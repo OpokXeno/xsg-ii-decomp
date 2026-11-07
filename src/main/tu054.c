@@ -377,16 +377,16 @@ void xglCdSetSlotValue(int value)
 
 int xglCdGetFileSize(const char *name);
 
-int xglCdReadFileTagged(int file, int buffer, int unused_arg2, int tag) {
+int xglCdReadFileTagged(const char *name, void *buffer, int unused_arg2, int tag) {
     int status;
 
-    status = xglCdGetFileSize((const char *) file);
+    status = xglCdGetFileSize(name);
     if (status > 0) {
         if (buffer != 0) {
             xglCdSlotTable[0].tag = tag;
             xglCdSlotTable[0].value = xglCdSlotValue;
             xglCdSetReadTag(0);
-            xglCdReadFile(file, buffer, 1, xglCdSlotEvent);
+            xglCdReadFile(name, buffer, 1, xglCdSlotEvent);
         }
     }
     return status;
@@ -410,7 +410,7 @@ extern u8 D_0069E1BC;
 
 /* Starts a read into a slot (proposed xglCdReadFileSlot). tag 0 reads without a slot;
  * otherwise the slot (index 0 when slot >= 0x80) takes tag and xglCdSlotValue before xglCdReadFile. */
-void xglCdReadFileSlot(int file, int buffer, int tag, u32 slot) {
+void xglCdReadFileSlot(const char *name, void *buffer, int tag, u32 slot) {
     CdSlot *entry;
     u32 index;
     int in_table;
@@ -419,10 +419,10 @@ void xglCdReadFileSlot(int file, int buffer, int tag, u32 slot) {
     in_table = slot < 0x80U;
     if (tag == 0) {
         if (D_0069E1BC != 0) {
-            xglCdReadFile(file, buffer, 1, 0);
+            xglCdReadFile(name, buffer, 1, 0);
             return;
         }
-        xglCdReadFile(file, buffer, tag, 0);
+        xglCdReadFile(name, buffer, tag, 0);
         return;
     }
     index = 0;
@@ -436,30 +436,186 @@ void xglCdReadFileSlot(int file, int buffer, int tag, u32 slot) {
     entry->value = value;
     xglCdSetReadTag(index);
     if (D_0069E1BC != 0) {
-        xglCdReadFile(file, buffer, 1, xglCdSlotEvent);
+        xglCdReadFile(name, buffer, 1, xglCdSlotEvent);
         return;
     }
-    xglCdReadFile(file, buffer, 0, xglCdSlotEvent);
+    xglCdReadFile(name, buffer, 0, xglCdSlotEvent);
 }
 
-int xglCdCheckFile(int, unsigned int *);
+/* Probes path and fills a file record (lsn at +0, size at +4, see tu022.c); -1 when missing, 0 otherwise. */
+int xglCdCheckFile(const char *path, unsigned int *record);
 
-/* Writes the four-character extension ".xap" with its NUL, then calls xglCdCheckFile on first (proposed xglCdSetXapExt; the second call's role is open). */
-int xglCdCheckXapFile(int first, char *extension)
+/* Writes the extension ".xap" with its NUL at extension, the end of path, then probes path
+ * (xglCdCheckFile): -1 when the .xap file is missing, 0 otherwise. */
+int xglCdCheckXapFile(const char *path, char *extension)
 {
-    unsigned int work[0xC];
+    unsigned int record[0xC];
 
     extension[0] = '.';
     extension[1] = 'x';
     extension[2] = 'a';
     extension[3] = 'p';
     extension[4] = 0;
-    return xglCdCheckFile(first, work);
+    return xglCdCheckFile(path, record);
 }
 
 INCLUDE_ASM("asm/main/nonmatchings/tu054", func_001DFCA8);
 
-INCLUDE_ASM("asm/main/nonmatchings/tu054", func_001DFD20);
+/* File type of a file id (bits 16-23), as the loader dispatcher func_001E0610 selects on it. */
+#define CD_FILE_TYPE_MASK 0xFF0000
+#define CD_FILE_TYPE(type) ((type) << 16)
+
+/* Header of a file-set block (func_001DFD20): the data address of each file of the set,
+ * 0 for a file that is missing. It takes the first 0x14 of GAME_RES_NAME_HEADER_SIZE bytes. */
+typedef struct CdFileSetHeader {
+    char *pxy;
+    char *txy;
+    char *xhr;
+    char *epf;
+    char *xap;
+} CdFileSetHeader;
+
+/* Still asm: D_002BB350 holds groups { name, file id, file id, ..., -1 } closed by a lone -1;
+ * returns the name of the group that lists file_id, or 0. */
+char *func_001DFCA8(int file_id);
+
+/* Default .xap name "man.xap" for ids whose own and fallback names are all missing
+ * (tu054's own .sdata, still asm-owned data). */
+extern char D_0069CEE0[8];
+
+/* Loads the file set of file_id into slot's block: a CdFileSetHeader, then the .xap file and
+ * the name's .epf, .xhr, .txy and .pxy files, each rounded up to GAME_RES_BLOCK_ALIGN and the
+ * last to CD_SECTOR_SIZE. The .xap name is the group's override (func_001DFCA8) or the file's
+ * own name; when that file is missing, its trailing digits, then an 'H' before them, are
+ * replaced by "00", and as the last resort (not for type 7) the default name "man.xap" is
+ * appended to the group directory.
+ * Returns the bytes the set takes. */
+int func_001DFD20(unsigned int file_id, unsigned int slot, int tag)
+{
+    char name[256];
+    char path[256];
+    char *extension;
+    char *end;
+    char *base;
+    char *source;
+    CdFileGroup *group;
+    char **names;
+    CdFileSetHeader *header;
+    char *buffer;
+    char *start;
+    int size;
+
+    start = buffer = (char *) xglCdSlotGetBuffer(slot);
+    extension = xglCdBuildFileName(name, file_id);
+    extension[0] = '.';
+    /* end is reused: it first clears the header, then walks the .xap path (the original's
+     * register use: one pseudo for both). */
+    end = buffer;
+    header = (CdFileSetHeader *) buffer;
+    buffer += GAME_RES_NAME_HEADER_SIZE;
+    if (slot != 0) {
+        ((CdFileSetHeader *) end)->txy = 0;
+        ((CdFileSetHeader *) end)->xhr = 0;
+        ((CdFileSetHeader *) end)->epf = 0;
+        ((CdFileSetHeader *) end)->xap = 0;
+    }
+    end = path;
+    names = xglCdFindFileGroup(CD_FILE_TYPE(3))->names;
+    for (source = names[0]; *source != 0; source++) {
+        *end++ = *source;
+    }
+    base = end;
+    group = xglCdFindFileGroup(file_id);
+    names = group->names;
+    source = names[file_id - group->base];
+    /* A string append in the original's do/while(0) macro form: its block boundary keeps end--
+     * ahead of the argument setup of the next call. end is left on the NUL. */
+    do {
+        while ((*end++ = *source++) != 0) {
+        }
+        end--;
+    } while (0);
+    source = func_001DFCA8(file_id);
+    if (source != 0) {
+        while ((*base++ = *source++) != 0) {
+        }
+        base[-1] = '.';
+        base[0] = 'x';
+        base[1] = 'a';
+        base[2] = 'p';
+        base[3] = 0;
+    } else if (xglCdCheckXapFile(path, end) != 0) {
+        /* strip the trailing decimal digits */
+        while ((unsigned int) ((unsigned char) end[-1] - '0') < 10) {
+            end--;
+        }
+        if (xglCdCheckXapFile(path, end) != 0) {
+            if (end[-1] == 'H') {
+                end--;
+            }
+            end[0] = '0';
+            end[1] = '0';
+            if (xglCdCheckXapFile(path, end + 2) != 0
+                && (file_id & CD_FILE_TYPE_MASK) != CD_FILE_TYPE(7)) {
+                for (source = D_0069CEE0; (*base++ = *source++) != 0;) {
+                }
+            }
+        }
+    }
+    size = xglCdGetFileSize(path);
+    if (size > 0) {
+        if (slot != 0) {
+            header->xap = buffer;
+            xglCdReadFileSlot(path, buffer, 0, 0);
+        }
+        buffer += (size + (GAME_RES_BLOCK_ALIGN - 1)) & ~(GAME_RES_BLOCK_ALIGN - 1);
+    }
+    extension[1] = 'e';
+    extension[2] = 'p';
+    extension[3] = 'f';
+    extension[4] = 0;
+    size = xglCdGetFileSize(name);
+    if (size > 0) {
+        if (slot != 0) {
+            header->epf = buffer;
+            xglCdReadFileSlot(name, buffer, 0, 0);
+        }
+        buffer += (size + (GAME_RES_BLOCK_ALIGN - 1)) & ~(GAME_RES_BLOCK_ALIGN - 1);
+    }
+    extension[1] = 'x';
+    extension[2] = 'h';
+    extension[3] = 'r';
+    extension[4] = 0;
+    size = xglCdGetFileSize(name);
+    if (size > 0) {
+        if (slot != 0) {
+            header->xhr = buffer;
+            xglCdReadFileSlot(name, buffer, 0, 0);
+        }
+        buffer += (size + (GAME_RES_BLOCK_ALIGN - 1)) & ~(GAME_RES_BLOCK_ALIGN - 1);
+    }
+    /* ".txy": the NUL written for ".xhr" stays */
+    extension[1] = 't';
+    extension[2] = 'x';
+    extension[3] = 'y';
+    size = xglCdGetFileSize(name);
+    if (size > 0) {
+        if (slot != 0) {
+            header->txy = buffer;
+            xglCdReadFileSlot(name, buffer, 0, 0);
+        }
+        buffer += (size + (GAME_RES_BLOCK_ALIGN - 1)) & ~(GAME_RES_BLOCK_ALIGN - 1);
+    }
+    /* ".pxy": read with the caller's tag and slot, no size check */
+    extension[1] = 'p';
+    size = xglCdGetFileSize(name);
+    if (slot != 0) {
+        header->pxy = buffer;
+        xglCdReadFileSlot(name, buffer, tag, slot);
+    }
+    buffer += (size + (CD_SECTOR_SIZE - 1)) & ~(CD_SECTOR_SIZE - 1);
+    return buffer - start;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/tu054", func_001E00F0);
 
@@ -469,11 +625,11 @@ int xglCdLoadXapFile(unsigned int file_id, unsigned int slot, int tag)
 {
     char name[256];
     char *extension;
-    unsigned int buffer;
-    unsigned int start;
+    char *buffer;
+    char *start;
     int size;
 
-    buffer = xglCdSlotGetBuffer(slot);
+    buffer = (char *) xglCdSlotGetBuffer(slot);
     start = buffer;
     extension = xglCdBuildFileName(name, file_id);
     extension[0] = '.';
@@ -488,7 +644,7 @@ int xglCdLoadXapFile(unsigned int file_id, unsigned int slot, int tag)
     }
     if (size > 0) {
         if (slot != 0) {
-            xglCdReadFileSlot((int) name, buffer, tag, slot);
+            xglCdReadFileSlot(name, buffer, tag, slot);
         }
         buffer += (size + (CD_SECTOR_SIZE - 1)) & ~(CD_SECTOR_SIZE - 1);
     }
@@ -500,11 +656,11 @@ int xglCdLoadEneFile(unsigned int file_id, unsigned int slot, int tag)
 {
     char name[256];
     char *extension;
-    unsigned int buffer;
-    unsigned int start;
+    char *buffer;
+    char *start;
     int size;
 
-    buffer = xglCdSlotGetBuffer(slot);
+    buffer = (char *) xglCdSlotGetBuffer(slot);
     start = buffer;
     extension = xglCdBuildFileName(name, file_id);
     extension[0] = '.';
@@ -515,7 +671,7 @@ int xglCdLoadEneFile(unsigned int file_id, unsigned int slot, int tag)
     size = xglCdGetFileSize(name);
     if (size > 0) {
         if (slot != 0) {
-            xglCdReadFileSlot((int) name, buffer, tag, slot);
+            xglCdReadFileSlot(name, buffer, tag, slot);
         }
         buffer += (size + (CD_SECTOR_SIZE - 1)) & ~(CD_SECTOR_SIZE - 1);
     }
