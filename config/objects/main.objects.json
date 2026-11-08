@@ -6811,9 +6811,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00124AC8",
+     "name": "sceLseek",
      "size": 568,
-     "splat_name": "func_00124AC8",
+     "splat_name": "sceLseek",
      "va": "0x00124ac8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -7054,9 +7054,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00127500",
+     "name": "sceSifAllocIopHeap",
      "size": 112,
-     "splat_name": "func_00127500",
+     "splat_name": "sceSifAllocIopHeap",
      "va": "0x00127500",
      "name_basis": "address",
      "provenance": "estimated"
@@ -7279,9 +7279,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00128530",
+     "name": "sceSifLoadElf",
      "size": 40,
-     "splat_name": "func_00128530",
+     "splat_name": "sceSifLoadElf",
      "va": "0x00128530",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8719,9 +8719,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012E160",
+     "name": "sceCdInit",
      "size": 736,
-     "splat_name": "func_0012E160",
+     "splat_name": "sceCdInit",
      "va": "0x0012e160",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8773,9 +8773,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012EB20",
+     "name": "sceCdPause",
      "size": 172,
-     "splat_name": "func_0012EB20",
+     "splat_name": "sceCdPause",
      "va": "0x0012eb20",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8809,9 +8809,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012EDB8",
+     "name": "sceCdBreak",
      "size": 184,
-     "splat_name": "func_0012EDB8",
+     "splat_name": "sceCdBreak",
      "va": "0x0012edb8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8827,9 +8827,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012EF48",
+     "name": "sceCdReadDvdDualInfo",
      "size": 208,
-     "splat_name": "func_0012EF48",
+     "splat_name": "sceCdReadDvdDualInfo",
      "va": "0x0012ef48",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8845,9 +8845,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012F0D0",
+     "name": "sceCdMmode",
      "size": 208,
-     "splat_name": "func_0012F0D0",
+     "splat_name": "sceCdMmode",
      "va": "0x0012f0d0",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8872,9 +8872,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012F388",
+     "name": "sceCdStInit",
      "size": 44,
-     "splat_name": "func_0012F388",
+     "splat_name": "sceCdStInit",
      "va": "0x0012f388",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8899,27 +8899,27 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012F420",
+     "name": "sceCdStSeek",
      "size": 44,
-     "splat_name": "func_0012F420",
+     "splat_name": "sceCdStSeek",
      "va": "0x0012f420",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012F450",
+     "name": "sceCdStStop",
      "size": 56,
-     "splat_name": "func_0012F450",
+     "splat_name": "sceCdStStop",
      "va": "0x0012f450",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012F488",
+     "name": "sceCdStRead",
      "size": 392,
-     "splat_name": "func_0012F488",
+     "splat_name": "sceCdStRead",
      "va": "0x0012f488",
      "name_basis": "address",
      "provenance": "estimated"

@@ -860,7 +860,7 @@ int xglHddUninstall(void)
     return result < 0 ? -5 : 0;
 }
 
-int xglCdReadCancel(int);
+void xglCdReadCancel(int immediate);
 
 /* The progress block at hddInstallContext that xglHddInstallReadCB updates: the
  * installed callback receives a stage, an offset and `param`. */
