@@ -901,9 +901,68 @@ void xglCdStreamParamInit(CdStreamParam *stream)
     stream->ring.buffer = 0;
 }
 
-/* Reloads the .filelist name list through xglDebFileRead (proposed
- * xglCdFileSelectListReload). */
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdFileSelectListReload);
+/* The debug file-select state (XS1 layout; xglCdFileSelectListReload reads
+ * directory, list and list_size). */
+typedef struct CdFileSelect {
+    int x;                                         /* +0x000 */
+    int y;                                         /* +0x004 */
+    int rows;                                      /* +0x008 */
+    int state;                                     /* +0x00c */
+    char directory[0x100];                         /* +0x010 */
+    char *list;                                    /* +0x110 */
+    unsigned int list_size;                        /* +0x114 */
+    void (*print)(int x, int y, const char *format, ...); /* +0x118 */
+    char path[0x100];                              /* +0x11c */
+    unsigned short entry_count;                    /* +0x21c */
+    short first_row;                               /* +0x21e */
+    short cursor;                                  /* +0x220 */
+    unsigned char unmodeled_222[2];                /* +0x222 */
+    int list_index;                                /* +0x224 */
+    char *list_position;                           /* +0x228 */
+    unsigned char unmodeled_22c[0x268 - 0x22c];    /* +0x22c */
+} CdFileSelect;
+
+/* ".filelist", the name list file read from the selected directory. */
+extern const char listname_7[];
+int xglDebFileRead(const char *name, void *buffer);
+
+/* Reloads the .filelist name list of the selected directory through
+ * xglDebFileRead and turns its lines into NUL-terminated names. */
+void xglCdFileSelectListReload(CdFileSelect *select)
+{
+    char path[CD_PATH_MAX];
+    unsigned int index;
+    char *list;
+    char *line;
+    char *destination;
+    const char *source;
+    unsigned char character;
+
+    list = select->list;
+    for (index = 0; index < select->list_size; index++) {
+        *list++ = 0;
+    }
+    destination = path;
+    for (source = select->directory; *source != 0; source++, destination++) {
+        *destination = *source;
+    }
+    for (source = listname_7; *source != 0; source++, destination++) {
+        *destination = *source;
+    }
+    *destination = 0;
+    xglDebFileRead(path, select->list);
+    line = select->list;
+    character = *line;
+    if (character != 0) {
+        do {
+            if (character == '\n') {
+                *line = 0;
+            }
+            line++;
+            character = *line;
+        } while (character != 0);
+    }
+}
 
 /* File-select path handling; calls the list reload (proposed xglCdFileSelectSub). */
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdFileSelectSub);

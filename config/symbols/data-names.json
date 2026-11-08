@@ -52,6 +52,7 @@
    "0x0063ed80": "PadData",
    "0x0063ee80": "menutbl",
    "0x0063f680": "monthday",
+   "0x0063f700": "listname_7",
    "0x0063f710": "head_8",
    "0x0063f720": "head_10",
    "0x0063f730": "system_cnf",

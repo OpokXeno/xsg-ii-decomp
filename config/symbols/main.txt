@@ -7866,6 +7866,7 @@ PadData = 0x0063ED80;
 textOptionFlags = 0x0063EDAA;
 menutbl = 0x0063EE80;
 monthday = 0x0063F680;
+listname_7 = 0x0063F700;
 head_8 = 0x0063F710;
 head_10 = 0x0063F720;
 system_cnf = 0x0063F730;
