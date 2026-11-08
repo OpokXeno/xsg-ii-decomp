@@ -145,6 +145,32 @@
     }
    ]
   },
+  "main/tu016": {
+   ".rodata": [
+    {
+     "range": [
+      "0x0068e088",
+      "0x0068e0a8"
+     ],
+     "generated": [
+      "0x0068e088",
+      "0x0068e0a5"
+     ],
+     "generated_by": [
+      "xglMovieOpen"
+     ],
+     "c_owned_symbols": [
+      "D_0068E088"
+     ],
+     "also_referenced_by_c": [],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/xgl_1_016.o"
+     }
+    }
+   ]
+  },
   "main/tu019": {
    ".rodata": [
     {

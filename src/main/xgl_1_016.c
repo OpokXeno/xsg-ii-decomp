@@ -6,6 +6,11 @@
 #define DMA_TAG_ID_REF 0x30000000U
 /* Clears the tag ID and IRQ bits, turning a REF tag into REFE. */
 #define DMA_TAG_ID_CLEAR_MASK 0x0fffffff
+/* Dn_CHCR of the D4 (IPU_to) channel: chain mode, from memory, started. */
+#define DMA_CHCR_DIR 0x1
+#define DMA_CHCR_MOD_CHAIN 0x4
+#define DMA_CHCR_STR 0x100
+#define MOVIE_D4_CHCR_CHAIN_START (DMA_CHCR_STR | DMA_CHCR_MOD_CHAIN | DMA_CHCR_DIR)
 /* GIF tag fields. */
 #define GIF_TAG_EOP 0x8000
 #define GIF_TAG_NREG_1 0x1000000000000000
@@ -74,7 +79,7 @@ typedef struct XglMovieWork {
     unsigned char transMode;        /* +0xc9 */
     unsigned char threshold1;       /* +0xca */
     unsigned char threshold0;       /* +0xcb */
-    unsigned char unmodeled_cc[4];
+    int missCount;                  /* +0xcc */
 } XglMovieWork;
 
 struct XglMovieSourceHeader {
@@ -151,7 +156,90 @@ unsigned long *make_gstrans(XglMovieWork *info, int y)
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_1_016", checkdma);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_1_016", xglMovieOpen);
+/* The movie work area starts with its CD stream record (0x40 bytes, the
+ * width follows at +0x40); xglMovieInfoInit and xglMovieOpen pass it to the
+ * xgl_cd stream functions. */
+struct CdStreamParam;
+void xglCdStreamParamInit(struct CdStreamParam *stream);
+
+/* xglMovieOpen: the largest source the ring takes, and the size it is cut to. */
+#define MOVIE_SOURCE_SIZE_LIMIT 0xfffff
+#define MOVIE_RING_HALF_BYTES 0xf0000
+#define MOVIE_DMA_QWORD 16
+/* "ipum" */
+#define MOVIE_SIGNATURE_IPUM 0x6d757069
+
+int printf(const char *format, ...);
+int xglCdStreamOpen(struct CdStreamParam *stream, int file);
+int xglCdStreamReadRing(struct CdStreamParam *stream, int bytes);
+void SyncDCache(void *start, void *end);
+
+/*
+ * Opens a movie: from a stream (file) through a ring of two source-sized
+ * halves fed by the four-tag DMA chain, or from memory as one transfer.
+ * Then checks the "ipum" header and takes the size and frame count.
+ */
+int xglMovieOpen(XglMovieWork *info, int stream)
+{
+    XglMovieSourceHeader *source;
+    XglDmaRefTag *chain;
+
+    if (stream) {
+        info->streamOpen = 1;
+        if (info->sourceSize > MOVIE_SOURCE_SIZE_LIMIT) {
+            printf("ring buffer size too large.\n");
+            info->sourceSize = MOVIE_RING_HALF_BYTES;
+        }
+        info->ringCapacity = info->sourceSize * 2;
+        info->ringBuffer = (unsigned char *) info->source;
+        xglCdStreamOpen((struct CdStreamParam *) info, stream);
+        chain = info->chain;
+        chain[0].tag = info->sourceSize / MOVIE_DMA_QWORD - 1;
+        chain[0].address = (unsigned int) (info->source + 1);
+        chain[0].upperQword = 0;
+        chain[1].tag = info->sourceSize / MOVIE_DMA_QWORD;
+        chain[1].address = (unsigned int) info->source;
+        chain[1].upperQword = 0;
+        chain[2].tag = info->sourceSize / MOVIE_DMA_QWORD;
+        chain[2].address = (unsigned int) info->source + info->sourceSize;
+        chain[2].upperQword = 0;
+        chain[3].tag = (info->sourceLength % info->sourceSize + 15) / MOVIE_DMA_QWORD;
+        chain[3].address = (unsigned int) info->source
+                                 + info->sourceSize * (info->sourceLength / info->sourceSize & 1);
+        chain[3].upperQword = 0;
+        info->ringRead = 0;
+        info->ringWrite = 0;
+        xglCdStreamReadRing((struct CdStreamParam *) info, info->sourceSize);
+        info->ringRead = 0;
+        info->dmaControl = MOVIE_D4_CHCR_CHAIN_START;
+        info->dmaTag = chain;
+        info->decodeState = 0;
+        info->dmaAddress = 0;
+        info->dmaQwords = 0;
+        info->bitPosition = 0;
+    } else {
+        info->dmaControl = MOVIE_D4_CHCR_CHAIN_START;
+        info->dmaAddress = (unsigned int) (info->source + 1);
+        info->dmaQwords = (info->sourceSize - 1) / MOVIE_DMA_QWORD;
+        info->streamOpen = 0;
+        info->dmaTag = 0;
+        info->bitPosition = 0;
+    }
+    source = info->source;
+    if (source->signature != MOVIE_SIGNATURE_IPUM) {
+        xglMovieClose(info);
+        return 1;
+    }
+    info->width = source->width;
+    info->stripQwords = (info->width >> 4) << 6;
+    info->height = source->height;
+    info->imageQwords = (info->height >> 4) * info->stripQwords;
+    info->frameCount = source->frameCount;
+    info->currentFrame = 0;
+    info->bufferIndex = 0;
+    SyncDCache(info, info + 1);
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_1_016", xglMoviePlay);
 
@@ -186,4 +274,19 @@ int xglMovieClose(XglMovieWork *info) {
     return (func_00131380(0, 0x200) >= 0) ? 0 : -1;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_1_016", xglMovieInfoInit);
+
+/* The two packet buffers in scratchpad RAM. */
+#define MOVIE_PACKET_ADDRESS_0 0x70000040
+#define MOVIE_PACKET_ADDRESS_1 0x70001000
+
+void xglMovieInfoInit(XglMovieWork *info)
+{
+    xglCdStreamParamInit((struct CdStreamParam *) info);
+    info->packetAddress[0] = MOVIE_PACKET_ADDRESS_0;
+    info->packetAddress[1] = MOVIE_PACKET_ADDRESS_1;
+    info->transMode = info->currentFrame = -1;
+    info->loop = 0;
+    info->threshold1 = 0;
+    info->threshold0 = 0;
+    info->missCount = 0;
+}
