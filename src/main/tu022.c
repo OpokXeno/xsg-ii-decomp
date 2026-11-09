@@ -73,7 +73,19 @@ void soundSlotSetLevel(int index, int value)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tu022", func_001A41C8);
+/* Sets the level of slot index's voice, unless the slot already has a level (state[1]). */
+void func_001A41C8(int index, int value)
+{
+    SoundSlot *slot;
+
+    if (index < 2) {
+        slot = &soundSlots[index];
+        if (slot->state[1] != 0) {
+            return;
+        }
+        func_00184310(slot->driver_id, value);
+    }
+}
 
 void func_00183220(int id);
 
@@ -148,9 +160,25 @@ int soundSlotSetVolume(int index, int level, int extra)
 }
 
 /* Returns the driver status of slot index's voice, or -1 for an invalid index. */
-INCLUDE_ASM("asm/main/nonmatchings/tu022", soundSlotStatus);
+int func_001832E0(int id);
 
-INCLUDE_ASM("asm/main/nonmatchings/tu022", func_001A43A8);
+int soundSlotStatus(int index)
+{
+    if (index >= 2) {
+        return -1;
+    }
+    return func_001832E0(soundSlots[index].driver_id);
+}
+
+int func_00184220(int id);
+
+int func_001A43A8(int index)
+{
+    if (index >= 2) {
+        return -1;
+    }
+    return func_00184220(soundSlots[index].driver_id);
+}
 
 void soundSlotStartFile(int index, int value);
 
@@ -210,7 +238,15 @@ void soundApplySettings(void)
 /* Writes the default control values (master 0x6E, default level 0x64) and sets channels 1 to 3 to 0x7F. */
 INCLUDE_ASM("asm/main/nonmatchings/tu022", soundSetDefaults);
 
-INCLUDE_ASM("asm/main/nonmatchings/tu022", soundVSyncCallback);
+void func_0017D138(int value);
+
+int soundVSyncCallback(void)
+{
+    func_0017D138(0);
+    /* sync, ei: orders the driver update and re-enables interrupts before the VSync callback returns */
+    __asm__ volatile("sync\n\tei" ::: "memory");
+    return 0;
+}
 
 /* Reopens slot index: destroys the old voice when there is one, creates a new one from the create
  * parameters, starts it, applies its level and fades it in (50 for slot 0, 70 for slot 1). */
