@@ -39,11 +39,11 @@ typedef struct SoundSlot {
 
 extern SoundSlot soundSlots[];
 void func_00184250(int id, int value);
-void func_00184A78(int id, int value);
+void func_00184A78(int id, const char *key);
 
 /* Sets the loop flag of the driver voice of slot index (0 or 1), then starts the file named by
  * fileKey on it. The ADX loader passes a key built from the file's start sector and size. */
-void soundSlotStartFile(int index, int fileKey)
+void soundSlotStartFile(int index, const char *fileKey)
 {
     SoundSlot *slot;
 
@@ -57,7 +57,45 @@ void soundSlotStartFile(int index, int fileKey)
 /* ADX loader: builds "<adxPathPrefix><name with / as \>.adx", looks it up on the disc
  * (xglCdCheckFile fills a file record: lsn at +0, size at +4), formats the key "lsn.sectors" over the
  * path and gives it to slot index with soundSlotStartFile. */
-INCLUDE_ASM("asm/main/nonmatchings/tu022", adxSetSlotFile);
+#define ADX_PATH_MAX 256
+
+/* The disc folder of the ADX files, and the "%08x.%08x" key format (start
+ * sector, then sectors). */
+extern const char *adxPathPrefix;
+extern const char adxSlotKeyFormat[];
+int xglCdCheckFile(const char *path, void *record);
+int func_002AA5D8(char *destination, const char *format, ...);
+
+void adxSetSlotFile(int index, const char *name)
+{
+    char path[ADX_PATH_MAX];
+    unsigned int record[0xC];
+    const char *source;
+    char *destination;
+    char character;
+
+    destination = path;
+    for (source = adxPathPrefix; *source != 0; source++) {
+        *destination++ = *source;
+    }
+    source = name;
+    character = *source++;
+    while (character != 0) {
+        if (character == '/') {
+            character = '\\';
+        }
+        *destination++ = character;
+        character = *source++;
+    }
+    destination[0] = '.';
+    destination[1] = 'a';
+    destination[2] = 'd';
+    destination[3] = 'x';
+    destination[4] = 0;
+    xglCdCheckFile(path, record);
+    func_002AA5D8(path, adxSlotKeyFormat, record[0], record[1] >> 11);
+    soundSlotStartFile(index, path);
+}
 
 void func_00184310(int id, int value);
 
@@ -180,11 +218,11 @@ int func_001A43A8(int index)
     return func_00184220(soundSlots[index].driver_id);
 }
 
-void soundSlotStartFile(int index, int value);
+void soundSlotStartFile(int index, const char *fileKey);
 
-void func_001A43E8(int index, int value)
+void func_001A43E8(int index, const char *fileKey)
 {
-    soundSlotStartFile(index, value);
+    soundSlotStartFile(index, fileKey);
 }
 
 void func_0013A7B8(void);
