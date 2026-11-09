@@ -111,7 +111,31 @@ void seSetMuted(int first, int flag) {
     func_001A3700();
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tu021", seVolumeSet);
+/* soundCtrl (tu022): +4 master volume, +5 default master level, +0x0C master volume ramp. */
+#define SOUND_CTRL_MASTER_VOLUME 4
+#define SOUND_CTRL_MASTER_LEVEL 5
+#define SOUND_CTRL_MASTER_RAMP 0x0C
+#define SOUND_LEVEL_MAX 0x7F
+
+extern unsigned char soundCtrl[];
+int seVolumeRampSet(void *ramp, int level, int step);
+void func_00138B48(int channel, int level);
+
+/* Starts the master volume ramp toward level (negative: the default level), scaled by the master
+ * volume and clamped to 0x7F; applies the level at once when the ramp returns one. */
+void seVolumeSet(int level, int step)
+{
+    int status;
+
+    if (level < 0) {
+        level = soundCtrl[SOUND_CTRL_MASTER_LEVEL];
+    }
+    level = level * soundCtrl[SOUND_CTRL_MASTER_VOLUME] / SOUND_LEVEL_MAX;
+    status = seVolumeRampSet(&soundCtrl[SOUND_CTRL_MASTER_RAMP], level < 0x80 ? level : SOUND_LEVEL_MAX, step);
+    if (status >= 0) {
+        func_00138B48(0, status);
+    }
+}
 
 void seVoiceStart(int, int, int);
 
@@ -120,12 +144,30 @@ void seVoiceStartDefault(int voice) {
     seVoiceStart(voice, -1, 0x40);
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tu021", func_001A3B38);
+int func_001A3B38(int kind)
+{
+    int group;
+
+    switch (kind) {
+    case 3:
+        group = 2;
+        break;
+    case 4:
+        group = 3;
+        break;
+    default:
+        group = 4;
+        break;
+    }
+    return group;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/tu021", seVoiceStart);
 
 INCLUDE_ASM("asm/main/nonmatchings/tu021", seVoiceSetPanVolume);
 
+/* For `packed` (bits 24..30: kind, bits 0..3: channel, bits 0..6: note), sends an expression
+ * control change, a program change and a note off to the kind's channel group. */
 INCLUDE_ASM("asm/main/nonmatchings/tu021", func_001A3D88);
 
 INCLUDE_ASM("asm/main/nonmatchings/tu021", func_001A3E10);
