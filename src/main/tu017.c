@@ -22,10 +22,6 @@ int func_001A0688(VirtualObject **object_slot)
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tu017", func_001A06B8);
-
-INCLUDE_ASM("asm/main/nonmatchings/tu017", func_001A0748);
-
 typedef struct AllocLayout {
     unsigned char unmodeled_00[8];
     int count_a;
@@ -44,6 +40,37 @@ typedef struct AllocRecord {
     unsigned char extra_enabled;
     signed char max_value;
 } AllocRecord;
+
+/* The record's handle is the player object func_0014FD80 creates. It stays an int: typed as a
+ * pointer it lands in another alias set and movieRenderBufferAlloc stores it in a different order. */
+#define RECORD_PLAYER(record) ((VirtualObject *) (record)->handle)
+
+void func_0014E8C0(int handle);
+void func_0017D868(void);
+void func_0017D150(void);
+void func_0013A8A0(int value);
+void soundSlotsReopen(void);
+
+/* Stops the player of record (methods 7 and 5), and when the record had the extra sound block,
+ * releases it and brings the sound slots back. */
+int func_001A06B8(AllocRecord *record)
+{
+    RECORD_PLAYER(record)->vtable[7](RECORD_PLAYER(record));
+    if (record->extra_enabled != 0) {
+        func_0014E8C0(record->handle);
+    }
+    RECORD_PLAYER(record)->vtable[5](RECORD_PLAYER(record));
+    if (record->extra_enabled != 0) {
+        func_0017D868();
+        func_0017D150();
+        func_0013A8A0(-1);
+        soundSlotsReopen();
+    }
+    return 0;
+}
+
+INCLUDE_ASM("asm/main/nonmatchings/tu017", func_001A0748);
+
 
 int func_001561C8(void);
 int makeGstransChain(int, int, int, int);
