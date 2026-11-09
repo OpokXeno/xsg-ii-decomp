@@ -17,7 +17,7 @@ typedef struct XglIntrCountSlot {
     unsigned char unmodeled_04[12];
 } XglIntrCountSlot;
 
-extern volatile int xglIntcSlotMap[];
+extern int xglIntcSlotMap[];
 extern XglIntrCountSlot xglIntcEventCounts[];
 
 /* Timer accumulator: intrTimerActive active flag, intrTimerStart start count, intrTimerAccum ticks total. */

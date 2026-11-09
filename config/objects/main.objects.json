@@ -4525,9 +4525,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00120200",
+     "name": "AddIntcHandler",
      "size": 16,
-     "splat_name": "func_00120200",
+     "splat_name": "AddIntcHandler",
      "va": "0x00120200",
      "name_basis": "address",
      "provenance": "estimated"
@@ -4552,9 +4552,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00120230",
+     "name": "AddDmacHandler",
      "size": 16,
-     "splat_name": "func_00120230",
+     "splat_name": "AddDmacHandler",
      "va": "0x00120230",
      "name_basis": "address",
      "provenance": "estimated"
@@ -5830,36 +5830,36 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00121000",
+     "name": "DisableIntc",
      "size": 104,
-     "splat_name": "func_00121000",
+     "splat_name": "DisableIntc",
      "va": "0x00121000",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00121068",
+     "name": "EnableIntc",
      "size": 104,
-     "splat_name": "func_00121068",
+     "splat_name": "EnableIntc",
      "va": "0x00121068",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001210D0",
+     "name": "DisableDmac",
      "size": 104,
-     "splat_name": "func_001210D0",
+     "splat_name": "DisableDmac",
      "va": "0x001210d0",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00121138",
+     "name": "EnableDmac",
      "size": 104,
-     "splat_name": "func_00121138",
+     "splat_name": "EnableDmac",
      "va": "0x00121138",
      "name_basis": "address",
      "provenance": "estimated"
