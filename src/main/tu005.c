@@ -1,12 +1,30 @@
 #include "common.h"
+#include "debug_break.h"
+
+int printf(const char *format, ...);
 
 void func_00194D08(void) {
 
 }
 
 /* Debug stubs: each passes a fixed "Don't use ..." message to printf. */
-INCLUDE_ASM("asm/main/nonmatchings/tu005", xglDebFileSize);
+int xglDebFileSize(const char *name)
+{
+    printf("Don't use xglDebFileSize()\n");
+    DEBUG_BREAK();
+    return -1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/tu005", xglDebFileRead);
+int xglDebFileRead(const char *name, void *buffer)
+{
+    printf("Don't use xglDebFileRead()\n");
+    DEBUG_BREAK();
+    return -1;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/tu005", xglDebFileWrite);
+int xglDebFileWrite(const char *name, const void *buffer)
+{
+    printf("Don't use xglDebFileWrite()\n");
+    DEBUG_BREAK();
+    return -1;
+}
