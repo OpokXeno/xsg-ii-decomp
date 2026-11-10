@@ -6,22 +6,27 @@
 #define SE_PATH_MAX 256
 #define SE_BANK_SLOT_COUNT 24
 
-/* The 0x30-byte file-position record xglCdCheckFile fills (CdFilePosition in xgl_cd.c; the
- * integrator reconciles). The loaders here pass the byte at +0x27 on to the driver with the lbn;
- * its meaning is not established. */
+/* This TU's view of the 0x30-byte file-position record xglCdCheckFile fills; the layout and the
+ * names are those of CdFilePosition in xgl_cd.c (the integrator reconciles). The loaders here pass
+ * the byte at +0x27 on to the driver together with the lbn (lbu 0x27($sp) at 0x1A3334, 0x1A3354,
+ * 0x1A3394 and 0x1A35A4); its meaning is not established, so it keeps its unmodeled name. */
 typedef struct SeFileRecord {
     unsigned int lbn;
-    unsigned char unmodeled_04[0x23];
-    unsigned char driver_flag;
+    int stored_bytes;
+    unsigned char unmodeled_08[0x1c];
+    unsigned char source;
+    unsigned char unmodeled_25;
+    unsigned char packed;
+    unsigned char unmodeled_27;
     int descriptor;
     int size_bytes;
 } SeFileRecord;
 
 int xglCdCheckFile(const char *path, SeFileRecord *record);
 void func_00138D78(int slot);
-int func_00139060(int slot, unsigned int lbn, int flag);
-void func_001391D8(int slot, unsigned int lbn, int flag);
-int func_0013A338(int slot, unsigned int lbn, int flag, int option);
+int func_00139060(int slot, unsigned int lbn, int record_byte_27);
+void func_001391D8(int slot, unsigned int lbn, int record_byte_27);
+int func_0013A338(int slot, unsigned int lbn, int record_byte_27, int option);
 
 /* Loads the bank `name` of `directory` into `slot`: clears the slot, gives the driver the position
  * of <directory><name>.vsf (func_0013A338 when `option` is set, else func_00139060) and then of
@@ -67,9 +72,9 @@ int seBankLoadFile(int slot, const char *name, const char *directory, int option
     }
     size = record.size_bytes;
     if (option != 0) {
-        result = func_0013A338(slot, record.lbn, record.driver_flag, option);
+        result = func_0013A338(slot, record.lbn, record.unmodeled_27, option);
     } else {
-        result = func_00139060(slot, record.lbn, record.driver_flag);
+        result = func_00139060(slot, record.lbn, record.unmodeled_27);
     }
     if (result < 0) {
         return result;
@@ -78,7 +83,7 @@ int seBankLoadFile(int slot, const char *name, const char *directory, int option
     destination[2] = 'r';
     destination[3] = 'j';
     xglCdCheckFile(path, &record);
-    func_001391D8(slot, record.lbn, record.driver_flag);
+    func_001391D8(slot, record.lbn, record.unmodeled_27);
     return size;
 }
 
@@ -131,15 +136,20 @@ int seBankLoadMemory(int slot, int vsf, int prj, int option)
 #define SOUND_CTRL_VOICE_LEVEL 6
 #define SOUND_CTRL_MASTER_RAMP 0x0C
 #define SOUND_LEVEL_MAX 0x7F
+/* soundCtrl[SOUND_CTRL_SONG] when the song name does not start with three digits. */
+#define SE_SONG_NONE 0xFF
+/* A `packed` song id above this value loads the bank only, not the .mid file. */
+#define SE_BGM_ID_MAX 0xFFFF
 
 extern unsigned char soundCtrl[];
 extern const char *seMidiDirectory;
-void func_00139AF0(void);
-int func_00139978(int packed, unsigned int lbn, int flag);
+/* Takes the song id in its first argument (move $17,$4 at 0x139AF8). */
+void func_00139AF0(int id);
+int func_00139978(int packed, unsigned int lbn, int record_byte_27);
 
 /* Loads the song `name` (three digits) from seMidiDirectory: its bank into slot 0, then, for a
- * `packed` id below 0x10000, the .mid file, and records the song number (0xFF when the name does
- * not start with three digits). With no name it returns what the bank load returned. */
+ * `packed` id up to SE_BGM_ID_MAX, the .mid file, and records the song number (SE_SONG_NONE when
+ * the name does not start with three digits). With no name it returns what the bank load returned. */
 int seBgmLoad(int packed, const char *name, int option)
 {
     SeFileRecord record;
@@ -147,17 +157,17 @@ int seBgmLoad(int packed, const char *name, int option)
     const char *source;
     char *destination;
     int result;
-    int high;
+    int bank_only;
 
-    high = packed > 0xFFFF;
-    if (!high) {
-        func_00139AF0();
+    bank_only = packed > SE_BGM_ID_MAX;
+    if (!bank_only) {
+        func_00139AF0(packed);
     }
     result = seBankLoadFile(0, name, seMidiDirectory, option);
     if (name == 0) {
         return result;
     }
-    if (high) {
+    if (bank_only) {
         return 0;
     }
     source = seMidiDirectory;
@@ -168,6 +178,7 @@ int seBgmLoad(int packed, const char *name, int option)
         source++;
     }
     source = name;
+    /* if + do/while: the original tests the first character apart and loads each one once */
     if (*source != 0) {
         do {
             *destination = *source;
@@ -181,8 +192,8 @@ int seBgmLoad(int packed, const char *name, int option)
     destination[3] = 'd';
     destination[4] = 0;
     xglCdCheckFile(path, &record);
-    result = func_00139978(packed, record.lbn, record.driver_flag);
-    soundCtrl[SOUND_CTRL_SONG] = -1;
+    result = func_00139978(packed, record.lbn, record.unmodeled_27);
+    soundCtrl[SOUND_CTRL_SONG] = SE_SONG_NONE;
     if ((name[0] & 0xF0) == '0' && (name[1] & 0xF0) == '0' && (name[2] & 0xF0) == '0') {
         soundCtrl[SOUND_CTRL_SONG] = (name[0] & 0xF) * 100 + (name[1] & 0xF) * 10 + (name[2] & 0xF);
     }
@@ -196,9 +207,9 @@ void seBgmLoadDefault(int packed, const char *name) {
 
 void func_0013A1B8(int, int);
 
-void func_001A3668(int first, int second, int third, int fourth, int fifth) {
-    func_00139AF0();
-    seBankLoadMemory(0, third, fourth, fifth);
+void func_001A3668(int first, int second, int vsf, int prj, int option) {
+    func_00139AF0(first);
+    seBankLoadMemory(0, vsf, prj, option);
     if (second != 0) {
         func_0013A1B8(first, second);
     }
@@ -296,6 +307,19 @@ void func_001A37E0(int packed, const char *name, int option) {
 #define SE_CONTROLLER_EXPRESSION 0x0B
 #define SE_CONTROLLER_REVERB 0x5B
 #define SE_PAN_CENTRE 0x40
+/* A packed voice id: kind in bits 24..30, MIDI channel in bits 0..3, note in bits 0..6. */
+#define SE_VOICE_KIND(packed) (((packed) >> 24) & 0x7F)
+#define SE_VOICE_CHANNEL(packed) ((packed) & 0xF)
+#define SE_VOICE_NOTE(packed) ((packed) & 0x7F)
+/* Default volume by kind in seVoiceStart: kinds 1 and 2 (below SE_VOICE_KIND_LEVELLED) play at
+ * SOUND_LEVEL_MAX, SE_VOICE_KIND_MASTER_LEVEL at the default master level. */
+#define SE_VOICE_KIND_LEVELLED 3
+#define SE_VOICE_KIND_MASTER_LEVEL 7
+/* func_001A3E10: a value above SE_TONE_PLAIN_MAX also carries a volume and a pan. */
+#define SE_TONE_PLAIN_MAX 0xFFFFFF
+#define SE_TONE_BANK(packed) ((packed) & 0x7F)
+#define SE_TONE_VOLUME(packed) (((packed) >> 16) & 0x7F)
+#define SE_TONE_PAN(packed) (((packed) >> 8) & 0x7F)
 #define SE_CHANNEL_COUNT 16
 /* Song 6 gets its own setup of MIDI channel 1 before it starts. */
 #define SE_SONG_WITH_CHANNEL_SETUP 6
@@ -303,7 +327,7 @@ void func_001A37E0(int packed, const char *name, int option) {
 
 void func_001388E8(int, int message, int);
 void func_00139B70(int, int, int, int);
-/* The result is not used here; an int return is what the loop's register choice shows. */
+/* Returns the reply word of its driver call (lw $2,0x10($sp) at 0x139D7C); not used here. */
 int func_00139D08(int, int channel);
 
 void func_001A3900(int id, int next_id)
@@ -391,25 +415,27 @@ int func_001A3B38(int kind)
     return group;
 }
 
-/* Sends one packed message to a channel group. The result is not used here; an int return is what
- * the callers' register choice shows. */
+/* Queues one packed message for a channel group. It returns 0, or -1 when the queue is busy or
+ * full (move $2,$16 at 0x13A9BC and 0x13A9C4); the callers here do not use the result. */
 int func_0013A938(int group, int message, int value);
 
 /* Starts the voice `packed` (bits 24..30: kind, bits 0..3: channel, bits 0..6: note) on the
  * kind's channel group: bank select (the kind), pan, expression, program 0, note on. A negative
- * volume takes the default of the kind; the volume is scaled by the master volume. */
+ * volume takes the default of the kind (kinds 1 and 2: SOUND_LEVEL_MAX, kind 7: the default
+ * master level, every other kind: the default voice level); the volume is then scaled by the
+ * master volume. */
 void seVoiceStart(int packed, int volume, int pan)
 {
-    int kind = (packed >> 24) & 0x7F;
-    int channel = SE_MSG_CHANNEL(packed & 0xF);
-    int note = packed & 0x7F;
+    int kind = SE_VOICE_KIND(packed);
+    int channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(packed));
+    int note = SE_VOICE_NOTE(packed);
     int group = func_001A3B38(kind);
 
     if (volume < 0) {
         volume = soundCtrl[SOUND_CTRL_VOICE_LEVEL];
         if (kind != 0) {
-            if (kind >= 3) {
-                if (kind == 7) {
+            if (kind >= SE_VOICE_KIND_LEVELLED) {
+                if (kind == SE_VOICE_KIND_MASTER_LEVEL) {
                     volume = soundCtrl[SOUND_CTRL_MASTER_LEVEL];
                 }
             } else {
@@ -418,7 +444,7 @@ void seVoiceStart(int packed, int volume, int pan)
         }
     }
     volume = volume * soundCtrl[SOUND_CTRL_MASTER_VOLUME] / SOUND_LEVEL_MAX;
-    if (volume >= 0x80) {
+    if (volume > SOUND_LEVEL_MAX) {
         volume = SOUND_LEVEL_MAX;
     }
     func_0013A938(group, channel | SE_MSG_DATA2(kind) | SE_MSG_CONTROL_CHANGE, 0);
@@ -432,14 +458,14 @@ void seVoiceStart(int packed, int volume, int pan)
 
 void seVoiceSetPanVolume(int packed, int volume, int pan)
 {
-    int channel = SE_MSG_CHANNEL(packed & 0xF);
-    int group = func_001A3B38((packed >> 24) & 0x7F);
+    int channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(packed));
+    int group = func_001A3B38(SE_VOICE_KIND(packed));
 
     if (volume < 0) {
         volume = soundCtrl[SOUND_CTRL_VOICE_LEVEL];
     }
     volume = volume * soundCtrl[SOUND_CTRL_MASTER_VOLUME] / SOUND_LEVEL_MAX;
-    if (volume >= 0x80) {
+    if (volume > SOUND_LEVEL_MAX) {
         volume = SOUND_LEVEL_MAX;
     }
     func_0013A938(group, channel | SE_MSG_DATA2(pan)
@@ -452,13 +478,14 @@ void seVoiceSetPanVolume(int packed, int volume, int pan)
  * control change, a program change and a note off to the kind's channel group. */
 void seVoiceStop(int packed)
 {
-    int group = func_001A3B38((packed >> 24) & 0x7F);
-    int channel = packed & 0xF;
+    int group = func_001A3B38(SE_VOICE_KIND(packed));
+    int channel = SE_VOICE_CHANNEL(packed);
 
+    /* shifted in a second step: the one-step form takes other registers */
     channel = SE_MSG_CHANNEL(channel);
     func_0013A938(group, channel | SE_MSG_CONTROL_CHANGE | SE_MSG_DATA1(SE_CONTROLLER_EXPRESSION), 0);
-    /* packed is reused for the note (bits 0..6) */
-    packed &= 0x7F;
+    /* packed is reused for the note; where this statement stands sets the first call's argument order */
+    packed = SE_VOICE_NOTE(packed);
     func_0013A938(group, channel | SE_MSG_PROGRAM_CHANGE, 0);
     channel |= SE_MSG_DATA1(packed);
     func_0013A938(group, channel | SE_MSG_NOTE_OFF, 0);
@@ -486,7 +513,7 @@ void func_001A3E10(int packed)
         return;
     }
     pan = SE_PAN_CENTRE;
-    channel = SE_MSG_CHANNEL(seNextChannel++ & 0xF);
+    channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(seNextChannel++));
     random = xglSRand();
     bend = (random >> 1) & 0x7F;
     if (seBendDisabled != 0) {
@@ -494,14 +521,14 @@ void func_001A3E10(int packed)
     }
     note = (random & 1) + 1;
     volume = soundCtrl[SOUND_CTRL_VOICE_LEVEL];
-    if (packed > 0xFFFFFF) {
-        volume = (packed >> 16) & 0x7F;
-        pan = (packed >> 8) & 0x7F;
+    if (packed > SE_TONE_PLAIN_MAX) {
+        volume = SE_TONE_VOLUME(packed);
+        pan = SE_TONE_PAN(packed);
     }
-    /* packed is reused for the bank number (bits 0..6) */
-    packed &= 0x7F;
+    /* packed is reused for the bank number */
+    packed = SE_TONE_BANK(packed);
     volume = volume * soundCtrl[SOUND_CTRL_MASTER_VOLUME] / SOUND_LEVEL_MAX;
-    if (volume >= 0x80) {
+    if (volume > SOUND_LEVEL_MAX) {
         volume = SOUND_LEVEL_MAX;
     }
     func_0013A938(1, channel | SE_MSG_DATA2(bend) | SE_MSG_PITCH_BEND, 0);
