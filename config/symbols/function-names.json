@@ -19,6 +19,7 @@
    "0x0012ced8": "scePadInfoPressMode",
    "0x0012cf38": "scePadEnterPressMode",
    "0x00124ac8": "sceLseek",
+   "0x0012d8f0": "sceCdLayerSearchFile",
    "0x0012e840": "sceCdGetReadPos",
    "0x0012eb20": "sceCdPause",
    "0x0012ebd0": "sceCdGetDiskType",

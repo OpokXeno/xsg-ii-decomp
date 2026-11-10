@@ -59,7 +59,9 @@ extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
 #define CD_SOURCE_HOST 1
 #define CD_SOURCE_HDD 2
 
-typedef void CdCompletionCallback(int event, int value);
+/* A callback gets a third argument: the current read tag from xglCdGetFilePos (lw $6 at
+ * 0x19BA04), the request's argument from the read service. */
+typedef void CdCompletionCallback(int event, int value, int tag);
 
 int sceCdStSeek(unsigned int lbn);
 int sceLseek(int descriptor, int offset, int whence);
@@ -246,10 +248,6 @@ extern const char xenosagaArc00Name[];
 extern int sceCdStStat(void);
 extern int sceOpen(const char *path, int flags, ...);
 extern int sceSifLoadModule(const char *path, int args_length, const char *args);
-/* Defined later in this file (INCLUDE_ASM); declared here, like BCD2INT
- * below, so its LOCAL definition does not follow a non-static declaration. */
-extern CdFilePosition *xglCdGetFilePos(CdFilePosition *file_position, const char *path,
-                           void (*callback)(int event, int value));
 extern int sceCdReadClock(unsigned char *clock);
 int sceLseek(int descriptor, int offset, int whence);
 extern int sceCdSync(int mode);
@@ -276,7 +274,6 @@ extern char hdd_head_6[7];
 extern char arcname_1[12];
 extern char arcname_2[12];
 extern char arcname_3[12];
-extern char arcname_4[12];
 extern char vcd_head_5[24];
 extern char tail_9[7];
 extern CdCompletionCallback *callback;
@@ -284,7 +281,7 @@ extern CdReadControl LW;
 extern CdArchiveStorage ArcHeader[4];
 extern signed char ReadClockInterval;
 extern unsigned char PresentTime[8];
-void xglCdDefaultCallback(int event, int value);
+void xglCdDefaultCallback(int event, int value, int tag);
 void xglCdSetReadTag(int value);
 int xglCdStreamStat(CdStreamParam *stream);
 void StreamReadRingCoreNormal(CdStreamParam *stream);
@@ -310,7 +307,7 @@ int func_0017AAF0(int handle);
 int func_0017AA00(int handle);
 int sceCdBreak(void);
 int sceCdPause(void);
-void xglCdDummyCallback(int event, int value);
+void xglCdDummyCallback(int event, int value, int tag);
 int xglCdGetFilePosSub(CdArchiveEntry *entry, const char *path);
 CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name,
                                        CdCompletionCallback *callback);
@@ -644,11 +641,11 @@ void xglClockUInt2DayTime(XglClock *clock_time, unsigned int elapsed)
  * the sizes of the xenosaga.10 and xenosaga.20 archives and reads system.cnf. */
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdIdentifyDisc);
 
-void xglCdDefaultCallback(int event, int value)
+void xglCdDefaultCallback(int event, int value, int tag)
 {
 }
 
-void xglCdDummyCallback(int event, int value)
+void xglCdDummyCallback(int event, int value, int tag)
 {
 }
 
@@ -826,7 +823,177 @@ int xglCdGetFilePosSub(CdArchiveEntry *entry, const char *path)
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdGetFilePos);
+/* Debug output for a path that starts with "data\": the prefix is dropped. */
+extern const char xglCdReplacePathFormat[];
+extern const char xglCdReplacedPathFormat[];
+int printf(const char *format, ...);
+
+#define CD_DATA_PREFIX_LENGTH 5
+#define CD_OPEN_READ 1
+/* sceLseek moves at most this far in one call. */
+#define CD_SEEK_STEP 0x40000000
+
+/* Locates a file: in the archives first (the path then becomes the archive's own file name), else
+ * by its name on the disc, the host or the HDD. Fills the position record (and opens and seeks
+ * the descriptor of a host or HDD file) and returns it, or 0 when the file is missing. The
+ * callback gets CD_EVENT_LOOKUP with the path and the current read tag. */
+CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name, CdCompletionCallback *callback)
+{
+    char buffer[CD_PATH_MAX];
+    const char *path = name;
+    CdArchiveEntry *entry;
+    const char *cursor;
+    char *destination;
+    const char *absolute_source;
+    char *absolute_destination;
+    char *scan;
+    int descriptor;
+    long offset;
+    int size;
+    int source;
+
+    if (path[0] == 'd' && path[1] == 'a' && path[2] == 't' && path[3] == 'a' && path[4] == '\\') {
+        printf(xglCdReplacePathFormat, name);
+        name = path + CD_DATA_PREFIX_LENGTH;
+        printf(xglCdReplacedPathFormat, name);
+    }
+    position->source = 0;
+    if (name[0] != '\\') {
+        /* the separators are rewritten in the caller's string */
+        for (scan = (char *) name; *scan != 0; scan++) {
+            if (*scan == '/') {
+                *scan = '\\';
+            }
+        }
+    }
+    do {
+        entry = &ArcHeader[0].entry;
+        if (entry->state != ARC_ENTRY_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
+            name = arcname_1;
+            position->source = entry->state;
+            break;
+        }
+        entry = &ArcHeader[1].entry;
+        if (entry->state != ARC_ENTRY_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
+            name = arcname_2;
+            position->source = entry->state;
+        } else {
+            entry++;
+            if (entry->state != ARC_ENTRY_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
+                name = arcname_3;
+                position->source = entry->state;
+            } else {
+                entry = 0;
+            }
+        }
+    } while (0);
+    if (name[0] == '\\') {
+        absolute_source = name + 1;
+        absolute_destination = buffer;
+        while ((*absolute_destination = *absolute_source) != 0) {
+            absolute_source++;
+            absolute_destination++;
+        }
+        position->source = CD_SOURCE_HOST;
+    } else {
+        destination = buffer;
+        source = position->source;
+        switch (source) {
+        case CD_SOURCE_DISC:
+            buffer[0] = '\\';
+            destination = buffer + 1;
+            for (cursor = name; *cursor != 0; cursor++, destination++) {
+                if (*cursor < 'a' || *cursor > 'z') {
+                    *destination = *cursor;
+                } else {
+                    *destination = *cursor - ('a' - 'A');
+                }
+            }
+            destination[0] = ';';
+            destination[1] = '1';
+            destination[2] = 0;
+            break;
+        case CD_SOURCE_HOST:
+        case CD_SOURCE_HDD:
+            if (position->source == CD_SOURCE_HOST) {
+                cursor = vcd_head_5;
+            } else {
+                cursor = hdd_head_6;
+            }
+            while ((*destination = *cursor) != 0) {
+                cursor++;
+                destination++;
+            }
+            cursor = name;
+            for (;;) {
+                if (*cursor == '\\') {
+                    *destination = '/';
+                } else {
+                    *destination = *cursor;
+                }
+                if (*cursor == 0) {
+                    break;
+                }
+                cursor++;
+                destination++;
+            }
+            break;
+        }
+    }
+    callback(CD_EVENT_LOOKUP, (int) path, xglCdReadTag);
+    switch (position->source) {
+    case CD_SOURCE_DISC:
+        if (entry != 0) {
+            position->lbn = entry->lbn + entry->file_lbn_offset;
+            position->stored_bytes = entry->stored_bytes;
+            position->packed = entry->packed;
+            position->size_bytes = entry->size_bytes;
+        } else {
+            sceCdSync(0);
+            sceCdDiskReady(0);
+            if (sceCdLayerSearchFile(position, buffer, LW.search_layer) == 0) {
+                return 0;
+            }
+            position->packed = 1;
+            position->size_bytes = position->stored_bytes;
+        }
+        break;
+    case CD_SOURCE_HDD:
+        if (xglHddCheck() < 0) {
+            return xglCdGetFilePos(position, path, callback);
+        }
+        /* fall through */
+    case CD_SOURCE_HOST:
+        descriptor = sceOpen(buffer, CD_OPEN_READ);
+        if (descriptor < 0) {
+            return 0;
+        }
+        if (entry != 0) {
+            position->lbn = entry->lbn + entry->file_lbn_offset;
+            position->stored_bytes = entry->stored_bytes;
+            position->packed = entry->packed;
+            position->size_bytes = entry->size_bytes;
+        } else {
+            position->lbn = 0;
+            position->packed = 0;
+            size = sceLseek(descriptor, 0, 2);
+            position->stored_bytes = size;
+            if (position->packed == 0) {
+                position->size_bytes = size;
+            }
+        }
+        offset = (long) position->lbn << 11;
+        sceLseek(descriptor, 0, 0);
+        while (offset > CD_SEEK_STEP) {
+            sceLseek(descriptor, CD_SEEK_STEP, 1);
+            offset -= CD_SEEK_STEP;
+        }
+        sceLseek(descriptor, offset, 1);
+        position->descriptor = descriptor;
+        break;
+    }
+    return position;
+}
 
 /* Probes a path: -1 when missing, closes the descriptor of a host or HDD file
  * and returns 0 otherwise. */

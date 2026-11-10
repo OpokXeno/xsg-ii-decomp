@@ -8647,9 +8647,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012D8F0",
+     "name": "sceCdLayerSearchFile",
      "size": 788,
-     "splat_name": "func_0012D8F0",
+     "splat_name": "sceCdLayerSearchFile",
      "va": "0x0012d8f0",
      "name_basis": "address",
      "provenance": "estimated"
