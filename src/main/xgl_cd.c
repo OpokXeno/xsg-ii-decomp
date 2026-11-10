@@ -700,11 +700,11 @@ void xglCdSetReadTag(int value)
     xglCdReadTag = value;
 }
 
-/* Applies one name record to the name in `name` and returns the name's end. A record starts with
+/* Expands one name record of an archive table into `name` and returns the name's end. A record starts with
  * a count byte. Zero: the bytes after it, up to a terminator, replace the name. Otherwise the low
  * nibble is the number of bytes copied over the name, starting (high nibble + 1) characters
  * before its end; the rest of the name stays. */
-char *func_0019B398(char *name, const unsigned char *record)
+char *xglCdArcNameExpand(char *name, const unsigned char *record)
 {
     unsigned char count;
     int back;
@@ -731,9 +731,100 @@ char *func_0019B398(char *name, const unsigned char *record)
     return name - 1;
 }
 
-/* Walks the archive record table of one entry for a backslash-separated path
- * (proposed xglCdGetFilePosSub, declared above). */
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdGetFilePosSub);
+/* Where a name stands in an archive's directory tree: its depth and the length of its directory
+ * part. Both halves are compared as one word. */
+typedef union ArcNameKey {
+    struct {
+        short depth;
+        short length;
+    } part;
+    int both;
+} ArcNameKey;
+
+#define ARC_DIRECTORY_DEPTH_MAX 16
+#define ARC_RECORD_POSITION_BYTES 7
+#define ARC_RECORD_SIZE_BYTES 3
+
+/* Walks the archive record table of one entry for a backslash-separated path. Directory records
+ * rebuild the current directory name; a file record is only expanded and compared when it stands
+ * at the path's depth with a directory part of the path's length. On a match the entry gets the
+ * file's position and sizes and the result is 1; 0 when the table ends. */
+int xglCdGetFilePosSub(CdArchiveEntry *entry, const char *path)
+{
+    char name[CD_PATH_MAX];
+    char *directory[ARC_DIRECTORY_DEPTH_MAX];
+    ArcNameKey current;
+    ArcNameKey target;
+    const unsigned char *record;
+    const char *cursor;
+    const char *left;
+    const char *right;
+    char *end;
+    int flags;
+    int packed;
+    int length;
+    int path_length;
+
+    current.both = 0;
+    target.both = 0;
+    record = entry->destination + 1;
+    directory[0] = name;
+    name[0] = 0;
+    for (cursor = path; *cursor != 0; cursor++) {
+        if (*cursor == '\\') {
+            target.part.depth++;
+            target.part.length = cursor - path;
+        }
+    }
+    path_length = cursor - path;
+    while ((flags = *record) != 0) {
+        packed = flags & ARC_RECORD_TYPE_EXTENDED;
+        length = flags & ARC_RECORD_LENGTH_MASK;
+        if ((flags & ARC_RECORD_EXTENDED) != 0) {
+            if (record[1] != 0) {
+                current.part.depth -= record[1];
+                directory[current.part.depth + 1][-1] = 0;
+            }
+            end = xglCdArcNameExpand(directory[current.part.depth], record + 2);
+            record += length;
+            end[0] = '\\';
+            end[1] = 0;
+            current.part.depth++;
+            current.part.length = end - name;
+            directory[current.part.depth] = end + 1;
+        } else {
+            if (current.both == target.both) {
+                end = xglCdArcNameExpand(directory[current.part.depth], record + 1);
+                record += length;
+                if (end - name == path_length) {
+                    left = path;
+                    right = name;
+                    while (*left == *right) {
+                        if (*left == 0) {
+                            entry->file_lbn_offset = (record[2] << 16) + (record[1] << 8) + record[0];
+                            entry->stored_bytes = (record[6] << 24) + (record[5] << 16) + (record[4] << 8) + record[3];
+                            if ((entry->packed = packed) != 0) {
+                                entry->size_bytes = (record[9] << 16) + (record[8] << 8) + record[7];
+                            } else {
+                                entry->size_bytes = entry->stored_bytes;
+                            }
+                            return 1;
+                        }
+                        left++;
+                        right++;
+                    }
+                }
+            } else {
+                record += length;
+            }
+            record += ARC_RECORD_POSITION_BYTES;
+            if (packed != 0) {
+                record += ARC_RECORD_SIZE_BYTES;
+            }
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdGetFilePos);
 

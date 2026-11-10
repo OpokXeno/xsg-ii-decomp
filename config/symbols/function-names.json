@@ -394,6 +394,7 @@
    "0x0019f228": "xglMcInitial",
    "0x0019f930": "xglMoviePlay",
    "0x0019ffe8": "xglMovieRewind",
+   "0x0019b398": "xglCdArcNameExpand",
    "0x001a0180": "xglMovieInfoInit",
    "0x001a01d8": "makeGstransChain",
    "0x001a0cd8": "xglFlagsClear",

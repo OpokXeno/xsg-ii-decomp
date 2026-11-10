@@ -38895,9 +38895,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0019B398",
+     "name": "xglCdArcNameExpand",
      "size": 192,
-     "splat_name": "func_0019B398",
+     "splat_name": "xglCdArcNameExpand",
      "va": "0x0019b398",
      "name_basis": "address",
      "provenance": "estimated"
