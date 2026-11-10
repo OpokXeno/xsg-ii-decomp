@@ -2,6 +2,7 @@
 #include "shared.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_hdd.h"
+#include "main/pad.h"
 #include "main/xgl_timer0.h"
 
 struct request {
@@ -1532,10 +1533,177 @@ void xglCdFileSelectListReload(CdFileSelect *select)
 
 /* File-select path handling; calls the list reload (proposed xglCdFileSelectSub). */
 INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdFileSelectSub);
+void xglCdFileSelectSub(CdFileSelect *select);
 
-/* Pad-driven file select: reads PadData and formats PATH:/%s (proposed
- * xglCdFileSelect). */
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdFileSelect);
+extern PadRecord PadData[2];
+extern const char fileSelectPathFormat[];
+extern const char fileSelectUpArrowText[];
+extern const char fileSelectCursorText[];
+/* Rows 0 and 1 of a subdirectory listing: "..", "." */
+extern const char *fileSelectParentNames[2];
+extern const char fileSelectDownArrowText[];
+
+/* Pad-driven debug file select. Up/down move the cursor (wrapping only on a fresh press), left/right
+ * move it by a page; triangle resets the state to 0 and cross cancels (returns 2). Circle on a
+ * directory appends it to the path (state 1), on a file appends it and returns 1 (state 3); on ".."
+ * it leaves (state 3), on "." it returns 3 (state 2). Inside a directory rows 0 and 1 are "..", ".".
+ * Then prints the path and the visible rows with the cursor and the scroll arrows. */
+int xglCdFileSelect(CdFileSelect *select)
+{
+    int index;
+    int skipped;
+    int end_row;
+    int count;
+    int x;
+    int y;
+    unsigned char *list;
+    char *last;
+    char *path;
+    char *tail;
+    unsigned char *entry;
+    unsigned short buttons;
+
+    xglCdFileSelectSub(select);
+    buttons = PadData[0].pressed;
+    if ((buttons & PAD_TRIANGLE) != 0) {
+        select->state = 0;
+    }
+    if ((buttons & PAD_CROSS) != 0) {
+        return 2;
+    }
+    if (PadData[0].repeated & PAD_LEFT) {
+        select->cursor -= select->rows;
+    }
+    if (PadData[0].repeated & PAD_UP) {
+        select->cursor--;
+    }
+    if (select->cursor < 0) {
+        if (PadData[0].pressed & PAD_UP) {
+            select->cursor = select->entry_count - 1;
+        }
+        else {
+            select->cursor = 0;
+        }
+    }
+    if (select->cursor - select->first_row <= 0) {
+        select->first_row = select->cursor - 1;
+    }
+    if (select->first_row < 0) {
+        select->first_row = 0;
+    }
+    if (PadData[0].repeated & PAD_RIGHT) {
+        select->cursor += select->rows;
+    }
+    if (PadData[0].repeated & PAD_DOWN) {
+        select->cursor++;
+    }
+    if (select->entry_count - 1 < select->cursor) {
+        if (PadData[0].pressed & PAD_DOWN) {
+            select->cursor = 0;
+        }
+        else {
+            select->cursor = select->entry_count - 1;
+        }
+    }
+    if (select->cursor - select->first_row > select->rows - 2) {
+        select->first_row = select->cursor - select->rows + 2;
+    }
+    if ((unsigned int)(select->entry_count - select->rows) < (unsigned int)select->first_row) {
+        select->first_row = select->entry_count - select->rows;
+    }
+    if (PadData[0].pressed & PAD_CIRCLE) {
+        entry = (unsigned char *)select->list_position;
+        if (select->path[0] != 0) {
+            if (select->cursor == 1) {
+                select->cursor = 0;
+                select->state = 2;
+                select->first_row = 0;
+                return 3;
+            }
+            select->cursor -= 2;
+        }
+        if (select->cursor < 0) {
+            path = select->path;
+            select->cursor = 0;
+            select->state = 3;
+            select->first_row = 0;
+        } else {
+            for (skipped = 0; skipped < select->cursor; skipped++) {
+                while (*entry++ != 0) {
+                    ;
+                }
+            }
+            last = (char *)entry;
+            while (last[1] != 0) {
+                last++;
+            }
+            path = select->path;
+            tail = path;
+            while (*tail != 0) {
+                tail++;
+            }
+            do {
+                *tail++ = *entry;
+            } while (*entry++ != 0);
+            if (*last == '/') {
+                select->cursor = 0;
+                select->state = 1;
+                select->first_row = 0;
+            } else {
+                select->cursor = 0;
+                select->state = 3;
+                select->first_row = 0;
+                return 1;
+            }
+        }
+    } else {
+        path = select->path;
+    }
+    x = select->x;
+    y = select->y;
+    list = (unsigned char *)select->list_position;
+    select->print(x, y, fileSelectPathFormat, path);
+    end_row = select->rows;
+    count = select->entry_count;
+    if (count < end_row) {
+        end_row = count;
+    }
+    end_row += select->first_row;
+    index = 0;
+    if (*path != 0) {
+        index = 2;
+    }
+    y += 12;
+    for (; index < select->first_row; index++) {
+        while (*list++ != 0) {
+            ;
+        }
+    }
+    if (select->first_row > 0) {
+        select->print(x, y, fileSelectUpArrowText);
+    }
+    for (index = select->first_row; index < end_row; index++) {
+        if (index == select->cursor) {
+            select->print(x + 8, y, fileSelectCursorText);
+        }
+        if (index < 2 && select->path[0] != 0) {
+            select->print(x + 16, y, fileSelectParentNames[index]);
+        } else {
+            select->print(x + 16, y, (char *)list);
+            while (*list++ != 0) {
+                ;
+            }
+            if (*list == 0) {
+                return 0;
+            }
+        }
+        y += 8;
+    }
+    if (*list != 0) {
+        select->print(x, y - 8, fileSelectDownArrowText);
+    }
+    return 0;
+}
 
 void xglCdSifLoadModule(const char *path, const char *args)
 {
