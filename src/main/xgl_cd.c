@@ -1531,9 +1531,116 @@ void xglCdFileSelectListReload(CdFileSelect *select)
     }
 }
 
-/* File-select path handling; calls the list reload (proposed xglCdFileSelectSub). */
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdFileSelectSub);
-void xglCdFileSelectSub(CdFileSelect *select);
+/* The file-select state machine: state 0 (and any unknown state) reloads the .filelist and clears
+ * the path; state 1 looks up the path's "<path>:" section in the list (".:" for the root), points
+ * list_position at its names and counts them (plus the "..", "." rows inside a directory), then
+ * moves to state 2 (idle); state 3 drops the last path component and goes back to state 1. */
+void xglCdFileSelectSub(CdFileSelect *select)
+{
+    char prefix[CD_PATH_MAX];
+    unsigned char *src;
+    char *dst;
+    char *name;
+    char *probe;
+    char *part;
+    char *cursor;
+    char *last;
+    unsigned char character;
+    int mismatch;
+
+    switch (select->state) {
+    case 0:
+    default:
+        xglCdFileSelectListReload(select);
+        select->path[0] = 0;
+        select->list_index = 0;
+        select->list_position = select->list;
+        select->entry_count = 1;
+        select->first_row = 0;
+        select->state = 1;
+        /* fall through */
+    case 1:
+        src = (unsigned char *)select->path;
+        dst = prefix;
+        if (select->path[0] == 0) {
+            prefix[0] = '.';
+            prefix[1] = ':';
+            prefix[2] = 0;
+        } else {
+            do {
+                *dst++ = *src;
+                src++;
+            } while (*src != 0);
+            *dst = 0;
+            dst[-1] = ':';
+        }
+        name = select->list;
+        while (*name != 0) {
+            mismatch = 0;
+            for (part = prefix; *part != 0; part++) {
+                if (*name == 0) {
+                    mismatch = 1;
+                    break;
+                }
+                if (*name != *part) {
+                    mismatch = 1;
+                    break;
+                }
+                name++;
+            }
+            if (!mismatch) {
+                select->list_position = name + 1;
+                break;
+            }
+            {
+                unsigned char character;
+
+                while ((character = *name++) != 0) {
+                    do {
+                        character = *name++;
+                    } while (character != 0);
+                }
+            }
+        }
+        select->entry_count = 0;
+        probe = select->list_position;
+        if (*probe != 0) {
+            probe++;
+            for (;;) {
+                character = *probe++;
+                if (character != 0) {
+                    continue;
+                }
+                select->entry_count++;
+                character = *probe;
+                if (character == 0) {
+                    break;
+                }
+            }
+        }
+        if (select->path[0] != 0) {
+            select->entry_count += 2;
+        }
+        select->state = 2;
+        break;
+    case 2:
+        return;
+    case 3:
+        last = select->path;
+        for (cursor = last; *cursor != 0; cursor++) {
+            if (*cursor == '/') {
+                if (cursor[1] == 0) {
+                    *last = 0;
+                    break;
+                }
+                last = cursor + 1;
+            }
+        }
+        *last = 0;
+        select->state = 1;
+        break;
+    }
+}
 
 extern PadRecord PadData[2];
 extern const char fileSelectPathFormat[];
