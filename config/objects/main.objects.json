@@ -41269,9 +41269,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A33F8",
+     "name": "seBankLoadMemory",
      "size": 188,
-     "splat_name": "func_001A33F8",
+     "splat_name": "seBankLoadMemory",
      "va": "0x001a33f8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -41305,9 +41305,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A3700",
+     "name": "seBgmSetSongLevel",
      "size": 220,
-     "splat_name": "func_001A3700",
+     "splat_name": "seBgmSetSongLevel",
      "va": "0x001a3700",
      "name_basis": "address",
      "provenance": "estimated"
@@ -41395,9 +41395,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A3D88",
+     "name": "seVoiceStop",
      "size": 136,
-     "splat_name": "func_001A3D88",
+     "splat_name": "seVoiceStop",
      "va": "0x001a3d88",
      "name_basis": "address",
      "provenance": "estimated"

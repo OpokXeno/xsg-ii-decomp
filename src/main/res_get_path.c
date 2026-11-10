@@ -1308,7 +1308,7 @@ int seNameCopyIfChanged(char *dst, char *src)
 
 #include "main/tu051.h"
 
-void func_001A3D88(u32 handle);
+void seVoiceStop(u32 handle);
 void soundInitIfNeeded(void);
 
 void resReleaseRecordsOfType(int kind, int forward) {
@@ -1321,7 +1321,7 @@ void resReleaseRecordsOfType(int kind, int forward) {
         record = (ResKindRecord *)(base + 12);
         for (i = 0; i < SE_RECORD_COUNT; i++, record++) {
             if (((record->kindWord >> 24) & 0x7f) == kind) {
-                func_001A3D88(record->kindWord);
+                seVoiceStop(record->kindWord);
                 record->kindWord = 0;
             }
         }
@@ -1330,7 +1330,7 @@ void resReleaseRecordsOfType(int kind, int forward) {
         record = (ResKindRecord *)(base + 12);
         for (i = SE_RECORD_COUNT - 1; i >= 0; i--, record++) {
             if ((record->kindWord >> 24) == kind) {
-                func_001A3D88(record->kindWord);
+                seVoiceStop(record->kindWord);
                 record->kindWord = 0;
             }
         }
@@ -1468,11 +1468,11 @@ void seVoiceRecordSet(u32 voice, u32 volume, u32 pan) {
                         return;
                     }
                 }
-                func_001A3D88(voice);
+                seVoiceStop(voice);
                 return;
             }
             resRecordTable[i].flags = 0;
-            func_001A3D88(voice);
+            seVoiceStop(voice);
             return;
         }
     }
