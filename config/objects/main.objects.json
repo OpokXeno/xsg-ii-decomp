@@ -40223,18 +40223,18 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A0378",
+     "name": "moviePlayerStartFile",
      "size": 292,
-     "splat_name": "func_001A0378",
+     "splat_name": "moviePlayerStartFile",
      "va": "0x001a0378",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A04A0",
+     "name": "moviePlayerUpdate",
      "size": 484,
-     "splat_name": "func_001A04A0",
+     "splat_name": "moviePlayerUpdate",
      "va": "0x001a04a0",
      "name_basis": "address",
      "provenance": "estimated"
@@ -40250,18 +40250,18 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A06B8",
+     "name": "moviePlayerDestroy",
      "size": 140,
-     "splat_name": "func_001A06B8",
+     "splat_name": "moviePlayerDestroy",
      "va": "0x001a06b8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A0748",
+     "name": "moviePlayerParamsInit",
      "size": 108,
-     "splat_name": "func_001A0748",
+     "splat_name": "moviePlayerParamsInit",
      "va": "0x001a0748",
      "name_basis": "address",
      "provenance": "estimated"

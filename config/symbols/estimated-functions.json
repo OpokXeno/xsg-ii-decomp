@@ -30072,13 +30072,13 @@
      2
     ],
     [
-     "func_001A0378",
+     "moviePlayerStartFile",
      1704824,
      292,
      2
     ],
     [
-     "func_001A04A0",
+     "moviePlayerUpdate",
      1705120,
      484,
      2
@@ -30090,13 +30090,13 @@
      2
     ],
     [
-     "func_001A06B8",
+     "moviePlayerDestroy",
      1705656,
      140,
      2
     ],
     [
-     "func_001A0748",
+     "moviePlayerParamsInit",
      1705800,
      108,
      2
