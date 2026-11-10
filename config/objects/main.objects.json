@@ -8746,9 +8746,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012E840",
+     "name": "sceCdGetReadPos",
      "size": 48,
-     "splat_name": "func_0012E840",
+     "splat_name": "sceCdGetReadPos",
      "va": "0x0012e840",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8782,9 +8782,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012EBD0",
+     "name": "sceCdGetDiskType",
      "size": 152,
-     "splat_name": "func_0012EBD0",
+     "splat_name": "sceCdGetDiskType",
      "va": "0x0012ebd0",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8800,9 +8800,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012ED00",
+     "name": "sceCdStatus",
      "size": 184,
-     "splat_name": "func_0012ED00",
+     "splat_name": "sceCdStatus",
      "va": "0x0012ed00",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8836,9 +8836,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012F018",
+     "name": "sceCdPowerOff",
      "size": 180,
-     "splat_name": "func_0012F018",
+     "splat_name": "sceCdPowerOff",
      "va": "0x0012f018",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8863,9 +8863,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012F298",
+     "name": "sceCdTrayReq",
      "size": 236,
-     "splat_name": "func_0012F298",
+     "splat_name": "sceCdTrayReq",
      "va": "0x0012f298",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8881,9 +8881,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012F3B8",
+     "name": "sceCdStStart",
      "size": 52,
-     "splat_name": "func_0012F3B8",
+     "splat_name": "sceCdStStart",
      "va": "0x0012f3b8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -8944,9 +8944,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012F6B8",
+     "name": "sceCdStStat",
      "size": 72,
-     "splat_name": "func_0012F6B8",
+     "splat_name": "sceCdStStat",
      "va": "0x0012f6b8",
      "name_basis": "address",
      "provenance": "estimated"
