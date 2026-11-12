@@ -158,7 +158,7 @@ int soundSlotsRestart(void)
 }
 
 int func_00183BA8(int id, int value);
-int seVolumeCurve(unsigned char selector);
+int seVolumeCurve(int level);
 
 /* Applies the value that state[3] selects to the slot's driver voice. */
 int soundSlotApply(SoundSlot *slot)

@@ -1,6 +1,29 @@
 #include "common.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/tu020", seVolumeCurve);
+/* Volume curve: one point per 4 levels; levels between points are
+ * interpolated, levels from 0x7F up give 0. */
+#define SE_VOLUME_LEVELS 0x7f
+
+extern short seVolumeCurveTable[];
+
+int seVolumeCurve(int level)
+{
+    int fraction = level & 3;
+    int value;
+
+    if (level < SE_VOLUME_LEVELS && fraction != 0) {
+        int point = seVolumeCurveTable[level >> 2];
+        int next = seVolumeCurveTable[(level + 4) >> 2];
+
+        value = point + (((next - point) * fraction) >> 2);
+    } else {
+        value = seVolumeCurveTable[level >> 2];
+        if (level >= SE_VOLUME_LEVELS) {
+            value = 0;
+        }
+    }
+    return value;
+}
 
 INCLUDE_ASM("asm/main/nonmatchings/tu020", seVolumeRampSet);
 
