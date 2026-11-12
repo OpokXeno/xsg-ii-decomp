@@ -1209,7 +1209,7 @@ extern int D_002BB5B8[];
 int seBankLoadDefault(int bank, int force);
 int seBankLoad(int bank, int a, int b);
 void func_001A37E0(int packed, int name, int option);
-void seVoiceStart(int voice, int a, int b);
+void seVoiceStart(int voice, int volume, int pan);
 void seFootBanksLoad(void);
 
 void resResetKindState(int mode) {
@@ -1308,7 +1308,7 @@ int seNameCopyIfChanged(char *dst, char *src)
 
 #include "main/tu051.h"
 
-void seVoiceStop(u32 handle);
+void seVoiceStop(int voice);
 void soundInitIfNeeded(void);
 
 void resReleaseRecordsOfType(int kind, int forward) {

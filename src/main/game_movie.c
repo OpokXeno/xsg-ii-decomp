@@ -344,10 +344,10 @@ void xglRenderClearDepth(void);
  * from $3 to $2. */
 int xglGetLanguageCode(char *code);
 int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-int func_001A0378(AllocRecord *player, const char *name);
-int func_001A04A0(AllocRecord *player);
+int moviePlayerStartFile(AllocRecord *player, const char *name);
+int moviePlayerUpdate(AllocRecord *player);
 int func_001A0688(AllocRecord *player, int pause);
-int func_001A06B8(AllocRecord *player);
+int moviePlayerDestroy(AllocRecord *player);
 void xglFontPrintDirect(const char *text);
 char *func_00195E90(int mode, char *cursor, int flag);
 int sprintf(char *destination, const char *format, ...);
@@ -439,12 +439,12 @@ void GameMovieCaptionPlay(const char *name)
             text = buffer;
         }
         movieRenderBufferAlloc(&player, (int)(buffer + ((size + 63) & ~63)), SaveData.dolby_digital);
-        if (func_001A0378(&player, path) >= 0) {
+        if (moviePlayerStartFile(&player, path) >= 0) {
             sRender.movie_active = 1;
             D_0069E094 = StudioEntrySkip = 1;
             gameWork.input_delay = 32;
             for (;;) {
-                status = func_001A04A0(&player);
+                status = moviePlayerUpdate(&player);
                 if (text != 0) {
                     entry = (unsigned char *)text;
                     while (*entry++ != 0) {
@@ -549,7 +549,7 @@ void GameMovieCaptionPlay(const char *name)
             D_0069E094 = 2;
             sRender.movie_active = 0;
         }
-        func_001A06B8(&player);
+        moviePlayerDestroy(&player);
     } while (replay);
     /* The maps on which the movie skips its closing fadeStartOut and keeps the screen as it is; every
      * other map fades out. */

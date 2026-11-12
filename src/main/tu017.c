@@ -195,7 +195,7 @@ int func_002AA5D8(char *destination, const char *format, ...);
 /* Starts the movie file `name` on the record's player: sets the volume (unless the record has the
  * extra sound block), builds "<moviePathPrefix><name with / as \>", looks it up on the disc and
  * gives the player the key "lbn.sectors". Returns -1 when the file is missing, else 0. */
-int moviePlayerStartFile(AllocRecord *record, const char *name)
+int moviePlayerStartFile(AllocRecord *player, const char *name)
 {
     char path[MOVIE_PATH_MAX];
     MovieFileRecord file;
@@ -203,8 +203,8 @@ int moviePlayerStartFile(AllocRecord *record, const char *name)
     char *destination;
     char character;
 
-    if (record->extra_enabled == 0) {
-        RECORD_PLAYER(record)->methods->set_volume(RECORD_PLAYER(record), seVolumeCurve(record->max_value));
+    if (player->extra_enabled == 0) {
+        RECORD_PLAYER(player)->methods->set_volume(RECORD_PLAYER(player), seVolumeCurve(player->max_value));
     }
     destination = path;
     source = moviePathPrefix;
@@ -233,8 +233,8 @@ int moviePlayerStartFile(AllocRecord *record, const char *name)
     }
     /* the key is written over the path, from its second character on */
     func_002AA5D8(path + 1, movieFileKeyFormat, file.lbn, file.stored_bytes >> CD_SECTOR_SHIFT);
-    RECORD_PLAYER(record)->methods->start_file(RECORD_PLAYER(record), path + 1);
-    record->frame_stamp = -1;
+    RECORD_PLAYER(player)->methods->start_file(RECORD_PLAYER(player), path + 1);
+    player->frame_stamp = -1;
     return 0;
 }
 
@@ -275,7 +275,7 @@ void func_00151438(int handle);
  * one, queues its upload chain; then, once a frame has arrived, queues the copy of the uploaded
  * page to the page shown. Returns 1 while the player is playing, -1 when it reached the end,
  * 0 otherwise. */
-int moviePlayerUpdate(AllocRecord *record)
+int moviePlayerUpdate(AllocRecord *player)
 {
     MovieFrame frame;
     XglPacket *packet;
@@ -284,20 +284,20 @@ int moviePlayerUpdate(AllocRecord *record)
     int status;
 
     packet = xglPacketGetCurrent();
-    if (record->frame_held != 0) {
-        func_00151438(record->handle);
+    if (player->frame_held != 0) {
+        func_00151438(player->handle);
     }
-    func_00150988(record->handle, &frame);
-    record->frame_held = 0;
+    func_00150988(player->handle, &frame);
+    player->frame_held = 0;
     if (frame.image != 0) {
-        record->frame_stamp = frame.stamp;
-        makeGstransChain(record->data_start, frame.image, frame.width, frame.height);
-        chain = UNCACHED(record->data_start);
+        player->frame_stamp = frame.stamp;
+        makeGstransChain(player->data_start, frame.image, frame.width, frame.height);
+        chain = UNCACHED(player->data_start);
         chain[4] = ((u64) sRender.flip_base << 37) | MOVIE_BITBLTBUF_DBW_512;
-        func_0012B618(packet, record->data_start, 0);
-        record->frame_held = 1;
+        func_0012B618(packet, player->data_start, 0);
+        player->frame_held = 1;
     }
-    if (record->frame_stamp >= 0) {
+    if (player->frame_stamp >= 0) {
         scratch = (u64 *) SCRATCHPAD_BASE;
         scratch[0] = 0;
         scratch[1] = VIF_DIRECT | (MOVIE_COPY_QWORDS - 1);
@@ -319,7 +319,7 @@ int moviePlayerUpdate(AllocRecord *record)
         sceVif1PkAddDirectDataN(packet, scratch, MOVIE_COPY_QWORDS);
         sceVif1PkCloseDirectHLCode(packet);
     }
-    status = RECORD_PLAYER(record)->methods->get_status(RECORD_PLAYER(record));
+    status = RECORD_PLAYER(player)->methods->get_status(RECORD_PLAYER(player));
     switch (status) {
     case MOVIE_STATUS_PLAYING:
         return 1;
@@ -347,14 +347,14 @@ void soundSlotsReopen(void);
 
 /* Stops and destroys the player of record, and when the record had the extra sound block,
  * releases it and brings the sound slots back. */
-int moviePlayerDestroy(AllocRecord *record)
+int moviePlayerDestroy(AllocRecord *player)
 {
-    RECORD_PLAYER(record)->methods->stop(RECORD_PLAYER(record));
-    if (record->extra_enabled != 0) {
-        func_0014E8C0(record->handle);
+    RECORD_PLAYER(player)->methods->stop(RECORD_PLAYER(player));
+    if (player->extra_enabled != 0) {
+        func_0014E8C0(player->handle);
     }
-    RECORD_PLAYER(record)->methods->destroy(RECORD_PLAYER(record));
-    if (record->extra_enabled != 0) {
+    RECORD_PLAYER(player)->methods->destroy(RECORD_PLAYER(player));
+    if (player->extra_enabled != 0) {
         func_0017D868();
         func_0017D150();
         func_0013A8A0(-1);

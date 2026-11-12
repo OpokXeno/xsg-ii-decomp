@@ -390,7 +390,7 @@ void seVolumeSet(int level, int step)
     }
 }
 
-void seVoiceStart(int packed, int volume, int pan);
+void seVoiceStart(int voice, int volume, int pan);
 
 /* Starts `voice` at the default volume (-1) and centre pan (0x40). */
 void seVoiceStartDefault(int voice) {
@@ -419,16 +419,16 @@ int func_001A3B38(int kind)
  * full (move $2,$16 at 0x13A9BC and 0x13A9C4); the callers here do not use the result. */
 int func_0013A938(int group, int message, int value);
 
-/* Starts the voice `packed` (bits 24..30: kind, bits 0..3: channel, bits 0..6: note) on the
+/* Starts `voice` (bits 24..30: kind, bits 0..3: channel, bits 0..6: note) on the
  * kind's channel group: bank select (the kind), pan, expression, program 0, note on. A negative
  * volume takes the default of the kind (kinds 1 and 2: SOUND_LEVEL_MAX, kind 7: the default
  * master level, every other kind: the default voice level); the volume is then scaled by the
  * master volume. */
-void seVoiceStart(int packed, int volume, int pan)
+void seVoiceStart(int voice, int volume, int pan)
 {
-    int kind = SE_VOICE_KIND(packed);
-    int channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(packed));
-    int note = SE_VOICE_NOTE(packed);
+    int kind = SE_VOICE_KIND(voice);
+    int channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(voice));
+    int note = SE_VOICE_NOTE(voice);
     int group = func_001A3B38(kind);
 
     if (volume < 0) {
@@ -456,10 +456,10 @@ void seVoiceStart(int packed, int volume, int pan)
     func_0013A938(group, channel | SE_MSG_DATA1(note) | SE_MSG_NOTE_ON | SE_MSG_DATA2(SOUND_LEVEL_MAX), 0);
 }
 
-void seVoiceSetPanVolume(int packed, int volume, int pan)
+void seVoiceSetPanVolume(int voice, int volume, int pan)
 {
-    int channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(packed));
-    int group = func_001A3B38(SE_VOICE_KIND(packed));
+    int channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(voice));
+    int group = func_001A3B38(SE_VOICE_KIND(voice));
 
     if (volume < 0) {
         volume = soundCtrl[SOUND_CTRL_VOICE_LEVEL];
@@ -474,20 +474,20 @@ void seVoiceSetPanVolume(int packed, int volume, int pan)
                   | SE_MSG_CONTROL_CHANGE | SE_MSG_DATA1(SE_CONTROLLER_EXPRESSION), 0);
 }
 
-/* For `packed` (bits 24..30: kind, bits 0..3: channel, bits 0..6: note), sends an expression
+/* For `voice` (bits 24..30: kind, bits 0..3: channel, bits 0..6: note), sends an expression
  * control change, a program change and a note off to the kind's channel group. */
-void seVoiceStop(int packed)
+void seVoiceStop(int voice)
 {
-    int group = func_001A3B38(SE_VOICE_KIND(packed));
-    int channel = SE_VOICE_CHANNEL(packed);
+    int group = func_001A3B38(SE_VOICE_KIND(voice));
+    int channel = SE_VOICE_CHANNEL(voice);
 
     /* shifted in a second step: the one-step form takes other registers */
     channel = SE_MSG_CHANNEL(channel);
     func_0013A938(group, channel | SE_MSG_CONTROL_CHANGE | SE_MSG_DATA1(SE_CONTROLLER_EXPRESSION), 0);
-    /* packed is reused for the note; where this statement stands sets the first call's argument order */
-    packed = SE_VOICE_NOTE(packed);
+    /* voice is reused for the note; where this statement stands sets the first call's argument order */
+    voice = SE_VOICE_NOTE(voice);
     func_0013A938(group, channel | SE_MSG_PROGRAM_CHANGE, 0);
-    channel |= SE_MSG_DATA1(packed);
+    channel |= SE_MSG_DATA1(voice);
     func_0013A938(group, channel | SE_MSG_NOTE_OFF, 0);
 }
 
