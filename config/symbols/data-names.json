@@ -195,6 +195,8 @@
    "0x0069e383": "xglMcQueueEnd",
    "0x0069e382": "xglMcQueueTop",
    "0x0068df88": "xglMcBasePath",
+   "0x0068e0a8": "frameDropMessage",
+   "0x0068e0b8": "ipuTimeoutMessage",
    "0x00644ed0": "seVolumeCurveTable",
    "0x00644f18": "soundCtrl",
    "0x00644f1b": "seSongNumber",

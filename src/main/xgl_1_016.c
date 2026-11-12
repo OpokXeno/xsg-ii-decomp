@@ -79,7 +79,8 @@ typedef struct XglMovieWork {
     unsigned char transMode;        /* +0xc9 */
     unsigned char threshold1;       /* +0xca */
     unsigned char threshold0;       /* +0xcb */
-    int missCount;                  /* +0xcc */
+    /* Memory-mode decode buffer; 0 uses the scratchpad. */
+    unsigned int workBuffer;        /* +0xcc */
 } XglMovieWork;
 
 struct XglMovieSourceHeader {
@@ -241,8 +242,6 @@ int xglMovieOpen(XglMovieWork *info, int stream)
     return 0;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_1_016", xglMoviePlay);
-
 /* D_ENABLEW bit 16 (CPND): holds all DMA transfers while a channel register is written. */
 #define D_ENABLEW ((volatile u32 *) 0x1000f590)
 #define D_ENABLE_HOLD 0x10000
@@ -250,9 +249,215 @@ INCLUDE_ASM("asm/main/nonmatchings/xgl_1_016", xglMoviePlay);
 /* D4_CHCR value that leaves the chain set up but stopped. */
 #define MOVIE_D4_CHCR_CHAIN_STOP (DMA_CHCR_MOD_CHAIN | DMA_CHCR_DIR)
 
-extern int DIntr(void);
 extern int EIntr(void);
 void xglCdStreamRewind(struct CdStreamParam *stream);
+
+/* EE IPU and IPU DMA registers. */
+#define IPU_CMD ((volatile u32 *) 0x10002000)
+#define IPU_CTRL ((volatile u32 *) 0x10002010)
+#define IPU_BP ((volatile u32 *) 0x10002020)
+#define D4_CHCR ((volatile u32 *) 0x1000b400)
+#define D4_MADR ((volatile u32 *) 0x1000b410)
+#define D4_QWC ((volatile u32 *) 0x1000b420)
+#define D4_TADR ((volatile u32 *) 0x1000b430)
+#define IPU_CTRL_RESET 0x40000000
+#define IPU_CMD_BCLR 0
+#define IPU_CMD_IDEC 0x10000000
+#define IPU_CMD_FDEC 0x40000000
+#define IPU_CMD_SETTH 0x90000000
+#define IPU_IDEC_QSC_1 0x10000 /* quantiser step code 1 */
+/* sceIpuSync timeout, and the busy-poll bound of the D3 wait. */
+#define IPU_SYNC_TIMEOUT 0x200
+#define MOVIE_POLL_LIMIT 0xFFFFFF
+/* transMode: decode into memory only (the strips are copied out of the scratchpad). */
+#define MOVIE_TRANS_MEMORY 0xff
+#define MOVIE_DMA_MAX_QWORDS 0xffff
+#define SCRATCHPAD_BASE 0x70000000
+#define XGL_DMA_CHANNEL_GIF 2
+
+typedef unsigned int Quadword __attribute__((mode(TI)));
+
+extern int DIntr(void);
+int sceIpuSync(int mode, int timeout);
+int sceGsSyncPath(int mode, int timeout);
+int myDmaDirectFromIPU(u32 address, u32 count);
+void xglDmaDirectSrcChain(u32 channel, u32 address);
+int checkdma(XglMovieWork *info);
+int xglMovieRewind(XglMovieWork *info);
+/* "frame drop\n" and "ipu time out:%d\n" */
+extern const char frameDropMessage[];
+extern const char ipuTimeoutMessage[];
+
+/*
+ * Decodes one movie frame: restarts the IPU feed when its DMA has stopped, checks the stream ring,
+ * decodes the strips into the GS (through make_gstrans packets) or into memory, and advances the
+ * frame. At the end it stops (loop off) or rewinds; otherwise it saves the IPU bitstream position
+ * for the next frame. Returns -1 on an IPU or ring error, 1 at the end, 0 otherwise.
+ */
+int xglMoviePlay(XglMovieWork *info)
+{
+    int strip;
+    int retry;
+    unsigned int header;
+    int pitch;
+    int x;
+    int row;
+    Quadword *source;
+    Quadword *destination;
+    unsigned int work;
+
+    if (info->loop == 0 && info->currentFrame >= info->frameCount) {
+        return 1;
+    }
+    if ((*D4_CHCR & DMA_CHCR_STR) == 0) {
+        *IPU_CTRL = IPU_CTRL_RESET;
+        if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
+            return -1;
+        }
+        *IPU_CMD = IPU_CMD_SETTH | (info->threshold1 << 16) | info->threshold0;
+        if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
+            return -1;
+        }
+        *IPU_CMD = info->bitPosition;
+        if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
+            return -1;
+        }
+        *D4_MADR = info->dmaAddress;
+        if (info->dmaQwords > MOVIE_DMA_MAX_QWORDS) {
+            *D4_QWC = MOVIE_DMA_MAX_QWORDS;
+        } else {
+            *D4_QWC = info->dmaQwords;
+        }
+        *D4_TADR = (unsigned int) info->dmaTag;
+        setD4_CHCR(info->dmaControl);
+    }
+    if (info->streamOpen) {
+        if (checkdma(info) != 0) {
+            printf(frameDropMessage);
+            return -1;
+        }
+    }
+    if (info->transMode != MOVIE_TRANS_MEMORY) {
+        sceGsSyncPath(0, 0);
+        for (strip = 0; strip < info->height; strip += MOVIE_MACROBLOCK) {
+            myDmaDirectFromIPU(info->imageAddress[info->bufferIndex], info->stripQwords);
+            if (strip == 0) {
+                *IPU_CMD = IPU_CMD_FDEC;
+                if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
+                    return -1;
+                }
+                header = *IPU_CMD >> 24;
+                *IPU_CMD = IPU_CMD_FDEC | 8;
+                if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
+                    return -1;
+                }
+                *IPU_CTRL = (header & 0xfb) << 16;
+                *IPU_CMD = (((header & 4) >> 2) << 24) | (IPU_CMD_IDEC | IPU_IDEC_QSC_1);
+            }
+            make_gstrans(info, strip);
+            for (retry = 0; retry <= MOVIE_POLL_LIMIT; retry++) {
+                if ((*D3_CHCR & DMA_CHCR_STR) == 0) {
+                    break;
+                }
+            }
+            xglDmaDirectSrcChain(XGL_DMA_CHANNEL_GIF, info->packetAddress[info->bufferIndex]);
+            info->bufferIndex ^= 1;
+        }
+        sceGsSyncPath(0, 0);
+    } else {
+        work = SCRATCHPAD_BASE;
+        if (info->workBuffer != 0) {
+            work = info->workBuffer;
+        }
+        for (strip = 0; strip < info->height; strip += MOVIE_MACROBLOCK) {
+            myDmaDirectFromIPU(work, info->stripQwords);
+            if (strip == 0) {
+                *IPU_CMD = IPU_CMD_FDEC;
+                if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
+                    return -1;
+                }
+                header = *IPU_CMD >> 24;
+                *IPU_CMD = IPU_CMD_FDEC | 8;
+                if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
+                    return -1;
+                }
+                *IPU_CTRL = (header & 0xfb) << 16;
+                *IPU_CMD = (((header & 4) >> 2) << 24) | (IPU_CMD_IDEC | IPU_IDEC_QSC_1);
+            }
+            for (retry = 0; retry <= MOVIE_POLL_LIMIT; retry++) {
+                if ((*D3_CHCR & DMA_CHCR_STR) == 0) {
+                    break;
+                }
+            }
+            if (retry > MOVIE_POLL_LIMIT) {
+                printf(ipuTimeoutMessage, strip);
+            }
+            pitch = info->width / 4;
+            source = (Quadword *) work;
+            destination = (Quadword *) (info->imageAddress[info->bufferIndex] + info->width * strip * 4);
+            for (x = 0; x < info->width; x += MOVIE_MACROBLOCK) {
+                for (row = MOVIE_MACROBLOCK - 1; row >= 0; row--) {
+                    destination[0] = source[0];
+                    destination[1] = source[1];
+                    destination[2] = source[2];
+                    destination[3] = source[3];
+                    source += 4;
+                    destination += pitch;
+                }
+                destination = destination - pitch * MOVIE_MACROBLOCK + 4;
+            }
+        }
+        info->bufferIndex ^= 1;
+    }
+    if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
+        return -1;
+    }
+    *IPU_CMD = IPU_CMD_FDEC | 0x20;
+    if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
+        return -1;
+    }
+    info->currentFrame++;
+    if (info->currentFrame >= info->frameCount) {
+        if (info->loop == 0) {
+            info->currentFrame = info->frameCount;
+            setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
+            DIntr();
+            *D_ENABLEW = *D_ENABLEW | D_ENABLE_HOLD;
+            *D3_CHCR = 0;
+            *D_ENABLEW = *D_ENABLEW & ~D_ENABLE_HOLD;
+            EIntr();
+        } else {
+            xglMovieRewind(info);
+        }
+        return 1;
+    }
+    if (info->streamOpen) {
+        unsigned int bitstream;
+
+        info->dmaControl = *D4_CHCR;
+        setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
+        bitstream = *IPU_BP;
+        info->dmaAddress = *D4_MADR - (((bitstream >> 16) & 3) + ((bitstream >> 8) & 0xf)) * 16;
+        info->dmaQwords = *D4_QWC + (((bitstream >> 16) & 3) + ((bitstream >> 8) & 0xf));
+        info->dmaTag = (XglDmaRefTag *) *D4_TADR;
+        info->bitPosition = bitstream & 0x7f;
+    } else {
+        unsigned int bitstream;
+        unsigned int consumed;
+
+        info->dmaControl = *D4_CHCR;
+        setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
+        bitstream = *IPU_BP;
+        consumed = *D4_MADR - info->dmaAddress - (((bitstream >> 16) & 3) + ((bitstream >> 8) & 0xf)) * 16;
+        info->dmaAddress += consumed;
+        info->dmaQwords -= consumed / MOVIE_DMA_QWORD;
+        info->dmaTag = (XglDmaRefTag *) *D4_TADR;
+        info->bitPosition = bitstream & 0x7f;
+    }
+    return 0;
+}
+
+
 
 /*
  * Restarts a movie at its first frame: stops both IPU DMA channels, seeks a stream back to its first
@@ -294,29 +499,25 @@ typedef signed char s8;
 
 typedef int s32;
 
-int func_00131380(int, int);
 void xglCdStreamClose(void);
 
 /*
  * Closes the movie stream of info: runs xglCdStreamClose while streamOpen is set,
  * clears the D4 channel, writes IPU_CTRL, and returns -1
- * when func_00131380 reports a failure before or after the write to IPU_CMD.
+ * when sceIpuSync reports a failure before or after the write to IPU_CMD.
  */
-/* EE IPU registers. */
-#define IPU_CMD (*(volatile u32 *) 0x10002000)
-#define IPU_CTRL (*(volatile u32 *) 0x10002010)
 
 int xglMovieClose(XglMovieWork *info) {
     if (info->streamOpen != 0) {
         xglCdStreamClose();
     }
     setD4_CHCR(0);
-    IPU_CTRL = 0x40000000;
-    if (func_00131380(0, 0x200) < 0) {
+    *IPU_CTRL = IPU_CTRL_RESET;
+    if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
         return -1;
     }
-    IPU_CMD = 0;
-    return (func_00131380(0, 0x200) >= 0) ? 0 : -1;
+    *IPU_CMD = IPU_CMD_BCLR;
+    return (sceIpuSync(0, IPU_SYNC_TIMEOUT) >= 0) ? 0 : -1;
 }
 
 
@@ -333,5 +534,5 @@ void xglMovieInfoInit(XglMovieWork *info)
     info->loop = 0;
     info->threshold1 = 0;
     info->threshold0 = 0;
-    info->missCount = 0;
+    info->workBuffer = 0;
 }

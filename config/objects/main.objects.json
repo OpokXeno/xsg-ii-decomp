@@ -9250,9 +9250,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00131380",
+     "name": "sceIpuSync",
      "size": 104,
-     "splat_name": "func_00131380",
+     "splat_name": "sceIpuSync",
      "va": "0x00131380",
      "name_basis": "address",
      "provenance": "estimated"

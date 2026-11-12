@@ -3,6 +3,7 @@
  "schema": "x2-function-names/1",
  "units": {
   "main": {
+   "0x00131380": "sceIpuSync",
    "0x001207a0": "FlushCache",
    "0x00120e18": "SyncDCache",
    "0x001246c0": "sceOpen",
