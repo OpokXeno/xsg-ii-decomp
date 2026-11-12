@@ -1165,8 +1165,8 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
                 request = &CD_READ_CONTROL->requests[CD_READ_CONTROL->queue_tail];
                 source = name;
                 destination = request->name;
-                while ((*destination++ = *source++) != 0)
-                    ;
+                while ((*destination++ = *source++) != 0) {
+                }
                 request->buffer = buffer;
                 request->offset = offset;
                 request->length = length;
@@ -1177,24 +1177,28 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
             }
         }
     }
-    if (CD_READ_CONTROL->dispatch_state != CD_STATE_IDLE && mode != 4)
+    if (CD_READ_CONTROL->dispatch_state != CD_STATE_IDLE && mode != 4) {
         return -3;
-    if (xglCdGetFilePos(file, name, notify) == 0)
+    }
+    if (xglCdGetFilePos(file, name, notify) == 0) {
         return -1;
+    }
     position.lbn += offset >> 11;
-    if (length > 0)
+    if (length > 0) {
         position.stored_bytes = length;
+    }
     notify(CD_EVENT_SIZE, (position.stored_bytes + CD_SECTOR_BYTES - 1) & -CD_SECTOR_BYTES, xglCdReadTag);
     CD_READ_CONTROL->completion_callback = notify;
     CD_READ_CONTROL->callback_argument = xglCdReadTag;
     CD_READ_CONTROL->extract_byte_count = (position.stored_bytes + CD_SECTOR_BYTES - 1) & -CD_SECTOR_BYTES;
     CD_READ_CONTROL->extract_destination = buffer;
-    if (file->packed == 0 || (mode & 2) != 0)
+    if (file->packed == 0 || (mode & 2) != 0) {
         CD_READ_CONTROL->extract_source = buffer;
-    else
+    } else {
         CD_READ_CONTROL->extract_source = (u8 *)buffer
             + ((position.size_bytes + CD_SECTOR_BYTES - 1) & -CD_SECTOR_BYTES)
             - CD_READ_CONTROL->extract_byte_count;
+    }
     CD_READ_CONTROL->read_poll_mode = position.source;
     switch (position.source) {
     case CD_SOURCE_DISC:
@@ -1223,8 +1227,9 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
                 func_0017D150();
             }
         } else {
-            while (sceCdSync(1) > 0)
+            while (sceCdSync(1) > 0) {
                 notify(CD_EVENT_PROGRESS, sceCdGetReadPos(), xglCdReadTag);
+            }
         }
         if (xglCdDeviceHandle != 0) {
             if (func_0017AF40(xglCdDeviceHandle) == 4) {
@@ -1252,13 +1257,14 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
         /* Host/HDD files are read synchronously in chunks of at most 64 KiB;
          * a failed read reports the HDD error and restarts the request. */
         do {
-            if (CD_READ_CONTROL->remaining_bytes > CD_FILE_CHUNK_BYTES - 1)
+            if (CD_READ_CONTROL->remaining_bytes > CD_FILE_CHUNK_BYTES - 1) {
                 result = sceRead(CD_READ_CONTROL->active_file_descriptor,
                                  CD_READ_CONTROL->write_cursor, CD_FILE_CHUNK_BYTES);
-            else
+            } else {
                 result = sceRead(CD_READ_CONTROL->active_file_descriptor,
                                  CD_READ_CONTROL->write_cursor,
                                  CD_READ_CONTROL->remaining_bytes);
+            }
             if (result < 0) {
                 hdd_error();
                 CD_READ_CONTROL->dispatch_state = CD_STATE_IDLE;
@@ -1280,9 +1286,10 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
         CD_READ_CONTROL->active_file_descriptor = -1;
         break;
     }
-    if ((mode & 2) == 0)
+    if ((mode & 2) == 0) {
         extract(CD_READ_CONTROL->extract_destination, CD_READ_CONTROL->extract_source,
                 CD_READ_CONTROL->extract_byte_count);
+    }
     notify(CD_EVENT_DONE, 0, xglCdReadTag);
     CD_READ_CONTROL->dispatch_state = CD_STATE_IDLE;
     return (position.size_bytes + CD_SECTOR_BYTES - 1) & -CD_SECTOR_BYTES;
