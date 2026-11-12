@@ -351,4 +351,60 @@ void soundSlotsReopen(void)
 
 /* Driver setup called from InitializeSystem: binds the KORG IOP driver ("[EE] Failed to bind KORG
  * IOP Sound Driver."), carves the work buffers from WorkEnd, sets the defaults and reopens the slots. */
-INCLUDE_ASM("asm/main/nonmatchings/tu022", soundDriverInit);
+void func_00182460(int value);
+int func_0017C890(int value);
+int sceGsSyncVCallback(int (*callback)(void));
+int func_0017B3E0(void);
+int func_00138300(void);
+int func_00138988(int value);
+int func_00138428(int value0, int value1);
+int func_00138780(int value0, int value1);
+int func_001396D8(int kind, int channel, int level);
+void soundSlotsReopen(void);
+int printf(const char *format, ...);
+extern unsigned char *WorkEnd;
+
+/* The work buffers of the two voices, and the part of each the driver uses. */
+#define SOUND_SLOT0_BUFFER_BYTES 0x30200
+#define SOUND_SLOT0_BUFFER_USED 0x301E4
+#define SOUND_SLOT1_BUFFER_BYTES 0x3DA00
+#define SOUND_SLOT1_BUFFER_USED 0x3D9E4
+#define SOUND_CHANNELS 16
+
+void soundDriverInit(void)
+{
+    unsigned char *work;
+    int size;
+    int channel;
+
+    func_00182460(0);
+    func_0017C890(0);
+    sceGsSyncVCallback(soundVSyncCallback);
+    func_0017B3E0();
+    if (func_00138300() != 0) {
+        printf("[EE] Failed to bind KORG IOP Sound Driver.\n");
+        return;
+    }
+    func_00138988(0xA1);
+    func_00138428(0, 0);
+    func_00138780(0x100, 0);
+    for (channel = 0; channel < SOUND_CHANNELS; channel++) {
+        func_001396D8(1, channel, 0x7F);
+        func_001396D8(4, channel, 0x7F);
+    }
+    soundSetDefaults();
+    /* Carve the two voices' work buffers from WorkEnd; size carries the part of each the driver uses. */
+    work = WorkEnd;
+    soundCtrl.slots[0].create.buffer_size = (size = SOUND_SLOT0_BUFFER_USED);
+    soundCtrl.slots[0].create.buffer = work;
+    work += SOUND_SLOT0_BUFFER_BYTES;
+    soundCtrl.slots[1].create.buffer = work;
+    soundCtrl.slots[1].driver_id = 0;
+    size = SOUND_SLOT1_BUFFER_USED;
+    work += SOUND_SLOT1_BUFFER_BYTES;
+    soundCtrl.initialized = 0;
+    soundCtrl.slots[0].driver_id = 0;
+    soundCtrl.slots[1].create.buffer_size = size;
+    soundSlotsReopen();
+    WorkEnd = work;
+}

@@ -596,6 +596,34 @@
     }
    ]
   },
+  "main/tu022": {
+   ".rodata": [
+    {
+     "range": [
+      "0x0068e1d8",
+      "0x0068e208"
+     ],
+     "generated": [
+      "0x0068e1d8",
+      "0x0068e204"
+     ],
+     "generated_by": [
+      "soundDriverInit"
+     ],
+     "c_owned_symbols": [
+      "D_0068E1D8"
+     ],
+     "also_referenced_by_c": [
+      "adxSlotKeyFormat"
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/tu022.o"
+     }
+    }
+   ]
+  },
   "main/tu028": {
    ".lit4": [
     {
