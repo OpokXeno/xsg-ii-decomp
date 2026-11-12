@@ -421,31 +421,6 @@
     "-g"
    ]
   },
-  "sce_ipu": {
-   "id": "main/tu015",
-   "ordinal": 15,
-   "path": "src/main/sce_ipu.c",
-   "kind": "gcc",
-   "category": "game",
-   "in_scope": true,
-   "mode": "asm",
-   "language": "c",
-   "compiler_profile": "ee-gcc2_96-realconv-lp7",
-   "flags": [
-    "-O2",
-    "-G0"
-   ],
-   "assembler": "LA29-vsqrt-swap-g (corrected ee-as with the per-object flag -g)",
-   "owners": {
-    ".text": "asm"
-   },
-   "evidence": "reports/x2-compiler-calibration.md",
-   "all_functions_accepted": false,
-   "accepted_functions": "0/1",
-   "assembler_options": [
-    "-g"
-   ]
-  },
   "xgl_1_016": {
    "id": "main/tu016",
    "ordinal": 16,
@@ -467,7 +442,7 @@
    },
    "evidence": "reports/x2-compiler-calibration.md",
    "all_functions_accepted": false,
-   "accepted_functions": "0/7",
+   "accepted_functions": "0/8",
    "assembler_options": [
     "-g"
    ]

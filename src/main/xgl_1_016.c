@@ -1,6 +1,26 @@
 #include "common.h"
 #include "shared.h"
-#include "main/sce_ipu.h"
+
+/* D_ENABLEW bit 16 (CPND): holds all DMA transfers while a channel register is written. */
+#define D_ENABLE_HOLD 0x10000
+#define D_ENABLEW ((volatile u32 *) 0x1000f590)
+/* DMAC channel 4 feeds the IPU (memory to IPU input); its control register takes the transfer mode and start bit. */
+#define D4_CHCR ((volatile u32 *) 0x1000b400)
+
+extern int DIntr(void);
+extern int EIntr(void);
+
+/* Starts or stops the IPU input transfer by writing D4_CHCR with the DMA interrupts held off.
+ * Static in this file, as in XS1's xgl_1.c: checkdma's delay-slot filling depends on the
+ * definition being in the same translation unit. */
+static void setD4_CHCR(u32 value)
+{
+    DIntr();
+    *D_ENABLEW = *D_ENABLEW | D_ENABLE_HOLD;
+    *D4_CHCR = value;
+    *D_ENABLEW = *D_ENABLEW & ~D_ENABLE_HOLD;
+    EIntr();
+}
 /* DMA tag ID (bits 28..30 of the first tag word). */
 #define DMA_TAG_ID_CNT 0x10000000U
 #define DMA_TAG_ID_REF 0x30000000U
@@ -242,21 +262,16 @@ int xglMovieOpen(XglMovieWork *info, int stream)
     return 0;
 }
 
-/* D_ENABLEW bit 16 (CPND): holds all DMA transfers while a channel register is written. */
-#define D_ENABLEW ((volatile u32 *) 0x1000f590)
-#define D_ENABLE_HOLD 0x10000
 #define D3_CHCR ((volatile u32 *) 0x1000b000)
 /* D4_CHCR value that leaves the chain set up but stopped. */
 #define MOVIE_D4_CHCR_CHAIN_STOP (DMA_CHCR_MOD_CHAIN | DMA_CHCR_DIR)
 
-extern int EIntr(void);
 void xglCdStreamRewind(struct CdStreamParam *stream);
 
 /* EE IPU and IPU DMA registers. */
 #define IPU_CMD ((volatile u32 *) 0x10002000)
 #define IPU_CTRL ((volatile u32 *) 0x10002010)
 #define IPU_BP ((volatile u32 *) 0x10002020)
-#define D4_CHCR ((volatile u32 *) 0x1000b400)
 #define D4_MADR ((volatile u32 *) 0x1000b410)
 #define D4_QWC ((volatile u32 *) 0x1000b420)
 #define D4_TADR ((volatile u32 *) 0x1000b430)
@@ -277,7 +292,6 @@ void xglCdStreamRewind(struct CdStreamParam *stream);
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
-extern int DIntr(void);
 int sceIpuSync(int mode, int timeout);
 int sceGsSyncPath(int mode, int timeout);
 int myDmaDirectFromIPU(u32 address, u32 count);
