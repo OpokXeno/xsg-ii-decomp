@@ -17,7 +17,8 @@ typedef struct XglIntrCountSlot {
     unsigned char unmodeled_04[12];
 } XglIntrCountSlot;
 
-extern int xglIntcSlotMap[];
+/* Written by the main thread, read here in interrupt context (see tu024.c). */
+extern volatile int xglIntcSlotMap[];
 extern XglIntrCountSlot xglIntcEventCounts[];
 
 /* Timer accumulator: intrTimerActive active flag, intrTimerStart start count, intrTimerAccum ticks total. */
@@ -27,8 +28,7 @@ extern int intrTimerAccum;
 
 int func_001A4768(int index)
 {
-    volatile int *slot = &xglIntcSlotMap[index];
-    XglIntrCountSlot *record = &xglIntcEventCounts[*slot];
+    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
 
     record->count++;
     /* sync: orders the count store before the interrupt returns */
@@ -40,8 +40,7 @@ int func_001A4768(int index)
 
 int func_001A47A8(int index)
 {
-    volatile int *slot = &xglIntcSlotMap[index];
-    XglIntrCountSlot *record = &xglIntcEventCounts[*slot];
+    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
 
     record->count++;
     /* sync: orders the count store before the interrupt returns */
@@ -53,8 +52,7 @@ int func_001A47A8(int index)
 
 int func_001A47E8(int index)
 {
-    volatile int *slot = &xglIntcSlotMap[index];
-    XglIntrCountSlot *record = &xglIntcEventCounts[*slot];
+    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
 
     record->count++;
     /* sync: orders the count store before the interrupt returns */
@@ -66,8 +64,7 @@ int func_001A47E8(int index)
 
 int func_001A4828(int index)
 {
-    volatile int *slot = &xglIntcSlotMap[index];
-    XglIntrCountSlot *record = &xglIntcEventCounts[*slot];
+    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
 
     record->count++;
     /* sync: orders the count store before the interrupt returns */
@@ -82,8 +79,7 @@ int func_001A4828(int index)
  * records the start count. The same handler also bumps its counter record. */
 int intrTimerAccumulate(int index)
 {
-    volatile int *slot = &xglIntcSlotMap[index];
-    XglIntrCountSlot *record = &xglIntcEventCounts[*slot];
+    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
 
     record->count++;
     if (intrTimerActive) {
@@ -117,8 +113,7 @@ int intrTimerGetAccum(void)
 
 int func_001A4918(int index)
 {
-    volatile int *slot = &xglIntcSlotMap[index];
-    XglIntrCountSlot *record = &xglIntcEventCounts[*slot];
+    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
 
     record->count++;
     /* sync: orders the count store before the interrupt returns */
@@ -130,8 +125,7 @@ int func_001A4918(int index)
 
 int func_001A4958(int index)
 {
-    volatile int *slot = &xglIntcSlotMap[index];
-    XglIntrCountSlot *record = &xglIntcEventCounts[*slot];
+    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
 
     record->count++;
     /* sync: orders the count store before the interrupt returns */
@@ -143,8 +137,7 @@ int func_001A4958(int index)
 
 int func_001A4998(int index)
 {
-    volatile int *slot = &xglIntcSlotMap[index];
-    XglIntrCountSlot *record = &xglIntcEventCounts[*slot];
+    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
 
     record->count++;
     /* sync: orders the count store before the interrupt returns */
@@ -156,8 +149,7 @@ int func_001A4998(int index)
 
 int func_001A49D8(int index)
 {
-    volatile int *slot = &xglIntcSlotMap[index];
-    XglIntrCountSlot *record = &xglIntcEventCounts[*slot];
+    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
 
     record->count++;
     /* sync: orders the count store before the interrupt returns */
@@ -169,8 +161,7 @@ int func_001A49D8(int index)
 
 int func_001A4A18(int index)
 {
-    volatile int *slot = &xglIntcSlotMap[index];
-    XglIntrCountSlot *record = &xglIntcEventCounts[*slot];
+    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
 
     record->count++;
     /* sync: orders the count store before the interrupt returns */
