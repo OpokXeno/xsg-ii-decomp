@@ -8791,9 +8791,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0012EC68",
+     "name": "sceCdGetError",
      "size": 152,
-     "splat_name": "func_0012EC68",
+     "splat_name": "sceCdGetError",
      "va": "0x0012ec68",
      "name_basis": "address",
      "provenance": "estimated"

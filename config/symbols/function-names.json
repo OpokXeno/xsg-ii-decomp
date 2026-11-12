@@ -243,6 +243,7 @@
    "0x0012a8c0": "sceGsSetDefLoadImage",
    "0x0012abe8": "sceGsExecLoadImage",
    "0x0012b3f8": "sceGsSyncVCallback",
+   "0x0012ec68": "sceCdGetError",
    "0x001a80ac": "xglVectorDiv",
    "0x001a8168": "xglVectorDivXYZ",
    "0x001a8210": "xglVectorMulAdd",
