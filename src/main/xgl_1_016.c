@@ -63,9 +63,10 @@ typedef struct XglDmaRefTag {
 typedef struct XglMovieSourceHeader XglMovieSourceHeader;
 
 typedef struct XglMovieWork {
-    unsigned char unmodeled_00[8];
-    unsigned char streamState;      /* +0x08 */
-    unsigned char unmodeled_09[0x0b];
+    unsigned char unmodeled_00[4];
+    /* checkdma reads this byte; xglMovieOpen clears it with the word at +0x04. */
+    unsigned char streamState;      /* +0x04 */
+    unsigned char unmodeled_05[0x0f];
     int sourceLength;               /* +0x14 */
     int streamingMode;              /* +0x18 */
     unsigned char unmodeled_1c[4];
@@ -175,7 +176,82 @@ unsigned long *make_gstrans(XglMovieWork *info, int y)
     return packet;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_1_016", checkdma);
+#define MOVIE_D4_CHCR_CHAIN_STOP (DMA_CHCR_MOD_CHAIN | DMA_CHCR_DIR)
+#define MOVIE_D4_CHCR_CHAIN_START_REF (DMA_TAG_ID_REF | MOVIE_D4_CHCR_CHAIN_START)
+#define D4_MADR ((volatile u32 *) 0x1000b410)
+#define D4_TADR ((volatile u32 *) 0x1000b430)
+/* XglMovieWork.decodeState once the whole source has been sent. */
+#define MOVIE_DECODE_DONE 99
+
+int checkdma(XglMovieWork *info)
+{
+    int wait = 0;
+    unsigned int consumed;
+
+    if (info->decodeState == MOVIE_DECODE_DONE) {
+        return 0;
+    }
+    setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
+    consumed = *D4_MADR - (unsigned int)info->source;
+    switch (info->decodeState) {
+    case 0:
+        if ((unsigned int)info->sourceSize < consumed) {
+            if (info->ringRead != info->ringWrite &&
+                (info->ringWrite - consumed) <
+                (unsigned int)(info->sourceSize / 2) && !info->streamState) {
+                wait = 1;
+                break;
+            }
+            info->ringRead = info->sourceSize;
+            if (!info->streamingMode) {
+                *D4_TADR = (unsigned int)&info->chain[3];
+                info->decodeState = 3;
+            } else {
+                *D4_TADR = (unsigned int)&info->chain[1];
+                info->decodeState = 1;
+            }
+        } else {
+            *D4_TADR = (unsigned int)&info->chain[2];
+        }
+        break;
+    case 1:
+        if (consumed < (unsigned int)info->sourceSize) {
+            if (info->ringRead != info->ringWrite &&
+                (info->ringWrite - consumed) <
+                (unsigned int)(info->sourceSize / 2) && !info->streamState) {
+                wait = 1;
+                break;
+            }
+            info->ringRead = 0;
+            if (!info->streamingMode) {
+                *D4_TADR = (unsigned int)&info->chain[3];
+                info->decodeState = 2;
+            } else {
+                *D4_TADR = (unsigned int)&info->chain[2];
+                info->decodeState = 0;
+            }
+        } else {
+            *D4_TADR = (unsigned int)&info->chain[1];
+        }
+        break;
+    case 2:
+        if ((unsigned int)info->sourceSize < consumed) {
+            info->decodeState = MOVIE_DECODE_DONE;
+        }
+        break;
+    case 3:
+        if (consumed < (unsigned int)info->sourceSize) {
+            info->decodeState = MOVIE_DECODE_DONE;
+        }
+        break;
+    }
+    if (info->decodeState != MOVIE_DECODE_DONE) {
+        setD4_CHCR(MOVIE_D4_CHCR_CHAIN_START_REF);
+    } else {
+        setD4_CHCR(MOVIE_D4_CHCR_CHAIN_START);
+    }
+    return wait;
+}
 
 /* The movie work area starts with its CD stream record (0x40 bytes, the
  * width follows at +0x40); xglMovieInfoInit and xglMovieOpen pass it to the
