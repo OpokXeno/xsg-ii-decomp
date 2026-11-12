@@ -33,10 +33,31 @@ int func_001A4010(void)
  * master volume (0x6E by default) and create_params[3] the default slot level (0x64). */
 typedef struct SoundSlot {
     int driver_id;
-    unsigned char create_params[8];
+    union {
+        unsigned char create_params[8];
+        struct {
+            unsigned char *buffer;    /* the voice's work buffer, carved from WorkEnd */
+            int buffer_size;
+        } create;                     /* what the create call takes */
+    };
     unsigned char state[4];           /* state[1]: last level set; state[3]: selects the value of soundSlotApply */
 } SoundSlot;
 
+/* The control block: a 16-byte head (the setup flag, the master create parameters and the master
+ * volume ramp state at +0x0C), then the two sound slots (soundSlots labels slots[0]). */
+typedef union SoundControl {
+    struct {
+        unsigned char initialized;    /* +0x00: nonzero once the driver setup has run */
+        unsigned char unmodeled_01[3];
+        unsigned char create_params[8]; /* +0x04: [0] master volume, [3] default slot level */
+        unsigned char state[4];       /* +0x0C */
+        SoundSlot slots[2];           /* +0x10 */
+    };
+    /* The head has a slot's layout too; soundSlotReopen indexes the slots as records[index + 1]. */
+    SoundSlot records[3];
+} SoundControl;
+
+extern SoundControl soundCtrl;
 extern SoundSlot soundSlots[];
 void func_00184250(int id, int value);
 void func_00184A78(int id, const char *key);
@@ -234,13 +255,12 @@ void func_001A4400(int flag)
     func_00184918(flag == 0);
 }
 
-extern unsigned char soundCtrl[];
 void func_0013B488(void);
 
 /* Runs the one-time driver setup when the control block's flag byte is still 0. */
 void soundInitIfNeeded(void)
 {
-    if (soundCtrl[0] == 0) {
+    if (soundCtrl.initialized == 0) {
         func_0013B488();
     }
 }
@@ -286,9 +306,27 @@ int soundVSyncCallback(void)
     return 0;
 }
 
+void func_00182CE8(int id);
+int func_00182908(int mode, unsigned char *buffer, int buffer_size);
+void func_00183CA8(int id, int value);
+int func_00183E08(int id, int frames);
+
 /* Reopens slot index: destroys the old voice when there is one, creates a new one from the create
  * parameters, starts it, applies its level and fades it in (50 for slot 0, 70 for slot 1). */
-INCLUDE_ASM("asm/main/nonmatchings/tu022", soundSlotReopen);
+int soundSlotReopen(int index)
+{
+    if (soundCtrl.records[index + 1].driver_id != 0) {
+        func_00182CE8(soundCtrl.records[index + 1].driver_id);
+    }
+    soundCtrl.records[index + 1].driver_id = func_00182908(2, soundCtrl.records[index + 1].create.buffer,
+                                                           soundCtrl.records[index + 1].create.buffer_size);
+    func_00183CA8(soundCtrl.records[index + 1].driver_id, 0x1E);
+    soundSlotSetVolume(index, -1, 0);
+    if (index == 0) {
+        return func_00183E08(soundCtrl.slots[0].driver_id, 50);
+    }
+    return func_00183E08(soundCtrl.slots[1].driver_id, 70);
+}
 
 /* Reopens both slots. */
 void soundSlotsReopen(void)
