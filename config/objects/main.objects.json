@@ -36832,9 +36832,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "gameMain",
+     "name": "main",
      "size": 216,
-     "splat_name": "gameMain",
+     "splat_name": "main",
      "va": "0x001947b8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -105887,9 +105887,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_002A6D50",
+     "name": "__main",
      "size": 56,
-     "splat_name": "func_002A6D50",
+     "splat_name": "__main",
      "va": "0x002a6d50",
      "name_basis": "address",
      "provenance": "estimated"

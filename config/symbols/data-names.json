@@ -603,6 +603,7 @@
    "0x0069e34c": "xglScratchQuads",
    "0x0069e350": "xglScratchQuadCount",
    "0x0069b570": "degToRad",
+   "0x0069b930": "soundEffectBankName",
    "0x0069de0c": "randomSeed",
    "0x0069e354": "gsQueueBase",
    "0x0069e358": "gsQueueCount",
