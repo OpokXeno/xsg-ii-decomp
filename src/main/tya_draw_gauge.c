@@ -338,7 +338,7 @@ void sefSetCurrentOwner(int owner);
 void resApplyCfFile(int id);
 int sprintf(char *destination, const char *format, ...);
 int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-int xglGetLanguageCode(char *code);
+unsigned short xglGetLanguageCode(char *code);
 int func_A9CEE8(unsigned char *scene, unsigned char *end);
 void func_A9CAD0(unsigned char *scene);
 void uwamonoResetRecords(int index, signed char mode);

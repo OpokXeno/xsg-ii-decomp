@@ -746,7 +746,7 @@ int xglCdLoadFileSet(unsigned int file_id, unsigned int slot, int tag)
 }
 
 void *memset(void *dest, int value, unsigned int count);
-int xglGetLanguageCode(char *buffer);
+unsigned short xglGetLanguageCode(char *buffer);
 extern u32 gameWork[];
 extern char *D_002B5DBC[];
 
@@ -1206,6 +1206,7 @@ typedef struct SeVoiceEntry {
 } SeVoiceEntry;
 
 extern int D_002BB5B8[];
+/* Defined void in tu021.c; resResetKindState only matches with this int view (register choice). */
 int seBankLoadDefault(int bank, int force);
 int seBankLoad(int bank, int a, int b);
 void func_001A37E0(int packed, int name, int option);

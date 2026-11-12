@@ -418,6 +418,7 @@
    "0x001a01d8": "makeGstransChain",
    "0x001a0378": "moviePlayerStartFile",
    "0x001a04a0": "moviePlayerUpdate",
+   "0x001a0688": "moviePlayerPause",
    "0x001a06b8": "moviePlayerDestroy",
    "0x001a0748": "moviePlayerParamsInit",
    "0x001a0cd8": "xglFlagsClear",

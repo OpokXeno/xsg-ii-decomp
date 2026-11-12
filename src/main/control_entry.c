@@ -30,7 +30,7 @@ extern const char korgModuleName[];
 extern const char korgModuleArgs[];
 
 /* SCE SDK entry points that bring up the IOP and its file system. */
-int sceSifInitRpc(unsigned int mode);
+void sceSifInitRpc(unsigned int mode);
 int sceCdInit(int init_mode);
 int sceSifRebootIop(const char *image);
 int sceSifSyncIop(void);

@@ -1013,7 +1013,7 @@ void func_00129C28(void);
 void func_0012A510(int);
 void xglRenderGlobalFadeReset(void);
 void pxyInit(void);
-void xglIntcEnable(int);
+int xglIntcEnable(int);
 
 void xglRenderInit(void)
 {

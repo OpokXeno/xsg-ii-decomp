@@ -114,8 +114,9 @@ typedef void (*MoviePlayerMethod)(MoviePlayer *self);
 
 /* The player's method table. Evidenced here: start_file gets the file key (moviePlayerStartFile),
  * get_status returns the MOVIE_STATUS_* value moviePlayerUpdate tests, set_volume gets the result
- * of seVolumeCurve. destroy, stop and release_frame are called with the player alone
- * (moviePlayerDestroy, func_001A0688); their names follow the interface order. */
+ * of seVolumeCurve, pause gets game_movie's on/off flag (moviePlayerPause passes its second
+ * argument through in $a1). destroy and stop are called with the player alone (moviePlayerDestroy);
+ * their names follow the interface order. */
 typedef struct MoviePlayerMethods {
     MoviePlayerMethod unmodeled_00[5];
     void (*destroy)(MoviePlayer *self);
@@ -123,7 +124,7 @@ typedef struct MoviePlayerMethods {
     void (*stop)(MoviePlayer *self);
     int (*get_status)(MoviePlayer *self);
     MoviePlayerMethod unmodeled_24;
-    void (*release_frame)(MoviePlayer *self);
+    void (*pause)(MoviePlayer *self, int on);
     void (*set_volume)(MoviePlayer *self, int volume);
 } MoviePlayerMethods;
 
@@ -330,12 +331,13 @@ int moviePlayerUpdate(AllocRecord *player)
     }
 }
 
-int func_001A0688(MoviePlayer **player_slot)
+/* Pauses (on != 0) or resumes the player of record; game_movie toggles it with START. */
+int moviePlayerPause(MoviePlayer **player_slot, int on)
 {
     MoviePlayer *player;
 
     player = *player_slot;
-    player->methods->release_frame(player);
+    player->methods->pause(player, on);
     return 0;
 }
 

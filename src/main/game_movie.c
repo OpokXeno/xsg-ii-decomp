@@ -342,11 +342,11 @@ unsigned char xglFontLoad(int, int);
 void xglRenderClearDepth(void);
 /* Also returns the two-letter code (daddu $2,$3 before its jr); declaring it void moves the '/' constant
  * from $3 to $2. */
-int xglGetLanguageCode(char *code);
+unsigned short xglGetLanguageCode(char *code);
 int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
 int moviePlayerStartFile(AllocRecord *player, const char *name);
 int moviePlayerUpdate(AllocRecord *player);
-int func_001A0688(AllocRecord *player, int pause);
+int moviePlayerPause(AllocRecord *player, int pause);
 int moviePlayerDestroy(AllocRecord *player);
 void xglFontPrintDirect(const char *text);
 char *func_00195E90(int mode, char *cursor, int flag);
@@ -502,7 +502,7 @@ void GameMovieCaptionPlay(const char *name)
                     if (gameWork.input_delay != 0) {
                         gameWork.input_delay--;
                     } else if (PadData.pressed & PAD_START) {
-                        func_001A0688(&player, 1);
+                        moviePlayerPause(&player, 1);
                         xglClockSampleDayTime();
                         gameWork.input_delay = 32;
                         if ((PadData.held & PAD_SOFT_RESET_HELD) == PAD_SOFT_RESET_HELD) {
@@ -540,7 +540,7 @@ void GameMovieCaptionPlay(const char *name)
                             break;
                         }
                         xglClockAccumulate();
-                        func_001A0688(&player, 0);
+                        moviePlayerPause(&player, 0);
                     }
                 }
                 xglSleep();

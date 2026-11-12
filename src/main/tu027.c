@@ -361,7 +361,7 @@ extern const char D_0068E4F0[];
 extern const char D_0068E508[];
 extern const char D_0068E528[];
 extern const char D_0068E538[];
-void func_00122D68(int);
+void sceSifInitRpc(unsigned int mode);
 void func_0029F008(int);
 int func_002A06F0(void *, int, int, int);
 int func_002A0848(void *, int);

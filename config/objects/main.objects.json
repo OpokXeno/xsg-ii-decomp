@@ -40241,9 +40241,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A0688",
+     "name": "moviePlayerPause",
      "size": 44,
-     "splat_name": "func_001A0688",
+     "splat_name": "moviePlayerPause",
      "va": "0x001a0688",
      "name_basis": "address",
      "provenance": "estimated"
