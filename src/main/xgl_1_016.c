@@ -589,17 +589,17 @@ typedef signed char s8;
 
 typedef int s32;
 
-void xglCdStreamClose(void);
+int xglCdStreamClose(struct CdStreamParam *stream);
 
 /*
- * Closes the movie stream of info: runs xglCdStreamClose while streamOpen is set,
+ * Closes the movie stream of info: closes its CD stream while streamOpen is set,
  * clears the D4 channel, writes IPU_CTRL, and returns -1
  * when sceIpuSync reports a failure before or after the write to IPU_CMD.
  */
 
 int xglMovieClose(XglMovieWork *info) {
     if (info->streamOpen != 0) {
-        xglCdStreamClose();
+        xglCdStreamClose((struct CdStreamParam *) info);
     }
     setD4_CHCR(0);
     *IPU_CTRL = IPU_CTRL_RESET;
