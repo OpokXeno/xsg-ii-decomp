@@ -5,7 +5,7 @@
  * soundCtrl is the control block; soundSlots holds two sound slots that overlap the
  * records after it. func_00138B48(channel, level) sets a channel level; channel 0 is the master. */
 
-void func_00138B48(int channel, int level);
+int func_00138B48(int channel, int level);
 
 /* Mutes channels 1 to 3, or restores them to full level 0x7F. */
 void soundSetMuted(int muted)
@@ -294,7 +294,16 @@ void soundApplySettings(void)
 }
 
 /* Writes the default control values (master 0x6E, default level 0x64) and sets channels 1 to 3 to 0x7F. */
-INCLUDE_ASM("asm/main/nonmatchings/tu022", soundSetDefaults);
+void soundSetDefaults(void)
+{
+    soundCtrl.create_params[0] = 0x6E;
+    soundCtrl.create_params[1] = 0x71;
+    soundCtrl.create_params[2] = 0x64;
+    soundCtrl.create_params[3] = 0x64;
+    func_00138B48(1, 0x7F);
+    func_00138B48(2, 0x7F);
+    func_00138B48(3, 0x7F);
+}
 
 void func_0017D138(int value);
 

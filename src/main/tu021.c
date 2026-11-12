@@ -372,7 +372,7 @@ void seSetMuted(int first, int flag) {
 }
 
 int seVolumeRampSet(void *ramp, int level, int step);
-void func_00138B48(int channel, int level);
+int func_00138B48(int channel, int level);
 
 /* Starts the master volume ramp toward level (negative: the default level), scaled by the master
  * volume and clamped to 0x7F; applies the level at once when the ramp returns one. */
