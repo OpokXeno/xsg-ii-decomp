@@ -1588,7 +1588,7 @@ extern IpuSpritePacket D_002BD2F0;
 void xglMovieInfoInit(XglMovieWork *info);
 int xglMovieOpen(XglMovieWork *info, const char *name);
 int xglMoviePlay(XglMovieWork *info);
-void xglMovieRewind(XglMovieWork *info);
+int xglMovieRewind(XglMovieWork *info);
 
 typedef struct XglPacket XglPacket;
 

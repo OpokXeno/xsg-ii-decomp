@@ -243,7 +243,52 @@ int xglMovieOpen(XglMovieWork *info, int stream)
 
 INCLUDE_ASM("asm/main/nonmatchings/xgl_1_016", xglMoviePlay);
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_1_016", xglMovieRewind);
+/* D_ENABLEW bit 16 (CPND): holds all DMA transfers while a channel register is written. */
+#define D_ENABLEW ((volatile u32 *) 0x1000f590)
+#define D_ENABLE_HOLD 0x10000
+#define D3_CHCR ((volatile u32 *) 0x1000b000)
+/* D4_CHCR value that leaves the chain set up but stopped. */
+#define MOVIE_D4_CHCR_CHAIN_STOP (DMA_CHCR_MOD_CHAIN | DMA_CHCR_DIR)
+
+extern int DIntr(void);
+extern int EIntr(void);
+void xglCdStreamRewind(struct CdStreamParam *stream);
+
+/*
+ * Restarts a movie at its first frame: stops both IPU DMA channels, seeks a stream back to its first
+ * sector and refills the first ring half, and sets up the DMA start as xglMovieOpen does.
+ */
+int xglMovieRewind(XglMovieWork *info)
+{
+    info->currentFrame = 0;
+    setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
+    DIntr();
+    *D_ENABLEW = *D_ENABLEW | D_ENABLE_HOLD;
+    *D3_CHCR = 0;
+    *D_ENABLEW = *D_ENABLEW & ~D_ENABLE_HOLD;
+    EIntr();
+    if (info->streamOpen) {
+        xglCdStreamRewind((struct CdStreamParam *) info);
+        info->ringWrite = 0;
+        info->ringRead = 0;
+        xglCdStreamReadRing((struct CdStreamParam *) info, info->sourceSize);
+        info->ringRead = 0;
+        info->dmaControl = MOVIE_D4_CHCR_CHAIN_START;
+        info->dmaTag = info->chain;
+        info->decodeState = 0;
+        info->dmaAddress = 0;
+        info->dmaQwords = 0;
+        info->bitPosition = 0;
+    } else {
+        info->dmaControl = MOVIE_D4_CHCR_CHAIN_START;
+        info->dmaAddress = (unsigned int) (info->source + 1);
+        info->dmaQwords = (info->sourceSize - 1) / MOVIE_DMA_QWORD;
+        info->dmaTag = 0;
+        info->bitPosition = 0;
+    }
+    SyncDCache(info, info + 1);
+    return 0;
+}
 
 typedef signed char s8;
 
