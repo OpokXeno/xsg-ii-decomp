@@ -1,11 +1,101 @@
 #include "common.h"
+#include "shared.h"
 #include "main/control_entry.h"
 #include "main/xgl_render.h"
 #include "main/xgl_studio.h"
 
-INCLUDE_ASM("asm/main/nonmatchings/control_entry", InitializeSystem);
+/* First address of the work heap WorkEnd tracks. */
+#define WORK_HEAP_START 0xB00000
 
-void InitializeSystem(void);
+/* sceCdMmode media: DVD. */
+#define SCECdDVD 2
+
+/* Packet buffer of xglPacketSystemInit: base, size and rate. */
+#define PACKET_BUFFER_BASE 0xC00000
+#define PACKET_BUFFER_SIZE 0x400000
+#define PACKET_RATE 50.0f
+
+extern u8 *WorkEnd;
+
+extern const char iopRebootImagePath[];
+extern char sio2manModuleName[];
+extern char mcmanModuleName[];
+extern char mcservModuleName[];
+extern char padmanModuleName[];
+extern char cdvdstmModuleName[];
+extern char libsdModuleName[];
+extern const char adxiModuleName[];
+extern const char adxiModuleArgs[];
+extern const char korgModuleName[];
+extern const char korgModuleArgs[];
+
+/* SCE SDK entry points that bring up the IOP and its file system. */
+int sceSifInitRpc(unsigned int mode);
+int sceCdInit(int init_mode);
+int sceSifRebootIop(const char *image);
+int sceSifSyncIop(void);
+int sceSifInitIopHeap(void);
+int sceSifLoadFileReset(void);
+int sceCdMmode(int media);
+int sceFsReset(void);
+
+int xglCdSifLoadModule(const char *path, const char *args);
+void xglCdInitial(void);
+void soundDriverInit(void);
+void xglPadInitial(void);
+void xglMcInitial(void);
+void *xglTaskInitial(void *manager, int capacity, int reset_gs);
+void xglDmaInitial(void);
+void xglIntrInit(void);
+void xglGeometryInit(void);
+void xglPacketSystemInit(u32 buffer, u32 size, float rate);
+void xglRenderInit(void);
+void xglFontInitial(void);
+void xglMovieInit(void);
+void xglMenuInitial(void);
+
+/*
+ * Reboots the IOP with IOPRP271, loads the SIF/CD/memory-card/pad/sound IOP
+ * modules (XS2 adds cdvdstm, the CRI ADX driver and the KORG VAG driver and
+ * drops XS1's ssd/rssd), then initialises every xgl subsystem.
+ */
+void InitializeSystem(void) {
+    sceSifInitRpc(0);
+    sceCdInit(0);
+    while (sceSifRebootIop(iopRebootImagePath) == 0) {
+    }
+    while (sceSifSyncIop() == 0) {
+    }
+    sceSifInitRpc(0);
+    sceSifInitIopHeap();
+    sceSifLoadFileReset();
+    sceCdInit(0);
+    sceCdMmode(SCECdDVD);
+    sceFsReset();
+    xglCdSifLoadModule(sio2manModuleName, 0);
+    xglCdSifLoadModule(mcmanModuleName, 0);
+    xglCdSifLoadModule(mcservModuleName, 0);
+    xglCdSifLoadModule(padmanModuleName, 0);
+    xglCdSifLoadModule(cdvdstmModuleName, 0);
+    xglCdSifLoadModule(libsdModuleName, 0);
+    xglCdSifLoadModule(adxiModuleName, adxiModuleArgs);
+    xglCdSifLoadModule(korgModuleName, korgModuleArgs);
+    WorkEnd = (u8 *)WORK_HEAP_START;
+    xglCdInitial();
+    soundDriverInit();
+    xglPadInitial();
+    xglMcInitial();
+    xglTaskInitial(0, 0, 0);
+    xglDmaInitial();
+    xglIntrInit();
+    xglGeometryInit();
+    xglPacketSystemInit(PACKET_BUFFER_BASE, PACKET_BUFFER_SIZE, PACKET_RATE);
+    xglRenderInit();
+    xglFontInitial();
+    xglMovieInit();
+    xglMenuInitial();
+}
+
 void xglCdOpenDevice(void);
 void xglRenderAndMovieInit(void);
 void xglCdControlThread(void);
@@ -80,7 +170,6 @@ int main(int argc, char **argv) {
     }
 }
 
-#include "shared.h"
 
 void xglSleep(void) {
     xglRenderFrame();

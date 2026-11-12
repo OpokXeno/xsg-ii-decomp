@@ -438,7 +438,7 @@ int movieRenderBufferAlloc(AllocRecord *record, int cursor, int extra_enabled)
 
 int func_00131450(void);
 
-void func_001A0920(void)
+void xglMovieInit(void)
 {
     func_00131450();
 }

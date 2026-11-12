@@ -144,7 +144,7 @@ int scePadRead(int port, int slot, unsigned char *packet);
 int scePadSetActDirect(int port, int slot, unsigned char *actuator);
 
 /* Returns at once with no effect. Only caller: InitializeSystem. */
-void func_00199428(void) {
+void xglDmaInitial(void) {
 }
 
 void xglPadInitial(void) {

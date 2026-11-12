@@ -6442,9 +6442,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00122D68",
+     "name": "sceSifInitRpc",
      "size": 412,
-     "splat_name": "func_00122D68",
+     "splat_name": "sceSifInitRpc",
      "va": "0x00122d68",
      "name_basis": "address",
      "provenance": "estimated"
@@ -6784,9 +6784,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00124688",
+     "name": "sceFsReset",
      "size": 52,
-     "splat_name": "func_00124688",
+     "splat_name": "sceFsReset",
      "va": "0x00124688",
      "name_basis": "address",
      "provenance": "estimated"
@@ -7045,9 +7045,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00127478",
+     "name": "sceSifInitIopHeap",
      "size": 136,
-     "splat_name": "func_00127478",
+     "splat_name": "sceSifInitIopHeap",
      "va": "0x00127478",
      "name_basis": "address",
      "provenance": "estimated"
@@ -7162,9 +7162,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00127B58",
+     "name": "sceSifLoadFileReset",
      "size": 56,
-     "splat_name": "func_00127B58",
+     "splat_name": "sceSifLoadFileReset",
      "va": "0x00127b58",
      "name_basis": "address",
      "provenance": "estimated"
@@ -7324,18 +7324,18 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00128890",
+     "name": "sceSifSyncIop",
      "size": 56,
-     "splat_name": "func_00128890",
+     "splat_name": "sceSifSyncIop",
      "va": "0x00128890",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001288C8",
+     "name": "sceSifRebootIop",
      "size": 272,
-     "splat_name": "func_001288C8",
+     "splat_name": "sceSifRebootIop",
      "va": "0x001288c8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -38238,9 +38238,9 @@
    "functions": [
     {
      "binding": "GLOBAL",
-     "name": "func_00199428",
+     "name": "xglDmaInitial",
      "size": 8,
-     "splat_name": "func_00199428",
+     "splat_name": "xglDmaInitial",
      "va": "0x00199428",
      "name_basis": "address",
      "provenance": "estimated"
@@ -40286,9 +40286,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A0920",
+     "name": "xglMovieInit",
      "size": 20,
-     "splat_name": "func_001A0920",
+     "splat_name": "xglMovieInit",
      "va": "0x001a0920",
      "name_basis": "address",
      "provenance": "estimated"
