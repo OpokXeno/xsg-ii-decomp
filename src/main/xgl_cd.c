@@ -253,6 +253,9 @@ extern int sceCdReadClock(unsigned char *clock);
 int sceLseek(int descriptor, int offset, int whence);
 extern int sceCdSync(int mode);
 extern int sceCdDiskReady(int mode);
+extern int sceCdStatus(void);
+extern int sceCdGetDiskType(void);
+extern int sceCdTrayReq(int mode, int *tray_changed);
 extern int sceCdRead(int lbn, int sectors, void *destination, CdReadMode *read_mode);
 void xglCdArcInit(void);
 static int BCD2INT(unsigned char bcd);
@@ -265,6 +268,7 @@ extern int sceCdLayerSearchFile(CdFilePosition *file, const char *name, int laye
 extern const char xenosagaArc10Name[16];
 extern const char xenosagaArc20Name[16];
 extern const char xenosagaArc30Name[16];
+extern const char xglCdSystemCnfName[];
 extern const char xenosagaPfs0Path[24];
 extern const char xenosagaArc00Name[16];
 /* Twelve month lengths followed by twelve cumulative month offsets. */
@@ -284,6 +288,7 @@ extern signed char ReadClockInterval;
 extern unsigned char PresentTime[8];
 void xglCdDefaultCallback(int event, int value, int tag);
 void xglCdSetReadTag(int value);
+int xglCdGetFileSize(const char *path);
 int xglCdStreamStat(CdStreamParam *stream);
 void StreamReadRingCoreNormal(CdStreamParam *stream);
 void StreamReadRingCoreXss(CdStreamParam *stream);
@@ -638,9 +643,108 @@ void xglClockUInt2DayTime(XglClock *clock_time, unsigned int elapsed)
     clock->day = days + 1;
 }
 
-/* Disc identification (proposed xglCdIdentifyDisc): waits for the disc, checks
- * the sizes of the xenosaga.10 and xenosaga.20 archives and reads system.cnf. */
-INCLUDE_ASM("asm/main/nonmatchings/xgl_cd", xglCdIdentifyDisc);
+/* sceCdStatus, sceCdDiskReady, sceCdGetDiskType and sceCdTrayReq values tested below. */
+#define CD_STATUS_SHELL_OPEN 1
+#define CD_DISK_READY_COMPLETE 2
+#define CD_DISK_READY_NOT_READY 6
+#define CD_DISC_NONE 0
+/* Types below this value mean the drive is still detecting the disc. */
+#define CD_DISC_DETECT_END 5
+#define CD_DISC_PS2_DVD 20
+#define CD_TRAY_CHECK 2
+/* LW.disk_state. */
+#define CD_DISK_STATE_UNKNOWN 0
+#define CD_DISK_STATE_IDENTIFIED 1
+#define CD_DISK_STATE_TRAY_CHANGED 2
+/* LW.disk_flags: which archives the disc holds. */
+#define CD_DISC_FLAG_ARC10 1
+#define CD_DISC_FLAG_ARC20 2
+#define CD_DISC_FLAGS_DUAL_LAYER 0x7f
+/* xglCdIdentifyDisc results below zero. */
+#define CD_CHECK_UNSUPPORTED (-1)
+#define CD_CHECK_SHELL_OPEN (-2)
+#define CD_CHECK_NOT_READY (-3)
+
+/* Disc identification (proposed xglCdIdentifyDisc): returns the disc's archive flags, 0 with no
+ * disc, or a CD_CHECK_* value. A disc not identified yet must be ready and a PS2 DVD; its flags
+ * come from the sizes of the xenosaga.10 and xenosaga.20 archives, and system.cnf must name an
+ * executable whose third letter is 'U'. An identified disc only has its tray and shell checked.
+ * `result` holds the sceCdDiskReady() and then the sceCdGetDiskType() value. */
+int xglCdIdentifyDisc(void)
+{
+    int tray_changed;
+    unsigned char *text;
+    unsigned char state;
+    int result;
+    int size;
+
+    if (LW.dual_layer_disc != 0) {
+        LW.disk_state = CD_DISK_STATE_IDENTIFIED;
+        LW.disk_flags = CD_DISC_FLAGS_DUAL_LAYER;
+    }
+    state = LW.disk_state;
+    if (state != CD_DISK_STATE_IDENTIFIED) {
+        int status;
+
+        status = sceCdStatus();
+        if (status == CD_STATUS_SHELL_OPEN) {
+            LW.disk_state = CD_DISK_STATE_UNKNOWN;
+            return CD_CHECK_SHELL_OPEN;
+        }
+        result = sceCdDiskReady(1);
+        if (result != CD_DISK_READY_COMPLETE) {
+            if (LW.disk_state == CD_DISK_STATE_TRAY_CHANGED
+                || (status == 0 && result == CD_DISK_READY_NOT_READY)) {
+                return CD_CHECK_SHELL_OPEN;
+            }
+            LW.disk_state = CD_DISK_STATE_UNKNOWN;
+            return CD_CHECK_NOT_READY;
+        }
+        LW.disk_state = CD_DISK_STATE_UNKNOWN;
+        result = sceCdGetDiskType();
+        if (result == CD_DISC_NONE) {
+            return 0;
+        }
+        if (result != CD_DISC_PS2_DVD) {
+            if (result >= CD_DISC_DETECT_END) {
+                return CD_CHECK_UNSUPPORTED;
+            }
+            return CD_CHECK_NOT_READY;
+        }
+        LW.disk_flags = 0;
+        size = xglCdGetFileSize(xenosagaArc10Name);
+        if (size > 0 && size <= CD_ARC_HEADER_RESERVE) {
+            LW.disk_flags |= CD_DISC_FLAG_ARC10;
+        }
+        size = xglCdGetFileSize(xenosagaArc20Name);
+        if (size > 0 && size <= CD_ARC_HEADER_RESERVE) {
+            LW.disk_flags |= CD_DISC_FLAG_ARC20;
+        }
+        if (LW.disk_flags == 0) {
+            return CD_CHECK_UNSUPPORTED;
+        }
+        text = WorkEnd;
+        while (xglCdServiceIfPending() != 0) {
+        }
+        xglCdReadFile(xglCdSystemCnfName, text, 0, 1);
+        while (*text++ != '\\') {
+        }
+        if (text[2] != 'U') {
+            return CD_CHECK_UNSUPPORTED;
+        }
+        LW.disk_state = CD_DISK_STATE_IDENTIFIED;
+    } else {
+        if (sceCdTrayReq(CD_TRAY_CHECK, &tray_changed) == 0 || tray_changed != 0) {
+            LW.disk_state = CD_DISK_STATE_TRAY_CHANGED;
+            return CD_CHECK_SHELL_OPEN;
+        }
+        if (sceCdStatus() == state) {
+            LW.disk_state = CD_DISK_STATE_UNKNOWN;
+            return CD_CHECK_SHELL_OPEN;
+        }
+    }
+    return LW.disk_flags;
+}
 
 void xglCdDefaultCallback(int event, int value, int tag)
 {
