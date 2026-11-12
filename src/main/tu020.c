@@ -25,8 +25,6 @@ int seVolumeCurve(int level)
     return value;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tu020", seVolumeRampSet);
-
 /* A volume ramp: the current level moves toward the target by step on each
  * call to seVolumeRampStep. Levels are 0..0x7F. */
 typedef struct VolumeRamp {
@@ -35,6 +33,28 @@ typedef struct VolumeRamp {
     unsigned char target;         /* +0x02: level the ramp moves toward */
     unsigned char current;        /* +0x03: level sent to the sound driver */
 } VolumeRamp;
+
+/* Starts a ramp toward level, moving by step per seVolumeRampStep call (in the right
+ * direction); step 0 jumps there at once and returns the new level, otherwise -1. The
+ * level is read back as the stored (8-bit) target. */
+int seVolumeRampSet(VolumeRamp *ramp, int level, int step)
+{
+    ramp->target = level;
+    if (step == 0) {
+        ramp->current = level;
+        ramp->step = 0;
+        return ramp->target;
+    }
+    if (ramp->target == ramp->current) {
+        return -1;
+    }
+    if (ramp->target < ramp->current) {
+        ramp->step = -step;
+    } else {
+        ramp->step = step;
+    }
+    return -1;
+}
 
 int seVolumeRampStep(VolumeRamp *ramp)
 {
