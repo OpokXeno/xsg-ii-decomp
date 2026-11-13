@@ -640,7 +640,7 @@ void ysegfDrawItemPage(void)
 extern int ysegfExitFlag;
 extern unsigned char D_0068B438[];
 void soundRestart(void);
-void func_001A37E0(int mode, unsigned char *name, int size);
+void seBgmPlay(int mode, unsigned char *name, int size);
 void seVoiceStartDefault(int voice);
 void func_001BA68C(void);
 void XenoActorSetFlagAll(int flag);
@@ -670,7 +670,7 @@ void ysegfRunMenu(void)
     ysegfExitFlag = 0;
     work = &gameWork;
     soundRestart();
-    func_001A37E0(1, D_0068B438, 0x19000);
+    seBgmPlay(1, D_0068B438, 0x19000);
     ysegfInit();
     pad = &PadData[0];
     do {

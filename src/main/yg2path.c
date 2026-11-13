@@ -1335,7 +1335,6 @@ extern YgPathGameWork gameWork;
 
 extern unsigned char D_0068B1C8[];
 void soundRestart(void);
-void func_001A37E0(int packed, int name, int option);
 void yg2PathLoadScene(void);
 void func_001BA68C(void);
 void func_001E0E98(void);
@@ -1346,7 +1345,7 @@ void yg2PathRun(void)
     int frames;
 
     soundRestart();
-    func_001A37E0(1, (int) D_0068B1C8, 0x19000);
+    seBgmPlay(1, D_0068B1C8, 0x19000);
     sRender.callback = 0;
     yg2PathLoadScene();
     sRender.callback = yg2PathDrawFrame;
