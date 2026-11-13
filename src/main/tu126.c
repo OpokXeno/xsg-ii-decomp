@@ -413,8 +413,8 @@ int saveItemGetValue(SaveItem *item) {
 
 void textDrawSegment(int, int, void *, int);
 void panelDrawNineSlice(void *image, int x, int y, int width, int height);
-void func_0021CEF8(int x, int y, int width, int height, void *image);
-void func_0021E338(int x, int y, int width, int height);
+void menuDrawTitledFrame(int x, int y, int width, int height, void *image);
+void menuDrawShortOutlineFrame(int x, int y, int width, int height);
 extern unsigned char menuPanelFrame[];
 extern unsigned char D_0068B688[];
 extern unsigned char D_0068B698[];
@@ -444,8 +444,8 @@ void saveOptionItemDraw(SaveItem *item, int origin_x, int origin_y)
     {
         fontObjSetOpacity(magnitude * 0x10);
         panelDrawNineSlice(menuPanelFrame, origin_x, origin_y, 0xB6, 0x68);
-        func_0021CEF8(label_x, origin_y + 5, 0xAE, 0x26, D_0068B688);
-        func_0021E338(label_x, origin_y + 0x2D, 0xAE, 0x36);
+        menuDrawTitledFrame(label_x, origin_y + 5, 0xAE, 0x26, D_0068B688);
+        menuDrawShortOutlineFrame(label_x, origin_y + 0x2D, 0xAE, 0x36);
         textDrawSegment(0, 0, D_0068B698, 0);
         textDrawSegment(0, 0, D_0068B6D8, 0);
         textDrawSegment(origin_x + 0x10, origin_y + 0x13, item->text, 4);
@@ -612,7 +612,7 @@ void saveUiSetMode(unsigned char mode)
                 saveListScroll++;
             }
             fontTrackSetBoth(&saveSlotListTrack, 0x200, -(signed char) saveListScroll * 0x73);
-            saveSlotListTrack.target_pair[0] = 0;
+            saveSlotListTrack.target_pair.x = 0;
             saveSlotRowsLayout();
             sjisStrcat(saveHeaderText, D_0069DA50);
             sjisStrcat(saveHeaderText, menuMainTxdEntry(savePort + 0x202));
@@ -622,8 +622,8 @@ void saveUiSetMode(unsigned char mode)
             int cursorValue = 0xC;
             SaveUiStateByte nextState;
             nextState.state = 0x12;
-            saveSlotListTrack.target_pair[0] = 0;
-            saveSlotListTrack.target_pair[1] = -((SaveUiScrollView *) &saveListScroll)->scroll * 0x73;
+            saveSlotListTrack.target_pair.x = 0;
+            saveSlotListTrack.target_pair.y = -((SaveUiScrollView *) &saveListScroll)->scroll * 0x73;
             *(SaveUiStateByte *) &saveUiState = nextState;
             ((SaveSlotRow *) (saveSlotRows + 8))[saveCursor[0]].value = cursorValue;
         }
@@ -634,8 +634,8 @@ void saveUiSetMode(unsigned char mode)
         fontTrackSetTarget(&saveMessagePanelTrack, 0, 0x28);
         break;
     case 3:
-        saveSlotListTrack.target_pair[0] = 0x200;
-        saveSlotListTrack.target_pair[1] = -saveCursor[0] * 0x73;
+        saveSlotListTrack.target_pair.x = 0x200;
+        saveSlotListTrack.target_pair.y = -saveCursor[0] * 0x73;
         saveSlotListTrack.step_count = 1;
         ((SaveSlotRow *) (saveSlotRows + 8))[saveCursor[0]].value = -0x1F4;
         saveItemInit(saveUiOptionItem, 1 - saveIsLoad, menuMainTxdEntry(0x20A));
@@ -726,7 +726,7 @@ void saveUiDraw(void)
         fontObjSetOpacity(0);
     }
     panelDrawNineSlice(menuPanelFrame, 0xA8, 0xA2, 0xAF, 0x5B);
-    func_0021CEF8(0xAC, 0xA7, 0xA7, 0x51, D_0068B688);
+    menuDrawTitledFrame(0xAC, 0xA7, 0xA7, 0x51, D_0068B688);
     index = 0;
     for (; index < 3; index++) {
         flags = (index == saveCursor[0]);
@@ -872,7 +872,7 @@ void textDrawDigitsWide(int, int, int, int);
 void textDrawShadow(int, int, void *, unsigned long long);
 void textDrawDecimalShadow(int, int, unsigned char, int, unsigned long long);
 void textDrawDecimalShadowZero(int, int, unsigned char, int, unsigned long long);
-void func_0021F0A0();
+void menuDrawLitIcon();
 void playTimeClamp(PlayClock *clock);
 void xglClockUInt2DayTime(void *time, unsigned int seconds);
 MemberRecordView *ptMemberRecordFindById(int id);
@@ -919,7 +919,7 @@ void saveSlotDrawDetail(int x, int y, int slot) {
     bar_x = x + 0x6A;
     bar_x2 = x + 0x72;
     text_y = y + 0x18;
-    func_0021E338(bar_x, bar_y, 0x15E, 0x53);
+    menuDrawShortOutlineFrame(bar_x, bar_y, 0x15E, 0x53);
     packetSubmitRequestEx(0x2A0, bar_x, bar_y, 0x15E, 0x16, 0x800);
     packetSubmitRequest(0x29A, bar_x, bar_y, 1);
     packetSubmitRequestEx(0x29B, bar_x2, bar_y, 0x14E, 0x16, 0x801);
@@ -962,7 +962,7 @@ void saveSlotDrawDetail(int x, int y, int slot) {
         item_x = x + 0x114;
         do {
             if (saveSlotTable[slot].row_value[row] != 0) {
-                func_0021F0A0(item_x, y + 0x47, saveSlotTable[slot].row_value[row] - 1);
+                menuDrawLitIcon(item_x, y + 0x47, saveSlotTable[slot].row_value[row] - 1);
             }
             item_x += 0x18;
             row++;
@@ -1008,7 +1008,7 @@ void saveSlotListDraw(void)
     int index;
     short cardResult;
 
-    if (saveSlotListTrack.current_pair[0] < 0x101)
+    if (saveSlotListTrack.current_pair.x < 0x101)
     {
         if ((signed char) saveListScroll > 0)
         {
@@ -1023,19 +1023,19 @@ void saveSlotListDraw(void)
     for (index = 0; index < SAVE_SLOT_COUNT; index++)
     {
         fontTrackEase(&SAVE_SLOT_TRACK(index));
-        x = saveSlotListTrack.current_pair[0] + ((SAVE_SLOT_TRACK(index).current_pair[0] < 0x1F) ? SAVE_SLOT_TRACK(index).current_pair[0] : 0x1E);
-        y = saveSlotListTrack.current_pair[1] + SAVE_SLOT_TRACK(index).current_pair[1];
+        x = saveSlotListTrack.current_pair.x + ((SAVE_SLOT_TRACK(index).current_pair.x < 0x1F) ? SAVE_SLOT_TRACK(index).current_pair.x : 0x1E);
+        y = saveSlotListTrack.current_pair.y + SAVE_SLOT_TRACK(index).current_pair.y;
         if (index == saveCursor[0])
         {
             x = (x < 0xC) ? 0xC : x;
         }
-        if (x >= 0x200 || SAVE_SLOT_TRACK(index).current_pair[0] >= 0x1F0)
+        if (x >= 0x200 || SAVE_SLOT_TRACK(index).current_pair.x >= 0x1F0)
         {
             continue;
         }
-        if (SAVE_SLOT_TRACK(index).current_pair[0] >= 0x1F)
+        if (SAVE_SLOT_TRACK(index).current_pair.x >= 0x1F)
         {
-            fontObjSetOpacity(~(SAVE_SLOT_TRACK(index).current_pair[0] >> 2) & 0x7F);
+            fontObjSetOpacity(~(SAVE_SLOT_TRACK(index).current_pair.x >> 2) & 0x7F);
         }
         cardResult = mcPortResult[savePort];
         if (cardResult != 1 && cardResult != 0xFF)
@@ -1108,25 +1108,25 @@ void saveScreenDraw(void)
     chars = sjisCharCount(saveHeaderText) >> 1;
     text_width = (chars << 4) - chars;
     panelDrawNineSlice(menuPanelFrame, 4, 8, text_width + 0x22, 0x25);
-    func_0021E338(8, 0xD, text_width + 0x1A, 0x1B);
+    menuDrawShortOutlineFrame(8, 0xD, text_width + 0x1A, 0x1B);
     textDrawSegment(0, 0, D_0068B6D8, 0);
     textDrawSegment(0x14, 0x10, saveHeaderText, 0);
     fontTrackEase(&saveMessagePanelTrack);
     if (saveMessageState != 0)
     {
-        menuDrawKindIcon(0x1A0, 0x17E - saveMessagePanelTrack.current_pair[1], 3);
-        menuDrawKindIcon(0x1B0, 0x17E - saveMessagePanelTrack.current_pair[1], 0);
-        textDrawSegment(0x1C0, 0x17E - saveMessagePanelTrack.current_pair[1], menuMainTxdEntry(0xE3), 0);
+        menuDrawKindIcon(0x1A0, 0x17E - saveMessagePanelTrack.current_pair.y, 3);
+        menuDrawKindIcon(0x1B0, 0x17E - saveMessagePanelTrack.current_pair.y, 0);
+        textDrawSegment(0x1C0, 0x17E - saveMessagePanelTrack.current_pair.y, menuMainTxdEntry(0xE3), 0);
     }
     fontObjSetColorRgba(0x10, 0x10, 0x10, 0x40);
-    packetSubmitRequestEx(0x33, 0, 0x198 - saveMessagePanelTrack.current_pair[1], 0x200,
-                          saveMessagePanelTrack.current_pair[1] + 0x1D, 0x104);
-    menuDrawBorder(-0x10, 0x198 - saveMessagePanelTrack.current_pair[1], 0x220,
-                   saveMessagePanelTrack.current_pair[1] + 0x1D, 0x3F80000040381A1AULL);
+    packetSubmitRequestEx(0x33, 0, 0x198 - saveMessagePanelTrack.current_pair.y, 0x200,
+                          saveMessagePanelTrack.current_pair.y + 0x1D, 0x104);
+    menuDrawBorder(-0x10, 0x198 - saveMessagePanelTrack.current_pair.y, 0x220,
+                   saveMessagePanelTrack.current_pair.y + 0x1D, 0x3F80000040381A1AULL);
     fontObjResetColor();
     xglFontFlush();
-    grSetScissor(0, 0x199 - saveMessagePanelTrack.current_pair[1], 0x1FF, 0x1B2);
-    msgRangeDraw(&saveMessageRange, 0x18, 0x19C - saveMessagePanelTrack.current_pair[1]);
+    grSetScissor(0, 0x199 - saveMessagePanelTrack.current_pair.y, 0x1FF, 0x1B2);
+    msgRangeDraw(&saveMessageRange, 0x18, 0x19C - saveMessagePanelTrack.current_pair.y);
     xglFontFlush();
     grResetScissor();
 }
@@ -1633,10 +1633,10 @@ int saveSlotTransferUpdate(void)
     if (cardState != 1 && cardState != 0xFF)
     {
         scrollRow = ((SaveUiScrollView *) &saveListScroll)->scroll;
-        saveSlotListTrack.target_pair[1] = -scrollRow * 115;
-        saveSlotListTrack.target_pair[0] = 0;
+        saveSlotListTrack.target_pair.y = -scrollRow * 115;
+        saveSlotListTrack.target_pair.x = 0;
         ((SaveSlotRow *) (saveSlotRows + 8))[saveCursor[0]].value = 12;
-        saveSlotListTrack.target_pair[0] = 512;
+        saveSlotListTrack.target_pair.x = 512;
         if (saveCardBusy != 0)
         {
             saveCardBusy = 0;
@@ -1743,11 +1743,11 @@ int saveSlotTransferUpdate(void)
             break;
         }
         scrollRow = saveListScroll;
-        saveSlotListTrack.target_pair[1] = -scrollRow * 115;
-        saveSlotListTrack.target_pair[0] = 0;
+        saveSlotListTrack.target_pair.y = -scrollRow * 115;
+        saveSlotListTrack.target_pair.x = 0;
         ((SaveSlotRow *) (saveSlotRows + 8))[saveCursor[0]].value = 12;
         saveCardBusy = 0;
-        saveSlotListTrack.target_pair[0] = 512;
+        saveSlotListTrack.target_pair.x = 512;
         saveUiSetMode(4);
         if (saveUiOptionItem[0].flag != 0)
         {
@@ -2113,7 +2113,7 @@ extern unsigned char D_0068B858[];
 int textDrawLines(int, int, void *, int);
 void msgRangeDrawRevealed(SaveMessageRange *, int, int);
 void menuDrawKindIcon(int x, int y, int index);
-void func_0021EE68(int);
+void menuDrawScrollFrame(int);
 
 void configScreenDraw(void) {
     int y;
@@ -2121,11 +2121,11 @@ void configScreenDraw(void) {
     fontObjResetAndBuild();
     fontObjSetOpacity(0x80 - configFadeStep);
     panelDrawNineSlice(menuPanelFrame, 0x20, 0x62, 0x1C0, 0xC4);
-    func_0021E338(0x24, 0x66, 0x1B8, 0xBC);
+    menuDrawShortOutlineFrame(0x24, 0x66, 0x1B8, 0xBC);
     fontObjSetOpacity(configFadeStep);
     panelDrawNineSlice(menuPanelFrame, 0x51, 0x96, 0x15E, 0x60);
-    func_0021CEF8(0x55, 0x9B, 0x156, 0x56, D_0068B800);
-    func_0021EE68(4);
+    menuDrawTitledFrame(0x55, 0x9B, 0x156, 0x56, D_0068B800);
+    menuDrawScrollFrame(4);
     fontObjResetOpacity();
     textDrawSegment(0, 0, D_0068B810, 0);
     textDrawSegment(0, 0, D_0068B858, 0);

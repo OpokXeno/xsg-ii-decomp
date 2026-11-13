@@ -65017,9 +65017,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021AFE8",
+     "name": "textDrawTitle",
      "size": 840,
-     "splat_name": "func_0021AFE8",
+     "splat_name": "textDrawTitle",
      "va": "0x0021afe8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65107,9 +65107,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021B8C8",
+     "name": "textDrawDigitsZero",
      "size": 208,
-     "splat_name": "func_0021B8C8",
+     "splat_name": "textDrawDigitsZero",
      "va": "0x0021b8c8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65134,18 +65134,18 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021BB10",
+     "name": "textDrawDigitsWideAlt",
      "size": 216,
-     "splat_name": "func_0021BB10",
+     "splat_name": "textDrawDigitsWideAlt",
      "va": "0x0021bb10",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021BBE8",
+     "name": "menuDrawCompareMark",
      "size": 324,
-     "splat_name": "func_0021BBE8",
+     "splat_name": "menuDrawCompareMark",
      "va": "0x0021bbe8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65161,27 +65161,27 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021BFA0",
+     "name": "panelDrawNineSliceDepth",
      "size": 644,
-     "splat_name": "func_0021BFA0",
+     "splat_name": "panelDrawNineSliceDepth",
      "va": "0x0021bfa0",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021C228",
+     "name": "panelDrawNineSliceFlipCorner",
      "size": 620,
-     "splat_name": "func_0021C228",
+     "splat_name": "panelDrawNineSliceFlipCorner",
      "va": "0x0021c228",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021C498",
+     "name": "panelDrawNineSliceNormalBlend",
      "size": 608,
-     "splat_name": "func_0021C498",
+     "splat_name": "panelDrawNineSliceNormalBlend",
      "va": "0x0021c498",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65197,9 +65197,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021CA40",
+     "name": "menuDrawBadge",
      "size": 452,
-     "splat_name": "func_0021CA40",
+     "splat_name": "menuDrawBadge",
      "va": "0x0021ca40",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65224,36 +65224,36 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021CEF8",
+     "name": "menuDrawTitledFrame",
      "size": 332,
-     "splat_name": "func_0021CEF8",
+     "splat_name": "menuDrawTitledFrame",
      "va": "0x0021cef8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021D048",
+     "name": "menuDrawTitledFrameBlue",
      "size": 364,
-     "splat_name": "func_0021D048",
+     "splat_name": "menuDrawTitledFrameBlue",
      "va": "0x0021d048",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021D1B8",
+     "name": "menuDrawTitledFrameRed",
      "size": 364,
-     "splat_name": "func_0021D1B8",
+     "splat_name": "menuDrawTitledFrameRed",
      "va": "0x0021d1b8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021D328",
+     "name": "menuDrawFixedFrame",
      "size": 548,
-     "splat_name": "func_0021D328",
+     "splat_name": "menuDrawFixedFrame",
      "va": "0x0021d328",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65287,9 +65287,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021D8B8",
+     "name": "menuDrawPanelFrameWide",
      "size": 376,
-     "splat_name": "func_0021D8B8",
+     "splat_name": "menuDrawPanelFrameWide",
      "va": "0x0021d8b8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65305,9 +65305,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021DB98",
+     "name": "menuDrawPanelFrameWideAlt",
      "size": 376,
-     "splat_name": "func_0021DB98",
+     "splat_name": "menuDrawPanelFrameWideAlt",
      "va": "0x0021db98",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65323,27 +65323,27 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021DDB8",
+     "name": "menuDrawPanelWide",
      "size": 164,
-     "splat_name": "func_0021DDB8",
+     "splat_name": "menuDrawPanelWide",
      "va": "0x0021ddb8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021DE60",
+     "name": "menuDrawWindowFrame",
      "size": 1236,
-     "splat_name": "func_0021DE60",
+     "splat_name": "menuDrawWindowFrame",
      "va": "0x0021de60",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021E338",
+     "name": "menuDrawShortOutlineFrame",
      "size": 360,
-     "splat_name": "func_0021E338",
+     "splat_name": "menuDrawShortOutlineFrame",
      "va": "0x0021e338",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65368,18 +65368,18 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021E7B0",
+     "name": "menuDrawTitledWindow",
      "size": 1716,
-     "splat_name": "func_0021E7B0",
+     "splat_name": "menuDrawTitledWindow",
      "va": "0x0021e7b0",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021EE68",
+     "name": "menuDrawScrollFrame",
      "size": 248,
-     "splat_name": "func_0021EE68",
+     "splat_name": "menuDrawScrollFrame",
      "va": "0x0021ee68",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65395,54 +65395,54 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021EFC8",
+     "name": "menuDrawIndexedIconMarked",
      "size": 212,
-     "splat_name": "func_0021EFC8",
+     "splat_name": "menuDrawIndexedIconMarked",
      "va": "0x0021efc8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021F0A0",
+     "name": "menuDrawLitIcon",
      "size": 108,
-     "splat_name": "func_0021F0A0",
+     "splat_name": "menuDrawLitIcon",
      "va": "0x0021f0a0",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021F110",
+     "name": "menuDrawLitIconWide",
      "size": 124,
-     "splat_name": "func_0021F110",
+     "splat_name": "menuDrawLitIconWide",
      "va": "0x0021f110",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021F190",
+     "name": "menuDrawDimIcon",
      "size": 136,
-     "splat_name": "func_0021F190",
+     "splat_name": "menuDrawDimIcon",
      "va": "0x0021f190",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021F218",
+     "name": "menuDrawLitIconMarked",
      "size": 212,
-     "splat_name": "func_0021F218",
+     "splat_name": "menuDrawLitIconMarked",
      "va": "0x0021f218",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021F2F0",
+     "name": "menuPlaceCursor",
      "size": 312,
-     "splat_name": "func_0021F2F0",
+     "splat_name": "menuPlaceCursor",
      "va": "0x0021f2f0",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65467,18 +65467,18 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021F530",
+     "name": "menuDrawPageTabs",
      "size": 292,
-     "splat_name": "func_0021F530",
+     "splat_name": "menuDrawPageTabs",
      "va": "0x0021f530",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021F658",
+     "name": "menuDrawPageCells",
      "size": 388,
-     "splat_name": "func_0021F658",
+     "splat_name": "menuDrawPageCells",
      "va": "0x0021f658",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65494,9 +65494,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0021F8A8",
+     "name": "menuDrawFrontMemberIcons",
      "size": 352,
-     "splat_name": "func_0021F8A8",
+     "splat_name": "menuDrawFrontMemberIcons",
      "va": "0x0021f8a8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65539,27 +65539,27 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00220210",
+     "name": "menuDrawPlainItemList",
      "size": 832,
-     "splat_name": "func_00220210",
+     "splat_name": "menuDrawPlainItemList",
      "va": "0x00220210",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00220550",
+     "name": "menuDrawMemberItemList",
      "size": 752,
-     "splat_name": "func_00220550",
+     "splat_name": "menuDrawMemberItemList",
      "va": "0x00220550",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00220840",
+     "name": "menuDrawStatCompare",
      "size": 336,
-     "splat_name": "func_00220840",
+     "splat_name": "menuDrawStatCompare",
      "va": "0x00220840",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65638,9 +65638,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00222860",
+     "name": "menuDrawCommandDetail",
      "size": 1072,
-     "splat_name": "func_00222860",
+     "splat_name": "menuDrawCommandDetail",
      "va": "0x00222860",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65710,117 +65710,117 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_002245B8",
+     "name": "menuItemMemberEntry",
      "size": 76,
-     "splat_name": "func_002245B8",
+     "splat_name": "menuItemMemberEntry",
      "va": "0x002245b8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00224608",
+     "name": "menuDrawStatIcon",
      "size": 148,
-     "splat_name": "func_00224608",
+     "splat_name": "menuDrawStatIcon",
      "va": "0x00224608",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_002246A0",
+     "name": "menuDrawLevel",
      "size": 160,
-     "splat_name": "func_002246A0",
+     "splat_name": "menuDrawLevel",
      "va": "0x002246a0",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00224740",
+     "name": "menuHpColours",
      "size": 204,
-     "splat_name": "func_00224740",
+     "splat_name": "menuHpColours",
      "va": "0x00224740",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00224810",
+     "name": "menuDrawHp",
      "size": 280,
-     "splat_name": "func_00224810",
+     "splat_name": "menuDrawHp",
      "va": "0x00224810",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00224928",
+     "name": "menuDrawEp",
      "size": 256,
-     "splat_name": "func_00224928",
+     "splat_name": "menuDrawEp",
      "va": "0x00224928",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00224A28",
+     "name": "menuDrawHpWide",
      "size": 280,
-     "splat_name": "func_00224A28",
+     "splat_name": "menuDrawHpWide",
      "va": "0x00224a28",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00224B40",
+     "name": "menuDrawEpWide",
      "size": 256,
-     "splat_name": "func_00224B40",
+     "splat_name": "menuDrawEpWide",
      "va": "0x00224b40",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00224C40",
+     "name": "menuDrawLevelShadow",
      "size": 184,
-     "splat_name": "func_00224C40",
+     "splat_name": "menuDrawLevelShadow",
      "va": "0x00224c40",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00224CF8",
+     "name": "menuDrawHpShadow",
      "size": 296,
-     "splat_name": "func_00224CF8",
+     "splat_name": "menuDrawHpShadow",
      "va": "0x00224cf8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00224E20",
+     "name": "menuDrawEpShadow",
      "size": 256,
-     "splat_name": "func_00224E20",
+     "splat_name": "menuDrawEpShadow",
      "va": "0x00224e20",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00224F20",
+     "name": "menuDrawHpWideShadow",
      "size": 296,
-     "splat_name": "func_00224F20",
+     "splat_name": "menuDrawHpWideShadow",
      "va": "0x00224f20",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00225048",
+     "name": "menuDrawEpWideShadow",
      "size": 256,
-     "splat_name": "func_00225048",
+     "splat_name": "menuDrawEpWideShadow",
      "va": "0x00225048",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65836,18 +65836,18 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_002251A0",
+     "name": "menuDrawTrackPanel",
      "size": 520,
-     "splat_name": "func_002251A0",
+     "splat_name": "menuDrawTrackPanel",
      "va": "0x002251a0",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_002253A8",
+     "name": "menuDrawPanelHighlight",
      "size": 180,
-     "splat_name": "func_002253A8",
+     "splat_name": "menuDrawPanelHighlight",
      "va": "0x002253a8",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65863,18 +65863,18 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00225FE0",
+     "name": "menuDrawEmptyPartySlot",
      "size": 352,
-     "splat_name": "func_00225FE0",
+     "splat_name": "menuDrawEmptyPartySlot",
      "va": "0x00225fe0",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00226140",
+     "name": "menuResetItems",
      "size": 488,
-     "splat_name": "func_00226140",
+     "splat_name": "menuResetItems",
      "va": "0x00226140",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65908,9 +65908,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00226948",
+     "name": "menuDrawItems",
      "size": 868,
-     "splat_name": "func_00226948",
+     "splat_name": "menuDrawItems",
      "va": "0x00226948",
      "name_basis": "address",
      "provenance": "estimated"
@@ -65980,27 +65980,27 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00227408",
+     "name": "menuSetValuesMode",
      "size": 76,
-     "splat_name": "func_00227408",
+     "splat_name": "menuSetValuesMode",
      "va": "0x00227408",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00227458",
+     "name": "menuDrawItemHighlighted",
      "size": 372,
-     "splat_name": "func_00227458",
+     "splat_name": "menuDrawItemHighlighted",
      "va": "0x00227458",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_002275D0",
+     "name": "menuEnableItems",
      "size": 488,
-     "splat_name": "func_002275D0",
+     "splat_name": "menuEnableItems",
      "va": "0x002275d0",
      "name_basis": "address",
      "provenance": "estimated"
@@ -66106,9 +66106,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_002280E0",
+     "name": "choiceSetRow",
      "size": 28,
-     "splat_name": "func_002280E0",
+     "splat_name": "choiceSetRow",
      "va": "0x002280e0",
      "name_basis": "address",
      "provenance": "estimated"
@@ -66133,9 +66133,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00228340",
+     "name": "choiceGetResult",
      "size": 28,
-     "splat_name": "func_00228340",
+     "splat_name": "choiceGetResult",
      "va": "0x00228340",
      "name_basis": "address",
      "provenance": "estimated"
@@ -67656,7 +67656,7 @@
    "path": "src/main/tu111.c",
    "scaffold_path": "scaffold/src/main/tu111.c",
    "kind": "gcc",
-   "mode": "asm",
+   "mode": "c",
    "category": "game",
    "map_class": "game",
    "domain": null,
@@ -67708,34 +67708,34 @@
    "functions": [
     {
      "binding": "GLOBAL",
-     "name": "talk_0022D1D8",
+     "name": "smsg",
      "size": 348,
-     "splat_name": "talk_0022D1D8",
+     "splat_name": "smsg",
      "va": "0x0022d1d8",
      "name_basis": "annotation",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_0022D338",
+     "name": "talkSetSlotFlags",
      "size": 76,
-     "splat_name": "func_0022D338",
+     "splat_name": "talkSetSlotFlags",
      "va": "0x0022d338",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "talk_0022D388",
+     "name": "msgDtl",
      "size": 356,
-     "splat_name": "talk_0022D388",
+     "splat_name": "msgDtl",
      "va": "0x0022d388",
      "name_basis": "annotation",
      "provenance": "estimated"
     }
    ],
    "owners": {
-    ".text": "asm",
+    ".text": "c",
     ".sdata": "asm"
    },
    "sections": {
@@ -67775,6 +67775,17 @@
      "0x0022d4f0"
     ],
     "note": null
+   },
+   "import": {
+    "mode": "c",
+    "note": "Source file created for the talk functions of this TU.",
+    "source": {
+     "kind": "file",
+     "path": "src/main/tu111.c",
+     "include_dirs": [
+      "include"
+     ]
+    }
    }
   },
   {

@@ -207,7 +207,7 @@ int choiceMenuOpenFromRequest(unsigned int index, ChoiceMenuRequest *request)
     for (;;) {
         unsigned int room = choiceMenuSlots[index].height;
         ChoiceMenuRecord *record = &choiceMenuSlots[index];
-        int *scroll = &record->track.target_pair[1];
+        int *scroll = &record->track.target_pair.y;
         unsigned int rows;
 
         room -= *scroll;
@@ -225,10 +225,10 @@ int choiceMenuOpenFromRequest(unsigned int index, ChoiceMenuRequest *request)
         unsigned int rows;
 
         rows = cursorBufferGetIndex(&choiceMenuSlots[index].cursor) * CHOICE_ROW_HEIGHT;
-        if (rows >= (unsigned int) -choiceMenuSlots[index].track.target_pair[1]) {
+        if (rows >= (unsigned int) -choiceMenuSlots[index].track.target_pair.y) {
             break;
         }
-        choiceMenuSlots[index].track.target_pair[1] += CHOICE_ROW_HEIGHT;
+        choiceMenuSlots[index].track.target_pair.y += CHOICE_ROW_HEIGHT;
     }
     fontTrackAdvance(&choiceMenuSlots[index].track);
     return 1;
@@ -347,7 +347,7 @@ void choiceMenuUpdate(unsigned int index)
         }
     }
     for (;;) {
-        room = record->height - record->track.target_pair[1];
+        room = record->height - record->track.target_pair.y;
         cursorIndex = cursorBufferGetIndex(&record->cursor);
         cursorOffset = cursorIndex * CHOICE_ROW_HEIGHT;
         if (record->style_value != 0) {
@@ -357,14 +357,14 @@ void choiceMenuUpdate(unsigned int index)
         } else if (!(room < cursorOffset)) {
             break;
         }
-        record->track.target_pair[1] -= CHOICE_ROW_HEIGHT;
+        record->track.target_pair.y -= CHOICE_ROW_HEIGHT;
     }
     for (;;) {
         cursorIndex = cursorBufferGetIndex(&record->cursor);
-        if (!(cursorIndex * CHOICE_ROW_HEIGHT < -record->track.target_pair[1])) {
+        if (!(cursorIndex * CHOICE_ROW_HEIGHT < -record->track.target_pair.y)) {
             break;
         }
-        record->track.target_pair[1] += CHOICE_ROW_HEIGHT;
+        record->track.target_pair.y += CHOICE_ROW_HEIGHT;
     }
 }
 

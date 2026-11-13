@@ -255,7 +255,7 @@ void ysegfInit(void)
         slot--;
     }
     fontTrackSetBoth(&ysegfListTrack, 0x200, -ysegfScrollTop * YSEGF_ROW_HEIGHT);
-    ysegfListTrack.target_pair[0] = 0;
+    ysegfListTrack.target_pair.x = 0;
     do {
     } while (xglCdServiceIfPending() != 0);
     cfeFileTempInit(xglCdBufferReserve(0x60000), 0x60000);
@@ -385,14 +385,14 @@ extern unsigned char D_0069D8D8[];
 extern void *D_0069D8C0;
 void panelDrawNineSlice(unsigned char *image, int x, int y, int width, int height);
 int dataBoxChkCategory3(int id);
-void func_0021D328(int x, int y);
+void menuDrawFixedFrame(int x, int y);
 void renderSpriteClutAlpha(int x, int y, int a, int b, int c, int d);
 void renderSpriteClut(int x, int y, int a, int b, int c);
 int fontObjBuildBaseVifPacket(void);
 void textDrawDigitsWide(int x, int y, int value, int digits);
 void textDrawSegment(int x, int y, void *text, int style);
 void textDrawShadow(int x, int y, void *text, unsigned long long colour);
-void func_0021AFE8(int a, int x, int y, void *data);
+void textDrawTitle(int a, int x, int y, void *data);
 void xglPacketTextureTrans(void *texture);
 
 /* Draws the treasure detail page for the record at index of ysegfTreasureTable. */
@@ -417,7 +417,7 @@ void ysegfDrawTreasureDetail(int x, int y, int index, int selected, int alpha)
     packetSubmitRequest(0x26A, frameX, y - 1, 1);
     labelY = y + 0x15;
     textDrawDigitsWide(x + 0x36, y, displayNumber, 2);
-    func_0021D328(x + 0x5D, labelY);
+    menuDrawFixedFrame(x + 0x5D, labelY);
     packetSubmitRequest(0x252, x + 0x69, y + 0x1F, 0);
     packetSubmitRequest(0x255, x + 0x69, y + 0x1F, 1);
     packetSubmitRequest(0x252, x + 0x69, y + 0x3E, 0);
@@ -471,11 +471,11 @@ void ysegfDrawTreasureDetail(int x, int y, int index, int selected, int alpha)
         fontObjResetColor();
     }
 
-    func_0021AFE8(0, x + 0x6C, labelY, D_0068B3B0);
-    func_0021AFE8(0, x + 0x6C, y + 0x34, D_0068B3C0);
-    func_0021AFE8(0, x + 0x109, y + 0x16, D_0069D8D0);
-    func_0021AFE8(0, x + 0x14A, y + 0x16, D_0069D8D8);
-    func_0021AFE8(0, x + 0x187, y + 0x16, D_0068B3C0);
+    textDrawTitle(0, x + 0x6C, labelY, D_0068B3B0);
+    textDrawTitle(0, x + 0x6C, y + 0x34, D_0068B3C0);
+    textDrawTitle(0, x + 0x109, y + 0x16, D_0069D8D0);
+    textDrawTitle(0, x + 0x14A, y + 0x16, D_0069D8D8);
+    textDrawTitle(0, x + 0x187, y + 0x16, D_0068B3C0);
 }
 
 void xglFontFlush(void);
@@ -491,21 +491,21 @@ void ysegfDrawTreasureList(void)
     int y;
     int alpha;
     int slideX;
-    int *listOrigin;
+    struct FontPair *listOrigin;
 
     packetSubmitRequest(0x24C, 0x40, 0x22, 1);
     packetSubmitRequestEx(0x24C, 0x1D3, -0x80, 1, 0x240, 0x81);
     packetSubmitRequestEx(0x24C, 0x1D2, -0x80, 1, 0x240, 0x81);
-    listOrigin = ysegfListTrack.current_pair;
+    listOrigin = &ysegfListTrack.current_pair;
     entrySlide = (int *) ysegfEntryPos;
     for (row = 0; row < YSEGF_ENTRY_COUNT; row++) {
-        y = listOrigin[1] + row * YSEGF_ROW_HEIGHT + 0x34;
+        y = listOrigin->y + row * YSEGF_ROW_HEIGHT + 0x34;
         slideX = entrySlide[row];
         rawSlide = slideX;
         if (slideX >= 31) {
             slideX = 30;
         }
-        x = listOrigin[0] + slideX;
+        x = listOrigin->x + slideX;
         if (x < 0x200 && rawSlide < 0x1F0) {
             alpha = 0x7F - ((rawSlide >> 2) & 0x7F);
             if (rawSlide >= 31) {
@@ -525,20 +525,8 @@ void ysegfDrawTreasureList(void)
     fontObjResetAndBuild();
 }
 
-/* Draw request layout that fontObjDraw reads (struct FontDrawItem of main/tu097.c). */
-struct FontDrawItem {
-    int cell_index;
-    int x;
-    int y;
-    int offset_x;
-    int offset_y;
-    int size_w;
-    int size_h;
-    int flags;
-};
-
 extern struct FontDrawItem ysegfItemNameDraw;
-void func_0021E338(void);
+void menuDrawShortOutlineFrame(void);
 void fontObjDraw(struct FontDrawItem *item);
 
 /* Draws the item-name frame: four font cells across the top row, then clears the colour. */
@@ -546,7 +534,7 @@ void ysegfDrawItemNameFrame(int x, int y, int width, int unused_arg3, void *labe
 {
     int inner_width;
 
-    func_0021E338();
+    menuDrawShortOutlineFrame();
     fontObjSetColor(0x3F80000080000080ULL);
     inner_width = width - 16;
     ysegfItemNameDraw.cell_index = 82;
@@ -573,7 +561,7 @@ void ysegfDrawItemNameFrame(int x, int y, int width, int unused_arg3, void *labe
     fontObjDraw(&ysegfItemNameDraw);
     fontObjResetColor();
     if (labelText != 0) {
-        func_0021AFE8(0, x + 12, y - 1, labelText);
+        textDrawTitle(0, x + 12, y - 1, labelText);
     }
 }
 
@@ -787,7 +775,7 @@ void ysegfUpdatePage(void)
         }
         entry++;
     }
-    ysegfListTrack.target_pair[1] = -(signed char) ysegfScrollTop * YSEGF_ROW_HEIGHT;
+    ysegfListTrack.target_pair.y = -(signed char) ysegfScrollTop * YSEGF_ROW_HEIGHT;
     fontTrackEase(&ysegfListTrack);
 
     if ((PadData[0].pressed & PAD_CROSS) != 0) {

@@ -108,7 +108,7 @@ extern unsigned short textOptionFlags[];
 
 /* Text window: the box at the bottom of the screen and its single line of text. */
 typedef struct TextWindow {
-    struct FontTrack track; /* +0x00: x and y are track.current_pair[0] and [1], eased by fontTrackEase */
+    struct FontTrack track; /* +0x00: x and y are track.current_pair.x and [1], eased by fontTrackEase */
     int width;             /* +0x1C */
     int fade;              /* +0x20 frames of the fade-in, opaque from 8 on */
     unsigned char *text;
@@ -481,7 +481,7 @@ void xglFontFlush(void);
 int xglCdArenaGetSize(void);
 void fontObjResetState(void);
 void fontObjSetAlpha(int alpha);
-void func_0021E7B0(int x, int y, int width, int height, char *title);
+void menuDrawTitledWindow(int x, int y, int width, int height, char *title);
 void grSetScissor(int x0, int y0, int x1, int y1);
 void grResetScissor(void);
 int textEncodeNewlines(unsigned char *text);
@@ -523,10 +523,10 @@ void textDrawAll(void)
         if (textWindow.fade < 8) {
             fontObjSetOpacity(textWindow.fade << 4);
         }
-        packetSubmitRequestEx(0x2BE, textWindow.track.current_pair[0], textWindow.track.current_pair[1], textWindow.width, 0x20, 0x10104);
+        packetSubmitRequestEx(0x2BE, textWindow.track.current_pair.x, textWindow.track.current_pair.y, textWindow.width, 0x20, 0x10104);
         if (textWindow.text) {
             textDrawSegment(0, 0, D_0068B588, 0);
-            textDrawString(textWindow.track.current_pair[0] + 12, textWindow.track.current_pair[1] + 6, textWindow.text);
+            textDrawString(textWindow.track.current_pair.x + 12, textWindow.track.current_pair.y + 6, textWindow.text);
         }
         fontObjResetColor();
         fontObjResetOpacity();
@@ -551,7 +551,7 @@ void textDrawAll(void)
             fontObjSetOpacity(entry->tick << 5);
         }
         fontObjResetState();
-        func_0021E7B0(x, y, width, height, entry->word_1c.title);
+        menuDrawTitledWindow(x, y, width, height, entry->word_1c.title);
         fontObjResetOpacity();
         grSetScissor(x + 5, entry->word_1c.title == 0 ? y + 5 : y + 16, x + width + 26, y + height + 25);
         if (entry->pages && entry->pages[entry->page]) {
@@ -589,7 +589,7 @@ void textDrawAll(void)
         }
         top = y + 5;
         fontObjResetState();
-        func_0021E7B0(x, y, width, height, menu->title);
+        menuDrawTitledWindow(x, y, width, height, menu->title);
         fontObjResetOpacity();
         if (menu->title) {
             top = y + 16;
@@ -657,7 +657,7 @@ void textDrawAll(void)
         fontObjSetOpacity(panel->tick << 5);
     }
     fontObjResetState();
-    func_0021E7B0(x, y, width, height, D_0069D9A8);
+    menuDrawTitledWindow(x, y, width, height, D_0069D9A8);
     fontObjResetOpacity();
     grSetScissor(x + 5, y + 5, x + width + 26, y + height + 25);
     x = panel->x;

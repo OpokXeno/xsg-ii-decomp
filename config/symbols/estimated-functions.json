@@ -39078,7 +39078,7 @@
      2
     ],
     [
-     "func_0021AFE8",
+     "textDrawTitle",
      2207720,
      840,
      2
@@ -39138,7 +39138,7 @@
      2
     ],
     [
-     "func_0021B8C8",
+     "textDrawDigitsZero",
      2209992,
      208,
      2
@@ -39156,13 +39156,13 @@
      2
     ],
     [
-     "func_0021BB10",
+     "textDrawDigitsWideAlt",
      2210576,
      216,
      2
     ],
     [
-     "func_0021BBE8",
+     "menuDrawCompareMark",
      2210792,
      324,
      2
@@ -39174,19 +39174,19 @@
      2
     ],
     [
-     "func_0021BFA0",
+     "panelDrawNineSliceDepth",
      2211744,
      644,
      2
     ],
     [
-     "func_0021C228",
+     "panelDrawNineSliceFlipCorner",
      2212392,
      620,
      2
     ],
     [
-     "func_0021C498",
+     "panelDrawNineSliceNormalBlend",
      2213016,
      608,
      2
@@ -39198,7 +39198,7 @@
      2
     ],
     [
-     "func_0021CA40",
+     "menuDrawBadge",
      2214464,
      452,
      2
@@ -39216,25 +39216,25 @@
      2
     ],
     [
-     "func_0021CEF8",
+     "menuDrawTitledFrame",
      2215672,
      332,
      2
     ],
     [
-     "func_0021D048",
+     "menuDrawTitledFrameBlue",
      2216008,
      364,
      2
     ],
     [
-     "func_0021D1B8",
+     "menuDrawTitledFrameRed",
      2216376,
      364,
      2
     ],
     [
-     "func_0021D328",
+     "menuDrawFixedFrame",
      2216744,
      548,
      2
@@ -39258,7 +39258,7 @@
      2
     ],
     [
-     "func_0021D8B8",
+     "menuDrawPanelFrameWide",
      2218168,
      376,
      2
@@ -39270,7 +39270,7 @@
      2
     ],
     [
-     "func_0021DB98",
+     "menuDrawPanelFrameWideAlt",
      2218904,
      376,
      2
@@ -39282,19 +39282,19 @@
      2
     ],
     [
-     "func_0021DDB8",
+     "menuDrawPanelWide",
      2219448,
      164,
      2
     ],
     [
-     "func_0021DE60",
+     "menuDrawWindowFrame",
      2219616,
      1236,
      2
     ],
     [
-     "func_0021E338",
+     "menuDrawShortOutlineFrame",
      2220856,
      360,
      2
@@ -39312,13 +39312,13 @@
      2
     ],
     [
-     "func_0021E7B0",
+     "menuDrawTitledWindow",
      2222000,
      1716,
      2
     ],
     [
-     "func_0021EE68",
+     "menuDrawScrollFrame",
      2223720,
      248,
      2
@@ -39330,37 +39330,37 @@
      2
     ],
     [
-     "func_0021EFC8",
+     "menuDrawIndexedIconMarked",
      2224072,
      212,
      2
     ],
     [
-     "func_0021F0A0",
+     "menuDrawLitIcon",
      2224288,
      108,
      2
     ],
     [
-     "func_0021F110",
+     "menuDrawLitIconWide",
      2224400,
      124,
      2
     ],
     [
-     "func_0021F190",
+     "menuDrawDimIcon",
      2224528,
      136,
      2
     ],
     [
-     "func_0021F218",
+     "menuDrawLitIconMarked",
      2224664,
      212,
      2
     ],
     [
-     "func_0021F2F0",
+     "menuPlaceCursor",
      2224880,
      312,
      2
@@ -39378,13 +39378,13 @@
      2
     ],
     [
-     "func_0021F530",
+     "menuDrawPageTabs",
      2225456,
      292,
      2
     ],
     [
-     "func_0021F658",
+     "menuDrawPageCells",
      2225752,
      388,
      2
@@ -39396,7 +39396,7 @@
      2
     ],
     [
-     "func_0021F8A8",
+     "menuDrawFrontMemberIcons",
      2226344,
      352,
      2
@@ -39426,19 +39426,19 @@
      2
     ],
     [
-     "func_00220210",
+     "menuDrawPlainItemList",
      2228752,
      832,
      2
     ],
     [
-     "func_00220550",
+     "menuDrawMemberItemList",
      2229584,
      752,
      2
     ],
     [
-     "func_00220840",
+     "menuDrawStatCompare",
      2230336,
      336,
      2
@@ -39492,7 +39492,7 @@
      2
     ],
     [
-     "func_00222860",
+     "menuDrawCommandDetail",
      2238560,
      1072,
      2
@@ -39540,79 +39540,79 @@
      2
     ],
     [
-     "func_002245B8",
+     "menuItemMemberEntry",
      2246072,
      76,
      2
     ],
     [
-     "func_00224608",
+     "menuDrawStatIcon",
      2246152,
      148,
      2
     ],
     [
-     "func_002246A0",
+     "menuDrawLevel",
      2246304,
      160,
      2
     ],
     [
-     "func_00224740",
+     "menuHpColours",
      2246464,
      204,
      2
     ],
     [
-     "func_00224810",
+     "menuDrawHp",
      2246672,
      280,
      2
     ],
     [
-     "func_00224928",
+     "menuDrawEp",
      2246952,
      256,
      2
     ],
     [
-     "func_00224A28",
+     "menuDrawHpWide",
      2247208,
      280,
      2
     ],
     [
-     "func_00224B40",
+     "menuDrawEpWide",
      2247488,
      256,
      2
     ],
     [
-     "func_00224C40",
+     "menuDrawLevelShadow",
      2247744,
      184,
      2
     ],
     [
-     "func_00224CF8",
+     "menuDrawHpShadow",
      2247928,
      296,
      2
     ],
     [
-     "func_00224E20",
+     "menuDrawEpShadow",
      2248224,
      256,
      2
     ],
     [
-     "func_00224F20",
+     "menuDrawHpWideShadow",
      2248480,
      296,
      2
     ],
     [
-     "func_00225048",
+     "menuDrawEpWideShadow",
      2248776,
      256,
      2
@@ -39624,13 +39624,13 @@
      2
     ],
     [
-     "func_002251A0",
+     "menuDrawTrackPanel",
      2249120,
      520,
      2
     ],
     [
-     "func_002253A8",
+     "menuDrawPanelHighlight",
      2249640,
      180,
      2
@@ -39642,13 +39642,13 @@
      2
     ],
     [
-     "func_00225FE0",
+     "menuDrawEmptyPartySlot",
      2252768,
      352,
      2
     ],
     [
-     "func_00226140",
+     "menuResetItems",
      2253120,
      488,
      2
@@ -39672,7 +39672,7 @@
      2
     ],
     [
-     "func_00226948",
+     "menuDrawItems",
      2255176,
      868,
      2
@@ -39720,19 +39720,19 @@
      2
     ],
     [
-     "func_00227408",
+     "menuSetValuesMode",
      2257928,
      76,
      2
     ],
     [
-     "func_00227458",
+     "menuDrawItemHighlighted",
      2258008,
      372,
      2
     ],
     [
-     "func_002275D0",
+     "menuEnableItems",
      2258384,
      488,
      2
@@ -39804,7 +39804,7 @@
      2
     ],
     [
-     "func_002280E0",
+     "choiceSetRow",
      2261216,
      28,
      2
@@ -39822,7 +39822,7 @@
      2
     ],
     [
-     "func_00228340",
+     "choiceGetResult",
      2261824,
      28,
      2
@@ -40404,19 +40404,19 @@
      2
     ],
     [
-     "talk_0022D1D8",
+     "smsg",
      2281944,
      348,
      2
     ],
     [
-     "func_0022D338",
+     "talkSetSlotFlags",
      2282296,
      76,
      2
     ],
     [
-     "talk_0022D388",
+     "msgDtl",
      2282376,
      356,
      2

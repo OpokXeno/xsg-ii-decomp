@@ -59,24 +59,24 @@ void fontTrackEase(struct FontTrack *track) {
         return;
     }
 
-    target_scaled = track->target_pair[0] << 4;
-    delta = target_scaled - track->scaled_pair[0];
+    target_scaled = track->target_pair.x << 4;
+    delta = target_scaled - track->scaled_pair.x;
     if ((delta >> 4) != 0) {
-        track->scaled_pair[0] = track->scaled_pair[0] + ((delta * track->step_count) >> 7);
-        track->current_pair[0] = track->scaled_pair[0] >> 4;
+        track->scaled_pair.x = track->scaled_pair.x + ((delta * track->step_count) >> 7);
+        track->current_pair.x = track->scaled_pair.x >> 4;
     } else {
-        track->current_pair[0] = track->target_pair[0];
-        track->scaled_pair[0] = target_scaled;
+        track->current_pair.x = track->target_pair.x;
+        track->scaled_pair.x = target_scaled;
     }
 
-    target_scaled = track->target_pair[1] << 4;
-    delta = target_scaled - track->scaled_pair[1];
+    target_scaled = track->target_pair.y << 4;
+    delta = target_scaled - track->scaled_pair.y;
     if ((delta >> 4) != 0) {
-        track->scaled_pair[1] = track->scaled_pair[1] + ((delta * track->step_count) >> 7);
-        track->current_pair[1] = track->scaled_pair[1] >> 4;
+        track->scaled_pair.y = track->scaled_pair.y + ((delta * track->step_count) >> 7);
+        track->current_pair.y = track->scaled_pair.y >> 4;
     } else {
-        track->current_pair[1] = track->target_pair[1];
-        track->scaled_pair[1] = target_scaled;
+        track->current_pair.y = track->target_pair.y;
+        track->scaled_pair.y = target_scaled;
     }
 
     track->step_count = track->step_count + FONT_TRACK_SPEED_STEP;
@@ -90,6 +90,6 @@ void fontTrackEase(struct FontTrack *track) {
  * toward it and fontTrackAtTarget tests for arrival.
  */
 void fontTrackSetTarget(struct FontTrack *track, int targetX, int targetY) {
-    track->target_pair[0] = targetX;
-    track->target_pair[1] = targetY;
+    track->target_pair.x = targetX;
+    track->target_pair.y = targetY;
 }

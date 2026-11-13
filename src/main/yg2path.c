@@ -605,7 +605,7 @@ void yg2PathDrawMainMenu(int opacity) {
     fontObjResetOpacity();
 }
 
-void func_0021B8C8(int x, int y, int unused, int mode);
+void textDrawDigitsZero(int x, int y, int unused, int mode);
 
 void yg2PathDrawPathGrid(int opacity)
 {
@@ -634,7 +634,7 @@ void yg2PathDrawPathGrid(int opacity)
             status = questFlags[i] & 3;
             if (status != 0) {
                 i++;
-                func_0021B8C8(x, y, i, 2);
+                textDrawDigitsZero(x, y, i, 2);
             } else {
                 i++;
             }
@@ -679,11 +679,11 @@ typedef struct YgCitizenFileRequest {
 } YgCitizenFileRequest;
 
 void textDrawSegment(int, int, unsigned char *, int);
-void func_0021E338(int, int, int, int);
+void menuDrawShortOutlineFrame(int, int, int, int);
 void textDrawDigitsPair(int, int, int, int, int);
-void func_0021BB10(int, int, int, int);
+void textDrawDigitsWideAlt(int, int, int, int);
 void func_0021CEE0(int, int, int, int);
-void func_0021D1B8(int, int, int, int, unsigned char *);
+void menuDrawTitledFrameRed(int, int, int, int, unsigned char *);
 void renderSpriteClutAlpha(int, int, int, int, int, unsigned char);
 void renderSpriteClut(int, int, int, int, int);
 void sprintf(YgCitizenFileRequest *, unsigned char *, YgCitizenFileRequest *, int);
@@ -707,7 +707,7 @@ extern unsigned char D_0069D838[];
 extern unsigned char D_0068B038[];
 extern unsigned char D_0069D840[];
 extern unsigned char D_0069D848[];
-void func_0021D048(int, int, int, int, unsigned char *);
+void menuDrawTitledFrameBlue(int, int, int, int, unsigned char *);
 
 /* Message page: the current path's quest message record and its
    questFlags byte (low nibble: availability, bit 0x10: flag). */
@@ -720,10 +720,10 @@ void yg2PathDrawMessagePage(int scroll)
   fontObjSetOpacity(scroll);
   panelDrawNineSlice(D_003EC930, 12, 15, 415, 89);
   packetSubmitRequest(454, 32, 15, 1);
-  func_0021BB10(74, 15, yg2PathCurrentPath + 1, 2);
+  textDrawDigitsWideAlt(74, 15, yg2PathCurrentPath + 1, 2);
   func_0021CEE0(24, 40, 391, 50);
-  func_0021D048(29, 47, 235, 37, D_0069D838);
-  func_0021D048(267, 47, 144, 37, D_0068B038);
+  menuDrawTitledFrameBlue(29, 47, 235, 37, D_0069D838);
+  menuDrawTitledFrameBlue(267, 47, 144, 37, D_0068B038);
   panelDrawNineSlice(yg2PathPanelImage, 26, 109, 460, 250);
   packetSubmitRequest(490, 53, 114, 1);
   packetSubmitRequest(418, 34, 140, 1);
@@ -740,8 +740,8 @@ void yg2PathDrawMessagePage(int scroll)
   packetSubmitRequestEx(425, 352, 311, 110, 16, 0);
   func_0021CEE0(54, 148, 130, 148);
   func_0021CEE0(200, 148, 265, 137);
-  func_0021D1B8(206, 155, 255, 123, D_0069D840);
-  func_0021D1B8(44, 300, 150, 37, D_0069D848);
+  menuDrawTitledFrameRed(206, 155, 255, 123, D_0069D840);
+  menuDrawTitledFrameRed(44, 300, 150, 37, D_0069D848);
   packetSubmitRequestEx(517, 208, 187, 249, 5, 1);
   packetSubmitRequestEx(517, 208, 207, 249, 5, 1);
   packetSubmitRequestEx(517, 208, 227, 249, 5, 1);
@@ -845,7 +845,7 @@ void yg2PathDrawCitizenProfile(int scroll)
   panelDrawNineSlice(yg2PathPanelImage, 0x2F, 0x1B, 0x1A1, 0x148);
   packetSubmitRequest(0x203, 0x4D, 0x1F, 1);
   packetSubmitRequest(0x1C6, 0xD0, 0x20, 1);
-  func_0021BB10(0xFA, 0x20, yg2PathCurrentCitizen + 1, 2);
+  textDrawDigitsWideAlt(0xFA, 0x20, yg2PathCurrentCitizen + 1, 2);
   packetSubmitRequest(0x1A2, 0x37, 0x3A, 1);
   packetSubmitRequest(0x1AC, 0x1B8, 0x3A, 0);
   packetSubmitRequest(0x1A4, 0x1B8, 0x3A, 1);
@@ -860,13 +860,13 @@ void yg2PathDrawCitizenProfile(int scroll)
   packetSubmitRequestEx(0x1A9, 0x138, 0xC4, 0x80, 0x10, 0);
   func_0021CEE0(0x42, 0x45, 0x82, 0x94);
   func_0021CEE0(0xCD, 0x45, 0xF1, 0x81);
-  func_0021D1B8(0xD2, 0x4C, 0xE7, 0x73, D_0069D850);
+  menuDrawTitledFrameRed(0xD2, 0x4C, 0xE7, 0x73, D_0069D850);
   packetSubmitRequestEx(0x205, 0xE6, 0x6D, 0xC6, 5, 1);
   packetSubmitRequestEx(0x205, 0xE6, 0x85, 0xC6, 5, 1);
   packetSubmitRequestEx(0x205, 0xE6, 0x9D, 0xC6, 5, 1);
   packetSubmitRequestEx(0x205, 0xE6, 0xB5, 0xC6, 5, 1);
-  func_0021E338(0x37, 0xEA, 0x191, 0x6B);
-  func_0021D1B8(0x42, 0xF7, 0x17B, 0x53, D_0069D858);
+  menuDrawShortOutlineFrame(0x37, 0xEA, 0x191, 0x6B);
+  menuDrawTitledFrameRed(0x42, 0xF7, 0x17B, 0x53, D_0069D858);
   packetSubmitRequestEx(0x205, 0x44, 0x117, 0x177, 5, 1);
   packetSubmitRequestEx(0x205, 0x44, 0x12B, 0x177, 5, 1);
   packetSubmitRequestEx(0x205, 0x44, 0x13F, 0x177, 5, 1);
@@ -937,7 +937,7 @@ void yg2PathDrawPathDetail(void)
   unsigned char questStatus;
   panelDrawNineSlice(yg2PathPanelImage, 0xD, 0x14, 0xF7, 0x194);
   packetSubmitRequest(0x202, 0x19, 0x19, 1);
-  func_0021E338(0x15, 0x33, 0xE7, 0x167);
+  menuDrawShortOutlineFrame(0x15, 0x33, 0xE7, 0x167);
   packetSubmitRequest(0x20A, 0x176, 0x185, 1);
   packetSubmitRequest(0x209, 0x18B, 0x189, 1);
   textDrawSegment(0, 0, yg2PathDetailTextHeader, 0);

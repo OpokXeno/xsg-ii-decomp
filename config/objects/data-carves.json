@@ -6792,27 +6792,79 @@
    ]
   },
   "main/tu101": {
+   ".lit4": [
+    {
+     "range": [
+      "0x0069b28c",
+      "0x0069b294"
+     ],
+     "generated": [
+      "0x0069b28c",
+      "0x0069b294"
+     ],
+     "generated_by": [
+      "func_0021DE60",
+      "func_0021E7B0"
+     ],
+     "c_owned_symbols": [
+      "D_0069B28C",
+      "D_0069B290"
+     ],
+     "also_referenced_by_c": [],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/tu101.o"
+     }
+    }
+   ],
    ".rodata": [
     {
      "range": [
       "0x0068a630",
-      "0x0068a890"
+      "0x0068a9b0"
      ],
      "generated": [
       "0x0068a630",
-      "0x0068a890"
+      "0x0068a9b0"
      ],
      "generated_by": [
-      "textDrawGlyphString"
+      "func_0021AFE8",
+      "textDrawGlyphString",
+      "textDrawStringAlt"
      ],
      "c_owned_symbols": [
       "jtbl_0068A630",
       "jtbl_0068A6A0",
-      "jtbl_0068A760"
+      "jtbl_0068A760",
+      "jtbl_0068A890",
+      "jtbl_0068A900"
      ],
      "also_referenced_by_c": [
+      "D_0068A600",
+      "D_0068A610",
+      "D_0068A9B0",
       "msgStyleInit",
-      "D_0068AB18"
+      "D_0068AA10",
+      "D_0068AA20",
+      "D_0068AA30",
+      "D_0068AA40",
+      "D_0068AA50",
+      "D_0068AA60",
+      "D_0068AA70",
+      "D_0068AA88",
+      "D_0068AA98",
+      "D_0068AAA8",
+      "D_0068AAB8",
+      "D_0068AAC8",
+      "D_0068AAD8",
+      "D_0068AAE8",
+      "D_0068AAF8",
+      "D_0068AB08",
+      "D_0068AB18",
+      "D_0068AB28",
+      "D_0068AB38",
+      "D_0068AB48"
      ],
      "basis": {
       "kind": "derived",
@@ -6823,20 +6875,47 @@
     {
      "range": [
       "0x0068ab60",
-      "0x0068ab90"
+      "0x0068abf0"
      ],
      "generated": [
       "0x0068ab60",
-      "0x0068ab84"
+      "0x0068abf0"
      ],
      "generated_by": [
-      "menuDrawPartyPanel"
+      "menuDrawPartyPanel",
+      "menuPlaceItemCursor",
+      "msgRangeDrawIcon"
      ],
      "c_owned_symbols": [
-      "jtbl_0068AB60"
+      "jtbl_0068AB60",
+      "jtbl_0068AB90",
+      "jtbl_0068ABC0"
      ],
      "also_referenced_by_c": [
-      "D_0068ABF0",
+      "D_0068ABF0"
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/tu101.o"
+     }
+    },
+    {
+     "range": [
+      "0x0068ac00",
+      "0x0068ac80"
+     ],
+     "generated": [
+      "0x0068ac00",
+      "0x0068ac80"
+     ],
+     "generated_by": [
+      "msgRangeDrawRevealed"
+     ],
+     "c_owned_symbols": [
+      "jtbl_0068AC00"
+     ],
+     "also_referenced_by_c": [
       "D_0068AC80"
      ],
      "basis": {

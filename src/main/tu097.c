@@ -16,21 +16,21 @@
 /* Sets the current pair of a track to (x, y), its scaled copy to (x << 4, y << 4) and the step counter to 1. */
 void fontTrackSetPoint(struct FontTrack *track, int x, int y)
 {
-    track->current_pair[0] = x;
-    track->current_pair[1] = y;
-    track->scaled_pair[0] = x << 4;
-    track->scaled_pair[1] = y << 4;
+    track->current_pair.x = x;
+    track->current_pair.y = y;
+    track->scaled_pair.x = x << 4;
+    track->scaled_pair.y = y << 4;
     track->step_count = 1;
 }
 
 void fontTrackSetBoth(struct FontTrack *track, int x, int y)
 {
-    track->target_pair[0] = x;
-    track->current_pair[0] = x;
-    track->target_pair[1] = y;
-    track->current_pair[1] = y;
-    track->scaled_pair[0] = x << 4;
-    track->scaled_pair[1] = y << 4;
+    track->target_pair.x = x;
+    track->current_pair.x = x;
+    track->target_pair.y = y;
+    track->current_pair.y = y;
+    track->scaled_pair.x = x << 4;
+    track->scaled_pair.y = y << 4;
     track->step_count = 1;
 }
 
@@ -40,12 +40,12 @@ void fontTrackAdvance(struct FontTrack *track)
     int target_y;
 
     track->step_count--;
-    target_x = track->target_pair[0];
-    track->current_pair[0] = target_x;
-    track->scaled_pair[0] = target_x << 4;
-    target_y = track->target_pair[1];
-    track->current_pair[1] = target_y;
-    track->scaled_pair[1] = target_y << 4;
+    target_x = track->target_pair.x;
+    track->current_pair.x = target_x;
+    track->scaled_pair.x = target_x << 4;
+    target_y = track->target_pair.y;
+    track->current_pair.y = target_y;
+    track->scaled_pair.y = target_y << 4;
     if (track->step_count <= 0) {
         track->step_count = 1;
     }
@@ -57,8 +57,8 @@ void fontTrackAdvance(struct FontTrack *track)
 int fontTrackAtTarget(struct FontTrack *track) {
     int at_target = 0;
 
-    if (track->current_pair[0] == track->target_pair[0]) {
-        at_target = track->current_pair[1] == track->target_pair[1];
+    if (track->current_pair.x == track->target_pair.x) {
+        at_target = track->current_pair.y == track->target_pair.y;
     }
     return at_target;
 }
@@ -332,18 +332,6 @@ struct FontCell {
     unsigned int uv;
 };
 
-/* The draw request fontObjDraw reads: cell index, screen position, offsets, size and flags. */
-struct FontDrawItem {
-    int cell_index;
-    int x;
-    int y;
-    int offset_x;
-    int offset_y;
-    int size_w;
-    int size_h;
-    int flags;
-};
-
 extern struct FontCell fontObjCellTable[];
 extern u16 sRenderDepthBase[];
 int fontObjBuildVifPacket(int texture_index);
@@ -604,30 +592,30 @@ void fontObjStartOpen(struct FontObject *object)
     }
     if (object->flags & FONT_OBJ_EASE) {
         if (object->move_phase == FONT_PHASE_CLOSING) {
-            fontTrackSetTarget(&object->tracks[2], object->tracks[0].target_pair[0],
-                          object->tracks[0].target_pair[1]);
+            fontTrackSetTarget(&object->tracks[2], object->tracks[0].target_pair.x,
+                          object->tracks[0].target_pair.y);
             {
                 struct FontTrack *track3 = &object->tracks[3];
 
-                fontTrackSetTarget(track3, object->tracks[1].target_pair[0],
-                              object->tracks[1].target_pair[1]);
+                fontTrackSetTarget(track3, object->tracks[1].target_pair.x,
+                              object->tracks[1].target_pair.y);
             }
         } else {
-            fontTrackSetBoth(&object->tracks[2], object->tracks[0].target_pair[0],
-                          object->tracks[0].target_pair[1]);
+            fontTrackSetBoth(&object->tracks[2], object->tracks[0].target_pair.x,
+                          object->tracks[0].target_pair.y);
             {
                 struct FontTrack *track3 = &object->tracks[3];
 
                 fontTrackSetPoint(track3, 0, 0);
-                fontTrackSetTarget(track3, object->tracks[1].target_pair[0],
-                              object->tracks[1].target_pair[1]);
+                fontTrackSetTarget(track3, object->tracks[1].target_pair.x,
+                              object->tracks[1].target_pair.y);
             }
         }
     } else {
-        fontTrackSetBoth(&object->tracks[2], object->tracks[0].target_pair[0],
-                      object->tracks[0].target_pair[1]);
-        fontTrackSetBoth(&object->tracks[3], object->tracks[1].target_pair[0],
-                      object->tracks[1].target_pair[1]);
+        fontTrackSetBoth(&object->tracks[2], object->tracks[0].target_pair.x,
+                      object->tracks[0].target_pair.y);
+        fontTrackSetBoth(&object->tracks[3], object->tracks[1].target_pair.x,
+                      object->tracks[1].target_pair.y);
     }
     object->flags |= FONT_OBJ_ACTIVE;
     object->move_phase = FONT_PHASE_OPENING;
@@ -644,22 +632,22 @@ void fontObjStartClose(struct FontObject *object)
     if (phase != FONT_PHASE_CLOSING) {
         if (object->flags & FONT_OBJ_EASE) {
             if (phase == FONT_PHASE_OPENING) {
-                fontTrackSetTarget(&object->tracks[2], object->tracks[0].target_pair[0],
-                              object->tracks[0].target_pair[1]);
+                fontTrackSetTarget(&object->tracks[2], object->tracks[0].target_pair.x,
+                              object->tracks[0].target_pair.y);
                 size_track = &object->tracks[3];
             } else {
-                fontTrackSetPoint(&object->tracks[2], object->tracks[0].current_pair[0],
-                              object->tracks[0].current_pair[1]);
-                fontTrackSetTarget(&object->tracks[2], object->tracks[0].target_pair[0],
-                              object->tracks[0].target_pair[1]);
-                fontTrackSetPoint(&object->tracks[3], object->tracks[1].current_pair[0],
-                              object->tracks[1].current_pair[1]);
+                fontTrackSetPoint(&object->tracks[2], object->tracks[0].current_pair.x,
+                              object->tracks[0].current_pair.y);
+                fontTrackSetTarget(&object->tracks[2], object->tracks[0].target_pair.x,
+                              object->tracks[0].target_pair.y);
+                fontTrackSetPoint(&object->tracks[3], object->tracks[1].current_pair.x,
+                              object->tracks[1].current_pair.y);
                 size_track = &object->tracks[3];
             }
             fontTrackSetTarget(size_track, 0, 0);
         } else {
-            fontTrackSetBoth(&object->tracks[2], object->tracks[0].target_pair[0],
-                          object->tracks[0].target_pair[1]);
+            fontTrackSetBoth(&object->tracks[2], object->tracks[0].target_pair.x,
+                          object->tracks[0].target_pair.y);
             fontTrackSetBoth(&object->tracks[3], 0, 0);
         }
         object->move_phase = FONT_PHASE_CLOSING;
@@ -686,8 +674,8 @@ void fontObjSettleTracks(struct FontObject *object)
         fontTrackAdvance(&object->tracks[3]);
     }
     if (fontTrackAtTarget(&object->tracks[2]) != 0 && fontTrackAtTarget(&object->tracks[3]) != 0) {
-        fontTrackSetTarget(&object->tracks[0], object->tracks[2].current_pair[0], object->tracks[2].current_pair[1]);
-        fontTrackSetTarget(&object->tracks[1], object->tracks[3].current_pair[0], object->tracks[3].current_pair[1]);
+        fontTrackSetTarget(&object->tracks[0], object->tracks[2].current_pair.x, object->tracks[2].current_pair.y);
+        fontTrackSetTarget(&object->tracks[1], object->tracks[3].current_pair.x, object->tracks[3].current_pair.y);
         object->move_phase = FONT_PHASE_IDLE;
     }
 }
@@ -763,16 +751,16 @@ void fontObjGetQuadCorners(struct FontObject *object, int *corners)
     struct FontTrack *second = (flags & FONT_OBJ_PHASE_RUNNING) ? &object->tracks[3] : &object->tracks[1];
 
     if (flags & 0x10) {
-        corners[0] = first->current_pair[0] +
-            ((object->tracks[1].target_pair[0] - second->current_pair[0]) >> 1);
-        corners[1] = first->current_pair[1] +
-            ((object->tracks[1].target_pair[1] - second->current_pair[1]) >> 1);
+        corners[0] = first->current_pair.x +
+            ((object->tracks[1].target_pair.x - second->current_pair.x) >> 1);
+        corners[1] = first->current_pair.y +
+            ((object->tracks[1].target_pair.y - second->current_pair.y) >> 1);
     } else {
-        corners[0] = first->current_pair[0];
-        corners[1] = first->current_pair[1];
+        corners[0] = first->current_pair.x;
+        corners[1] = first->current_pair.y;
     }
-    corners[2] = corners[0] + second->current_pair[0];
-    corners[3] = corners[1] + second->current_pair[1];
+    corners[2] = corners[0] + second->current_pair.x;
+    corners[3] = corners[1] + second->current_pair.y;
 }
 
 
@@ -1197,8 +1185,8 @@ int fontObjDrawText(FontTextBlock *block)
         fontTrackEase((struct FontTrack *)block);
         fontObjDrawIfActive(&block->sub_object);
         if (block->sub_object.move_phase != FONT_PHASE_OPENING) {
-            offsetX = block->sub_object.tracks[0].current_pair[0] + block->origin_x;
-            offsetY = block->sub_object.tracks[0].current_pair[1] + block->origin_y;
+            offsetX = block->sub_object.tracks[0].current_pair.x + block->origin_x;
+            offsetY = block->sub_object.tracks[0].current_pair.y + block->origin_y;
             fontObjGetQuadCorners(&block->sub_object, block->corners);
             block->corners[1] -= 4;
             block->corners[3] -= 4;
@@ -1326,8 +1314,8 @@ void cursorBufferUpdateEntry(struct FontCursorEntry *entry)
     fontTrackEase((struct FontTrack *)entry);
     fontObjDrawIfActive(&entry->sub_object);
     if (entry->sub_object.move_phase != FONT_PHASE_OPENING) {
-        offsetX = entry->sub_object.tracks[0].current_pair[0] + entry->origin_x;
-        offsetY = entry->sub_object.tracks[0].current_pair[1] + entry->origin_y;
+        offsetX = entry->sub_object.tracks[0].current_pair.x + entry->origin_x;
+        offsetY = entry->sub_object.tracks[0].current_pair.y + entry->origin_y;
         fontObjGetQuadCorners(&entry->sub_object, entry->corners);
         entry->corners[1] -= 4;
         entry->corners[3] -= 4;

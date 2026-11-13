@@ -88,13 +88,13 @@ void textDrawDecimalAltShadow(int x, int y, int value, int digits, unsigned long
 void panelDrawNineSlice(unsigned char *frame, int x, int y, int width, int height);
 void menuDrawSplitFrame(int x, int y, int width, int height, int extra);
 void menuDrawIndexedIcon(int x, int y, unsigned char icon);
-void func_00224608(int a, int x, int y, unsigned long long style);
-void func_00224C40(int x, int y, int value);
-void func_00224CF8(int x, int y, int a, long b);
-void func_00224E20(int x, int y, int a, int b);
-void func_00224F20(int x, int y, int a, long b);
-void func_00225048(int x, int y, int a, int b);
-void func_0021E338(int x, int y, int a, int b);
+void menuDrawStatIcon(int a, int x, int y, unsigned long long style);
+void menuDrawLevelShadow(int x, int y, int value);
+void menuDrawHpShadow(int x, int y, int a, long b);
+void menuDrawEpShadow(int x, int y, int a, int b);
+void menuDrawHpWideShadow(int x, int y, int a, long b);
+void menuDrawEpWideShadow(int x, int y, int a, int b);
+void menuDrawShortOutlineFrame(int x, int y, int a, int b);
 long long func_002A5C88(long long a, long long b);
 void battleResultDrawEntries(int x, int y);
 void textDrawSegment(int x, int y, void *text, unsigned long long style);
@@ -150,7 +150,7 @@ void battleResultDrawRow(int x, int y, int index, int tally)
     menuDrawIndexedIcon(x + 27, y + 10, label->icon);
     packetSubmitRequest(288, x + 68, y + 8, 17);
     textDrawShadow(x + 73, y + 11, label->text, 0xFE00ULL << 46);
-    func_00224C40(x + wideOffset + 140, y + 7, resultText->value_13 - adjust);
+    menuDrawLevelShadow(x + wideOffset + 140, y + 7, resultText->value_13 - adjust);
     if (row->adjust_a != 0) {
         if (adjust == 0) {
             packetSubmitRequest(396, x + wideOffset + 240, y + 3, 17);
@@ -160,32 +160,32 @@ void battleResultDrawRow(int x, int y, int index, int tally)
             adjust = row->adjust_b;
         }
         if (wideOffset != 0) {
-            func_00224F20(x + 69, y + 36, resultText->value_5c, (int)(resultText->gauge - adjust));
+            menuDrawHpWideShadow(x + 69, y + 36, resultText->value_5c, (int)(resultText->gauge - adjust));
         } else {
-            func_00224CF8(x + 69, y + 36, resultText->value_5c, (int)(resultText->gauge - adjust));
+            menuDrawHpShadow(x + 69, y + 36, resultText->value_5c, (int)(resultText->gauge - adjust));
         }
         adjust = tally != battleResultScoreMax ? row->adjust_c : 0;
         if (wideOffset != 0) {
-            func_00225048(x + 69, y + 52, resultText->value_60, resultText->value_06 - adjust);
+            menuDrawEpWideShadow(x + 69, y + 52, resultText->value_60, resultText->value_06 - adjust);
         } else {
-            func_00224E20(x + 69, y + 52, resultText->value_60, resultText->value_06 - adjust);
+            menuDrawEpShadow(x + 69, y + 52, resultText->value_60, resultText->value_06 - adjust);
         }
     } else {
         if (wideOffset != 0) {
-            func_00224F20(x + 69, y + 36, resultText->value_5c, resultText->gauge);
+            menuDrawHpWideShadow(x + 69, y + 36, resultText->value_5c, resultText->gauge);
         } else {
-            func_00224CF8(x + 69, y + 36, resultText->value_5c, resultText->gauge);
+            menuDrawHpShadow(x + 69, y + 36, resultText->value_5c, resultText->gauge);
         }
         if (wideOffset != 0) {
-            func_00225048(x + 69, y + 52, resultText->value_60, resultText->value_06);
+            menuDrawEpWideShadow(x + 69, y + 52, resultText->value_60, resultText->value_06);
         } else {
-            func_00224E20(x + 69, y + 52, resultText->value_60, resultText->value_06);
+            menuDrawEpShadow(x + 69, y + 52, resultText->value_60, resultText->value_06);
         }
     }
     fontObjSetColor(RESULT_SHADOW_COLOUR);
-    func_00224608(5, x + 70, y + 74, 0xFE00ULL << 46);
+    menuDrawStatIcon(5, x + 70, y + 74, 0xFE00ULL << 46);
     fontObjSetColor(0x3F80000080665B6EULL);
-    func_00224608(5, x + 69, y + 71, 0xFE00ULL << 46);
+    menuDrawStatIcon(5, x + 69, y + 71, 0xFE00ULL << 46);
     fontObjResetColor();
     if (tally == battleResultScoreMax) {
         lowerRowY = y + 75;
@@ -197,17 +197,17 @@ void battleResultDrawRow(int x, int y, int index, int tally)
     fontObjSetColor(RESULT_SHADOW_COLOUR);
     scoreRowY = y + 32;
     markerX = x + wideOffset + 199;
-    func_00224608(6, markerX, scoreRowY, 0xFE00ULL << 46);
+    menuDrawStatIcon(6, markerX, scoreRowY, 0xFE00ULL << 46);
     adjust = y + 57;
-    func_00224608(2, markerX, adjust, 0xFE00ULL << 46);
-    func_00224608(3, markerX, lowerRowY, 0xFE00ULL << 46);
+    menuDrawStatIcon(2, markerX, adjust, 0xFE00ULL << 46);
+    menuDrawStatIcon(3, markerX, lowerRowY, 0xFE00ULL << 46);
     fontObjSetColor(0x3F80000080665B6EULL);
     markerFillX = markerX - 1;
     markerY = y + 29;
-    func_00224608(6, markerFillX, markerY, 0xFE00ULL << 46);
+    menuDrawStatIcon(6, markerFillX, markerY, 0xFE00ULL << 46);
     fontObjSetColor(0x3F800000807F5747ULL);
-    func_00224608(2, markerFillX, y + 54, 0xFE00ULL << 46);
-    func_00224608(3, markerFillX, y + 72, 0xFE00ULL << 46);
+    menuDrawStatIcon(2, markerFillX, y + 54, 0xFE00ULL << 46);
+    menuDrawStatIcon(3, markerFillX, y + 72, 0xFE00ULL << 46);
     fontObjResetColor();
     total = row->score_a;
     total = func_002A5C88(total * tally, battleResultScoreMax);
@@ -249,8 +249,8 @@ void battleResultDrawRow(int x, int y, int index, int tally)
     rest = rest * (battleResultScoreMax - tally);
     rest = func_002A5C88(rest, battleResultScoreMax);
     textDrawSignedDecimalShadow(x + wideOffset + 300, scoreRowY, (int)rest, 5, 0xFE00ULL << 46);
-    func_0021E338(x + wideOffset + 191, markerY, 170, 21);
-    func_0021E338(x + wideOffset + 294, y + 53, 67, 41);
+    menuDrawShortOutlineFrame(x + wideOffset + 191, markerY, 170, 21);
+    menuDrawShortOutlineFrame(x + wideOffset + 294, y + 53, 67, 41);
 }
 
 #include "main/tu110.h"
@@ -288,8 +288,8 @@ void battleResultDrawEntries(int x, int y) {
     i = 0;
     highlighted = 0;
     panelDrawNineSlice(menuPanelFrame, x, y, 0xF6, battleResultEntryCount * RESULT_ROW_HEIGHT + 0x36);
-    func_0021E338(x + 4, y + 5, 0xEE, 0x1B);
-    func_0021E338(x + 4, y + 0x22, 0xEE, battleResultEntryCount * RESULT_ROW_HEIGHT + 0xF);
+    menuDrawShortOutlineFrame(x + 4, y + 5, 0xEE, 0x1B);
+    menuDrawShortOutlineFrame(x + 4, y + 0x22, 0xEE, battleResultEntryCount * RESULT_ROW_HEIGHT + 0xF);
     textDrawSegment(x + 0x40, y + 8, menuMainTxdEntry(BATTLE_RESULT_TXD_HEADING), 0);
     textDrawSegment(x + 0x40, y + 8, D_0068B490, 0);
 
@@ -326,7 +326,7 @@ void battleResultDrawEntries(int x, int y) {
     if (highlighted != 0) {
         x -= 0x20;
         panelDrawNineSlice(menuPanelFrame, x, y + battleResultEntryCount * RESULT_ROW_HEIGHT + 0x40, 0x136, 0x25);
-        func_0021E338(x + 4, y + battleResultEntryCount * RESULT_ROW_HEIGHT + 0x45, 0x12E, 0x1B);
+        menuDrawShortOutlineFrame(x + 4, y + battleResultEntryCount * RESULT_ROW_HEIGHT + 0x45, 0x12E, 0x1B);
         fontObjSetColor(RESULT_SHADOW_COLOUR);
         packetSubmitRequest(0xC8, x + 0xD, y + battleResultEntryCount * RESULT_ROW_HEIGHT + 0x4B, 4);
         fontObjSetColor(RESULT_FILL_COLOUR);
@@ -353,9 +353,9 @@ void battleResultDrawScreen(void)
     fontObjResetAndBuild();
     textDrawSegment(0, 0, battleResultTextSetup, 0);
     panelDrawNineSlice(menuPanelFrame, 4, 8, 84, 37);
-    func_0021E338(8, 13, 76, 27);
+    menuDrawShortOutlineFrame(8, 13, 76, 27);
     panelDrawNineSlice(menuPanelFrame, 155, 20, 201, 37);
-    func_0021E338(159, 25, 193, 27);
+    menuDrawShortOutlineFrame(159, 25, 193, 27);
     fontObjSetColor(0x3F80000080808080ULL);
     textDrawShadow(18, 19, battleResultTitle, 0xFE00ULL << 46);
     textDrawShadow(167, 31, battleResultClearTimeLabel, 0xFE00ULL << 46);

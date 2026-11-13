@@ -59,4 +59,16 @@ void fontObjSetOpacity(int opacity);
 void fontObjStartClose(struct FontObject *object);
 void fontObjStartOpen(struct FontObject *object);
 
+/* The draw request fontObjDraw reads: cell index, screen position, offsets, size and flags. */
+struct FontDrawItem {
+    int cell_index;
+    int x;
+    int y;
+    int offset_x;
+    int offset_y;
+    int size_w;
+    int size_h;
+    int flags;
+};
+
 #endif /* INCLUDE_MAIN_TU097_H */

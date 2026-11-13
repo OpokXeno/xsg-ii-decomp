@@ -49,8 +49,8 @@ typedef struct CursorEntry {
 /* The limits block of a ControlContext; both are set to 1000 by menuTutorialPageReset. */
 struct ControlLimits {
     unsigned char unmodeled_00[8];
-    int limit_a;
-    int limit_b;
+    int skillPoints;
+    int classPoints;
 };
 
 struct ControlBuffer {
@@ -358,7 +358,7 @@ struct ItemList {
 
 void textDrawSegment(int x, int y, void *text, int style);
 void panelDrawNineSlice(void *record, int x, int y, int width, int height);
-void func_0021CEF8(int x, int y, int width, int height, void *text);
+void menuDrawTitledFrame(int x, int y, int width, int height, void *text);
 int xglFontGetStringWidth();
 extern char D_0068A3F0[];
 extern unsigned char menuPanelFrame[];
@@ -401,7 +401,7 @@ void menuMapListDraw(struct ItemList *list) {
             if (i & 1) {
                 target = &D_006A54A4[7 * (i >> 1)];
             } else {
-                target = D_006A54A0[i >> 1].current_pair;
+                target = &D_006A54A0[i >> 1].current_pair.x;
             }
             scale = *target;
             xglPacketAddTexturedDraw(0x20, rowY + 0x13, i, scale);
@@ -414,7 +414,7 @@ void menuMapListDraw(struct ItemList *list) {
         } while (i < list->count);
     }
     fontObjResetAndBuild();
-    func_0021CEF8(0x1E, panelTop + 5, 0x1C4, panelHeight - 10, D_0069D530);
+    menuDrawTitledFrame(0x1E, panelTop + 5, 0x1C4, panelHeight - 10, D_0069D530);
 }
 
 extern unsigned int menuSkillModelSizes[];
@@ -954,7 +954,7 @@ void func_00211B88(int index, int flag) {
 extern int menuSavedCursor;
 void menuSetCursor(StateBlock *menu, int index);
 void menuPlaceItemCursor(StateBlock *menu, int index);
-void func_002275D0(StateBlock *menu, int value);
+void menuEnableItems(StateBlock *menu, int value);
 
 void menuFocusMainSlot(void) {
     ControlSlot *slot = &menuSlots[7];
@@ -964,12 +964,12 @@ void menuFocusMainSlot(void) {
         StateBlock *menu = &D_006A4940;
 
         menuSetMode(menu, 1);
-        func_002275D0(menu, 0xF0F);
+        menuEnableItems(menu, 0xF0F);
         if (menu->cursor < 3) {
             menuSavedCursor = menu->cursor;
             menuSetCursor(menu, menu->cursor + 3);
         }
-        func_002275D0(menu, 0x40E);
+        menuEnableItems(menu, 0x40E);
         menuPlaceItemCursor(menu, menu->cursor);
         fontTrackAdvance(&menu->tracks[0]);
         fontTrackAdvance(&menu->tracks[1]);
@@ -977,7 +977,7 @@ void menuFocusMainSlot(void) {
     } else {
         menuSetMode(&D_006A4940, 1);
         if (D_0069D4E0 != 0) {
-            func_002275D0(&D_006A4940, 0x401);
+            menuEnableItems(&D_006A4940, 0x401);
         }
     }
     slot->state = 0;
@@ -1028,8 +1028,8 @@ int ptFindRecord();
 int ptFindSlot();
 void menuFocusRootSlot(void);
 /* Rewinds the cursors of the menu's cursor buffers (their cursor and previous_cursor words) and clears D_0069E228. */
-void func_0021F2F0();
-void func_00227408();
+void menuPlaceCursor();
+void menuSetValuesMode();
 /* Rebuilds the cursor buffers for the layout selected by menuCurrentSlot and sets their capacities from the context. */
 void menuRebuildCursorBuffers(void);
 void fontObjLoadTexture(int mode);
@@ -1056,12 +1056,12 @@ void menuSceneSetState(int menuState) {
 
     D_006A4940.flags &= ~2;
     menuSlots[menuCurrentSlot].flags &= ~CONTROL_SLOT_FLAG_MARK;
-    func_00227408(stateBlock, 0);
+    menuSetValuesMode(stateBlock, 0);
     stateBlock->flags &= ~(1 | 4);
     menuSetSelected(&D_006A4940, -1);
-    func_0021F2F0(0, 0, 0, 0);
+    menuPlaceCursor(0, 0, 0, 0);
     if (menuSavedCursor != -1 && menuState != 3) {
-        func_002275D0(&D_006A4940, 0xF0F);
+        menuEnableItems(&D_006A4940, 0xF0F);
         menuSetCursor(&D_006A4940, menuSavedCursor);
         menuSavedCursor = -1;
     }
@@ -1121,12 +1121,12 @@ void menuSceneSetState(int menuState) {
             D_0069D4DC |= 1;
             if (D_0069D4E0 != 0) {
                 menuSetMode(&D_006A4940, 1);
-                func_002275D0(&D_006A4940, 0xF0F);
+                menuEnableItems(&D_006A4940, 0xF0F);
                 if (D_006A4940.cursor < 3) {
                     menuSavedCursor = D_006A4940.cursor;
                     menuSetCursor(&D_006A4940, D_006A4940.cursor + 3);
                 }
-                func_002275D0(&D_006A4940, 0x40E);
+                menuEnableItems(&D_006A4940, 0x40E);
                 menuPlaceItemCursor(&D_006A4940, D_006A4940.cursor);
                 fontTrackAdvance(&D_006A4940.tracks[0]);
                 fontTrackAdvance(&D_006A4940.tracks[1]);
@@ -1148,14 +1148,14 @@ void menuSceneSetState(int menuState) {
             D_0069D4DC |= 1;
             menuSetMode(&D_006A4940, 3);
             if (D_0069D4E0 != 0) {
-                func_002275D0(&D_006A4940, 0xF0F);
+                menuEnableItems(&D_006A4940, 0xF0F);
                 if (savedCursor < 3) {
                     menuSavedCursor = savedCursor;
                     menuSetCursor(&D_006A4940, savedCursor + 3);
                 } else {
                     menuSetCursor(&D_006A4940, savedCursor);
                 }
-                func_002275D0(&D_006A4940, 0x40E);
+                menuEnableItems(&D_006A4940, 0x40E);
                 menuPlaceItemCursor(&D_006A4940, D_006A4940.cursor);
                 fontTrackAdvance(&D_006A4940.tracks[0]);
                 fontTrackAdvance(&D_006A4940.tracks[1]);
@@ -1446,11 +1446,11 @@ void menuSceneInit(void) {
         }
     }
 
-    func_00226140(&D_006A4940, D_0069D4E0);
-    func_00226140(D_006A4D28, D_0069D4E0);
+    menuResetItems(&D_006A4940, D_0069D4E0);
+    menuResetItems(D_006A4D28, D_0069D4E0);
     menuHide(&D_006A4940, 0);
     menuHide(D_006A4D28, 4);
-    func_00227408(D_006A4D28, 0);
+    menuSetValuesMode(D_006A4D28, 0);
     fontTrackSetBoth(&D_006A5110, 0x200, 0);
     fontTrackSetBoth(D_006A5130, -0x110, D_0069D504 * 16 + D_0069D4E0 * 12 + 0x104);
 
@@ -1494,7 +1494,7 @@ void menuSceneInit(void) {
     }
 
     cursorBufferSetOrInit(D_006A5220, 9, 10, 0);
-    func_0021F2F0(0, 0, 0, 0);
+    menuPlaceCursor(0, 0, 0, 0);
     D_0069D4DC = 0;
 
     for (i = 0; i < 11; i++) {
@@ -1936,7 +1936,7 @@ extern signed char D_003EB078[];
 extern short D_003EB050[];
 extern u8 D_003EB240[];
 extern u8 D_003EB268[];
-void func_0021EE68(int value);
+void menuDrawScrollFrame(int value);
 void msgRangeDrawRevealed(void *text, int first, int second);
 
 void menuDrawMainCards(ControlSlot *slot) {
@@ -1968,7 +1968,7 @@ void menuDrawMainCards(ControlSlot *slot) {
     }
     originY = D_006A4944[0];
     fontObjResetAndBuild();
-    func_0021EE68(D_0069D529 * 3 + 4);
+    menuDrawScrollFrame(D_0069D529 * 3 + 4);
     if (menuCurrentSlot != 0 && menuCurrentSlot != 9) {
         if (menuCurrentSlot != 10) {
             func_00213A78(originY + 57);
@@ -2091,19 +2091,19 @@ void menuDrawMainCards(ControlSlot *slot) {
 }
 
 void menuDrawItemList(int id, int unit, void *target);
-void func_00226948(u8 *table);
+void menuDrawItems(u8 *table);
 
 /* Draws the item list of the slot's link, then the labels in the table D_006A4D28. */
 void menuDrawSlotItems(ControlSlot *slot) {
     menuDrawItemList(0xD, 0x5F, slot->link);
-    func_00226948(D_006A4D28);
+    menuDrawItems(D_006A4D28);
 }
 
-void func_00220550();
+void menuDrawMemberItemList();
 
 /* Submits the four layout packets; D_0069D4E0 picks one of two coordinate sets. */
 void menuLayoutSubmit(ControlSlot *slot) {
-    func_00220550(0xD, 0xD4, D_006A5180, &D_0069E238);
+    menuDrawMemberItemList(0xD, 0xD4, D_006A5180, &D_0069E238);
     if (D_0069D4E0 != 0) {
         packetSubmitRequest(0x161, 0x11, 0xB7, 1);
         packetSubmitRequest(0x163, 0xAF, 0xB7, 1);
@@ -2115,7 +2115,7 @@ void menuLayoutSubmit(ControlSlot *slot) {
         packetSubmitRequestEx(0x162, 0x21, 0xB7, 0x7D, 0x11, 1);
         packetSubmitRequest(0x139, 0x40, 0xB6, 1);
     }
-    func_00226948(D_006A4D28);
+    menuDrawItems(D_006A4D28);
 }
 
 extern int menuLicenseState;
@@ -2180,7 +2180,7 @@ void menuDrawCopilotInfo(int x, int y, void *menu, int word, unsigned short hp);
 void menuDrawPartnerInfo(int x, int y, void *menu, int word, unsigned short hp);
 void menuDrawAttackCommand(int x, int y, void *menu, int word);
 void menuDrawCommandInfo(int x, int y, void *menu, int word);
-void func_00222860(int x, int y, void *menu, int word);
+void menuDrawCommandDetail(int x, int y, void *menu, int word);
 
 /* Draws the attack or command panel of the actor and the matching info panel. */
 void menuDrawCommandPage(struct MenuActor *actor) {
@@ -2209,7 +2209,7 @@ void menuDrawCommandPage(struct MenuActor *actor) {
                 D_003EC662[0] = (u8) menuSavedCursor;
             }
             menuDrawAttackCommand(13, 183, D_006A5198, ptGetMenuMember()->kind);
-            func_00222860(275, 95, D_006A5198, ptGetMenuMember()->kind);
+            menuDrawCommandDetail(275, 95, D_006A5198, ptGetMenuMember()->kind);
             if (menuSavedCursor != noSavedCursor) {
                 D_003EC662[0] = D_006A4D0C[0];
             }
@@ -2235,8 +2235,8 @@ int selectionFindIndex(void *list, int key);
 void menuDrawCharStats(int x, int y, void *rec, int icon, int mark);
 void menuDrawEquipPanel(int x, int y, void *rec, void *extra, int flag);
 void menuDrawItemCategory(int x, int y, void *a, void *b, int c);
-int func_00220210(int a, int b, void *c);
-int func_00227458(void *p, int n);
+int menuDrawPlainItemList(int a, int b, void *c);
+int menuDrawItemHighlighted(void *p, int n);
 
 void menuDrawEquipPage(ControlSlot *slot) {
     int listEntry = 0;
@@ -2283,11 +2283,11 @@ void menuDrawEquipPage(ControlSlot *slot) {
             ctx = ptGetMenuMember();
             menuDrawCharStats(0xC5, 0x63, ctx, 0, -1);
         }
-        func_00220210(0x124, 0x5F, D_006A51C8);
+        menuDrawPlainItemList(0x124, 0x5F, D_006A51C8);
         ctx = ptGetMenuMember();
         menuDrawEquipPanel(0x7C, 0xF7, D_006A51B0, ctx->buffer->items, D_0069D504);
-        func_00227458(&D_006A4940, ptState.cursor + 3);
-        func_00227458(&D_006A4940, ptState.cursor + 6);
+        menuDrawItemHighlighted(&D_006A4940, ptState.cursor + 3);
+        menuDrawItemHighlighted(&D_006A4940, ptState.cursor + 6);
         if (menuSavedCursor != -1) {
             ptState.cursor = D_006A4940.flag3CC;
         }
@@ -2330,8 +2330,8 @@ void menuDrawEquipPage(ControlSlot *slot) {
     } else {
         fontTrackSetTarget(D_006A5130, -0x110, (D_0069D504 << 4) + D_0069D4E0 * 12 + 0x104);
     }
-    x = D_006A5130[0].current_pair[0];
-    y = D_006A5130[0].current_pair[1];
+    x = D_006A5130[0].current_pair.x;
+    y = D_006A5130[0].current_pair.y;
     panelDrawNineSlice(menuPanelFrame, x, y, 0x77, 0x30);
     menuDrawKindIcon(x + 0x18, y + 4, 3);
     menuDrawKindIcon(x + 0x18, y + 0x18, 2);
@@ -2395,7 +2395,7 @@ extern u8 D_0069D548[];
 void menuDrawPlayTime(int x, int y);
 void textDrawGlyphString(int x, int y, void *text, u64 color);
 void menuDrawBorder(int x, int y, int w, int h, u64 color);
-void func_0021F0A0(int x, int y, u8 code);
+void menuDrawLitIcon(int x, int y, u8 code);
 
 /* Draws the scene's font track, panels and text, then the item list when the state is 5. */
 void menuDrawExtraPage(void) {
@@ -2406,23 +2406,23 @@ void menuDrawExtraPage(void) {
     int step;
     KeyedObject *member;
 
-    func_00226948(D_006A4940.unmodeled_00);
+    menuDrawItems(D_006A4940.unmodeled_00);
     if (D_006A4940.mode == 0 || D_006A4940.mode == 5) {
         fontTrackSetTarget(&D_006A5110, 0x118, 0);
     } else {
         fontTrackSetTarget(&D_006A5110, 0x200, 0xFF);
     }
     fontTrackEase(&D_006A5110);
-    panelDrawNineSlice(menuPanelFrame, D_006A5110.current_pair[0], 0x149, 0xF0, 0x2B);
-    func_0021CEF8(D_006A5110.current_pair[0] + 6, 0x14E, 0x6B, 0x21, D_0069D548);
-    menuDrawPlayTime(D_006A5110.current_pair[0] + 0x75, 0x14E);
+    panelDrawNineSlice(menuPanelFrame, D_006A5110.current_pair.x, 0x149, 0xF0, 0x2B);
+    menuDrawTitledFrame(D_006A5110.current_pair.x + 6, 0x14E, 0x6B, 0x21, D_0069D548);
+    menuDrawPlayTime(D_006A5110.current_pair.x + 0x75, 0x14E);
     if (D_0069D50E != 0) {
-        textDrawGlyphString(D_006A5110.current_pair[0] + 0x16, 0x15D, menuMainTxdEntry(D_0069D50E + 0xB),
+        textDrawGlyphString(D_006A5110.current_pair.x + 0x16, 0x15D, menuMainTxdEntry(D_0069D50E + 0xB),
                             (((u64) 0x3F800000 << 0x10) | 0x8054) << 0x10 | 0x200B);
     }
     if ((unsigned int) (D_006A4940.mode - 5) < 2U) {
-        /* the word at 0x14 is scaled_pair[1] of the track; the menu reads it as the border step */
-        step = D_006A5110.scaled_pair[1];
+        /* the word at 0x14 is scaled_pair.y of the track; the menu reads it as the border step */
+        step = D_006A5110.scaled_pair.y;
         menuDrawBorder((-(step * 0x29) >> 0xC) + 0x143, ((step * 4) >> 0xC) + 0x114,
                        ((step * 0x29) >> 0xC) + 0xAE, ((step * 0x31) >> 0xC) + 0x27,
                        (((u64) 0x3F800000 << 0x10) | 0x8038) << 0x10 | 0x1A1A);
@@ -2441,7 +2441,7 @@ void menuDrawExtraPage(void) {
         for (i = 0; i < 4; i++) {
             member = ptState.roster[6 + i];
             if (member != 0) {
-                func_0021F0A0(y, 0x11B, member->info->code);
+                menuDrawLitIcon(y, 0x11B, member->info->code);
                 y += 0x18;
             }
         }
@@ -2559,7 +2559,7 @@ void menuSceneDraw(void) {
         }
         if (menuTutorialStage != 0) {
             fontTrackEase(D_006A5360);
-            menuDrawAnimatedBand(D_006A5360[0].current_pair[0], D_006A5360[0].current_pair[1] + D_006A4944[0]);
+            menuDrawAnimatedBand(D_006A5360[0].current_pair.x, D_006A5360[0].current_pair.y + D_006A4944[0]);
             if (menuTutorialStage >= 2) {
                 textDrawSegment(0, 0, D_0068A3F0, 0);
                 textDrawSegment(48, 382, menuTutorialTxdEntry(menuTutorialIndex + 1), 0);
@@ -2772,7 +2772,7 @@ void menuTutorialSaveState(void) {
     index = 0;
     menuSceneSetState(3);
     savedHeader = D_0069E248;
-    func_0021F2F0(0, 0, 0, 0);
+    menuPlaceCursor(0, 0, 0, 0);
     menuSlots[3].state = 4;
     func_00211918((ControlLink *) D_006A51E0);
     cursorBufferSetOffset(D_006A4928, 1);
@@ -2808,10 +2808,10 @@ void menuTutorialSaveState(void) {
     ptGetMenuMember()->buffer->flags[0] = 0;
     D_0069E24D = ptGetMenuMember()->buffer->flags[1];
     ptGetMenuMember()->buffer->flags[1] = 0;
-    D_0069E250 = ptGetMenuMember()->limits->limit_a;
-    ptGetMenuMember()->limits->limit_a = 1000;
-    D_0069E254 = ptGetMenuMember()->limits->limit_b;
-    ptGetMenuMember()->limits->limit_b = 1000;
+    D_0069E250 = ptGetMenuMember()->limits->skillPoints;
+    ptGetMenuMember()->limits->skillPoints = 1000;
+    D_0069E254 = ptGetMenuMember()->limits->classPoints;
+    ptGetMenuMember()->limits->classPoints = 1000;
     D_0069D529 = 1;
     cursorBufferSetOffset((CursorBuffer *) D_006A51E0, 0);
     cursorBufferSetOffset((CursorBuffer *) ((CursorEntry *) D_006A51E0 + 1), 0);
@@ -2828,7 +2828,7 @@ void menuTutorialRestoreState(void) {
     menuTutorialStage = 0;
     D_0069D529 = 0;
     D_0069D51C = 0;
-    func_0021F2F0(0, 0, 0, 0);
+    menuPlaceCursor(0, 0, 0, 0);
     for (i = 0; i < 4; i++) {
         ptGetMenuMember()->buffer->header[i] = D_0069E248[i];
     }
@@ -2840,8 +2840,8 @@ void menuTutorialRestoreState(void) {
     }
     ptGetMenuMember()->buffer->flags[0] = D_0069E24C;
     ptGetMenuMember()->buffer->flags[1] = D_0069E24D;
-    ptGetMenuMember()->limits->limit_a = D_0069E250;
-    ptGetMenuMember()->limits->limit_b = D_0069E254;
+    ptGetMenuMember()->limits->skillPoints = D_0069E250;
+    ptGetMenuMember()->limits->classPoints = D_0069E254;
     if (D_0069E25B != 0) {
         CursorEntry *records = (CursorEntry *) D_006A51E0;
 
@@ -2911,8 +2911,8 @@ void menuTutorialPageReset(void) {
     } while (i < 8);
     ptGetMenuMember()->buffer->flags[0] = 0;
     ptGetMenuMember()->buffer->flags[1] = 0;
-    ptGetMenuMember()->limits->limit_a = 1000;
-    ptGetMenuMember()->limits->limit_b = 1000;
+    ptGetMenuMember()->limits->skillPoints = 1000;
+    ptGetMenuMember()->limits->classPoints = 1000;
     cursorBufferSetOffset((CursorBuffer *) D_006A51E0, 0);
     cursorBufferSetOffset((CursorBuffer *) ((CursorEntry *) D_006A51E0 + 1), 0);
     cursorBufferSetOffset((CursorBuffer *) ((CursorEntry *) D_006A51E0 + 2), 0);
@@ -3217,7 +3217,7 @@ void menuTutorialStep(void) {
                         if (selectionTakeSub(ctx, links[0].kind, links[1].kind, links[2].kind)) {
                             menuSetLayout(3);
                             ctx = ptGetMenuMember();
-                            ctx->limits->limit_b += D_003EC120[links[0].kind * 8 + links[1].kind];
+                            ctx->limits->classPoints += D_003EC120[links[0].kind * 8 + links[1].kind];
                         }
                         break;
                     }
@@ -3272,8 +3272,8 @@ void menuTutorialStep(void) {
 }
 
 extern int D_006A4914[];
-void func_002280E0(int value);
-int func_00228340(void);
+void choiceSetRow(int value);
+int choiceGetResult(void);
 
 int menuMainCommandStep(ControlSlot *slot) {
     int activeState;
@@ -3313,7 +3313,7 @@ int menuMainCommandStep(ControlSlot *slot) {
             seVoiceStartDefault(MENU_SE_CURSOR);
         }
     } else if (D_0069D4E4) {
-        if (!func_00228340()) {
+        if (!choiceGetResult()) {
             result = activeState;
             D_0069D501 = 2;
         } else {
@@ -3326,7 +3326,7 @@ int menuMainCommandStep(ControlSlot *slot) {
                 if (ptState.progress->key != -1) {
                     seVoiceStartDefault(MENU_SE_CONFIRM);
                     choiceInit(menuMainTxdEntry(0x1BE), 1);
-                    func_002280E0(0xF0);
+                    choiceSetRow(0xF0);
                     D_0069D4E4 = activeState;
                 } else {
                     menuSceneSetState(10);
@@ -3459,7 +3459,7 @@ int menuItemListStep(ControlSlot *slot) {
 
                 countdownInit(menuMainTxdEntry(selectionWindowList[((CursorBuffer *) slot->link)->cursor] + 0x193), 0x12C);
                 countdownActive = 1;
-                entry = func_002245B8(&((SelectionBlock *) D_006A4D28)->entries[((SelectionBlock *) D_006A4D28)->current]);
+                entry = menuItemMemberEntry(&((SelectionBlock *) D_006A4D28)->entries[((SelectionBlock *) D_006A4D28)->current]);
                 func_00A8B658(entry->key, selectionWindowList[((CursorBuffer *) slot->link)->cursor]);
                 func_00A8F3C0(map[selectionWindowList[((CursorBuffer *) slot->link)->cursor] - 0x25]);
                 if (!D_0069D4E0) {
@@ -3477,7 +3477,7 @@ int menuItemListStep(ControlSlot *slot) {
                 return 0;
             }
             if (selectionWindowEntryMarkedFlags(((CursorBuffer *) slot->link)->cursor) != 0) {
-                func_00227408(D_006A4D28, 1);
+                menuSetValuesMode(D_006A4D28, 1);
             }
             if (selectionWindowEntryHasFlag4(((CursorBuffer *) slot->link)->cursor) != 0) {
                 ((SelectionBlock *) D_006A4D28)->flags3E4 |= 4;
@@ -3498,7 +3498,7 @@ int menuItemListStep(ControlSlot *slot) {
         if (padCrossPressedAlone() != 0) {
             SelectionBlock *menu = (SelectionBlock *) D_006A4D28;
 
-            func_00227408(menu, 0);
+            menuSetValuesMode(menu, 0);
             seVoiceStartDefault(MENU_SE_CANCEL);
             menu->flags3E4 &= ~1;
             slot->state = 4;
@@ -3512,7 +3512,7 @@ int menuItemListStep(ControlSlot *slot) {
                     goto soundFail;
                 }
                 seVoiceStartDefault(MENU_SE_CONFIRM);
-                entry = func_002245B8(&((SelectionBlock *) D_006A4D28)->entries[((SelectionBlock *) D_006A4D28)->current]);
+                entry = menuItemMemberEntry(&((SelectionBlock *) D_006A4D28)->entries[((SelectionBlock *) D_006A4D28)->current]);
                 func_00A8B658(entry->key, selectionWindowList[((CursorBuffer *) slot->link)->cursor]);
                 if (selectionWindowListDropAt(((CursorBuffer *) slot->link)->cursor) > 0) {
                     return 0;
@@ -3530,7 +3530,7 @@ int menuItemListStep(ControlSlot *slot) {
                 goto soundFail;
             }
             seVoiceStartDefault(MENU_SE_CONFIRM);
-            entry = func_002245B8(&((SelectionBlock *) D_006A4D28)->entries[((SelectionBlock *) D_006A4D28)->current]);
+            entry = menuItemMemberEntry(&((SelectionBlock *) D_006A4D28)->entries[((SelectionBlock *) D_006A4D28)->current]);
             func_00A8B658(entry->key, selectionWindowList[((CursorBuffer *) slot->link)->cursor]);
             if (selectionWindowListDropAt(((CursorBuffer *) slot->link)->cursor) > 0) {
                 return 0;
@@ -3768,7 +3768,7 @@ int menuLicenseChargeStep(ControlSlot *slot) {
         break;
     case 5:
         if (D_0069D4E4 != 0) {
-            if (func_00228340() == 0) {
+            if (choiceGetResult() == 0) {
                 selectionHolderCharge(ptGetMenuMember(), D_006A51E0[0], D_006A51E0[5]);
             }
             D_0069D4E4 = 0;
@@ -3800,7 +3800,7 @@ int menuLicenseChargeStep(ControlSlot *slot) {
         break;
     case 6:
         if (D_0069D4E4 != 0) {
-            if (func_00228340() == 0) {
+            if (choiceGetResult() == 0) {
                 flagsBefore = ptGetMenuMember()->buffer->flags[0];
                 ctx = ptGetMenuMember();
                 if (selectionApplyEntry(ctx, D_006A51E0[0], D_006A51E0[5], D_006A51E0[10]) != 0) {
@@ -3820,9 +3820,9 @@ int menuLicenseChargeStep(ControlSlot *slot) {
                         countdownActive = 2;
                     }
                     limits = ptGetMenuMember()->limits;
-                    limits->limit_b += D_003EC120[D_006A51E0[0] * 8 + D_006A51E0[5]];
-                    if (ptGetMenuMember()->limits->limit_b > 99999) {
-                        ptGetMenuMember()->limits->limit_b = 99999;
+                    limits->classPoints += D_003EC120[D_006A51E0[0] * 8 + D_006A51E0[5]];
+                    if (ptGetMenuMember()->limits->classPoints > 99999) {
+                        ptGetMenuMember()->limits->classPoints = 99999;
                     }
                 }
             }
@@ -4210,7 +4210,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
                 menuSetCursor(&D_006A4940, D_003EC65D[0]);
             }
             menuSetMode(&D_006A4940, D_006A4940.mode);
-            func_002275D0(&D_006A4940, 0x500);
+            menuEnableItems(&D_006A4940, 0x500);
             seVoiceStartDefault(MENU_SE_CONFIRM);
             break;
         default:
@@ -4256,11 +4256,11 @@ int menuPartyFormationStep(ControlSlot *slot) {
             D_0069D56C = D_006A4940.cursor;
             if (D_0069D4E0 != 0) {
                 if (D_006A4940.cursor < 3) {
-                    func_002275D0(&D_006A4940, 0x401);
+                    menuEnableItems(&D_006A4940, 0x401);
                 } else if (D_006A4940.cursor < 6) {
-                    func_002275D0(&D_006A4940, 0xC02);
+                    menuEnableItems(&D_006A4940, 0xC02);
                 } else {
-                    func_002275D0(&D_006A4940, 0x80C);
+                    menuEnableItems(&D_006A4940, 0x80C);
                 }
             }
             seVoiceStartDefault(MENU_SE_CONFIRM);
@@ -4270,7 +4270,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
             if (D_0069D4E0 != 0) {
                 seVoiceStartDefault(MENU_SE_CANCEL);
                 func_0022B458();
-                func_002275D0(&D_006A4940, 0xF0F);
+                menuEnableItems(&D_006A4940, 0xF0F);
                 menuSetCursor(&D_006A4940, D_006A4940.cursor);
             }
             break;
@@ -4301,7 +4301,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
             menuSetSelected(&D_006A4940, -1);
             slot->state = CONTROL_STATE_RUNNING;
             if (D_0069D4E0 != 0) {
-                func_002275D0(&D_006A4940, 0xF0F);
+                menuEnableItems(&D_006A4940, 0xF0F);
             }
             break;
         }
@@ -4331,7 +4331,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
         menuSetSelected(&D_006A4940, -1);
         slot->state = CONTROL_STATE_RUNNING;
         if (D_0069D4E0 != 0) {
-            func_002275D0(&D_006A4940, 0xF0F);
+            menuEnableItems(&D_006A4940, 0xF0F);
         }
         seVoiceStartDefault(MENU_SE_CONFIRM);
         ptLoadPartyModels();
@@ -4366,7 +4366,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
             slot->state = CONTROL_STATE_BROWSE;
             D_006A4940.flags &= ~1;
             D_0069D4DC &= ~1;
-            func_002275D0(&D_006A4940, 0xF0F);
+            menuEnableItems(&D_006A4940, 0xF0F);
             break;
         }
         if (padCirclePressedAlone() != 0) {
@@ -4581,7 +4581,7 @@ int menuConfigSlotStep(ControlSlot *slot) {
             slot->state = CONTROL_STATE_RUNNING;
             func_00211918((ControlLink *) D_006A5220); /* a CursorBuffer passed where a ControlLink is expected */
             seVoiceStartDefault(MENU_SE_BACK);
-            func_0021F2F0(0, 0, 0, 0);
+            menuPlaceCursor(0, 0, 0, 0);
         }
         return 0;
     }
@@ -4610,12 +4610,12 @@ int menuMapChoiceStep(ControlSlot *slot) {
         break;
     case CONTROL_STATE_CHOICE:
             if (D_0069D4E4 != 0) {
-                if (func_00228340() == 2) {
+                if (choiceGetResult() == 2) {
                     D_0069D4E4 = 0;
                     slot->state = CONTROL_STATE_RUNNING;
                 } else {
                     int choice;
-                    choice = func_00228340();
+                    choice = choiceGetResult();
                     D_0069D4E4 = 0;
                     D_0069D500 = choice;
                     slot->state = CONTROL_STATE_CHOICE_APPLY;
@@ -4631,7 +4631,7 @@ int menuMapChoiceStep(ControlSlot *slot) {
         break;
     case CONTROL_STATE_CHOICE_APPLY:
             if (D_0069D4E4 != 0) {
-                if (func_00228340() == 0) {
+                if (choiceGetResult() == 0) {
                     D_0069D501 = 1;
                     changed = 1;
                 } else {
@@ -4645,7 +4645,7 @@ int menuMapChoiceStep(ControlSlot *slot) {
                 msgBufferAppend(D_0069D578);
                 choiceSetFirstOptionText(menuMainTxdEntry(0x1EE - D_0069D500));
                 choiceSetSecondOptionText(menuMainTxdEntry(0x1C3));
-                func_002280E0(0xF0);
+                choiceSetRow(0xF0);
                 D_0069D4E4 = 1;
             }
         break;
