@@ -115,6 +115,8 @@ int seBankLoadMemory(int slot, int vsf, int prj, int option)
     return func_0013A128(slot, prj);
 }
 
+/* A negative volume or level: the default one. */
+#define SE_VOLUME_DEFAULT (-1)
 /* soundCtrl.song when the song name does not start with three digits. */
 #define SE_SONG_NONE 0xFF
 /* A `packed` song id above this value loads the bank only, not the .mid file. */
@@ -228,7 +230,16 @@ void seBgmStart(int, int);
 void seVolumeSet(int, int);
 
 /* `packed`: the high 16 bits select the mode, the low 16 bits are the id.
- * `name` is the song name for seBgmLoad; a non-null name also starts playback. */
+ * `name` is the song name for seBgmLoad; a non-null name also starts playback. SE_BGM_START sets the
+ * default volume afterwards, SE_BGM_START_KEEP_VOLUME keeps it; SE_BGM_BANK loads the bank only,
+ * unmutes and fades the default volume in. seBgmLoad gets the id plus SE_BGM_LOAD_OFFSET. */
+#define SE_BGM_START 0
+#define SE_BGM_BANK 1
+#define SE_BGM_START_KEEP_VOLUME 2
+#define SE_BGM_LOAD_OFFSET 0x100
+/* Above SE_BGM_ID_MAX: seBgmLoad loads the bank only. */
+#define SE_BGM_BANK_ONLY 0x10000
+#define SE_BGM_FADE_STEP 16
 void seBgmPlay(int packed, const char *name, int option) {
     int *mode_ref;
     int mode;
@@ -238,10 +249,10 @@ void seBgmPlay(int packed, const char *name, int option) {
     id = packed;
     mode = id >> 16;
     id &= 0xffff;
-    next_id = id + 0x100;
+    next_id = id + SE_BGM_LOAD_OFFSET;
     switch (mode) {
-    case 2:
-    case 0:
+    case SE_BGM_START_KEEP_VOLUME:
+    case SE_BGM_START:
         func_00139C20(0, id);
         func_001394B8(1, 0);
         mode_ref = &mode;
@@ -249,19 +260,19 @@ void seBgmPlay(int packed, const char *name, int option) {
         if (name != 0) {
             seBgmStart(id, next_id);
             /* the address taken here makes this test reload mode */
-            if (*mode_ref == 0) {
-                seVolumeSet(-1, 0);
+            if (*mode_ref == SE_BGM_START) {
+                seVolumeSet(SE_VOLUME_DEFAULT, 0);
                 return;
             }
         }
         return;
 
-    case 1:
-        seBgmLoad(0x10100 + id, name, option);
+    case SE_BGM_BANK:
+        seBgmLoad(SE_BGM_BANK_ONLY + SE_BGM_LOAD_OFFSET + id, name, option);
         if (name != 0) {
             seVolumeSet(0, 0);
             seSetMuted(id, 0);
-            seVolumeSet(-1, 16);
+            seVolumeSet(SE_VOLUME_DEFAULT, SE_BGM_FADE_STEP);
             seBgmSetSongLevel();
         }
         break;
@@ -287,8 +298,6 @@ void seBgmPlay(int packed, const char *name, int option) {
 #define SE_CONTROLLER_EXPRESSION 0x0B
 #define SE_CONTROLLER_REVERB 0x5B
 #define SE_PAN_CENTRE 0x40
-/* A negative volume: the default level of the voice's kind. */
-#define SE_VOLUME_DEFAULT (-1)
 /* A packed voice id: kind in bits 24..30, MIDI channel in bits 0..3, note in bits 0..6. */
 #define SE_VOICE_KIND(packed) (((packed) >> 24) & 0x7F)
 #define SE_VOICE_CHANNEL(packed) ((packed) & 0xF)

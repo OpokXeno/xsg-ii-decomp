@@ -188,9 +188,9 @@ int soundSlotSetVolume(int index, int level, int extra)
     return status;
 }
 
-/* Returns the driver status of slot index's voice, or -1 for an invalid index. */
 int func_001832E0(int id);
 
+/* Returns the driver status of slot index's voice, or -1 for an invalid index. */
 int soundSlotStatus(int index)
 {
     if (index >= 2) {
@@ -201,6 +201,7 @@ int soundSlotStatus(int index)
 
 int func_00184220(int id);
 
+/* Returns func_00184220 of slot index's voice, or -1 for an invalid index. */
 int func_001A43A8(int index)
 {
     if (index >= 2) {
@@ -209,8 +210,7 @@ int func_001A43A8(int index)
     return func_00184220(soundSlots[index].driver_id);
 }
 
-void soundSlotStartFile(int index, const char *fileKey);
-
+/* The same as soundSlotStartFile. */
 void func_001A43E8(int index, const char *fileKey)
 {
     soundSlotStartFile(index, fileKey);
@@ -315,16 +315,14 @@ void soundSlotsReopen(void)
     }
 }
 
-/* Driver setup called from InitializeSystem: binds the KORG IOP driver ("[EE] Failed to bind KORG
- * IOP Sound Driver."), carves the work buffers from WorkEnd, sets the defaults and reopens the slots. */
 void func_00182460(int value);
 int func_0017C890(int value);
 int sceGsSyncVCallback(int (*callback)(void));
 int func_0017B3E0(void);
 int func_00138300(void);
 int func_00138988(int value);
-int func_00138428(int value0, int value1);
-int func_00138780(int value0, int value1);
+int func_00138428(int, int);
+int func_00138780(int, int);
 int func_001396D8(int kind, int channel, int level);
 int printf(const char *format, ...);
 extern unsigned char *WorkEnd;
@@ -336,6 +334,8 @@ extern unsigned char *WorkEnd;
 #define SOUND_SLOT1_BUFFER_USED 0x3D9E4
 #define SOUND_CHANNELS 16
 
+/* Driver setup called from InitializeSystem: binds the KORG IOP driver ("[EE] Failed to bind KORG
+ * IOP Sound Driver."), carves the work buffers from WorkEnd, sets the defaults and reopens the slots. */
 void soundDriverInit(void)
 {
     unsigned char *work;
@@ -354,8 +354,8 @@ void soundDriverInit(void)
     func_00138428(0, 0);
     func_00138780(0x100, 0);
     for (channel = 0; channel < SOUND_CHANNELS; channel++) {
-        func_001396D8(1, channel, 0x7F);
-        func_001396D8(4, channel, 0x7F);
+        func_001396D8(1, channel, SOUND_LEVEL_MAX);
+        func_001396D8(4, channel, SOUND_LEVEL_MAX);
     }
     soundSetDefaults();
     /* Carve the two voices' work buffers from WorkEnd; size carries the part of each the driver uses. */

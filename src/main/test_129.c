@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/tu005.h"
 #include "main/tu026.h"
 #include "main/pad.h"
 #include "main/xgl_font.h"
@@ -15,6 +16,7 @@
 
 int xglDebFileRead(const char *name, void *buffer);
 int xglDebFileSize(const char *name);
+
 extern char D_0068C788[4];
 extern char D_0068C790[4];
 extern PadRecord PadData;

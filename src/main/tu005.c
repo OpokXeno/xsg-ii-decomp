@@ -1,5 +1,6 @@
 #include "common.h"
 #include "debug_break.h"
+#include "main/tu005.h"
 
 int printf(const char *format, ...);
 

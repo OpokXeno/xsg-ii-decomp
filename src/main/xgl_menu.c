@@ -1,33 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "main/pad.h"
-
-typedef struct XglMenuNode XglMenuNode;
-
-/*
- * The row's link word is either the child menu node pointer or, for a row that
- * ends the menu, a plain result value; xgl_menu.c reads it through both views.
- */
-typedef union XglMenuRowLink {
-    XglMenuNode *node;
-    int result;
-} XglMenuRowLink;
-
-typedef struct XglMenuRow {
-    const char *text;
-    XglMenuRowLink next;
-} XglMenuRow;
-
-struct XglMenuNode {
-    unsigned char item_count;
-    struct { signed char initial_selected_item; unsigned char flags; unsigned char row_spacing; } initial;
-    signed char selected_item;
-    unsigned char unmodeled_05[3];
-    int enter_result;
-    int cancel_result;
-    unsigned char unmodeled_10[8];
-    XglMenuRow *rows;
-};
+#include "main/xgl_menu.h"
 
 typedef struct XglMenuListData {
     short position_x;
@@ -89,22 +63,11 @@ typedef struct {
     short sprite_row_marks[18];
 } XglMenuEntry;
 
-/* xglMenuOpen's request: what to open, where, and where the result goes. */
-typedef struct XglMenuParams {
-    unsigned char type;
-    unsigned char select_flags;
-    unsigned char unmodeled_02[2];
-    short x;
-    short y;
-    short z;
-    unsigned char unmodeled_0a[2];
-    int default_result;
-    XglMenuNode *root;
-    int *result_out;
-} XglMenuParams;
-
 float I2F(int value);
 
+/* The initial alpha and row mark of a sprite menu. */
+#define XGL_MENU_SPRITE_ALPHA 100
+#define XGL_MENU_SPRITE_ROW_MARK 0x3000
 
 /* Functions and data used by other translation units. */
 extern const char darkRedTextFormat[];
@@ -154,6 +117,8 @@ extern const char dimTextFormat[8];
 /* Text: {reset}%s */
 extern const char plainTextFormat[4];
 
+/* Opens a menu from `params` in `slot`, or in the first inactive slot when `slot` is
+ * XGL_MENU_SLOT_ANY. Returns the slot used, or -1 when no slot is free. */
 int xglMenuOpen(int slot, XglMenuParams *params)
 {
     XglMenuListData *list;
@@ -161,7 +126,7 @@ int xglMenuOpen(int slot, XglMenuParams *params)
     XglMenuPayload *payload;
     int i;
 
-    if (slot == -1) {
+    if (slot == XGL_MENU_SLOT_ANY) {
         slot = 0;
         while (slot < MENU_TABLE_COUNT && menutbl[slot].active) {
             slot++;
@@ -182,7 +147,7 @@ int xglMenuOpen(int slot, XglMenuParams *params)
     switch (params->type) {
     case XGL_MENU_TYPE_SPRITE:
         payload = &entry->payload;
-        payload->sprite.alpha = 100;
+        payload->sprite.alpha = XGL_MENU_SPRITE_ALPHA;
         payload->sprite.flags = 0;
         payload->sprite.x = I2F(params->x);
         payload->sprite.y = I2F(params->y);
@@ -198,7 +163,7 @@ int xglMenuOpen(int slot, XglMenuParams *params)
         payload->sprite.offsets[2] = 0;
         payload->sprite.unit_params[4] = 1.0f;
         for (i = 0; i < entry->root->item_count; i++) {
-            entry->sprite_row_marks[i] = 0x3000;
+            entry->sprite_row_marks[i] = XGL_MENU_SPRITE_ROW_MARK;
         }
         break;
     case XGL_MENU_TYPE_LIST:
