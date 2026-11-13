@@ -1,13 +1,20 @@
 #include "common.h"
 #include "main/tu022.h"
+#include "main/xgl_cd.h"
 
 /* Sound driver layer of main/tu022 (KORG IOP driver, bound by soundDriverInit).
- * soundCtrl is the control block; soundSlots holds two sound slots that overlap the
- * records after it. func_00138B48(channel, level) sets a channel level; channel 0 is the master. */
+ * soundCtrl is the control block (main/tu022.h). func_00138B48(channel, level) sets a channel level;
+ * channel 0 is the master. */
+
+/* soundSetDefaults: master volume, default master, voice and slot levels. */
+#define SOUND_DEFAULT_MASTER_VOLUME 0x6E
+#define SOUND_DEFAULT_MASTER_LEVEL 0x71
+#define SOUND_DEFAULT_VOICE_LEVEL 0x64
+#define SOUND_DEFAULT_SLOT_LEVEL 0x64
 
 int func_00138B48(int channel, int level);
 
-/* Mutes channels 1 to 3, or restores them to full level 0x7F. */
+/* Mutes channels 1 to 3, or restores them to full level. */
 void soundSetMuted(int muted)
 {
     if (muted != 0) {
@@ -16,9 +23,9 @@ void soundSetMuted(int muted)
         func_00138B48(3, 0);
         return;
     }
-    func_00138B48(1, 0x7F);
-    func_00138B48(2, 0x7F);
-    func_00138B48(3, 0x7F);
+    func_00138B48(1, SOUND_LEVEL_MAX);
+    func_00138B48(2, SOUND_LEVEL_MAX);
+    func_00138B48(3, SOUND_LEVEL_MAX);
 }
 
 int func_001393D0(void);
@@ -28,37 +35,6 @@ int func_001A4010(void)
     return func_001393D0();
 }
 
-/* One 16-byte sound slot. Driver calls take driver_id; the create call (0x182908) takes the words
- * at create_params+0 and create_params+4. In the control block soundCtrl, create_params[0] is the
- * master volume (0x6E by default) and create_params[3] the default slot level (0x64). */
-typedef struct SoundSlot {
-    int driver_id;
-    union {
-        unsigned char create_params[8];
-        struct {
-            unsigned char *buffer;    /* the voice's work buffer, carved from WorkEnd */
-            int buffer_size;
-        } create;                     /* what the create call takes */
-    };
-    unsigned char state[4];           /* state[1]: last level set; state[3]: selects the value of soundSlotApply */
-} SoundSlot;
-
-/* The control block: a 16-byte head (the setup flag, the master create parameters and the master
- * volume ramp state at +0x0C), then the two sound slots (soundSlots labels slots[0]). */
-typedef union SoundControl {
-    struct {
-        unsigned char initialized;    /* +0x00: nonzero once the driver setup has run */
-        unsigned char unmodeled_01[3];
-        unsigned char create_params[8]; /* +0x04: [0] master volume, [3] default slot level */
-        unsigned char state[4];       /* +0x0C */
-        SoundSlot slots[2];           /* +0x10 */
-    };
-    /* The head has a slot's layout too; soundSlotReopen indexes the slots as records[index + 1]. */
-    SoundSlot records[3];
-} SoundControl;
-
-extern SoundControl soundCtrl;
-extern SoundSlot soundSlots[];
 void func_00184250(int id, int value);
 void func_00184A78(int id, const char *key);
 
@@ -75,22 +51,20 @@ void soundSlotStartFile(int index, const char *fileKey)
     }
 }
 
-/* ADX loader: builds "<adxPathPrefix><name with / as \>.adx", looks it up on the disc
- * (xglCdCheckFile fills a file record: lsn at +0, size at +4), formats the key "lsn.sectors" over the
- * path and gives it to slot index with soundSlotStartFile. */
+/* ADX loader: builds "<adxPathPrefix><name with / as \>.adx", looks it up on the disc,
+ * formats the key "lsn.sectors" over the path and gives it to slot index with soundSlotStartFile. */
 #define ADX_PATH_MAX 256
 
 /* The disc folder of the ADX files, and the "%08x.%08x" key format (start
  * sector, then sectors). */
 extern const char *adxPathPrefix;
 extern const char adxSlotKeyFormat[];
-int xglCdCheckFile(const char *path, void *record);
 int sprintf(char *destination, const char *format, ...);
 
 void adxSetSlotFile(int index, const char *name)
 {
     char path[ADX_PATH_MAX];
-    unsigned int record[0xC];
+    CdFilePosition position;
     const char *source;
     char *destination;
     char character;
@@ -113,14 +87,14 @@ void adxSetSlotFile(int index, const char *name)
     destination[2] = 'd';
     destination[3] = 'x';
     destination[4] = 0;
-    xglCdCheckFile(path, record);
-    sprintf(path, adxSlotKeyFormat, record[0], record[1] >> 11);
+    xglCdCheckFile(path, &position);
+    sprintf(path, adxSlotKeyFormat, position.lbn, (unsigned int) position.stored_bytes >> CD_SECTOR_SHIFT);
     soundSlotStartFile(index, path);
 }
 
 void func_00184310(int id, int value);
 
-/* Sets the level of slot index and keeps a copy in state[1]. */
+/* Sets the level of slot index and keeps a copy in ramp.set_level. */
 void soundSlotSetLevel(int index, int value)
 {
     SoundSlot *slot;
@@ -128,18 +102,18 @@ void soundSlotSetLevel(int index, int value)
     if (index < 2) {
         slot = &soundSlots[index];
         func_00184310(slot->driver_id, value);
-        slot->state[1] = (unsigned char) value;
+        slot->ramp.set_level = (unsigned char) value;
     }
 }
 
-/* Sets the level of slot index's voice, unless the slot already has a level (state[1]). */
+/* Sets the level of slot index's voice, unless the slot already has a level (ramp.set_level). */
 void func_001A41C8(int index, int value)
 {
     SoundSlot *slot;
 
     if (index < 2) {
         slot = &soundSlots[index];
-        if (slot->state[1] != 0) {
+        if (slot->ramp.set_level != 0) {
             return;
         }
         func_00184310(slot->driver_id, value);
@@ -160,8 +134,6 @@ void soundSlotStop(int index)
     }
 }
 
-int soundSlotReopen(int index);
-
 /* Stops, then reopens, both slots. */
 int soundSlotsRestart(void)
 {
@@ -179,23 +151,20 @@ int soundSlotsRestart(void)
 }
 
 int func_00183BA8(int id, int value);
-int seVolumeCurve(int level);
 
-/* Applies the value that state[3] selects to the slot's driver voice. */
+/* Applies the slot's current ramp level, through the volume curve, to its driver voice. */
 int soundSlotApply(SoundSlot *slot)
 {
     int driver_id;
     int value;
 
     driver_id = slot->driver_id;
-    value = seVolumeCurve(slot->state[3]);
+    value = seVolumeCurve(slot->ramp.current);
     return func_00183BA8(driver_id, value);
 }
 
-int seVolumeRampSet(void *, int, int);
-
 /* Volume of slot index. A negative level takes the default level from the control block; slot 0
- * is scaled by the master volume; the level is clamped to 0x7F before it is applied. */
+ * is scaled by the master volume; the level is clamped to SOUND_LEVEL_MAX before it is applied. */
 int soundSlotSetVolume(int index, int level, int extra)
 {
     SoundSlot *slot;
@@ -203,14 +172,14 @@ int soundSlotSetVolume(int index, int level, int extra)
 
     status = index < 2;
     if (status != 0) {
-        slot = &soundSlots[index];
+        slot = &soundCtrl.slots[index];
         if (level < 0) {
-            level = soundSlots[-1].create_params[3];
+            level = soundCtrl.slot_level;
         }
         if (index == 0) {
-            level = level * soundSlots[-1].create_params[0] / 127;
+            level = level * soundCtrl.master_volume / SOUND_LEVEL_MAX;
         }
-        status = seVolumeRampSet(slot->state, level < 0x80 ? level : 0x7F, extra);
+        status = seVolumeRampSet(&slot->ramp, level <= SOUND_LEVEL_MAX ? level : SOUND_LEVEL_MAX, extra);
         if (status >= 0) {
             status = soundSlotApply(slot);
         }
@@ -265,27 +234,24 @@ void soundInitIfNeeded(void)
     }
 }
 
-extern unsigned char D_00644F24[];
 void func_0017D150(void);
-int seVolumeRampStep(void *);
 
-/* Applies the settings: master volume on channel 0 from the control block state, then both slots. */
+/* Steps the master volume ramp (channel 0) and the ramps of both slots, applying the levels that
+ * changed. */
 void soundApplySettings(void)
 {
-    unsigned char *cursor;
     SoundSlot *slot;
     int status;
     int index;
 
-    cursor = D_00644F24;
-    status = seVolumeRampStep(cursor);
+    status = seVolumeRampStep(&soundCtrl.master_ramp);
     if (status >= 0) {
         func_00138B48(0, status);
     }
     soundInitIfNeeded();
-    slot = (SoundSlot *) (cursor + 4);
+    slot = soundCtrl.slots;
     for (index = 1; index >= 0; index--) {
-        if (seVolumeRampStep(slot->state) >= 0) {
+        if (seVolumeRampStep(&slot->ramp) >= 0) {
             soundSlotApply(slot);
         }
         slot++;
@@ -293,16 +259,16 @@ void soundApplySettings(void)
     func_0017D150();
 }
 
-/* Writes the default control values (master 0x6E, default level 0x64) and sets channels 1 to 3 to 0x7F. */
+/* Writes the default volume and levels and sets channels 1 to 3 to full level. */
 void soundSetDefaults(void)
 {
-    soundCtrl.create_params[0] = 0x6E;
-    soundCtrl.create_params[1] = 0x71;
-    soundCtrl.create_params[2] = 0x64;
-    soundCtrl.create_params[3] = 0x64;
-    func_00138B48(1, 0x7F);
-    func_00138B48(2, 0x7F);
-    func_00138B48(3, 0x7F);
+    soundCtrl.master_volume = SOUND_DEFAULT_MASTER_VOLUME;
+    soundCtrl.master_level = SOUND_DEFAULT_MASTER_LEVEL;
+    soundCtrl.voice_level = SOUND_DEFAULT_VOICE_LEVEL;
+    soundCtrl.slot_level = SOUND_DEFAULT_SLOT_LEVEL;
+    func_00138B48(1, SOUND_LEVEL_MAX);
+    func_00138B48(2, SOUND_LEVEL_MAX);
+    func_00138B48(3, SOUND_LEVEL_MAX);
 }
 
 void func_0017D138(int value);
@@ -360,7 +326,6 @@ int func_00138988(int value);
 int func_00138428(int value0, int value1);
 int func_00138780(int value0, int value1);
 int func_001396D8(int kind, int channel, int level);
-void soundSlotsReopen(void);
 int printf(const char *format, ...);
 extern unsigned char *WorkEnd;
 

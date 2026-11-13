@@ -3,6 +3,8 @@
 #include "main/control_entry.h"
 #include "main/xgl_render.h"
 #include "main/xgl_studio.h"
+#include "main/tu021.h"
+#include "main/tu022.h"
 
 /* First address of the work heap WorkEnd tracks. */
 #define WORK_HEAP_START 0xB00000
@@ -41,7 +43,6 @@ int sceFsReset(void);
 
 int xglCdSifLoadModule(const char *path, const char *args);
 void xglCdInitial(void);
-void soundDriverInit(void);
 void xglPadInitial(void);
 void xglMcInitial(void);
 void *xglTaskInitial(void *manager, int capacity, int reset_gs);
@@ -102,7 +103,6 @@ void xglCdControlThread(void);
 void xglStudioSetup(void);
 void xglRenderDispOn(void);
 void xglCdLoadOverlay(int overlay);
-int seBankLoad(int slot, const char *name, int option);
 
 /* ov02 (the title overlay): an empty function, the logo screen and the title screen. */
 void func_00A80790(void);

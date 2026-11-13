@@ -2,6 +2,7 @@
  * OV01 original TU 8: 0x00a818e8..0x00a83d28 (53 functions)
  */
 #include "common.h"
+#include "main/tu021.h"
 #include "ov01/tu008.h"
 #include "ov01/tu009.h"
 #include "ov01/tu070.h"
@@ -124,7 +125,6 @@ typedef struct DataVoiceBlock {
     int vsf_size;
 } DataVoiceBlock;
 
-int seBankLoadMemory(int, int, int, int);
 int ov01HeapFree(int);
 
 void dataBattleSeRelease(void) {

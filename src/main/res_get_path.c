@@ -1206,11 +1206,6 @@ typedef struct SeVoiceEntry {
 } SeVoiceEntry;
 
 extern int D_002BB5B8[];
-/* Defined void in tu021.c; resResetKindState only matches with this int view (register choice). */
-int seBankLoadDefault(int bank, int force);
-int seBankLoad(int bank, int a, int b);
-void func_001A37E0(int packed, int name, int option);
-void seVoiceStart(int voice, int volume, int pan);
 void seFootBanksLoad(void);
 
 void resResetKindState(int mode) {
@@ -1234,7 +1229,7 @@ void resResetKindState(int mode) {
         return;
     }
     if (seBgmName[0] != 0) {
-        func_001A37E0(mode + 1, (int)seBgmName, 0x19000);
+        func_001A37E0(mode + 1, seBgmName, 0x19000);
     }
     for (i = 0; i < SE_RECORD_COUNT; i++) {
         flags = resRecordTable[i].flags;
@@ -1309,8 +1304,6 @@ int seNameCopyIfChanged(char *dst, char *src)
 
 #include "main/tu051.h"
 
-void seVoiceStop(int voice);
-void soundInitIfNeeded(void);
 
 void resReleaseRecordsOfType(int kind, int forward) {
     int i;
@@ -1403,11 +1396,11 @@ int seBankSetName(int kind, char *text)
     }
     if (kind == 3) {
         seBankLoad(4, 0, 0);
-        bankSize = seBankLoad(3, (int)name, D_002BB5B8[3]);
+        bankSize = seBankLoad(3, name, D_002BB5B8[3]);
         D_002BB5B8[4] = 0xBE000 + ((bankSize + 255) & -256);
         return bankSize;
     }
-    return seBankLoad(kind, (int)name, D_002BB5B8[kind]);
+    return seBankLoad(kind, name, D_002BB5B8[kind]);
 }
 
 void func_0013A618(int, int);
@@ -1426,7 +1419,6 @@ void soundReset(void) {
 
 extern unsigned char D_0069CFD0;
 extern signed char seBgmVolume;
-void seVolumeSet(int value, int flags);
 
 void seBgmNameSet(signed char *name)
 {
@@ -1443,8 +1435,6 @@ void seBgmNameSet(signed char *name)
         seVolumeSet(seBgmVolume, 16);
     }
 }
-
-void seVoiceSetPanVolume(u32 key, u32 volume, u32 pan);
 
 void seVoiceRecordSet(u32 voice, u32 volume, u32 pan) {
     int freeSlot = -1;

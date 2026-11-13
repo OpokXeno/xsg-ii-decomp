@@ -484,7 +484,6 @@ int namePut(int call)
 
 INCLUDE_ASM("asm/nonmatchings/ov01/tu047", objx);
 
-int soundSlotReopen(int);
 
 int streamPlay(int call)
 {

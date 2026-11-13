@@ -2,27 +2,13 @@
 #include "main/tu021.h"
 #include "main/tu022.h"
 #include "main/xgl_2.h"
+#include "main/xgl_cd.h"
 
 #define SE_PATH_MAX 256
 #define SE_BANK_SLOT_COUNT 24
 
-/* This TU's view of the 0x30-byte file-position record xglCdCheckFile fills; the layout and the
- * names are those of CdFilePosition in xgl_cd.c (the integrator reconciles). The loaders here pass
- * the byte at +0x27 on to the driver together with the lbn (lbu 0x27($sp) at 0x1A3334, 0x1A3354,
- * 0x1A3394 and 0x1A35A4); its meaning is not established, so it keeps its unmodeled name. */
-typedef struct SeFileRecord {
-    unsigned int lbn;
-    int stored_bytes;
-    unsigned char unmodeled_08[0x1c];
-    unsigned char source;
-    unsigned char unmodeled_25;
-    unsigned char packed;
-    unsigned char unmodeled_27;
-    int descriptor;
-    int size_bytes;
-} SeFileRecord;
-
-int xglCdCheckFile(const char *path, SeFileRecord *record);
+/* The loaders here pass CdFilePosition.unmodeled_27 on to the driver together with the lbn
+ * (lbu 0x27($sp) at 0x1A3334, 0x1A3354, 0x1A3394 and 0x1A35A4); its meaning is not established. */
 void func_00138D78(int slot);
 int func_00139060(int slot, unsigned int lbn, int record_byte_27);
 void func_001391D8(int slot, unsigned int lbn, int record_byte_27);
@@ -34,7 +20,7 @@ int func_0013A338(int slot, unsigned int lbn, int record_byte_27, int option);
  * negative result of the failing step. */
 int seBankLoadFile(int slot, const char *name, const char *directory, int option)
 {
-    SeFileRecord record;
+    CdFilePosition record;
     char path[SE_PATH_MAX];
     const char *source;
     char *destination;
@@ -94,8 +80,9 @@ int seBankLoad(int slot, const char *name, int option) {
     return seBankLoadFile(slot, name, seBankDirectory, option);
 }
 
-void seBankLoadDefault(int slot, const char *name) {
-    seBankLoad(slot, name, 0);
+/* Loads the bank `name` into `slot` with no option. */
+int seBankLoadDefault(int slot, const char *name) {
+    return seBankLoad(slot, name, 0);
 }
 
 int func_0013A098(int slot, int vsf);
@@ -128,20 +115,11 @@ int seBankLoadMemory(int slot, int vsf, int prj, int option)
     return func_0013A128(slot, prj);
 }
 
-/* soundCtrl (tu022): +3 current song number, +4 master volume, +5 default master level,
- * +6 default voice level, +0x0C master volume ramp. */
-#define SOUND_CTRL_SONG 3
-#define SOUND_CTRL_MASTER_VOLUME 4
-#define SOUND_CTRL_MASTER_LEVEL 5
-#define SOUND_CTRL_VOICE_LEVEL 6
-#define SOUND_CTRL_MASTER_RAMP 0x0C
-#define SOUND_LEVEL_MAX 0x7F
-/* soundCtrl[SOUND_CTRL_SONG] when the song name does not start with three digits. */
+/* soundCtrl.song when the song name does not start with three digits. */
 #define SE_SONG_NONE 0xFF
 /* A `packed` song id above this value loads the bank only, not the .mid file. */
 #define SE_BGM_ID_MAX 0xFFFF
 
-extern unsigned char soundCtrl[];
 extern const char *seMidiDirectory;
 /* Takes the song id in its first argument (move $17,$4 at 0x139AF8). */
 void func_00139AF0(int id);
@@ -152,7 +130,7 @@ int func_00139978(int packed, unsigned int lbn, int record_byte_27);
  * the name does not start with three digits). With no name it returns what the bank load returned. */
 int seBgmLoad(int packed, const char *name, int option)
 {
-    SeFileRecord record;
+    CdFilePosition record;
     char path[SE_PATH_MAX];
     const char *source;
     char *destination;
@@ -193,9 +171,9 @@ int seBgmLoad(int packed, const char *name, int option)
     destination[4] = 0;
     xglCdCheckFile(path, &record);
     result = func_00139978(packed, record.lbn, record.unmodeled_27);
-    soundCtrl[SOUND_CTRL_SONG] = SE_SONG_NONE;
+    soundCtrl.song = SE_SONG_NONE;
     if ((name[0] & 0xF0) == '0' && (name[1] & 0xF0) == '0' && (name[2] & 0xF0) == '0') {
-        soundCtrl[SOUND_CTRL_SONG] = (name[0] & 0xF) * 100 + (name[1] & 0xF) * 10 + (name[2] & 0xF);
+        soundCtrl.song = (name[0] & 0xF) * 100 + (name[1] & 0xF) * 10 + (name[2] & 0xF);
     }
     return result;
 }
@@ -236,7 +214,7 @@ void seBgmSetSongLevel(void)
     SeSongLevel *entry;
 
     for (entry = table; entry->song != 0; entry++) {
-        if (soundCtrl[SOUND_CTRL_SONG] == entry->song) {
+        if (soundCtrl.song == entry->song) {
             func_001394B8(1, entry->level);
             break;
         }
@@ -307,6 +285,8 @@ void func_001A37E0(int packed, const char *name, int option) {
 #define SE_CONTROLLER_EXPRESSION 0x0B
 #define SE_CONTROLLER_REVERB 0x5B
 #define SE_PAN_CENTRE 0x40
+/* A negative volume: the default level of the voice's kind. */
+#define SE_VOLUME_DEFAULT (-1)
 /* A packed voice id: kind in bits 24..30, MIDI channel in bits 0..3, note in bits 0..6. */
 #define SE_VOICE_KIND(packed) (((packed) >> 24) & 0x7F)
 #define SE_VOICE_CHANNEL(packed) ((packed) & 0xF)
@@ -337,7 +317,7 @@ void func_001A3900(int id, int next_id)
     for (i = 0; i < SE_CHANNEL_COUNT; i++) {
         func_00139D08(0, i);
     }
-    if (soundCtrl[SOUND_CTRL_SONG] == SE_SONG_WITH_CHANNEL_SETUP) {
+    if (soundCtrl.song == SE_SONG_WITH_CHANNEL_SETUP) {
         func_001388E8(0, SE_SETUP_CHANNEL | SE_MSG_PITCH_BEND | SE_MSG_DATA2(0x3F), 0);
         func_001388E8(0, SE_SETUP_CHANNEL | SE_MSG_CONTROL(SE_CONTROLLER_MODULATION, 0), 0);
         func_001388E8(0, SE_SETUP_CHANNEL | SE_MSG_CONTROL(SE_CONTROLLER_DATA_ENTRY, 0), 0);
@@ -371,30 +351,27 @@ void seSetMuted(int first, int flag) {
     seBgmSetSongLevel();
 }
 
-int seVolumeRampSet(void *ramp, int level, int step);
 int func_00138B48(int channel, int level);
 
 /* Starts the master volume ramp toward level (negative: the default level), scaled by the master
- * volume and clamped to 0x7F; applies the level at once when the ramp returns one. */
+ * volume and clamped to SOUND_LEVEL_MAX; applies the level at once when the ramp returns one. */
 void seVolumeSet(int level, int step)
 {
     int status;
 
     if (level < 0) {
-        level = soundCtrl[SOUND_CTRL_MASTER_LEVEL];
+        level = soundCtrl.master_level;
     }
-    level = level * soundCtrl[SOUND_CTRL_MASTER_VOLUME] / SOUND_LEVEL_MAX;
-    status = seVolumeRampSet(&soundCtrl[SOUND_CTRL_MASTER_RAMP], level < 0x80 ? level : SOUND_LEVEL_MAX, step);
+    level = level * soundCtrl.master_volume / SOUND_LEVEL_MAX;
+    status = seVolumeRampSet(&soundCtrl.master_ramp, level <= SOUND_LEVEL_MAX ? level : SOUND_LEVEL_MAX, step);
     if (status >= 0) {
         func_00138B48(0, status);
     }
 }
 
-void seVoiceStart(int voice, int volume, int pan);
-
-/* Starts `voice` at the default volume (-1) and centre pan (0x40). */
+/* Starts `voice` at the default volume and centre pan. */
 void seVoiceStartDefault(int voice) {
-    seVoiceStart(voice, -1, 0x40);
+    seVoiceStart(voice, SE_VOLUME_DEFAULT, SE_PAN_CENTRE);
 }
 
 int func_001A3B38(int kind)
@@ -432,18 +409,18 @@ void seVoiceStart(int voice, int volume, int pan)
     int group = func_001A3B38(kind);
 
     if (volume < 0) {
-        volume = soundCtrl[SOUND_CTRL_VOICE_LEVEL];
+        volume = soundCtrl.voice_level;
         if (kind != 0) {
             if (kind >= SE_VOICE_KIND_LEVELLED) {
                 if (kind == SE_VOICE_KIND_MASTER_LEVEL) {
-                    volume = soundCtrl[SOUND_CTRL_MASTER_LEVEL];
+                    volume = soundCtrl.master_level;
                 }
             } else {
                 volume = SOUND_LEVEL_MAX;
             }
         }
     }
-    volume = volume * soundCtrl[SOUND_CTRL_MASTER_VOLUME] / SOUND_LEVEL_MAX;
+    volume = volume * soundCtrl.master_volume / SOUND_LEVEL_MAX;
     if (volume > SOUND_LEVEL_MAX) {
         volume = SOUND_LEVEL_MAX;
     }
@@ -462,9 +439,9 @@ void seVoiceSetPanVolume(int voice, int volume, int pan)
     int group = func_001A3B38(SE_VOICE_KIND(voice));
 
     if (volume < 0) {
-        volume = soundCtrl[SOUND_CTRL_VOICE_LEVEL];
+        volume = soundCtrl.voice_level;
     }
-    volume = volume * soundCtrl[SOUND_CTRL_MASTER_VOLUME] / SOUND_LEVEL_MAX;
+    volume = volume * soundCtrl.master_volume / SOUND_LEVEL_MAX;
     if (volume > SOUND_LEVEL_MAX) {
         volume = SOUND_LEVEL_MAX;
     }
@@ -520,14 +497,14 @@ void func_001A3E10(int packed)
         bend = 0;
     }
     note = (random & 1) + 1;
-    volume = soundCtrl[SOUND_CTRL_VOICE_LEVEL];
+    volume = soundCtrl.voice_level;
     if (packed > SE_TONE_PLAIN_MAX) {
         volume = SE_TONE_VOLUME(packed);
         pan = SE_TONE_PAN(packed);
     }
     /* packed is reused for the bank number */
     packed = SE_TONE_BANK(packed);
-    volume = volume * soundCtrl[SOUND_CTRL_MASTER_VOLUME] / SOUND_LEVEL_MAX;
+    volume = volume * soundCtrl.master_volume / SOUND_LEVEL_MAX;
     if (volume > SOUND_LEVEL_MAX) {
         volume = SOUND_LEVEL_MAX;
     }

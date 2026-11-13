@@ -1,38 +1,29 @@
 #include "common.h"
-
-/* Volume curve: one point per 4 levels; levels between points are
- * interpolated, levels from 0x7F up give 0. */
-#define SE_VOLUME_LEVELS 0x7f
+#include "main/tu020.h"
 
 extern short seVolumeCurveTable[];
+
+/* Volume curve: one point per 4 levels; levels between points are
+ * interpolated, levels from SOUND_LEVEL_MAX up give 0. */
 
 int seVolumeCurve(int level)
 {
     int fraction = level & 3;
     int value;
 
-    if (level < SE_VOLUME_LEVELS && fraction != 0) {
+    if (level < SOUND_LEVEL_MAX && fraction != 0) {
         int point = seVolumeCurveTable[level >> 2];
         int next = seVolumeCurveTable[(level + 4) >> 2];
 
         value = point + (((next - point) * fraction) >> 2);
     } else {
         value = seVolumeCurveTable[level >> 2];
-        if (level >= SE_VOLUME_LEVELS) {
+        if (level >= SOUND_LEVEL_MAX) {
             value = 0;
         }
     }
     return value;
 }
-
-/* A volume ramp: the current level moves toward the target by step on each
- * call to seVolumeRampStep. Levels are 0..0x7F. */
-typedef struct VolumeRamp {
-    signed char step;             /* +0x00: added to current on each call; cleared when the ramp reaches target */
-    unsigned char unmodeled_01;
-    unsigned char target;         /* +0x02: level the ramp moves toward */
-    unsigned char current;        /* +0x03: level sent to the sound driver */
-} VolumeRamp;
 
 /* Starts a ramp toward level, moving by step per seVolumeRampStep call (in the right
  * direction); step 0 jumps there at once and returns the new level, otherwise -1. The
@@ -56,6 +47,8 @@ int seVolumeRampSet(VolumeRamp *ramp, int level, int step)
     return -1;
 }
 
+/* One ramp step: moves current by step and stops at the target (or at the ends of the level
+ * range); returns the new level, or -1 when the ramp is not moving. */
 int seVolumeRampStep(VolumeRamp *ramp)
 {
     int step;
@@ -66,7 +59,7 @@ int seVolumeRampStep(VolumeRamp *ramp)
         next_value = ramp->current;
         next_value += step;
         if ((step < 0 && next_value < ramp->target) || (step > 0 && next_value > ramp->target)
-            || next_value < 0 || next_value >= 0x80) {
+            || next_value < 0 || next_value > SOUND_LEVEL_MAX) {
             next_value = ramp->target;
             ramp->step = 0;
         }

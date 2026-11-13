@@ -1,12 +1,11 @@
 #include "common.h"
+#include "main/tu021.h"
 
 int func_A9F0C0(int call, int index);
 int func_A9F1C0(int call, int index);
 float I2F(int value);
 /* res_get_path.c types this ResRecord *; it reads only rec->u.position at offset 0. */
 unsigned int seVoicePanVolumeFromPosition(float *position);
-void seVoiceStart(int voice, int volume, int pan);
-void seVoiceStop(int voice);
 extern unsigned char seDefaultVolume[];
 
 /* Native "se" (its name pointer is at 0x3e6f00).  Argument 1 is the voice; argument 2 the
@@ -95,8 +94,6 @@ int bgmSePos(int call) {
     seVoiceRecordAddAt(voice, position);
     return 1;
 }
-
-void seVolumeSet(int value, int flags);
 
 /* Native "bgmFade": argument 1 is the music volume (below 0: the default); argument 2 the
    fade length seVolumeSet hands to seVolumeRampSet, 0 (at once) when absent. */
