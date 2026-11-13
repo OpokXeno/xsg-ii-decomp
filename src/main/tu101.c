@@ -3176,70 +3176,8 @@ void menuDrawClassInfo(int x, int y)
     }
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tu101", menuDrawAttackCommand);
-
-INCLUDE_ASM("asm/main/nonmatchings/tu101", menuDrawSpecialAttack);
-
-INCLUDE_ASM("asm/main/nonmatchings/tu101", menuDrawCommandInfo);
-
-INCLUDE_ASM("asm/main/nonmatchings/tu101", menuDrawPartnerInfo);
-
-INCLUDE_ASM("asm/main/nonmatchings/tu101", func_00222860);
-
-INCLUDE_ASM("asm/main/nonmatchings/tu101", menuDrawCopilotInfo);
-
-INCLUDE_ASM("asm/main/nonmatchings/tu101", menuDrawClassInfo);
-
-/* The context returned by ptGetMenuMember (defined in main/tu100). */
-struct ControlLimits {
-    unsigned char unmodeled_00[8];
-    int limit_a;
-    int limit_b;
-};
-
-struct ControlBuffer {
-    unsigned char header[4];
-    unsigned char cells[4][8];
-    unsigned char flags[2];
-};
-
-struct ControlContext {
-    unsigned char unmodeled_00[8];
-    struct ControlLimits *limits;
-    struct ControlBuffer *buffer;
-};
-
-/* A scrolling list cursor: selected row, row count and the blink flag. */
-typedef struct LicenseCursor {
-    int index;
-    int unmodeled_04;
-    unsigned int count;
-    int unmodeled_0c;
-    int flags;
-} LicenseCursor;
-
-typedef struct LicenseRecord {
-    unsigned char kind;
-    unsigned char dispatch_value;
-    unsigned short value;
-    unsigned char bit;
-    unsigned char unmodeled_05;
-} LicenseRecord;
-
-struct ControlContext *func_0022A560();
-int selectionCanOpenSlot(struct ControlContext *context, int group, int sub);
+int selectionCanOpenSlot(struct ControlContext *context, int group, int slot);
 int selectionCanTakeSub(struct ControlContext *context, int group, int slot, int sub);
-void func_0021CEF8(int x, int y, int width, int height, void *text);
-void func_0021CC08(int, int, int, int);
-void menuDrawBorder(int x, int y, int width, int height, unsigned long long color);
-int cursorBufferGetAlignedOffset(LicenseCursor *cursor);
-void menuDrawCharInfo(int x, int y, int group, int slot, int mode);
-void textDrawSegment(int, int, void *, int);
-void textDrawGlyphString(int x, int y, unsigned char *text, u64 colour);
-void textDrawDecimalShadow(int x, int y, int value, int digits, unsigned long long color);
-void func_0021F2F0(int x, int y, int width, int blink);
-void func_0021F8A8(int x, int y, int record);
-int selectionEntryBitOutsideMask(int group, int slot, int sub, int mask);
 int selectionRecordIndex(int group, int slot, int sub);
 extern unsigned char D_0068AB18[];
 extern unsigned char D_0069D720[];
@@ -3308,7 +3246,7 @@ void menuDrawLicenseBoard(int x, int y, LicenseCursor *groupCursor, LicenseCurso
             }
             break;
         case 1:
-            if (selectionCanOpenSlot(func_0022A560(), groupCursor->index, i)
+            if (selectionCanOpenSlot(ptGetMenuMember(), groupCursor->index, i)
                 || ((board->header[groupCursor->index] >> i) & 1)) {
                 unlocked = 1;
             } else {
@@ -3320,7 +3258,7 @@ void menuDrawLicenseBoard(int x, int y, LicenseCursor *groupCursor, LicenseCurso
             }
             break;
         case 2:
-            if (selectionCanTakeSub(func_0022A560(), groupCursor->index, slotCursor->index, i)
+            if (selectionCanTakeSub(ptGetMenuMember(), groupCursor->index, slotCursor->index, i)
                 || ((board->cells[groupCursor->index][slotCursor->index] >> i) & 1)) {
                 unlocked = 1;
             } else {

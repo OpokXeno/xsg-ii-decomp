@@ -760,7 +760,7 @@ void menuRebuildCursorBuffers(void) {
                 }
             }
             if (D_006A53FE[0] == 5) {
-                context = func_0022A560();
+                context = ptGetMenuMember();
                 capacity = selectionCopilotRecordCount(context->kind, D_0069D50C);
                 cursorBufferSetCapacity(D_006A5198, capacity);
                 return;
@@ -769,12 +769,12 @@ void menuRebuildCursorBuffers(void) {
             return;
         }
         if (D_006A53FE[0] == 5) {
-            context = func_0022A560();
+            context = ptGetMenuMember();
             capacity = selectionPairRecordCount(context->kind, D_0069D50C);
             cursorBufferSetCapacity(D_006A5198, capacity);
             return;
         }
-        context = func_0022A560();
+        context = ptGetMenuMember();
         capacity = selectionMemberCapacity(context->kind);
         cursorBufferSetCapacity(D_006A5198, capacity);
         return;
@@ -812,9 +812,9 @@ void menuRebuildCursorBuffers(void) {
                 mode = 3;
                 break;
             }
-            context = func_0022A560();
+            context = ptGetMenuMember();
             D_0069E23C = selectionCollectEntries(D_006A52E0, context, mode, D_0069D508);
-            D_0069D504 = selectionSubIsTaken(func_0022A560(), 1, 7, 1) + 3;
+            D_0069D504 = selectionSubIsTaken(ptGetMenuMember(), 1, 7, 1) + 3;
             cursorBufferSetCapacity(D_006A51C8, D_0069E23C);
             D_006A51C8[0].unit_size = 4;
         }
@@ -1203,8 +1203,8 @@ void menuSceneSetState(int menuState) {
             cursorBufferSetOrInit(D_006A51B0, ptGetMenuMember()->buffer->count, 4, 0);
             cursorBufferSetCapacity(D_006A4928, 1);
         } else {
-            D_0069D504 = (u8) (selectionSubIsTaken(func_0022A560(), 1, 7, 1) + 3);
-            cursorBufferSetOrInit(D_006A51B0, func_0022A560()->buffer->count, 4, 0);
+            D_0069D504 = (u8) (selectionSubIsTaken(ptGetMenuMember(), 1, 7, 1) + 3);
+            cursorBufferSetOrInit(D_006A51B0, ptGetMenuMember()->buffer->count, 4, 0);
             cursorBufferSetCapacity(D_006A4928, 4);
         }
         func_00211B88(menuState, 1);
@@ -3181,8 +3181,8 @@ void menuTutorialStep(void) {
                     ctx = ptGetMenuMember();
                     links = (ControlLink *) D_006A51E0;
                     if (selectionTakeSub(ctx, links[0].kind, links[1].kind, links[2].kind)) {
-                        ctx = func_0022A560();
-                        ctx->limits->limit_b += D_003EC120[links[0].kind * 8 + links[1].kind];
+                        ctx = ptGetMenuMember();
+                        ctx->limits->classPoints += D_003EC120[links[0].kind * 8 + links[1].kind];
                     }
                     break;
                 }
@@ -3386,7 +3386,7 @@ int selectionEntryIsEligible(int key);
 u16 selectionWindowEntryMarkedFlags(int index);
 int selectionWindowEntryHasFlag4(int index);
 int selectionWindowListDropAt(int key);
-SelectionEntry *func_002245B8(SelectionEntry *entry);
+SelectionEntry *menuItemMemberEntry(SelectionEntry *entry);
 int selectionCountedMemberNeedsHpEp(void);
 int selectionEntryIsUseful(int key, SelectionEntry *entry);
 int func_00A8B658(int key, int value);
@@ -3525,7 +3525,7 @@ int menuItemListStep(ControlSlot *slot) {
                 sel->flags3E4 &= ~4;
                 break;
             }
-            entry = func_002245B8(&((SelectionBlock *) D_006A4D28)->entries[((SelectionBlock *) D_006A4D28)->current]);
+            entry = menuItemMemberEntry(&((SelectionBlock *) D_006A4D28)->entries[((SelectionBlock *) D_006A4D28)->current]);
             if (!selectionEntryIsUseful(((CursorBuffer *) slot->link)->cursor, entry)) {
                 goto soundFail;
             }
@@ -3781,7 +3781,7 @@ int menuLicenseChargeStep(ControlSlot *slot) {
             func_00211918((ControlLink *) D_006A51E0);
             slot->state = 4;
         } else if (padCirclePressedAlone() != 0) {
-            int found = selectionCanOpenSlot(func_0022A560(), D_006A51E0[0], D_006A51E0[5]);
+            int found = selectionCanOpenSlot(ptGetMenuMember(), D_006A51E0[0], D_006A51E0[5]);
             if (found != 0) {
                 seVoiceStartDefault(MENU_SE_CONFIRM);
                 choiceInit(menuMainTxdEntry(D_006A51E0[0] + 0x36), 1);
@@ -3833,7 +3833,7 @@ int menuLicenseChargeStep(ControlSlot *slot) {
             slot->state = 5;
         } else if (padCirclePressedAlone() != 0) {
             if (selectionEntryBitOutsideMask(D_006A51E0[0], D_006A51E0[5], D_006A51E0[10], D_0069D508) == 0
-                && selectionCanTakeSub(func_0022A560(), D_006A51E0[0], D_006A51E0[5], D_006A51E0[10]) != 0) {
+                && selectionCanTakeSub(ptGetMenuMember(), D_006A51E0[0], D_006A51E0[5], D_006A51E0[10]) != 0) {
                 int value;
 
                 seVoiceStartDefault(MENU_SE_CONFIRM);
