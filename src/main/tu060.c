@@ -1,6 +1,7 @@
 #include "common.h"
 #include "main/pad.h"
 #include "main/tu012.h"
+#include "main/xgl_1_016.h"
 
 /* One port of the pad record PadData, the full 0x80 bytes (xglPadRead
  * scales the port index by 128): the raw pad buffer, the decoded buttons
@@ -1541,27 +1542,6 @@ extern const char D_0069D138[];
 /* JP: IPU title. */
 extern const char D_0069D140[];
 
-/* The IPU movie player state: the frame size at 0x40, the frame counter
- * at 0x46, the stream buffer at 0x90, the two decoded frame buffers at
- * 0xB0 with the index of the one being decoded at 0xC8, and the work
- * buffer at 0xCC. */
-typedef struct XglMovieWork {
-    unsigned char unmodeled_00[0x40];
-    short width;
-    short height;
-    unsigned char unmodeled_44[0x46 - 0x44];
-    short currentFrame;
-    unsigned char unmodeled_48[0x90 - 0x48];
-    unsigned char *source;
-    int sourceSize;
-    unsigned char unmodeled_98[0xB0 - 0x98];
-    unsigned char *imageAddress[2];
-    unsigned char unmodeled_B8[0xC8 - 0xB8];
-    unsigned char bufferIndex;
-    unsigned char unmodeled_C9[0xCC - 0xC9];
-    unsigned char *workBuffer;
-} XglMovieWork;
-
 /* The textured sprite that shows a decoded frame: TEX0 at 0x10, the two
  * XYZ2 vertices at 0x40 and 0x60 and the second vertex's UV at 0x50. */
 typedef struct IpuSpritePacket {
@@ -1585,10 +1565,6 @@ extern unsigned long long D_002BD280[6];
 extern unsigned long long D_002BD2B0[8];
 extern IpuSpritePacket D_002BD2F0;
 
-void xglMovieInfoInit(XglMovieWork *info);
-int xglMovieOpen(XglMovieWork *info, const char *name);
-int xglMoviePlay(XglMovieWork *info);
-int xglMovieRewind(XglMovieWork *info);
 
 typedef struct XglPacket XglPacket;
 
@@ -1612,7 +1588,7 @@ void IpuMovieTest(void) {
     int result;
 
     xglMovieInfoInit(&info);
-    info.source = (unsigned char *)IPU_STREAM_BUFFER_BASE;
+    info.source = (XglMovieSourceHeader *)IPU_STREAM_BUFFER_BASE;
     info.sourceSize = 0x10000;
     xglMovieOpen(&info, D_00689400);
     info.imageAddress[0] = (unsigned char *)DEBUG_BUFFER_BASE;
