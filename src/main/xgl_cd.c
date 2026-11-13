@@ -1102,8 +1102,10 @@ CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name, CdCo
 
 /* Probes a path: -1 when missing, closes the descriptor of a host or HDD file
  * and returns 0 otherwise. */
-int xglCdCheckFile(const char *path, CdFilePosition *position)
+int xglCdCheckFile(const char *path, void *record)
 {
+    CdFilePosition *position = record;
+
     if (xglCdGetFilePos(position, path, xglCdDummyCallback) == 0) {
         return -1;
     }
