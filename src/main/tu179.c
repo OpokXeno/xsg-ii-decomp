@@ -6,7 +6,6 @@
 
 extern char *strcat(char *destination, const char *source);
 extern u8 *buffer;
-extern int xglCdGetFileSize(const char *name);
 
 /* Battle slots of the resource state. */
 #define SRS_CHARACTER_SLOTS 3        /* party members that own weapon data */

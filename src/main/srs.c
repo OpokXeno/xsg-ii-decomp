@@ -9,7 +9,6 @@ extern int sprintf(char *destination, const char *format, ...);
 extern u8 *buffer;
 extern char *strcpy(char *destination, const char *source);
 int srsLoadEffectData(void *buffer, int effectNo);
-extern int xglCdGetFileSize(const char *name);
 
 /* Battle slots of the resource state. */
 #define SRS_CHARACTER_SLOTS 3        /* party members that own weapon data */

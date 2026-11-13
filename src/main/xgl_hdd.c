@@ -860,8 +860,6 @@ int xglHddUninstall(void)
     return result < 0 ? -5 : 0;
 }
 
-void xglCdReadCancel(int immediate);
-
 /* The progress block at hddInstallContext that xglHddInstallReadCB updates: the
  * installed callback receives a stage, an offset and `param`. */
 struct HddInstallCBParam {
@@ -939,7 +937,6 @@ struct HddInstallImage {
 
 extern int sprintf(char *buffer, const char *format, ...);
 extern int sceFormat(const char *mount_point, const char *device, void *payload, int payload_length);
-extern int xglCdGetFileSize(const char *name);
 extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
                              void (*callback)(int event, int value), int offset, int length);
 int xglHddDummyCallback(int stage, int offset, void *param);

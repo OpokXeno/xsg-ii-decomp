@@ -44,10 +44,6 @@ struct XglTaskScheduler {
     XglTaskPrefix *next_to_visit;
 };
 
-typedef struct StreamXssBuffer StreamXssBuffer;
-
-typedef struct StreamRing StreamRing;
-
 extern u8 *buffer;
 extern u8 *WorkEnd;
 void xglClockRead(XglClock *clock);
@@ -55,55 +51,16 @@ extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),
                                 XglTaskPrefix *entry);
 
-/* Where a file is read from (CdFilePosition.source, CdStreamParam.mode). */
-#define CD_SOURCE_DISC 0
-#define CD_SOURCE_HOST 1
-#define CD_SOURCE_HDD 2
-
 /* A callback gets a third argument: the current read tag from xglCdGetFilePos (lw $6 at
  * 0x19BA04), the request's argument from the read service. */
 typedef void CdCompletionCallback(int event, int value, int tag);
 
 int sceCdStSeek(unsigned int lbn);
 int sceLseek(int descriptor, int offset, int whence);
-
-typedef struct CdStreamParam CdStreamParam;
-
-struct StreamRing {
-    unsigned char *buffer;
-    int capacity;
-    int write_position;
-    int read_position;
-};
-
-struct StreamXssBuffer {
-    unsigned char *source;
-    unsigned char *position;
-    unsigned char value;
-    unsigned char mode;
-    short sectors;
-};
-
-struct CdStreamParam {
-    /* The XSS interleave state; a stream that has one reads through
-     * StreamReadRingCoreXss (xglCdStreamReadRingCore). */
-    StreamXssBuffer *xss;       /* +0x00 */
-    /* Set once the stream has no bytes left (xglCdStreamRead and the ring
-     * readers); cleared by xglCdStreamSeek and xglCdStreamParamInit. */
-    unsigned char exhausted;    /* +0x04 */
-    /* CD_SOURCE_*: xglCdStreamSeek, xglCdStreamClose, xglCdStreamStat and
-     * StreamReadRingCoreSub switch on this byte. */
-    unsigned char source;       /* +0x05 */
-    short block_count;
-    int sector_position;        /* +0x08: advanced by StreamReadRingCoreSub */
-    int block_size;             /* +0x0c: xglCdStreamRead pads reads to it */
-    int descriptor;             /* +0x10 */
-    int file_byte_count;        /* +0x14 */
-    int remaining; /* +0x18: bytes not yet transferred into the stream rings. */
-    int ring_size;
-    StreamRing ring;            /* +0x20 */
-    StreamRing alternate_ring;  /* +0x30 */
-};
+/* sceLseek origins (SDK sceio.h). */
+#define SCE_SEEK_SET 0
+#define SCE_SEEK_CUR 1
+#define SCE_SEEK_END 2
 
 typedef struct CdReadMode {
     unsigned char try_count;
@@ -125,8 +82,6 @@ typedef struct CdArchiveEntry {
 } CdArchiveEntry;
 
 unsigned int xglClockDayTime2UInt(XglClock *clock_time);
-extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
-                             CdCompletionCallback *callback, int offset, int length);
 
 /* Events passed to a completion callback (int event, int value). */
 #define CD_EVENT_LOOKUP 0 /* value: the path being looked up */
@@ -135,10 +90,26 @@ extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
 #define CD_EVENT_DONE 4
 #define CD_EVENT_READ_ERROR (-2)
 
+/* xglCdSetCallback arguments that are not a callback address. */
+#define CD_CALLBACK_DEFAULT 0
+#define CD_CALLBACK_DUMMY 1
+#define CD_CALLBACK_KEEP (-1)
+/* xglCdReadFilePart's callback argument may instead select one: the current global callback,
+ * the dummy or the default one (xglCdReadFile passes its flags argument through as it). */
+#define CD_NOTIFY_CURRENT 0
+#define CD_NOTIFY_DUMMY 1
+#define CD_NOTIFY_DEFAULT 2
+/* xglCdReadFilePart mode bits: queue or start the read and return at once; leave the data packed
+ * where it was read; read even while another read is active (only as the whole mode). */
+#define CD_READ_ASYNC 1
+#define CD_READ_NO_EXTRACT 2
+#define CD_READ_WHILE_BUSY 4
+/* xglCdReadFilePart result while another read is active. */
+#define CD_READ_BUSY (-3)
+
 void xglCdPowerOffCB(void);
 void xglClockUInt2DayTime(XglClock *clock_time, unsigned int elapsed);
 void xglCdStreamReadRingCore(CdStreamParam *stream);
-int xglCdStreamReadRing(CdStreamParam *stream, int bytes);
 extern int xglHddCheck(void);
 extern void xglHddErrorScreen(void);
 
@@ -147,6 +118,7 @@ extern void xglHddErrorScreen(void);
 /* A CD sector is fixed at 2048 bytes on this drive/read path (see also
  * xglCdStreamReadRing's own `& -2048` sector rounding later in this TU). */
 #define CD_SECTOR_BYTES 2048
+#define CD_SECTOR_SHIFT 11
 #define ARC_RECORD_EXTENDED        0x80
 #define ARC_RECORD_TYPE_EXTENDED   0x40
 #define ARC_RECORD_LENGTH_MASK     0x3f
@@ -160,12 +132,9 @@ extern void xglHddErrorScreen(void);
 #define CD_STATE_SYNC_READ 1
 #define CD_STATE_ASYNC_READ 2
 #define CD_STATE_STREAM 3
-/* The request queue is declared as a 32-entry ring, but the asm of the queue
- * helpers (xglCdQueueNext, xglCdServiceRead) masks its indices with 0x7F, so the
- * wrap is not confirmed by them. Left as declared; see the naming notes. */
+/* LW has room for 32 queued requests (+0x40..+0x103F), but xglCdQueueNext, xglCdServiceRead and
+ * xglCdReadFilePart wrap the indices with 0x7F, as if there were 128. */
 #define CD_QUEUE_SIZE 32
-#define CD_QUEUE_MASK (CD_QUEUE_SIZE - 1)
-/* The mask the queue helpers' asm applies to the queue indices. */
 #define CD_QUEUE_INDEX_MASK 0x7f
 /* Host and HDD files are read in pieces of at most 64 KiB. */
 #define CD_FILE_CHUNK_BYTES 0x10000
@@ -187,12 +156,12 @@ extern void xglHddErrorScreen(void);
 
 /*
  * The queue entries occupy 0x80 bytes; only their used prefix is named.
- * xglCdReadFilePart (0x0019BC98..0x0019C1E0, still INCLUDE_ASM) enqueues by
+ * xglCdReadFilePart enqueues by
  * storing its own second argument (buffer) at entry+0x00 and its own first
  * argument (name) at entry+0x14, with the offset and length at +0x04 and +0x08
  * and the completion callback at +0x0C. The queue-next helper xglCdQueueNext
  * passes entry+0x10 to xglCdSetReadTag (xglCdSetReadTag) and entry+0x14 back as
- * the name, in xglCdReadFile's (name, buffer, ...) order from shared.h.
+ * the name, in xglCdReadFile's (name, buffer, ...) order from main/xgl_cd.h.
  */
 typedef struct CdRequestPartial {
     void *buffer;
@@ -235,7 +204,7 @@ typedef struct CdReadControl {
     u8 unmodeled_035[0x9];                       /* +0x35..0x3d */
     u8 queue_cursor;                             /* +0x3e */
     u8 queue_tail;                               /* +0x3f */
-    CdRequestPartial requests[32];               /* +0x40..0x103f */
+    CdRequestPartial requests[CD_QUEUE_SIZE];    /* +0x40..0x103f */
 } CdReadControl;
 
 /* Four 0x18-byte archive slots; the initialization helper models each prefix. */
@@ -244,13 +213,10 @@ typedef union CdArchiveStorage {
     unsigned char bytes[0x18];
 } CdArchiveStorage;
 
-extern const char xenosagaPfs0Path[];
-extern const char xenosagaArc00Name[];
 extern int sceCdStStat(void);
 extern int sceOpen(const char *path, int flags, ...);
 extern int sceSifLoadModule(const char *path, int args_length, const char *args);
 extern int sceCdReadClock(unsigned char *clock);
-int sceLseek(int descriptor, int offset, int whence);
 extern int sceCdSync(int mode);
 extern int sceCdDiskReady(int mode);
 extern int sceCdStatus(void);
@@ -273,23 +239,19 @@ extern const char xenosagaPfs0Path[24];
 extern const char xenosagaArc00Name[16];
 /* Twelve month lengths followed by twelve cumulative month offsets. */
 extern unsigned short monthday[24];
-extern char head_8[13];
-extern char root_0[6];
-extern char hdd_head_6[7];
-extern char arcname_1[12];
-extern char arcname_2[12];
-extern char arcname_3[12];
-extern char vcd_head_5[24];
-extern char tail_9[7];
+extern char xglCdModulePathHead[13];
+extern char xglCdHddPathHead[7];
+extern char xenosaga00FileName[12];
+extern char xenosaga10FileName[12];
+extern char xenosaga20FileName[12];
+extern char xglCdHostPathHead[24];
+extern char xglCdModulePathTail[7];
 extern CdCompletionCallback *callback;
 extern CdReadControl LW;
 extern CdArchiveStorage ArcHeader[4];
 extern signed char ReadClockInterval;
 extern unsigned char PresentTime[8];
 void xglCdDefaultCallback(int event, int value, int tag);
-void xglCdSetReadTag(int value);
-int xglCdGetFileSize(const char *path);
-int xglCdStreamStat(CdStreamParam *stream);
 void StreamReadRingCoreNormal(CdStreamParam *stream);
 void StreamReadRingCoreXss(CdStreamParam *stream);
 int sceCdInit(int mode);
@@ -299,13 +261,15 @@ int sceCdStInit(unsigned int buffer_max, unsigned int bank_max, unsigned int iop
 int sceCdReadDvdDualInfo(int *on_dual, unsigned int *layer1_start);
 int sceSifLoadElf(const char *name, void *exec_data);
 void FlushCache(int operation);
+/* FlushCache operations (SDK eekernel.h). */
+#define WRITEBACK_DCACHE 0
+#define INVALIDATE_ICACHE 2
 void *memset(void *destination, int value, unsigned int size);
 void xglCdReset(void);
-int xglHddMount(void);
 /* The overlay loaded last, and the path pieces around "OVnn": "cdrom0:\\" and ".OVL;1". */
 extern unsigned char loaded_overlay;
-extern const char head_10[];
-extern const char tail_11[8];
+extern const char xglCdOverlayPathHead[];
+extern const char xglCdOverlayPathTail[8];
 extern int xglCdDeviceHandle;
 /* The alternate CD device the handle selects: stop at once, or after the
  * current transfer (xglCdReadCancel). */
@@ -316,7 +280,7 @@ int sceCdPause(void);
 void xglCdDummyCallback(int event, int value, int tag);
 int xglCdGetFilePosSub(CdArchiveEntry *entry, const char *path);
 CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name,
-                                       CdCompletionCallback *callback);
+                                CdCompletionCallback *notify);
 int xglCdReadFilePart(const char *name, void *buffer, int mode,
                       CdCompletionCallback *notify, int offset, int length);
 
@@ -337,6 +301,7 @@ void xglCdPowerOffCB(void)
 void extract(u32 *destination, u32 *source, int byte_count)
 {
     if (source[0] == CD_PACKED_MAGIC && source[3] == 0) {
+        /* The one-pass loop around the call is needed for the original block layout. */
         do {
             xglArxExtract(destination, source);
         } while (0);
@@ -348,7 +313,7 @@ void extract(u32 *destination, u32 *source, int byte_count)
     }
 }
 
-/* Queue-next helper (proposed xglCdQueueNext): reports CD_EVENT_DONE with the
+/* Reports CD_EVENT_DONE with the
  * pending count, starts the request at queue_cursor and advances the cursor. */
 int xglCdQueueNext(void)
 {
@@ -374,8 +339,10 @@ int xglCdQueueNext(void)
 /* completion_callback event of xglCdServiceRead: value is the read position (bytes read for a
  * device-handle read, the drive's read position, or the file offset). */
 #define CD_EVENT_PROGRESS_ASYNC 3
-/* func_0017AF40 result for a finished device-handle read. */
+/* func_0017AF40 results for a device-handle read: busy, finished, failed. */
+#define CD_DEVICE_READ_BUSY 1
 #define CD_DEVICE_READ_DONE 3
+#define CD_DEVICE_READ_ERROR 4
 
 extern unsigned char xglCdServiceActive;
 int func_0017AF10(int handle);
@@ -396,7 +363,7 @@ void xglCdServiceRead(void)
     case CD_SOURCE_DISC:
         if (xglCdDeviceHandle != 0) {
             if (xglCdServiceActive == 0) {
-                LW.completion_callback(CD_EVENT_PROGRESS_ASYNC, func_0017AF10(xglCdDeviceHandle) << 11,
+                LW.completion_callback(CD_EVENT_PROGRESS_ASYNC, func_0017AF10(xglCdDeviceHandle) << CD_SECTOR_SHIFT,
                                        LW.callback_argument);
             }
             if (func_0017AF40(xglCdDeviceHandle) == CD_DEVICE_READ_DONE) {
@@ -432,7 +399,7 @@ void xglCdServiceRead(void)
         LW.write_cursor += transferred;
         LW.remaining_bytes -= transferred;
         if (xglCdServiceActive == 0) {
-            LW.completion_callback(CD_EVENT_PROGRESS_ASYNC, sceLseek(LW.active_file_descriptor, 0, 1),
+            LW.completion_callback(CD_EVENT_PROGRESS_ASYNC, sceLseek(LW.active_file_descriptor, 0, SCE_SEEK_CUR),
                                    LW.callback_argument);
         }
         if (LW.remaining_bytes > 0) {
@@ -460,14 +427,14 @@ void xglCdServiceRead(void)
 }
 
 int func_0017A2E8(unsigned char *table, int mode);
-extern unsigned char D_0068DEC8[];
+extern unsigned char xglCdDeviceName[];
 
 /* Clears the busy byte xglCdServiceActive and stores the device handle from the table
- * at D_0068DEC8 in xglCdDeviceHandle (proposed xglCdOpenDevice). */
+ * at xglCdDeviceName in xglCdDeviceHandle. */
 void xglCdOpenDevice(void)
 {
     xglCdServiceActive = 0;
-    xglCdDeviceHandle = func_0017A2E8(D_0068DEC8, 0);
+    xglCdDeviceHandle = func_0017A2E8(xglCdDeviceName, 0);
 }
 
 /* The stream service state at 0x959CC0. xglCdControlThread gives each open stream of the list a
@@ -495,7 +462,6 @@ extern const char xglCdDev9Device[];
 extern int sceDevctl(const char *device, int command, const void *input,
                      unsigned int input_size, void *output, unsigned int output_size);
 int sceCdPowerOff(int *result);
-int xglCdStreamSeek(CdStreamParam *stream, int sector);
 
 /* One tick of the CD service: counts the clock interval down, runs the power-off sequence when it
  * is pending, then serves the current state: an asynchronous read, or the streams, each for
@@ -665,7 +631,7 @@ void xglClockUInt2DayTime(XglClock *clock_time, unsigned int elapsed)
 #define CD_CHECK_SHELL_OPEN (-2)
 #define CD_CHECK_NOT_READY (-3)
 
-/* Disc identification (proposed xglCdIdentifyDisc): returns the disc's archive flags, 0 with no
+/* Disc identification: returns the disc's archive flags, 0 with no
  * disc, or a CD_CHECK_* value. A disc not identified yet must be ready and a PS2 DVD; its flags
  * come from the sizes of the xenosaga.10 and xenosaga.20 archives, and system.cnf must name an
  * executable whose third letter is 'U'. An identified disc only has its tray and shell checked.
@@ -746,6 +712,7 @@ int xglCdIdentifyDisc(void)
     return LW.disk_flags;
 }
 
+/* The default and the dummy completion callbacks; both ignore every event. */
 void xglCdDefaultCallback(int event, int value, int tag)
 {
 }
@@ -768,7 +735,7 @@ void xglCdReset(void)
     for (i = 0; i < CD_STREAM_LIST_SIZE; i++) {
         xglCdStreamService.list[i] = 0;
     }
-    LW.dispatch_state = 0;
+    LW.dispatch_state = CD_STATE_IDLE;
     callback = xglCdDefaultCallback;
     sceCdPause();
     sceCdSync(0);
@@ -779,13 +746,13 @@ CdCompletionCallback *xglCdSetCallback(int callback_address)
     CdCompletionCallback *old_callback = callback;
 
     switch (callback_address) {
-    case 0:
+    case CD_CALLBACK_DEFAULT:
         callback = xglCdDefaultCallback;
         break;
-    case 1:
+    case CD_CALLBACK_DUMMY:
         callback = xglCdDummyCallback;
         break;
-    case -1:
+    case CD_CALLBACK_KEEP:
         break;
     default:
         callback = (CdCompletionCallback *)callback_address;
@@ -796,7 +763,7 @@ CdCompletionCallback *xglCdSetCallback(int callback_address)
 
 extern int xglCdReadTag;
 
-/* Sets the current read tag xglCdReadTag (proposed xglCdSetReadTag). */
+/* Sets the current read tag xglCdReadTag. */
 void xglCdSetReadTag(int value)
 {
     xglCdReadTag = value;
@@ -942,7 +909,7 @@ int printf(const char *format, ...);
  * by its name on the disc, the host or the HDD. Fills the position record (and opens and seeks
  * the descriptor of a host or HDD file) and returns it, or 0 when the file is missing. The
  * callback gets CD_EVENT_LOOKUP with the path and the current read tag. */
-CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name, CdCompletionCallback *callback)
+CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name, CdCompletionCallback *notify)
 {
     char buffer[CD_PATH_MAX];
     const char *path = name;
@@ -971,21 +938,23 @@ CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name, CdCo
             }
         }
     }
+    /* The archives in order; the first that holds the name wins. The one-pass loop with `break` is
+     * the original's block layout (an if/else chain compiles differently). */
     do {
         entry = &ArcHeader[0].entry;
         if (entry->state != ARC_ENTRY_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
-            name = arcname_1;
+            name = xenosaga00FileName;
             position->source = entry->state;
             break;
         }
         entry = &ArcHeader[1].entry;
         if (entry->state != ARC_ENTRY_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
-            name = arcname_2;
+            name = xenosaga10FileName;
             position->source = entry->state;
         } else {
             entry++;
             if (entry->state != ARC_ENTRY_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
-                name = arcname_3;
+                name = xenosaga20FileName;
                 position->source = entry->state;
             } else {
                 entry = 0;
@@ -1021,9 +990,9 @@ CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name, CdCo
         case CD_SOURCE_HOST:
         case CD_SOURCE_HDD:
             if (position->source == CD_SOURCE_HOST) {
-                cursor = vcd_head_5;
+                cursor = xglCdHostPathHead;
             } else {
-                cursor = hdd_head_6;
+                cursor = xglCdHddPathHead;
             }
             while ((*destination = *cursor) != 0) {
                 cursor++;
@@ -1045,7 +1014,7 @@ CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name, CdCo
             break;
         }
     }
-    callback(CD_EVENT_LOOKUP, (int) path, xglCdReadTag);
+    notify(CD_EVENT_LOOKUP, (int) path, xglCdReadTag);
     switch (position->source) {
     case CD_SOURCE_DISC:
         if (entry != 0) {
@@ -1065,7 +1034,7 @@ CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name, CdCo
         break;
     case CD_SOURCE_HDD:
         if (xglHddCheck() < 0) {
-            return xglCdGetFilePos(position, path, callback);
+            return xglCdGetFilePos(position, path, notify);
         }
         /* fall through */
     case CD_SOURCE_HOST:
@@ -1081,19 +1050,19 @@ CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name, CdCo
         } else {
             position->lbn = 0;
             position->packed = 0;
-            size = sceLseek(descriptor, 0, 2);
+            size = sceLseek(descriptor, 0, SCE_SEEK_END);
             position->stored_bytes = size;
             if (position->packed == 0) {
                 position->size_bytes = size;
             }
         }
-        offset = (long) position->lbn << 11;
-        sceLseek(descriptor, 0, 0);
+        offset = (long) position->lbn << CD_SECTOR_SHIFT;
+        sceLseek(descriptor, 0, SCE_SEEK_SET);
         while (offset > CD_SEEK_STEP) {
-            sceLseek(descriptor, CD_SEEK_STEP, 1);
+            sceLseek(descriptor, CD_SEEK_STEP, SCE_SEEK_CUR);
             offset -= CD_SEEK_STEP;
         }
-        sceLseek(descriptor, offset, 1);
+        sceLseek(descriptor, offset, SCE_SEEK_CUR);
         position->descriptor = descriptor;
         break;
     }
@@ -1134,6 +1103,11 @@ int xglCdGetFileSize(const char *path)
 int func_0017ACE0(int handle, unsigned int lbn, int mode);
 int func_0017A9C0(int handle, int sectors, void *buffer);
 
+/* Reads length bytes of name (the whole file when length <= 0), starting offset bytes into the file, into
+ * buffer. With CD_READ_ASYNC the read is queued behind an active one or started, and the call
+ * returns at once; otherwise it waits, reports progress to notify and retries failed disc reads.
+ * Packed data is read to the end of the buffer and unpacked in place unless CD_READ_NO_EXTRACT is
+ * set. Returns the sector-rounded size, -1 when the file is missing, or CD_READ_BUSY. */
 int xglCdReadFilePart(const char *name, void *buffer, int mode,
                       CdCompletionCallback *notify, int offset, int length)
 {
@@ -1150,17 +1124,17 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
     CdFilePosition *file = &position;
 
     switch ((int)notify) {
-    case 0:
+    case CD_NOTIFY_CURRENT:
         notify = callback;
         break;
-    case 1:
+    case CD_NOTIFY_DUMMY:
         notify = xglCdDummyCallback;
         break;
-    case 2:
+    case CD_NOTIFY_DEFAULT:
         notify = xglCdDefaultCallback;
         break;
     }
-    asynchronous = mode & 1;
+    asynchronous = mode & CD_READ_ASYNC;
     if (asynchronous != 0) {
         if (CD_READ_CONTROL->dispatch_state != CD_STATE_IDLE) {
             if (CD_READ_CONTROL->dispatch_state != CD_STATE_STREAM) {
@@ -1179,13 +1153,13 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
             }
         }
     }
-    if (CD_READ_CONTROL->dispatch_state != CD_STATE_IDLE && mode != 4) {
-        return -3;
+    if (CD_READ_CONTROL->dispatch_state != CD_STATE_IDLE && mode != CD_READ_WHILE_BUSY) {
+        return CD_READ_BUSY;
     }
     if (xglCdGetFilePos(file, name, notify) == 0) {
         return -1;
     }
-    position.lbn += offset >> 11;
+    position.lbn += offset >> CD_SECTOR_SHIFT;
     if (length > 0) {
         position.stored_bytes = length;
     }
@@ -1194,7 +1168,7 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
     CD_READ_CONTROL->callback_argument = xglCdReadTag;
     CD_READ_CONTROL->extract_byte_count = (position.stored_bytes + CD_SECTOR_BYTES - 1) & -CD_SECTOR_BYTES;
     CD_READ_CONTROL->extract_destination = buffer;
-    if (file->packed == 0 || (mode & 2) != 0) {
+    if (file->packed == 0 || (mode & CD_READ_NO_EXTRACT) != 0) {
         CD_READ_CONTROL->extract_source = buffer;
     } else {
         CD_READ_CONTROL->extract_source = (u8 *)buffer
@@ -1204,6 +1178,7 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
     CD_READ_CONTROL->read_poll_mode = position.source;
     switch (position.source) {
     case CD_SOURCE_DISC:
+    /* A failed disc read restarts here (as in XS1); a loop form changes the block order. */
     retry_cd:
         if (xglCdDeviceHandle != 0) {
             func_0017ACE0(xglCdDeviceHandle, position.lbn, 0);
@@ -1225,7 +1200,7 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
         CD_READ_CONTROL->dispatch_state = CD_STATE_SYNC_READ;
         if (xglCdDeviceHandle != 0) {
             while (func_0017AF40(xglCdDeviceHandle) != CD_DEVICE_READ_DONE) {
-                notify(CD_EVENT_PROGRESS, func_0017AF10(xglCdDeviceHandle) << 11, xglCdReadTag);
+                notify(CD_EVENT_PROGRESS, func_0017AF10(xglCdDeviceHandle) << CD_SECTOR_SHIFT, xglCdReadTag);
                 func_0017D150();
             }
         } else {
@@ -1234,8 +1209,8 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
             }
         }
         if (xglCdDeviceHandle != 0) {
-            if (func_0017AF40(xglCdDeviceHandle) == 4) {
-                notify(CD_EVENT_READ_ERROR, 4, xglCdReadTag);
+            if (func_0017AF40(xglCdDeviceHandle) == CD_DEVICE_READ_ERROR) {
+                notify(CD_EVENT_READ_ERROR, CD_DEVICE_READ_ERROR, xglCdReadTag);
                 goto retry_cd;
             }
         } else {
@@ -1288,7 +1263,7 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
         CD_READ_CONTROL->active_file_descriptor = -1;
         break;
     }
-    if ((mode & 2) == 0) {
+    if ((mode & CD_READ_NO_EXTRACT) == 0) {
         extract(CD_READ_CONTROL->extract_destination, CD_READ_CONTROL->extract_source,
                 CD_READ_CONTROL->extract_byte_count);
     }
@@ -1303,7 +1278,7 @@ int xglCdReadFile(const char *name, void *buffer, int mode, int flags)
 }
 
 /* Cancels the active read: clears pending requests, breaks or pauses a sync
- * read, closes an open descriptor and goes idle (proposed xglCdReadCancel). */
+ * read, closes an open descriptor and goes idle. */
 void xglCdReadCancel(int immediate)
 {
     LW.queue_tail = LW.queue_cursor;
@@ -1352,31 +1327,30 @@ void xglCdReadCancel(int immediate)
     LW.dispatch_state = CD_STATE_IDLE;
 }
 
-extern unsigned char xglCdStreamsActive[];
+/* Unsized: the original addresses it absolutely, not through $gp. */
+extern signed char xglCdStreamsActive[];
 
-/* Services the stream list when xglCdStreamsActive is set (proposed xglCdServiceIfPending). */
+/* Services the stream list when xglCdStreamsActive is set. */
 int xglCdServiceIfPending(void)
 {
-    if ((signed char) xglCdStreamsActive[0] == 0) {
+    if (xglCdStreamsActive[0] == 0) {
         return 0;
     }
     xglCdServiceRead();
     return 1;
 }
 
-/* Returns the stream-service flag xglCdStreamsActive (proposed xglCdGetServicePending). */
+/* Returns the stream-service flag xglCdStreamsActive. */
 signed char xglCdGetServicePending(void)
 {
-    return (signed char) xglCdStreamsActive[0];
+    return xglCdStreamsActive[0];
 }
 
-int func_0017AF40(int);
-
-/* Nonzero when the CD side has finished its last request (proposed xglCdSyncDone). */
+/* Nonzero when the CD side has finished its last request. */
 int xglCdSyncDone(void)
 {
     if (xglCdDeviceHandle != 0) {
-        return func_0017AF40(xglCdDeviceHandle) != 1;
+        return func_0017AF40(xglCdDeviceHandle) != CD_DEVICE_READ_BUSY;
     }
     return sceCdSync(1) == 0;
 }
@@ -1437,6 +1411,7 @@ int xglCdStreamOpen(CdStreamParam *stream, const char *path)
         stream->alternate_ring.read_position = 0;
         stream->alternate_ring.write_position = 0;
         for (slot = xglCdStreamService.list, index = 0; index < CD_STREAM_LIST_SIZE; index++, slot++) {
+            /* The redundant second test is needed for the original code. */
             if (*slot == 0 && *slot != stream) {
                 *slot = stream;
                 break;
@@ -1455,14 +1430,14 @@ int StreamReadRingCoreSub(CdStreamParam *stream, unsigned char *buffer, int sect
 
     switch (stream->source) {
     case CD_SOURCE_DISC:
-        result = sceCdStRead(sectors, buffer, 1, &read_error) << 11;
+        result = sceCdStRead(sectors, buffer, 1, &read_error) << CD_SECTOR_SHIFT;
         break;
     case CD_SOURCE_HOST:
     case CD_SOURCE_HDD:
-        result = sceRead(stream->descriptor, buffer, sectors << 11);
+        result = sceRead(stream->descriptor, buffer, sectors << CD_SECTOR_SHIFT);
         break;
     }
-    stream->sector_position += (result + CD_SECTOR_MASK) >> 11;
+    stream->sector_position += (result + CD_SECTOR_MASK) >> CD_SECTOR_SHIFT;
     return result;
 }
 
@@ -1522,7 +1497,7 @@ void StreamReadRingCoreNormal(CdStreamParam *stream)
                 cursor = stream->ring.buffer;
                 bytes = StreamReadRingCoreSub(stream, cursor, sectors[1]);
             }
-            remaining = stream->remaining - ((sectors[0] + sectors[1]) << 11);
+            remaining = stream->remaining - ((sectors[0] + sectors[1]) << CD_SECTOR_SHIFT);
             if (remaining <= 0) {
                 int block_size = stream->block_size;
 
@@ -1542,7 +1517,7 @@ void StreamReadRingCoreNormal(CdStreamParam *stream)
             }
             stream->remaining = remaining;
             stream->ring.write_position =
-                (stream->ring.write_position + ((sectors[0] + sectors[1]) << 11))
+                (stream->ring.write_position + ((sectors[0] + sectors[1]) << CD_SECTOR_SHIFT))
                 % stream->ring.capacity;
         }
     }
@@ -1564,21 +1539,21 @@ void StreamReadRingCoreXss(CdStreamParam *stream)
             if (xss->sectors <= 0) {
                 StreamReadRingCoreSub(stream, xss->source, 1);
                 xss->position = xss->source;
-                xss->value = 0;
-                xss->mode = 0;
+                xss->map_byte = 0;
+                xss->bits_left = 0;
                 xss->sectors = CD_STREAM_XSS_SECTORS;
             } else {
-                if (xss->mode == 0) {
-                    xss->value = *xss->position;
+                if (xss->bits_left == 0) {
+                    xss->map_byte = *xss->position;
                     xss->position += 1;
-                    xss->mode = 8;
+                    xss->bits_left = 8;
                 }
-                ring = ((xss->value >> (8 - xss->mode)) & 1) == 0
+                ring = ((xss->map_byte >> (8 - xss->bits_left)) & 1) == 0
                     ? &stream->ring : &stream->alternate_ring;
                 if (ring->write_position == ring->read_position) {
                     break;
                 }
-                xss->mode--;
+                xss->bits_left--;
                 xss->sectors--;
                 StreamReadRingCoreSub(stream, ring->buffer + ring->write_position, 1);
                 ring->write_position = (ring->write_position + CD_SECTOR_BYTES) % ring->capacity;
@@ -1593,6 +1568,7 @@ void StreamReadRingCoreXss(CdStreamParam *stream)
     }
 }
 
+/* Refills a stream's ring(s): XSS streams through the interleave map, others directly. */
 void xglCdStreamReadRingCore(CdStreamParam *stream)
 {
     if (stream->xss != 0) {
@@ -1602,6 +1578,8 @@ void xglCdStreamReadRingCore(CdStreamParam *stream)
     StreamReadRingCoreNormal(stream);
 }
 
+/* Advances the ring read position by bytes, rounded up to whole sectors, and refills the ring until
+ * the stream ends or the ring is full. */
 int xglCdStreamReadRing(CdStreamParam *stream, int bytes)
 {
     int aligned;
@@ -1629,7 +1607,7 @@ int xglCdStreamRead(CdStreamParam *stream, unsigned char *buffer, int byte_count
     int block_size;
     int tail;
 
-    transferred = StreamReadRingCoreSub(stream, buffer, byte_count >> 11);
+    transferred = StreamReadRingCoreSub(stream, buffer, byte_count >> CD_SECTOR_SHIFT);
     remaining = stream->remaining - transferred;
     if (remaining <= 0)
     {
@@ -1657,7 +1635,7 @@ int xglCdStreamRead(CdStreamParam *stream, unsigned char *buffer, int byte_count
 }
 
 /* Seeks a stream to a sector: clears the exhausted byte, sets remaining from the
- * stored size and seeks the disc or host/HDD descriptor (proposed xglCdStreamSeek). */
+ * stored size and seeks the disc or host/HDD descriptor. */
 int xglCdStreamSeek(CdStreamParam *stream, int sector)
 {
     int offset = sector * CD_SECTOR_BYTES;
@@ -1670,25 +1648,22 @@ int xglCdStreamSeek(CdStreamParam *stream, int sector)
         break;
     case CD_SOURCE_HOST:
     case CD_SOURCE_HDD:
-        sceLseek(stream->descriptor, offset, 0);
+        sceLseek(stream->descriptor, offset, SCE_SEEK_SET);
         break;
     }
     return 0;
 }
 
-/* Seeks a stream to its first sector (proposed xglCdStreamRewind). */
+/* Seeks a stream to its first sector. */
 void xglCdStreamRewind(CdStreamParam *stream)
 {
     xglCdStreamSeek(stream, 0);
 }
 
-/* Closes a stream and drops it from the two-entry list xglCdStreamList (proposed
- * xglCdStreamClose). */
-/* The open streams, two entries. */
-
-/* Unsized: the original addresses it absolutely, not through $gp. */
 int sceCdStStop(void);
 
+/* Closes a stream and drops it from the two-entry list xglCdStreamList; stops disc streaming when
+ * it was the last open stream. */
 int xglCdStreamClose(CdStreamParam *stream)
 {
     CdStreamParam **slot = xglCdStreamService.list;
@@ -1725,13 +1700,13 @@ int xglCdStreamClose(CdStreamParam *stream)
     return 0;
 }
 
-/* Resets a stream record to idle: descriptor -1, buffers cleared (proposed
- * xglCdStreamParamInit). */
+/* Resets a stream record to idle: descriptor -1, buffers cleared. */
 void xglCdStreamParamInit(CdStreamParam *stream)
 {
     stream->alternate_ring.buffer = 0;
     stream->descriptor = -1;
     stream->exhausted = 0;
+    /* The one-pass loop keeps this store where the original has it. */
     do {
         stream->xss = 0;
     } while (0);
@@ -1740,6 +1715,17 @@ void xglCdStreamParamInit(CdStreamParam *stream)
 
 /* The debug file-select state (XS1 layout; xglCdFileSelectListReload reads
  * directory, list and list_size). */
+/* CdFileSelect.state. */
+#define CD_FILE_SELECT_RELOAD 0
+#define CD_FILE_SELECT_LOOKUP 1
+#define CD_FILE_SELECT_IDLE 2
+#define CD_FILE_SELECT_PARENT 3
+/* xglCdFileSelect results: nothing chosen, a file chosen, cancelled, "." chosen. */
+#define CD_FILE_SELECT_NONE 0
+#define CD_FILE_SELECT_FILE 1
+#define CD_FILE_SELECT_CANCEL 2
+#define CD_FILE_SELECT_CURRENT 3
+
 typedef struct CdFileSelect {
     int x;                                         /* +0x000 */
     int y;                                         /* +0x004 */
@@ -1760,7 +1746,7 @@ typedef struct CdFileSelect {
 } CdFileSelect;
 
 /* ".filelist", the name list file read from the selected directory. */
-extern const char listname_7[];
+extern const char xglCdFileListName[];
 int xglDebFileRead(const char *name, void *buffer);
 
 /* Reloads the .filelist name list of the selected directory through
@@ -1783,7 +1769,7 @@ void xglCdFileSelectListReload(CdFileSelect *select)
     for (source = select->directory; *source != 0; source++, destination++) {
         *destination = *source;
     }
-    for (source = listname_7; *source != 0; source++, destination++) {
+    for (source = xglCdFileListName; *source != 0; source++, destination++) {
         *destination = *source;
     }
     *destination = 0;
@@ -1819,7 +1805,7 @@ void xglCdFileSelectSub(CdFileSelect *select)
     int mismatch;
 
     switch (select->state) {
-    case 0:
+    case CD_FILE_SELECT_RELOAD:
     default:
         xglCdFileSelectListReload(select);
         select->path[0] = 0;
@@ -1827,9 +1813,9 @@ void xglCdFileSelectSub(CdFileSelect *select)
         select->list_position = select->list;
         select->entry_count = 1;
         select->first_row = 0;
-        select->state = 1;
+        select->state = CD_FILE_SELECT_LOOKUP;
         /* fall through */
-    case 1:
+    case CD_FILE_SELECT_LOOKUP:
         src = (unsigned char *)select->path;
         dst = prefix;
         if (select->path[0] == 0) {
@@ -1863,12 +1849,14 @@ void xglCdFileSelectSub(CdFileSelect *select)
                 break;
             }
             {
-                unsigned char character;
+                /* Skips this section's names; a separate variable, as reusing `character` moves
+                 * registers. */
+                unsigned char skipped;
 
-                while ((character = *name++) != 0) {
+                while ((skipped = *name++) != 0) {
                     do {
-                        character = *name++;
-                    } while (character != 0);
+                        skipped = *name++;
+                    } while (skipped != 0);
                 }
             }
         }
@@ -1891,11 +1879,11 @@ void xglCdFileSelectSub(CdFileSelect *select)
         if (select->path[0] != 0) {
             select->entry_count += 2;
         }
-        select->state = 2;
+        select->state = CD_FILE_SELECT_IDLE;
         break;
-    case 2:
+    case CD_FILE_SELECT_IDLE:
         return;
-    case 3:
+    case CD_FILE_SELECT_PARENT:
         last = select->path;
         for (cursor = last; *cursor != 0; cursor++) {
             if (*cursor == '/') {
@@ -1907,7 +1895,7 @@ void xglCdFileSelectSub(CdFileSelect *select)
             }
         }
         *last = 0;
-        select->state = 1;
+        select->state = CD_FILE_SELECT_LOOKUP;
         break;
     }
 }
@@ -1943,10 +1931,10 @@ int xglCdFileSelect(CdFileSelect *select)
     xglCdFileSelectSub(select);
     buttons = PadData[0].pressed;
     if ((buttons & PAD_TRIANGLE) != 0) {
-        select->state = 0;
+        select->state = CD_FILE_SELECT_RELOAD;
     }
     if ((buttons & PAD_CROSS) != 0) {
-        return 2;
+        return CD_FILE_SELECT_CANCEL;
     }
     if (PadData[0].repeated & PAD_LEFT) {
         select->cursor -= select->rows;
@@ -1993,16 +1981,16 @@ int xglCdFileSelect(CdFileSelect *select)
         if (select->path[0] != 0) {
             if (select->cursor == 1) {
                 select->cursor = 0;
-                select->state = 2;
+                select->state = CD_FILE_SELECT_IDLE;
                 select->first_row = 0;
-                return 3;
+                return CD_FILE_SELECT_CURRENT;
             }
             select->cursor -= 2;
         }
         if (select->cursor < 0) {
             path = select->path;
             select->cursor = 0;
-            select->state = 3;
+            select->state = CD_FILE_SELECT_PARENT;
             select->first_row = 0;
         } else {
             for (skipped = 0; skipped < select->cursor; skipped++) {
@@ -2024,13 +2012,13 @@ int xglCdFileSelect(CdFileSelect *select)
             } while (*entry++ != 0);
             if (*last == '/') {
                 select->cursor = 0;
-                select->state = 1;
+                select->state = CD_FILE_SELECT_LOOKUP;
                 select->first_row = 0;
             } else {
                 select->cursor = 0;
-                select->state = 3;
+                select->state = CD_FILE_SELECT_PARENT;
                 select->first_row = 0;
-                return 1;
+                return CD_FILE_SELECT_FILE;
             }
         }
     } else {
@@ -2066,12 +2054,12 @@ int xglCdFileSelect(CdFileSelect *select)
         if (index < 2 && select->path[0] != 0) {
             select->print(x + 16, y, fileSelectParentNames[index]);
         } else {
-            select->print(x + 16, y, (char *)list);
+            select->print(x + 16, y, (const char *)list);
             while (*list++ != 0) {
                 ;
             }
             if (*list == 0) {
-                return 0;
+                return CD_FILE_SELECT_NONE;
             }
         }
         y += 8;
@@ -2079,9 +2067,11 @@ int xglCdFileSelect(CdFileSelect *select)
     if (*list != 0) {
         select->print(x, y - 8, fileSelectDownArrowText);
     }
-    return 0;
+    return CD_FILE_SELECT_NONE;
 }
 
+/* Loads IOP module "cdrom0:\IOP\<PATH>.IRX;1" (path upper-cased) with the double-NUL-terminated
+ * argument list args. */
 void xglCdSifLoadModule(const char *path, const char *args)
 {
     char name[CD_PATH_MAX];
@@ -2089,7 +2079,7 @@ void xglCdSifLoadModule(const char *path, const char *args)
     char *dst;
     int args_length;
 
-    src = head_8;
+    src = xglCdModulePathHead;
     dst = name;
     while ((*dst = *src) != 0) {
         src++;
@@ -2101,7 +2091,7 @@ void xglCdSifLoadModule(const char *path, const char *args)
         else
             *dst = *src - ('a' - 'A');
     }
-    src = tail_9;
+    src = xglCdModulePathTail;
     while ((*dst = *src) != 0) {
         src++;
         dst++;
@@ -2123,12 +2113,12 @@ void xglCdSifLoadModule(const char *path, const char *args)
     sceSifLoadModule(name, args_length, args);
 }
 
-/* Loads an overlay ELF from cdrom0 with its .OVL;1 name, after clearing and
- * flushing caches (proposed xglCdLoadOverlay). */
 /* EE memory the overlays load into, cleared before each load. */
 #define CD_OVERLAY_ADDRESS 0xa80000
 #define CD_OVERLAY_SIZE 0x80000
 
+/* Loads overlay OVnn from cdrom0 ("cdrom0:\OVnn.OVL;1") unless it is already loaded, after
+ * clearing its memory and flushing the caches; retries until the load succeeds. */
 void xglCdLoadOverlay(int overlay)
 {
     char name[CD_PATH_MAX];
@@ -2138,7 +2128,7 @@ void xglCdLoadOverlay(int overlay)
 
     if (overlay != loaded_overlay) {
         loaded_overlay = overlay;
-        src = head_10;
+        src = xglCdOverlayPathHead;
         dst = name;
         while ((*dst = *src) != 0) {
             src++;
@@ -2149,18 +2139,18 @@ void xglCdLoadOverlay(int overlay)
         dst[2] = overlay / 10 + '0';
         dst[3] = overlay % 10 + '0';
         dst += 4;
-        src = tail_11;
+        src = xglCdOverlayPathTail;
         while ((*dst = *src) != 0) {
             src++;
             dst++;
         }
         memset((void *)CD_OVERLAY_ADDRESS, 0, CD_OVERLAY_SIZE);
-        FlushCache(0);
-        FlushCache(2);
+        FlushCache(WRITEBACK_DCACHE);
+        FlushCache(INVALIDATE_ICACHE);
         while (sceSifLoadElf(name, exec_data) != 0) {
         }
-        FlushCache(0);
-        FlushCache(2);
+        FlushCache(WRITEBACK_DCACHE);
+        FlushCache(INVALIDATE_ICACHE);
     }
 }
 
@@ -2256,20 +2246,23 @@ unsigned char *xglCdArcInitSub2(unsigned char *archive_data)
     return cursor;
 }
 
+/* Fills ArcHeader from the PFS0 archive header when present, otherwise from the disc, and advances
+ * WorkEnd past the archive data it locates. */
 void xglCdArcInit(void)
 {
     u8 *work = WorkEnd;
     unsigned char header_sectors = 0;
     int descriptor;
 
-    while (xglHddActivate(-1) != 0 && (descriptor = sceOpen(xenosagaPfs0Path, 1)) >= 0) {
-        ArcHeader[0].entry.state = 2;
+    /* Runs at most once (break at the end); as an if, the block order differs from the original. */
+    while (xglHddActivate(-1) != 0 && (descriptor = sceOpen(xenosagaPfs0Path, CD_OPEN_READ)) >= 0) {
+        ArcHeader[0].entry.state = CD_SOURCE_HDD;
         ArcHeader[0].entry.destination = work;
         ArcHeader[0].entry.lbn = 0;
         sceRead(descriptor, work, CD_SECTOR_BYTES);
         header_sectors = work[0];
         sceRead(descriptor, work + CD_SECTOR_BYTES,
-                (header_sectors << 11) - CD_SECTOR_BYTES);
+                (header_sectors << CD_SECTOR_SHIFT) - CD_SECTOR_BYTES);
         sceClose(descriptor);
         break;
     }
@@ -2279,19 +2272,21 @@ void xglCdArcInit(void)
         }
         xglHddActivate(0x100);
     }
+    /* A one-pass loop: as a plain block the original block order is not reproduced. */
     do {
         if (LW.dual_layer_disc != 0) {
             work = xglCdArcInitSub2(work);
-            do {
-            } while (xglCdArcInitSub1(&ArcHeader[1].entry, xenosagaArc10Name, work) <= 0);
+            while (xglCdArcInitSub1(&ArcHeader[1].entry, xenosagaArc10Name, work) <= 0) {
+            }
             work = xglCdArcInitSub2(work);
             LW.search_layer = 1;
-            do {
-            } while (xglCdArcInitSub1(&ArcHeader[2].entry, xenosagaArc20Name, work) <= 0);
+            while (xglCdArcInitSub1(&ArcHeader[2].entry, xenosagaArc20Name, work) <= 0) {
+            }
             LW.search_layer = 0;
             work += ((xglCdArcInitSub2(work) - work) + CD_SECTOR_BYTES - 1) & -CD_SECTOR_BYTES;
         } else {
             work += CD_ARC_LOOKAHEAD_BYTES;
+            /* Neither archive found: mark the slot unused. Runs at most once (break), as in the original. */
             while (xglCdArcInitSub1(&ArcHeader[1].entry, xenosagaArc10Name, work) <= 0
                    && xglCdArcInitSub1(&ArcHeader[1].entry, xenosagaArc20Name, work) <= 0) {
                 ArcHeader[1].entry.state = ARC_ENTRY_UNUSED;
@@ -2305,6 +2300,7 @@ void xglCdArcInit(void)
     WorkEnd = work;
 }
 
+/* Rereads the archive headers into the space they already use, keeping WorkEnd. */
 void xglCdArcCheck(void)
 {
     u8 *saved_work_end = WorkEnd;
@@ -2314,16 +2310,17 @@ void xglCdArcCheck(void)
     WorkEnd = saved_work_end;
 }
 
-/* Subsystem start after the reset: calls xglCdReset, HDD activation, the HDD
- * mount and xglCdArcInit (proposed xglCdInitial); called by InitializeSystem. */
 /* CD stream setup: 0x40 sectors of IOP buffer in 0x10 banks, plus the
  * alignment slack the 0x80-byte rounding needs. */
 #define CD_STREAM_BUFFER_SECTORS 0x40
 #define CD_STREAM_BANKS 0x10
 #define CD_STREAM_IOP_ALIGN 0x80
 #define CD_STREAM_IOP_BYTES (CD_STREAM_BUFFER_SECTORS * CD_SECTOR_BYTES + CD_STREAM_IOP_ALIGN)
-#define SCECdMmodeDvd 2
+/* sceCdMmode media (SDK libcdvd.h). */
+#define SCECdDVD 2
 
+/* Starts the CD subsystem (called by InitializeSystem): drive and stream setup, xglCdReset, the
+ * dual-layer check, HDD activation and mount, then xglCdArcInit. */
 void xglCdInitial(void)
 {
     int on_dual;
@@ -2335,10 +2332,10 @@ void xglCdInitial(void)
     LW.search_layer = 0;
     LW.dual_layer_disc = 0;
     LW.power_off_pending = 0;
-    LW.disk_state = 0;
+    LW.disk_state = CD_DISK_STATE_UNKNOWN;
     LW.disk_flags = 0;
     sceCdInit(0);
-    sceCdMmode(SCECdMmodeDvd);
+    sceCdMmode(SCECdDVD);
     iop_buffer = (unsigned int)sceSifAllocIopHeap(CD_STREAM_IOP_BYTES);
     sceCdStInit(CD_STREAM_BUFFER_SECTORS, CD_STREAM_BANKS,
                 (iop_buffer + CD_STREAM_IOP_ALIGN - 1) & -CD_STREAM_IOP_ALIGN);

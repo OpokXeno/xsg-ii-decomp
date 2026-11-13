@@ -127,7 +127,6 @@ void segAddrOnClearAll(void)
     }
 }
 
-int xglCdGetFileSize(const char *name);
 void *xglCdBufferReserve(int size);
 extern unsigned char D_0068B200[];
 extern unsigned char D_0069D8A0[];
