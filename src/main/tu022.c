@@ -85,7 +85,7 @@ void soundSlotStartFile(int index, const char *fileKey)
 extern const char *adxPathPrefix;
 extern const char adxSlotKeyFormat[];
 int xglCdCheckFile(const char *path, void *record);
-int func_002AA5D8(char *destination, const char *format, ...);
+int sprintf(char *destination, const char *format, ...);
 
 void adxSetSlotFile(int index, const char *name)
 {
@@ -114,7 +114,7 @@ void adxSetSlotFile(int index, const char *name)
     destination[3] = 'x';
     destination[4] = 0;
     xglCdCheckFile(path, record);
-    func_002AA5D8(path, adxSlotKeyFormat, record[0], record[1] >> 11);
+    sprintf(path, adxSlotKeyFormat, record[0], record[1] >> 11);
     soundSlotStartFile(index, path);
 }
 

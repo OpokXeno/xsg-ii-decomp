@@ -191,7 +191,7 @@ extern const char *moviePathPrefix;
 extern const char movieFileKeyFormat[];
 int seVolumeCurve(int level);
 int xglCdCheckFile(const char *path, MovieFileRecord *record);
-int func_002AA5D8(char *destination, const char *format, ...);
+int sprintf(char *destination, const char *format, ...);
 
 /* Starts the movie file `name` on the record's player: sets the volume (unless the record has the
  * extra sound block), builds "<moviePathPrefix><name with / as \>", looks it up on the disc and
@@ -233,7 +233,7 @@ int moviePlayerStartFile(AllocRecord *player, const char *name)
         return -1;
     }
     /* the key is written over the path, from its second character on */
-    func_002AA5D8(path + 1, movieFileKeyFormat, file.lbn, file.stored_bytes >> CD_SECTOR_SHIFT);
+    sprintf(path + 1, movieFileKeyFormat, file.lbn, file.stored_bytes >> CD_SECTOR_SHIFT);
     RECORD_PLAYER(player)->methods->start_file(RECORD_PLAYER(player), path + 1);
     player->frame_stamp = -1;
     return 0;
