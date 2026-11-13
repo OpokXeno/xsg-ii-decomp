@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/xgl_timer0.h"
 #include "main/xgl_cd.h"
 
 /* Writes the low 16 bits of number as a 6-byte name: "cf" then four decimal digits, no NUL. */
@@ -746,7 +747,6 @@ int xglCdLoadFileSet(unsigned int file_id, unsigned int slot, int tag)
 }
 
 void *memset(void *dest, int value, unsigned int count);
-unsigned short xglGetLanguageCode(char *buffer);
 extern u32 gameWork[];
 extern char *D_002B5DBC[];
 
@@ -1229,7 +1229,7 @@ void resResetKindState(int mode) {
         return;
     }
     if (seBgmName[0] != 0) {
-        func_001A37E0(mode + 1, seBgmName, 0x19000);
+        seBgmPlay(mode + 1, seBgmName, 0x19000);
     }
     for (i = 0; i < SE_RECORD_COUNT; i++) {
         flags = resRecordTable[i].flags;
@@ -1423,14 +1423,14 @@ extern signed char seBgmVolume;
 void seBgmNameSet(signed char *name)
 {
     if (*name == 0) {
-        func_001A37E0(1, 0, 0x19000);
+        seBgmPlay(1, 0, 0x19000);
         func_001A3A18();
         seBgmName[0] = 0;
         return;
     }
     if (seNameCopyIfChanged(seBgmName, name) != 0) {
         seVolumeSet(seBgmVolume, 0);
-        func_001A37E0(0x20001, seBgmName, 0x19000);
+        seBgmPlay(0x20001, seBgmName, 0x19000);
     } else {
         seVolumeSet(seBgmVolume, 16);
     }
@@ -3235,7 +3235,7 @@ extern FootRecord D_0033FDC4[];
 extern u8 D_002BB748[];
 extern u8 D_002BB758[];
 int xglFlagsGet8(int flag);
-void func_001A3E10(int mode);
+void seTonePlay(int mode);
 int seBankSetName(int kind, char *text);
 float seSetMaxDistance(float maxDistance);
 
@@ -3284,10 +3284,10 @@ done:
     }
     if (materialGroup < 7) {
         seSetMaxDistance(10);
-        func_001A3E10(-1);
+        seTonePlay(-1);
     } else {
         seSetMaxDistance(60);
-        func_001A3E10(-2);
+        seTonePlay(-2);
     }
     seBankSetName(SE_BANK_FOOT, 0);
     for (i = SE_BANK_FOOT_MATERIAL; i < SE_BANK_ENEMY_FOOT; i++) {

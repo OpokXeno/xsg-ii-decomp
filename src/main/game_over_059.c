@@ -451,7 +451,7 @@ void GameOver(void)
         framebuffer = IMAGE_FRAME_BUFFER;
         jpeg_source = IMAGE_LOAD_BUFFER;
         GameCopyFrame();
-        func_001A37E0(1, D_00688558, 0x19000);
+        seBgmPlay(1, D_00688558, 0x19000);
         xglCdReadFile(D_00688568, (void *)jpeg_source, 0, 1);
         memset(&jpeg, 0, sizeof(jpeg));
         jpeg.source = jpeg_source;
@@ -499,7 +499,7 @@ void GameOver(void)
                 break;
             }
         }
-        func_001A37E0(1, 0, 0x19000);
+        seBgmPlay(1, 0, 0x19000);
         GameCopyFrame();
         xglSleep();
         xglSleep();

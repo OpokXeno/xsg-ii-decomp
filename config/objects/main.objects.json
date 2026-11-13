@@ -41296,9 +41296,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A3668",
+     "name": "seBgmLoadMemory",
      "size": 152,
-     "splat_name": "func_001A3668",
+     "splat_name": "seBgmLoadMemory",
      "va": "0x001a3668",
      "name_basis": "address",
      "provenance": "estimated"
@@ -41314,18 +41314,18 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A37E0",
+     "name": "seBgmPlay",
      "size": 284,
-     "splat_name": "func_001A37E0",
+     "splat_name": "seBgmPlay",
      "va": "0x001a37e0",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A3900",
+     "name": "seBgmStart",
      "size": 280,
-     "splat_name": "func_001A3900",
+     "splat_name": "seBgmStart",
      "va": "0x001a3900",
      "name_basis": "address",
      "provenance": "estimated"
@@ -41368,9 +41368,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A3B38",
+     "name": "seVoiceKindGroup",
      "size": 40,
-     "splat_name": "func_001A3B38",
+     "splat_name": "seVoiceKindGroup",
      "va": "0x001a3b38",
      "name_basis": "address",
      "provenance": "estimated"
@@ -41404,9 +41404,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A3E10",
+     "name": "seTonePlay",
      "size": 408,
-     "splat_name": "func_001A3E10",
+     "splat_name": "seTonePlay",
      "va": "0x001a3e10",
      "name_basis": "address",
      "provenance": "estimated"
@@ -41646,9 +41646,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A41C8",
+     "name": "soundSlotSetLevelIfUnset",
      "size": 64,
-     "splat_name": "func_001A41C8",
+     "splat_name": "soundSlotSetLevelIfUnset",
      "va": "0x001a41c8",
      "name_basis": "address",
      "provenance": "estimated"

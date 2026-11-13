@@ -107,7 +107,7 @@ void soundSlotSetLevel(int index, int value)
 }
 
 /* Sets the level of slot index's voice, unless the slot already has a level (ramp.set_level). */
-void func_001A41C8(int index, int value)
+void soundSlotSetLevelIfUnset(int index, int value)
 {
     SoundSlot *slot;
 

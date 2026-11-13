@@ -185,7 +185,9 @@ void seBgmLoadDefault(int packed, const char *name) {
 
 void func_0013A1B8(int, int);
 
-void func_001A3668(int first, int second, int vsf, int prj, int option) {
+/* The memory form of seBgmLoad: selects song `first`, loads its bank from the files `vsf` and `prj`
+ * already in memory into slot 0 and, when `second` is set, passes it on with the song. */
+void seBgmLoadMemory(int first, int second, int vsf, int prj, int option) {
     func_00139AF0(first);
     seBankLoadMemory(0, vsf, prj, option);
     if (second != 0) {
@@ -222,12 +224,12 @@ void seBgmSetSongLevel(void)
 }
 
 void func_00139C20(int, int);
-void func_001A3900(int, int);
+void seBgmStart(int, int);
 void seVolumeSet(int, int);
 
 /* `packed`: the high 16 bits select the mode, the low 16 bits are the id.
  * `name` is the song name for seBgmLoad; a non-null name also starts playback. */
-void func_001A37E0(int packed, const char *name, int option) {
+void seBgmPlay(int packed, const char *name, int option) {
     int *mode_ref;
     int mode;
     int id;
@@ -245,7 +247,7 @@ void func_001A37E0(int packed, const char *name, int option) {
         mode_ref = &mode;
         seBgmLoad(next_id, name, option);
         if (name != 0) {
-            func_001A3900(id, next_id);
+            seBgmStart(id, next_id);
             /* the address taken here makes this test reload mode */
             if (*mode_ref == 0) {
                 seVolumeSet(-1, 0);
@@ -295,7 +297,7 @@ void func_001A37E0(int packed, const char *name, int option) {
  * SOUND_LEVEL_MAX, SE_VOICE_KIND_MASTER_LEVEL at the default master level. */
 #define SE_VOICE_KIND_LEVELLED 3
 #define SE_VOICE_KIND_MASTER_LEVEL 7
-/* func_001A3E10: a value above SE_TONE_PLAIN_MAX also carries a volume and a pan. */
+/* seTonePlay: a value above SE_TONE_PLAIN_MAX also carries a volume and a pan. */
 #define SE_TONE_PLAIN_MAX 0xFFFFFF
 #define SE_TONE_BANK(packed) ((packed) & 0x7F)
 #define SE_TONE_VOLUME(packed) (((packed) >> 16) & 0x7F)
@@ -310,7 +312,9 @@ void func_00139B70(int, int, int, int);
 /* Returns the reply word of its driver call (lw $2,0x10($sp) at 0x139D7C); not used here. */
 int func_00139D08(int, int channel);
 
-void func_001A3900(int id, int next_id)
+/* Starts song `id` (loaded as `next_id` by seBgmLoad): resets the 16 channels, gives song
+ * SE_SONG_WITH_CHANNEL_SETUP its own setup of MIDI channel 1, then starts playback. */
+void seBgmStart(int id, int next_id)
 {
     int i;
 
@@ -374,19 +378,29 @@ void seVoiceStartDefault(int voice) {
     seVoiceStart(voice, SE_VOLUME_DEFAULT, SE_PAN_CENTRE);
 }
 
-int func_001A3B38(int kind)
+/* The channel group a voice kind plays on: kinds 3 and 4 have their own group, every other kind
+ * shares SE_GROUP_VOICE. */
+#define SE_KIND_GROUP2 3
+#define SE_KIND_GROUP3 4
+#define SE_GROUP_KIND3 2
+#define SE_GROUP_KIND4 3
+#define SE_GROUP_VOICE 4
+/* seTonePlay's channel group. */
+#define SE_GROUP_TONE 1
+
+int seVoiceKindGroup(int kind)
 {
     int group;
 
     switch (kind) {
-    case 3:
-        group = 2;
+    case SE_KIND_GROUP2:
+        group = SE_GROUP_KIND3;
         break;
-    case 4:
-        group = 3;
+    case SE_KIND_GROUP3:
+        group = SE_GROUP_KIND4;
         break;
     default:
-        group = 4;
+        group = SE_GROUP_VOICE;
         break;
     }
     return group;
@@ -406,7 +420,7 @@ void seVoiceStart(int voice, int volume, int pan)
     int kind = SE_VOICE_KIND(voice);
     int channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(voice));
     int note = SE_VOICE_NOTE(voice);
-    int group = func_001A3B38(kind);
+    int group = seVoiceKindGroup(kind);
 
     if (volume < 0) {
         volume = soundCtrl.voice_level;
@@ -433,10 +447,12 @@ void seVoiceStart(int voice, int volume, int pan)
     func_0013A938(group, channel | SE_MSG_DATA1(note) | SE_MSG_NOTE_ON | SE_MSG_DATA2(SOUND_LEVEL_MAX), 0);
 }
 
+/* Sets pan and volume of a playing `voice` (a negative volume: the default voice level, scaled by
+ * the master volume). */
 void seVoiceSetPanVolume(int voice, int volume, int pan)
 {
     int channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(voice));
-    int group = func_001A3B38(SE_VOICE_KIND(voice));
+    int group = seVoiceKindGroup(SE_VOICE_KIND(voice));
 
     if (volume < 0) {
         volume = soundCtrl.voice_level;
@@ -455,7 +471,7 @@ void seVoiceSetPanVolume(int voice, int volume, int pan)
  * control change, a program change and a note off to the kind's channel group. */
 void seVoiceStop(int voice)
 {
-    int group = func_001A3B38(SE_VOICE_KIND(voice));
+    int group = seVoiceKindGroup(SE_VOICE_KIND(voice));
     int channel = SE_VOICE_CHANNEL(voice);
 
     /* shifted in a second step: the one-step form takes other registers */
@@ -468,7 +484,7 @@ void seVoiceStop(int voice)
     func_0013A938(group, channel | SE_MSG_NOTE_OFF, 0);
 }
 
-/* seBendDisabled: nonzero turns the random pitch bend of func_001A3E10 off.
+/* seBendDisabled: nonzero turns the random pitch bend of seTonePlay off.
  * seNextChannel: counts the calls; its low four bits pick the MIDI channel. */
 extern unsigned char seBendDisabled;
 extern unsigned char seNextChannel;
@@ -476,7 +492,7 @@ extern unsigned char seNextChannel;
 /* Plays bank `packed & 0x7F` on channel group 1, on the next channel in turn, with a random pitch
  * bend and one of two notes. A value above 0xFFFFFF also carries the volume (bits 16..22) and the
  * pan (bits 8..14). A negative value only sets seBendDisabled (to packed + 1). */
-void func_001A3E10(int packed)
+void seTonePlay(int packed)
 {
     int channel;
     int random;
@@ -508,12 +524,12 @@ void func_001A3E10(int packed)
     if (volume > SOUND_LEVEL_MAX) {
         volume = SOUND_LEVEL_MAX;
     }
-    func_0013A938(1, channel | SE_MSG_DATA2(bend) | SE_MSG_PITCH_BEND, 0);
-    func_0013A938(1, channel | SE_MSG_DATA2(packed) | SE_MSG_CONTROL_CHANGE, 0);
-    func_0013A938(1, channel | SE_MSG_DATA2(pan)
+    func_0013A938(SE_GROUP_TONE, channel | SE_MSG_DATA2(bend) | SE_MSG_PITCH_BEND, 0);
+    func_0013A938(SE_GROUP_TONE, channel | SE_MSG_DATA2(packed) | SE_MSG_CONTROL_CHANGE, 0);
+    func_0013A938(SE_GROUP_TONE, channel | SE_MSG_DATA2(pan)
                   | SE_MSG_CONTROL_CHANGE | SE_MSG_DATA1(SE_CONTROLLER_PAN), 0);
-    func_0013A938(1, channel | SE_MSG_DATA2(volume)
+    func_0013A938(SE_GROUP_TONE, channel | SE_MSG_DATA2(volume)
                   | SE_MSG_CONTROL_CHANGE | SE_MSG_DATA1(SE_CONTROLLER_EXPRESSION), 0);
-    func_0013A938(1, channel | SE_MSG_PROGRAM_CHANGE, 0);
-    func_0013A938(1, channel | SE_MSG_DATA1(note) | SE_MSG_NOTE_ON | SE_MSG_DATA2(SOUND_LEVEL_MAX), 0);
+    func_0013A938(SE_GROUP_TONE, channel | SE_MSG_PROGRAM_CHANGE, 0);
+    func_0013A938(SE_GROUP_TONE, channel | SE_MSG_DATA1(note) | SE_MSG_NOTE_ON | SE_MSG_DATA2(SOUND_LEVEL_MAX), 0);
 }

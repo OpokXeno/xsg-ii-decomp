@@ -65,11 +65,6 @@ int xglTimer0Get(void)
     return *T0_COUNT & T0_COUNT_MASK;
 }
 
-/*
- * Copies the nine two-letter language codes in xglLanguageCodeTable to the stack and
- * returns the one selected by xglLanguageIndex; a non-null buffer receives its two
- * bytes.
- */
 /* The two-letter codes "en", "jp", "en", "de", "fr", "it", "es", "zh" and "ko",
  * each read as one halfword (first letter in the low byte). */
 typedef struct XglLanguageCodes {
@@ -80,6 +75,8 @@ extern const XglLanguageCodes xglLanguageCodeTable;
 /* Unsized: the original addresses it absolutely, not through the gp. */
 extern unsigned char xglLanguageIndex[];
 
+/* Copies the nine two-letter language codes in xglLanguageCodeTable to the stack and
+ * returns the one selected by xglLanguageIndex; a non-null buffer receives its two bytes. */
 unsigned short xglGetLanguageCode(char *buffer)
 {
     XglLanguageCodes codes = xglLanguageCodeTable;

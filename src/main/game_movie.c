@@ -2,9 +2,11 @@
 #include "gs.h"
 #include "shared.h"
 #include "main/pad.h"
+#include "main/tu017.h"
 #include "main/tu021.h"
 #include "main/tu051.h"
 #include "main/xgl_font.h"
+#include "main/xgl_timer0.h"
 
 char *caption_nextline(char *cursor);
 char *caption_getparam(char *cursor, int *time, char *out);
@@ -291,17 +293,6 @@ void func_001E7C08(void)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-/* The movie player record (AllocRecord of src/main/tu017.c), with the frame counter read back here. */
-typedef struct AllocRecord {
-    int handle;
-    int data_start;
-    int frame;                 /* +0x08 */
-    unsigned char clear_state;
-    unsigned char extra_enabled; /* +0x0D: written by movieRenderBufferAlloc (tu017.c) from its third argument */
-    signed char max_value;
-    unsigned char unmodeled_0f;
-} AllocRecord;
-
 /* The fields of the global game block this file uses: the control word, the pad input delay and the current map. */
 typedef struct MovieGameWork {
     unsigned char unmodeled_00[8];
@@ -333,21 +324,12 @@ extern const char D_00688430[]; /* the "seek error" message with its replay/skip
 
 void fadeClear(void);
 void soundRestart(void);
-int movieRenderBufferSize(int include_extra);
-int movieRenderBufferAlloc(AllocRecord *player, int cursor, int extra_enabled);
 void *GameResArenaReserve(unsigned int bytesWanted);
 void GameResArenaRelease(void);
 int xglCdServiceIfPending(void);
 unsigned char xglFontLoad(int, int);
 void xglRenderClearDepth(void);
-/* Also returns the two-letter code (daddu $2,$3 before its jr); declaring it void moves the '/' constant
- * from $3 to $2. */
-unsigned short xglGetLanguageCode(char *code);
 int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-int moviePlayerStartFile(AllocRecord *player, const char *name);
-int moviePlayerUpdate(AllocRecord *player);
-int moviePlayerPause(AllocRecord *player, int pause);
-int moviePlayerDestroy(AllocRecord *player);
 void xglFontPrintDirect(const char *text);
 char *func_00195E90(int mode, char *cursor, int flag);
 int sprintf(char *destination, const char *format, ...);
@@ -364,7 +346,7 @@ void xglClockAccumulate(void);
 void GameMovieCaptionPlay(const char *name)
 {
     char path[0x40];
-    AllocRecord player;
+    MoviePlayerRecord player;
     char position_control[0x20];
     int replay;
     char *buffer;
@@ -450,7 +432,7 @@ void GameMovieCaptionPlay(const char *name)
                     while (*entry++ != 0) {
                     }
                     time = entry[0] + (entry[1] << 8);
-                    if (time >= 0 && player.frame >= time) {
+                    if (time >= 0 && player.frame_stamp >= time) {
                         text = (char *)(entry + 2);
                     }
                     xglFontPrint(0, 317, 0xFFFFFF, movieCaptionControl);
@@ -498,7 +480,7 @@ void GameMovieCaptionPlay(const char *name)
                 if (status > 0) {
                     break;
                 }
-                if (player.frame >= 0) {
+                if (player.frame_stamp >= 0) {
                     if (gameWork.input_delay != 0) {
                         gameWork.input_delay--;
                     } else if (PadData.pressed & PAD_START) {
