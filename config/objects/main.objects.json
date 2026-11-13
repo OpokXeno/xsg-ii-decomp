@@ -41953,36 +41953,36 @@
    "functions": [
     {
      "binding": "GLOBAL",
-     "name": "func_001A4768",
+     "name": "xglIntcHandlerGs",
      "size": 64,
-     "splat_name": "func_001A4768",
+     "splat_name": "xglIntcHandlerGs",
      "va": "0x001a4768",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A47A8",
+     "name": "xglIntcHandlerVblankStart",
      "size": 64,
-     "splat_name": "func_001A47A8",
+     "splat_name": "xglIntcHandlerVblankStart",
      "va": "0x001a47a8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A47E8",
+     "name": "xglIntcHandlerVblankEnd",
      "size": 64,
-     "splat_name": "func_001A47E8",
+     "splat_name": "xglIntcHandlerVblankEnd",
      "va": "0x001a47e8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4828",
+     "name": "xglIntcHandlerVif0",
      "size": 64,
-     "splat_name": "func_001A4828",
+     "splat_name": "xglIntcHandlerVif0",
      "va": "0x001a4828",
      "name_basis": "address",
      "provenance": "estimated"
@@ -42016,45 +42016,45 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4918",
+     "name": "xglIntcHandlerVu0",
      "size": 64,
-     "splat_name": "func_001A4918",
+     "splat_name": "xglIntcHandlerVu0",
      "va": "0x001a4918",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4958",
+     "name": "xglIntcHandlerVu1",
      "size": 64,
-     "splat_name": "func_001A4958",
+     "splat_name": "xglIntcHandlerVu1",
      "va": "0x001a4958",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4998",
+     "name": "xglIntcHandlerIpu",
      "size": 64,
-     "splat_name": "func_001A4998",
+     "splat_name": "xglIntcHandlerIpu",
      "va": "0x001a4998",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A49D8",
+     "name": "xglIntcHandlerTimer0",
      "size": 64,
-     "splat_name": "func_001A49D8",
+     "splat_name": "xglIntcHandlerTimer0",
      "va": "0x001a49d8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4A18",
+     "name": "xglIntcHandlerTimer1",
      "size": 64,
-     "splat_name": "func_001A4A18",
+     "splat_name": "xglIntcHandlerTimer1",
      "va": "0x001a4a18",
      "name_basis": "address",
      "provenance": "estimated"
@@ -42148,63 +42148,63 @@
    "functions": [
     {
      "binding": "GLOBAL",
-     "name": "xglDmaEventHandler",
+     "name": "xglDmaHandlerVif0",
      "size": 64,
-     "splat_name": "xglDmaEventHandler",
+     "splat_name": "xglDmaHandlerVif0",
      "va": "0x001a4a58",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4A98",
+     "name": "xglDmaHandlerVif1",
      "size": 64,
-     "splat_name": "func_001A4A98",
+     "splat_name": "xglDmaHandlerVif1",
      "va": "0x001a4a98",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4AD8",
+     "name": "xglDmaHandlerGif",
      "size": 64,
-     "splat_name": "func_001A4AD8",
+     "splat_name": "xglDmaHandlerGif",
      "va": "0x001a4ad8",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4B18",
+     "name": "xglDmaHandlerFromIpu",
      "size": 64,
-     "splat_name": "func_001A4B18",
+     "splat_name": "xglDmaHandlerFromIpu",
      "va": "0x001a4b18",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4B58",
+     "name": "xglDmaHandlerToIpu",
      "size": 64,
-     "splat_name": "func_001A4B58",
+     "splat_name": "xglDmaHandlerToIpu",
      "va": "0x001a4b58",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4B98",
+     "name": "xglDmaHandlerFromSpr",
      "size": 64,
-     "splat_name": "func_001A4B98",
+     "splat_name": "xglDmaHandlerFromSpr",
      "va": "0x001a4b98",
      "name_basis": "address",
      "provenance": "estimated"
     },
     {
      "binding": "GLOBAL",
-     "name": "func_001A4BD8",
+     "name": "xglDmaHandlerToSpr",
      "size": 64,
-     "splat_name": "func_001A4BD8",
+     "splat_name": "xglDmaHandlerToSpr",
      "va": "0x001a4bd8",
      "name_basis": "address",
      "provenance": "estimated"

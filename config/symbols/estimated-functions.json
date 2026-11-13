@@ -30624,25 +30624,25 @@
      2
     ],
     [
-     "func_001A4768",
+     "xglIntcHandlerGs",
      1722216,
      64,
      2
     ],
     [
-     "func_001A47A8",
+     "xglIntcHandlerVblankStart",
      1722280,
      64,
      2
     ],
     [
-     "func_001A47E8",
+     "xglIntcHandlerVblankEnd",
      1722344,
      64,
      2
     ],
     [
-     "func_001A4828",
+     "xglIntcHandlerVif0",
      1722408,
      64,
      2
@@ -30666,73 +30666,73 @@
      2
     ],
     [
-     "func_001A4918",
+     "xglIntcHandlerVu0",
      1722648,
      64,
      2
     ],
     [
-     "func_001A4958",
+     "xglIntcHandlerVu1",
      1722712,
      64,
      2
     ],
     [
-     "func_001A4998",
+     "xglIntcHandlerIpu",
      1722776,
      64,
      2
     ],
     [
-     "func_001A49D8",
+     "xglIntcHandlerTimer0",
      1722840,
      64,
      2
     ],
     [
-     "func_001A4A18",
+     "xglIntcHandlerTimer1",
      1722904,
      64,
      2
     ],
     [
-     "xglDmaEventHandler",
+     "xglDmaHandlerVif0",
      1722968,
      64,
      2
     ],
     [
-     "func_001A4A98",
+     "xglDmaHandlerVif1",
      1723032,
      64,
      2
     ],
     [
-     "func_001A4AD8",
+     "xglDmaHandlerGif",
      1723096,
      64,
      2
     ],
     [
-     "func_001A4B18",
+     "xglDmaHandlerFromIpu",
      1723160,
      64,
      2
     ],
     [
-     "func_001A4B58",
+     "xglDmaHandlerToIpu",
      1723224,
      64,
      2
     ],
     [
-     "func_001A4B98",
+     "xglDmaHandlerFromSpr",
      1723288,
      64,
      2
     ],
     [
-     "func_001A4BD8",
+     "xglDmaHandlerToSpr",
      1723352,
      64,
      2

@@ -5,6 +5,7 @@
 #include "main/xgl_studio.h"
 #include "main/tu021.h"
 #include "main/tu022.h"
+#include "main/tu024.h"
 
 /* First address of the work heap WorkEnd tracks. */
 #define WORK_HEAP_START 0xB00000
@@ -47,7 +48,6 @@ void xglPadInitial(void);
 void xglMcInitial(void);
 void *xglTaskInitial(void *manager, int capacity, int reset_gs);
 void xglDmaInitial(void);
-void xglIntrInit(void);
 void xglGeometryInit(void);
 void xglPacketSystemInit(u32 buffer, u32 size, float rate);
 void xglRenderInit(void);

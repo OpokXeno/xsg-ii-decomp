@@ -1,4 +1,5 @@
 #include "common.h"
+#include "shared.h"
 #include "main/tu022.h"
 #include "main/xgl_cd.h"
 
@@ -276,8 +277,7 @@ void func_0017D138(int value);
 int soundVSyncCallback(void)
 {
     func_0017D138(0);
-    /* sync, ei: orders the driver update and re-enables interrupts before the VSync callback returns */
-    __asm__ volatile("sync\n\tei" ::: "memory");
+    ExitHandler();
     return 0;
 }
 

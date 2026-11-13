@@ -1,87 +1,62 @@
 #include "common.h"
 #include "shared.h"
+#include "main/tu024.h"
 
-/* Interrupt handlers of main/tu023. Each handler takes an index, maps it through xglIntcSlotMap to a
- * 16-byte record in xglIntcEventCounts and adds 1 to the word at its start. Nine of the ten handlers are the
- * same code; the table of handler addresses starts at 0x00644FC4 with 16-byte entries. */
+/* The INTC handlers registered in xglIntcRecords (main/tu024.h), one per cause: GS, VBlank start,
+ * VBlank end, VIF0, VIF1, VU0, VU1, IPU, timer 0, timer 1 (causes 0 and 2..10). Each bumps the
+ * count of its cause's record; nine of the ten are the same code, the VIF1 one also runs the timer
+ * accumulator. */
 
 /* EE timer 1 count, and VIF1_FBRST, whose STC bit cancels a VIF1 stall. */
 #define T1_COUNT ((volatile u32 *) 0x10000800)
 #define VIF1_FBRST ((volatile u32 *) 0x10003c10)
 #define VIF_FBRST_STC 8
 
-/* xglIntcEventCounts labels the count word of the first 16-byte record of
- * the INTC table (see tu024.c); the handlers bump the count of their slot. */
-typedef struct XglIntrCountSlot {
-    int count;
-    unsigned char unmodeled_04[12];
-} XglIntrCountSlot;
-
-/* Written by the main thread, read here in interrupt context (see tu024.c). */
-extern volatile int xglIntcSlotMap[];
-extern XglIntrCountSlot xglIntcEventCounts[];
-
-/* Timer accumulator: intrTimerActive active flag, intrTimerStart start count, intrTimerAccum ticks total. */
-extern int intrTimerActive;
-extern int intrTimerStart;
-extern int intrTimerAccum;
-
-int func_001A4768(int index)
+int xglIntcHandlerGs(int index)
 {
-    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-    record->count++;
-    /* sync: orders the count store before the interrupt returns */
-    __asm__ volatile("sync" ::: "memory");
-    /* ei: re-enables interrupts in the handler context */
-    __asm__ volatile("ei");
+    (*count)++;
+    ExitHandler();
     return 0;
 }
 
-int func_001A47A8(int index)
+int xglIntcHandlerVblankStart(int index)
 {
-    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-    record->count++;
-    /* sync: orders the count store before the interrupt returns */
-    __asm__ volatile("sync" ::: "memory");
-    /* ei: re-enables interrupts in the handler context */
-    __asm__ volatile("ei");
+    (*count)++;
+    ExitHandler();
     return 0;
 }
 
-int func_001A47E8(int index)
+int xglIntcHandlerVblankEnd(int index)
 {
-    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-    record->count++;
-    /* sync: orders the count store before the interrupt returns */
-    __asm__ volatile("sync" ::: "memory");
-    /* ei: re-enables interrupts in the handler context */
-    __asm__ volatile("ei");
+    (*count)++;
+    ExitHandler();
     return 0;
 }
 
-int func_001A4828(int index)
+int xglIntcHandlerVif0(int index)
 {
-    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-    record->count++;
-    /* sync: orders the count store before the interrupt returns */
-    __asm__ volatile("sync" ::: "memory");
-    /* ei: re-enables interrupts in the handler context */
-    __asm__ volatile("ei");
+    (*count)++;
+    ExitHandler();
     return 0;
 }
 
-/* Timer accumulator. It reads the EE timer 1 count (0x10000800). When intrTimerActive is set it adds the
- * ticks since the start count to intrTimerAccum and clears the flag; otherwise it sets the flag and
- * records the start count. The same handler also bumps its counter record. */
+/* The VIF1 handler and timer accumulator. It reads the EE timer 1 count (0x10000800). When
+ * intrTimerActive is set it adds the ticks since the start count to intrTimerAccum and clears the
+ * flag; otherwise it sets the flag and records the start count. It also bumps its count and
+ * cancels a VIF1 stall. */
 int intrTimerAccumulate(int index)
 {
-    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-    record->count++;
+    (*count)++;
     if (intrTimerActive) {
         intrTimerAccum += *T1_COUNT - intrTimerStart;
         intrTimerActive = 0;
@@ -90,10 +65,7 @@ int intrTimerAccumulate(int index)
         intrTimerActive = 1;
     }
     *VIF1_FBRST = VIF_FBRST_STC;
-    /* sync: orders the stores before the interrupt returns */
-    __asm__ volatile("sync" ::: "memory");
-    /* ei: re-enables interrupts in the handler context */
-    __asm__ volatile("ei");
+    ExitHandler();
     return 0;
 }
 
@@ -111,62 +83,47 @@ int intrTimerGetAccum(void)
     return intrTimerAccum;
 }
 
-int func_001A4918(int index)
+int xglIntcHandlerVu0(int index)
 {
-    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-    record->count++;
-    /* sync: orders the count store before the interrupt returns */
-    __asm__ volatile("sync" ::: "memory");
-    /* ei: re-enables interrupts in the handler context */
-    __asm__ volatile("ei");
+    (*count)++;
+    ExitHandler();
     return 0;
 }
 
-int func_001A4958(int index)
+int xglIntcHandlerVu1(int index)
 {
-    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-    record->count++;
-    /* sync: orders the count store before the interrupt returns */
-    __asm__ volatile("sync" ::: "memory");
-    /* ei: re-enables interrupts in the handler context */
-    __asm__ volatile("ei");
+    (*count)++;
+    ExitHandler();
     return 0;
 }
 
-int func_001A4998(int index)
+int xglIntcHandlerIpu(int index)
 {
-    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-    record->count++;
-    /* sync: orders the count store before the interrupt returns */
-    __asm__ volatile("sync" ::: "memory");
-    /* ei: re-enables interrupts in the handler context */
-    __asm__ volatile("ei");
+    (*count)++;
+    ExitHandler();
     return 0;
 }
 
-int func_001A49D8(int index)
+int xglIntcHandlerTimer0(int index)
 {
-    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-    record->count++;
-    /* sync: orders the count store before the interrupt returns */
-    __asm__ volatile("sync" ::: "memory");
-    /* ei: re-enables interrupts in the handler context */
-    __asm__ volatile("ei");
+    (*count)++;
+    ExitHandler();
     return 0;
 }
 
-int func_001A4A18(int index)
+int xglIntcHandlerTimer1(int index)
 {
-    XglIntrCountSlot *record = &xglIntcEventCounts[xglIntcSlotMap[index]];
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-    record->count++;
-    /* sync: orders the count store before the interrupt returns */
-    __asm__ volatile("sync" ::: "memory");
-    /* ei: re-enables interrupts in the handler context */
-    __asm__ volatile("ei");
+    (*count)++;
+    ExitHandler();
     return 0;
 }
