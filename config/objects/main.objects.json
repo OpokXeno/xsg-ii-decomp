@@ -4061,7 +4061,6 @@
   "tu012",
   "xgl_mc",
   "xgl_1_014",
-  "sce_ipu",
   "xgl_1_016",
   "tu017",
   "xgl_flags",
@@ -9250,9 +9249,9 @@
     },
     {
      "binding": "GLOBAL",
-     "name": "func_00131380",
+     "name": "sceIpuSync",
      "size": 104,
-     "splat_name": "func_00131380",
+     "splat_name": "sceIpuSync",
      "va": "0x00131380",
      "name_basis": "address",
      "provenance": "estimated"
@@ -39885,101 +39884,6 @@
    }
   },
   {
-   "id": "main/tu015",
-   "unit": "main",
-   "ordinal": 15,
-   "name": "sce_ipu",
-   "path": "src/main/sce_ipu.c",
-   "scaffold_path": "scaffold/src/main/sce_ipu.c",
-   "kind": "gcc",
-   "mode": "c",
-   "category": "game",
-   "map_class": "game",
-   "domain": null,
-   "in_scope": true,
-   "boundary_kind": "inferred",
-   "boundary_evidence": [
-    "x1_homolog: src/main/xgl_1.c -> src/main/sce_ipu.c"
-   ],
-   "boundary_confidence": "medium",
-   "provisional": true,
-   "name_basis": "X1 file of 1 homolog function(s)",
-   "name_confidence": "medium",
-   "contract": {
-    "assembler": "LA29-vsqrt-swap-g (corrected ee-as with the per-object flag -g)",
-    "assembler_path": "tool:ee-as-la29-vsqrt-swap",
-    "assembler_sha256": "448143a3f1f7ecd4fffb79ea3e641afa36863895366873f93462028535f95494",
-    "cc1_sha256": "58a63b84ed4385101b1135a71919a2516f2d6c61b80258b5917ccd47bc56b1f4",
-    "cc_dir": "tool:ee-gcc2.96-realconv-lp7",
-    "compiler_profile": "ee-gcc2_96-realconv-lp7",
-    "flags": [
-     "-O2",
-     "-G0"
-    ],
-    "language": "c",
-    "source_class": "c",
-    "assembler_options": [
-     "-g"
-    ]
-   },
-   "contract_evidence": {
-    "compiler": "2.96",
-    "compiler_confidence": "medium",
-    "assembler_class": "LA29",
-    "assembler_confidence": "medium",
-    "g_flag": "-G0",
-    "g_basis": "no gp-relative instruction in the code; -G0 cannot add one",
-    "g_confidence": "medium",
-    "optimization": "-O2",
-    "source": "reports/x2-compiler-calibration.md"
-   },
-   "accepted": {
-    "all_functions_accepted": false,
-    "functions": 0,
-    "of": 1,
-    "migration_hints": [],
-    "records": []
-   },
-   "functions": [
-    {
-     "binding": "GLOBAL",
-     "name": "setD4_CHCR",
-     "size": 92,
-     "splat_name": "setD4_CHCR",
-     "va": "0x0019f300",
-     "name_basis": "annotation",
-     "provenance": "estimated"
-    }
-   ],
-   "owners": {
-    ".text": "c"
-   },
-   "sections": {},
-   "text": {
-    "start": "0x0019f300",
-    "end": "0x0019f360",
-    "code_end": "0x0019f35c",
-    "size": 96,
-    "splat": "c",
-    "splat_range": [
-     "0x0019f300",
-     "0x0019f360"
-    ],
-    "note": null
-   },
-   "import": {
-    "mode": "c",
-    "note": "X1 C under express order (user 2026-11-05)",
-    "source": {
-     "kind": "file",
-     "path": "src/main/sce_ipu.c",
-     "include_dirs": [
-      "include"
-     ]
-    }
-   }
-  },
-  {
    "id": "main/tu016",
    "unit": "main",
    "ordinal": 16,
@@ -39994,7 +39898,8 @@
    "in_scope": true,
    "boundary_kind": "inferred",
    "boundary_evidence": [
-    "x1_homolog: src/main/sce_ipu.c -> src/main/xgl_1.c"
+    "x1_homolog: src/main/xgl_1.c",
+    "merged main/tu015 sce_ipu (setD4_CHCR 0x0019f300): XS1 defines it static in xgl_1.c before checkdma, and checkdma only matches with the definition in the same TU"
    ],
    "boundary_confidence": "medium",
    "provisional": true,
@@ -40031,11 +39936,20 @@
    "accepted": {
     "all_functions_accepted": false,
     "functions": 0,
-    "of": 7,
+    "of": 8,
     "migration_hints": [],
     "records": []
    },
    "functions": [
+    {
+     "binding": "GLOBAL",
+     "name": "setD4_CHCR",
+     "size": 92,
+     "splat_name": "setD4_CHCR",
+     "va": "0x0019f300",
+     "name_basis": "annotation",
+     "provenance": "estimated"
+    },
     {
      "binding": "GLOBAL",
      "name": "make_gstrans",
@@ -40131,13 +40045,13 @@
     }
    },
    "text": {
-    "start": "0x0019f360",
+    "start": "0x0019f300",
     "end": "0x001a01d8",
     "code_end": "0x001a01d8",
-    "size": 3704,
+    "size": 3800,
     "splat": "c",
     "splat_range": [
-     "0x0019f360",
+     "0x0019f300",
      "0x001a01d8"
     ],
     "note": null
@@ -60183,7 +60097,7 @@
    },
    "import": {
     "mode": "c",
-    "note": "Ahora actua como orquestrador de hasta 20 suabgentes T1 y T2 para: 16 TUs \u00b7 219 funciones \u00b7 71,2 KB tu074 \u2026 tu089 (express integration of banked exact functions, x2-c12)",
+    "note": "Ahora actua como orquestrador de hasta 20 suabgentes T1 y T2 para: 16 TUs · 219 funciones · 71,2 KB tu074 … tu089 (express integration of banked exact functions, x2-c12)",
     "source": {
      "kind": "file",
      "path": "src/main/tu087.c",
@@ -60497,7 +60411,7 @@
    },
    "import": {
     "mode": "c",
-    "note": "Ahora actua como orquestrador de hasta 20 suabgentes T1 y T2 para: 16 TUs \u00b7 219 funciones \u00b7 71,2 KB tu074 \u2026 tu089 (express integration of banked exact functions, x2-c12)",
+    "note": "Ahora actua como orquestrador de hasta 20 suabgentes T1 y T2 para: 16 TUs · 219 funciones · 71,2 KB tu074 … tu089 (express integration of banked exact functions, x2-c12)",
     "source": {
      "kind": "file",
      "path": "src/main/tu088.c",

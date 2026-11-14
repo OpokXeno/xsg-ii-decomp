@@ -14,7 +14,9 @@ typedef struct RenderFrameState {
     unsigned short page_width;      /* +0x10: XglRenderVram.width of xgl_render.c */
     unsigned short page_height;     /* +0x12 */
     unsigned short frame_base;      /* +0x14: sRenderFrameBase */
-    unsigned char unmodeled_16[0x0A];
+    unsigned char unmodeled_16[4];
+    unsigned short frame_base_1;    /* +0x1A: the second page xgl_1_016 uploads movie strips to */
+    unsigned char unmodeled_1c[4];
     unsigned short display_base;    /* +0x20: sRenderDisplayBase */
     unsigned short copy_base;       /* +0x22 */
     unsigned char unmodeled_24[0x84 - 0x24];

@@ -198,6 +198,8 @@
    "0x0069e385": "seNextChannel",
    "0x0069e382": "xglMcQueueTop",
    "0x0068df88": "xglMcBasePath",
+   "0x0068e0a8": "frameDropMessage",
+   "0x0068e0b8": "ipuTimeoutMessage",
    "0x0068e0d0": "movieFileKeyFormat",
    "0x0068e1b8": "adxPathPrefixString",
    "0x00644ed0": "seVolumeCurveTable",
