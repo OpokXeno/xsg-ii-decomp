@@ -71,7 +71,33 @@ struct CdStreamParam {
  * work buffers they reuse for the record. */
 int xglCdCheckFile(const char *path, void *record);
 void xglCdArcCheck(void);
+/* A callback gets a third argument: the current read tag from xglCdGetFilePos (lw $6 at
+ * 0x19BA04), the request's argument from the read service. */
+typedef void CdCompletionCallback(int event, int value, int tag);
+
+/* xglCdReadFilePart's callback argument may instead select one: the current global callback,
+ * the dummy or the default one (xglCdReadFile passes its flags argument through as it). */
+#define CD_NOTIFY_CURRENT 0
+#define CD_NOTIFY_DUMMY 1
+#define CD_NOTIFY_DEFAULT 2
+/* xglCdReadFilePart mode bits: queue or start the read and return at once; leave the data packed
+ * where it was read; read even while another read is active (only as the whole mode). */
+#define CD_READ_SYNC 0
+#define CD_READ_ASYNC 1
+#define CD_READ_NO_EXTRACT 2
+#define CD_READ_WHILE_BUSY 4
+
+/* Overlay numbers for xglCdLoadOverlay. */
+#define OVERLAY_TITLE 2
+
+int xglCdReadFilePart(const char *name, void *buffer, int mode,
+                      CdCompletionCallback *notify, int offset, int length);
 int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
+void xglCdSifLoadModule(const char *path, const char *args);
+void xglCdInitial(void);
+void xglCdOpenDevice(void);
+void xglCdControlThread(void);
+void xglCdLoadOverlay(int overlay);
 int xglCdServiceIfPending(void);
 void xglCdSetReadTag(int value);
 int xglCdGetFileSize(const char *path);

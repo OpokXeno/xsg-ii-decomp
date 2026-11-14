@@ -51,10 +51,6 @@ extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),
                                 XglTaskPrefix *entry);
 
-/* A callback gets a third argument: the current read tag from xglCdGetFilePos (lw $6 at
- * 0x19BA04), the request's argument from the read service. */
-typedef void CdCompletionCallback(int event, int value, int tag);
-
 int sceCdStSeek(unsigned int lbn);
 int sceLseek(int descriptor, int offset, int whence);
 /* sceLseek origins (SDK sceio.h). */
@@ -70,7 +66,7 @@ typedef struct CdReadMode {
 
 /* Only the fields xglCdArcInitSub1 writes are evidenced here. */
 typedef struct CdArchiveEntry {
-    unsigned char state;
+    unsigned char source;   /* CD_SOURCE_*, or CD_SOURCE_UNUSED */
     unsigned char unmodeled_01;
     unsigned char packed;
     unsigned char unmodeled_03;
@@ -94,18 +90,10 @@ unsigned int xglClockDayTime2UInt(XglClock *clock_time);
 #define CD_CALLBACK_DEFAULT 0
 #define CD_CALLBACK_DUMMY 1
 #define CD_CALLBACK_KEEP (-1)
-/* xglCdReadFilePart's callback argument may instead select one: the current global callback,
- * the dummy or the default one (xglCdReadFile passes its flags argument through as it). */
-#define CD_NOTIFY_CURRENT 0
-#define CD_NOTIFY_DUMMY 1
-#define CD_NOTIFY_DEFAULT 2
-/* xglCdReadFilePart mode bits: queue or start the read and return at once; leave the data packed
- * where it was read; read even while another read is active (only as the whole mode). */
-#define CD_READ_ASYNC 1
-#define CD_READ_NO_EXTRACT 2
-#define CD_READ_WHILE_BUSY 4
 /* xglCdReadFilePart result while another read is active. */
 #define CD_READ_BUSY (-3)
+/* sceCdGetError: the read was aborted (SDK libcdvd.h); higher codes are real errors. */
+#define SCECdErABRT 1
 
 void xglCdPowerOffCB(void);
 void xglClockUInt2DayTime(XglClock *clock_time, unsigned int elapsed);
@@ -126,7 +114,8 @@ extern void xglHddErrorScreen(void);
 #define ARC_RECORD_TYPE_EXTRA_BYTES 3
 #define ARC_TABLE_ALIGN_BYTES      64
 #define CD_PACKED_MAGIC 0x585241
-#define ARC_ENTRY_UNUSED 0xff
+/* CdArchiveEntry.source of an archive slot that holds nothing. */
+#define CD_SOURCE_UNUSED 0xff
 /* CdReadControl.dispatch_state: what the control thread is doing. */
 #define CD_STATE_IDLE 0
 #define CD_STATE_SYNC_READ 1
@@ -281,9 +270,6 @@ void xglCdDummyCallback(int event, int value, int tag);
 int xglCdGetFilePosSub(CdArchiveEntry *entry, const char *path);
 CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name,
                                 CdCompletionCallback *notify);
-int xglCdReadFilePart(const char *name, void *buffer, int mode,
-                      CdCompletionCallback *notify, int offset, int length);
-
 void hdd_error(void)
 {
     int *descriptor = &LW.active_file_descriptor;
@@ -327,7 +313,7 @@ int xglCdQueueNext(void)
     if (CD_READ_CONTROL->queue_tail != CD_READ_CONTROL->queue_cursor) {
         request = &CD_READ_CONTROL->requests[CD_READ_CONTROL->queue_cursor];
         xglCdSetReadTag(request->tag);
-        xglCdReadFilePart(request->name, request->buffer, 1,
+        xglCdReadFilePart(request->name, request->buffer, CD_READ_ASYNC,
                           request->completion_callback, request->offset,
                           request->length);
         CD_READ_CONTROL->queue_cursor = (CD_READ_CONTROL->queue_cursor + 1) & CD_QUEUE_INDEX_MASK;
@@ -678,6 +664,8 @@ int xglCdIdentifyDisc(void)
             return CD_CHECK_NOT_READY;
         }
         LW.disk_flags = 0;
+        /* xenosaga.10/.20 are archive headers: xglCdArcInit reads them into the reserve it keeps
+         * after the first header, so a larger file is not accepted. */
         size = xglCdGetFileSize(xenosagaArc10Name);
         if (size > 0 && size <= CD_ARC_HEADER_RESERVE) {
             LW.disk_flags |= CD_DISC_FLAG_ARC10;
@@ -692,7 +680,7 @@ int xglCdIdentifyDisc(void)
         text = WorkEnd;
         while (xglCdServiceIfPending() != 0) {
         }
-        xglCdReadFile(xglCdSystemCnfName, text, 0, 1);
+        xglCdReadFile(xglCdSystemCnfName, text, CD_READ_SYNC, CD_NOTIFY_DUMMY);
         while (*text++ != '\\') {
         }
         if (text[2] != 'U') {
@@ -704,7 +692,7 @@ int xglCdIdentifyDisc(void)
             LW.disk_state = CD_DISK_STATE_TRAY_CHANGED;
             return CD_CHECK_SHELL_OPEN;
         }
-        if (sceCdStatus() == state) {
+        if (sceCdStatus() == CD_STATUS_SHELL_OPEN) {
             LW.disk_state = CD_DISK_STATE_UNKNOWN;
             return CD_CHECK_SHELL_OPEN;
         }
@@ -942,20 +930,20 @@ CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name, CdCo
      * the original's block layout (an if/else chain compiles differently). */
     do {
         entry = &ArcHeader[0].entry;
-        if (entry->state != ARC_ENTRY_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
+        if (entry->source != CD_SOURCE_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
             name = xenosaga00FileName;
-            position->source = entry->state;
+            position->source = entry->source;
             break;
         }
         entry = &ArcHeader[1].entry;
-        if (entry->state != ARC_ENTRY_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
+        if (entry->source != CD_SOURCE_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
             name = xenosaga10FileName;
-            position->source = entry->state;
+            position->source = entry->source;
         } else {
             entry++;
-            if (entry->state != ARC_ENTRY_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
+            if (entry->source != CD_SOURCE_UNUSED && xglCdGetFilePosSub(entry, name) != 0) {
                 name = xenosaga20FileName;
-                position->source = entry->state;
+                position->source = entry->source;
             } else {
                 entry = 0;
             }
@@ -1215,7 +1203,7 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
             }
         } else {
             result = sceCdGetError();
-            if ((unsigned int)result >= 2) {
+            if ((unsigned int)result > SCECdErABRT) {
                 notify(CD_EVENT_READ_ERROR, result, xglCdReadTag);
                 goto retry_cd;
             }
@@ -2186,7 +2174,7 @@ int xglCdArcInitSub1(CdArchiveEntry *archive_entry,
 
     archive_entry->destination = destination;
     archive_entry->lbn = file_position.lbn;
-    archive_entry->state = 0;
+    archive_entry->source = CD_SOURCE_DISC;
 
     /* xglCdArcInitSub0 only reads its `archive_entry` argument's leading
      * word as an LBN, so the file position's own lbn field (the one
@@ -2256,7 +2244,7 @@ void xglCdArcInit(void)
 
     /* Runs at most once (break at the end); as an if, the block order differs from the original. */
     while (xglHddActivate(-1) != 0 && (descriptor = sceOpen(xenosagaPfs0Path, CD_OPEN_READ)) >= 0) {
-        ArcHeader[0].entry.state = CD_SOURCE_HDD;
+        ArcHeader[0].entry.source = CD_SOURCE_HDD;
         ArcHeader[0].entry.destination = work;
         ArcHeader[0].entry.lbn = 0;
         sceRead(descriptor, work, CD_SECTOR_BYTES);
@@ -2270,7 +2258,7 @@ void xglCdArcInit(void)
         if (xglCdArcInitSub1(&ArcHeader[0].entry, xenosagaArc00Name, work) == 0) {
             return;
         }
-        xglHddActivate(0x100);
+        xglHddActivate(HDD_ACTIVATE_NO_ARC_CHECK);
     }
     /* A one-pass loop: as a plain block the original block order is not reproduced. */
     do {
@@ -2289,7 +2277,7 @@ void xglCdArcInit(void)
             /* Neither archive found: mark the slot unused. Runs at most once (break), as in the original. */
             while (xglCdArcInitSub1(&ArcHeader[1].entry, xenosagaArc10Name, work) <= 0
                    && xglCdArcInitSub1(&ArcHeader[1].entry, xenosagaArc20Name, work) <= 0) {
-                ArcHeader[1].entry.state = ARC_ENTRY_UNUSED;
+                ArcHeader[1].entry.source = CD_SOURCE_UNUSED;
                 work[0] = 0;
                 work[1] = 0;
                 break;
@@ -2343,13 +2331,13 @@ void xglCdInitial(void)
     on_dual = 0;
     layer1_start = 0;
     sceCdReadDvdDualInfo(&on_dual, &layer1_start);
-    loaded_overlay = 2;
+    loaded_overlay = OVERLAY_TITLE;
     LW.dual_layer_disc = on_dual;
-    ArcHeader[0].entry.state = ARC_ENTRY_UNUSED;
-    ArcHeader[1].entry.state = ARC_ENTRY_UNUSED;
-    ArcHeader[2].entry.state = ARC_ENTRY_UNUSED;
-    ArcHeader[3].entry.state = ARC_ENTRY_UNUSED;
-    xglHddActivate(0x100);
+    ArcHeader[0].entry.source = CD_SOURCE_UNUSED;
+    ArcHeader[1].entry.source = CD_SOURCE_UNUSED;
+    ArcHeader[2].entry.source = CD_SOURCE_UNUSED;
+    ArcHeader[3].entry.source = CD_SOURCE_UNUSED;
+    xglHddActivate(HDD_ACTIVATE_NO_ARC_CHECK);
     xglHddMount();
     xglCdArcInit();
 }
