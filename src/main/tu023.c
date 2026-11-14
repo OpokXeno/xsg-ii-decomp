@@ -12,9 +12,9 @@
 #define VIF1_FBRST ((volatile u32 *) 0x10003c10)
 #define VIF_FBRST_STC 8
 
-int xglIntcHandlerGs(int index)
+int xglIntcHandlerGs(int cause)
 {
-    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
+    int *count = &xglIntcRecords[xglIntcSlotMap[cause]].count;
 
     (*count)++;
     ExitHandler();

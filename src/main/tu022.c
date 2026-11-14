@@ -46,7 +46,7 @@ void soundSlotStartFile(int index, const char *fileKey)
     SoundSlot *slot;
 
     if (index < 2) {
-        slot = &soundSlots[index];
+        slot = &soundCtrl.slots[index];
         func_00184250(slot->driver_id, 1);
         func_00184A78(slot->driver_id, fileKey);
     }
@@ -101,7 +101,7 @@ void soundSlotSetLevel(int index, int value)
     SoundSlot *slot;
 
     if (index < 2) {
-        slot = &soundSlots[index];
+        slot = &soundCtrl.slots[index];
         func_00184310(slot->driver_id, value);
         slot->ramp.set_level = (unsigned char) value;
     }
@@ -113,7 +113,7 @@ void soundSlotSetLevelIfUnset(int index, int value)
     SoundSlot *slot;
 
     if (index < 2) {
-        slot = &soundSlots[index];
+        slot = &soundCtrl.slots[index];
         if (slot->ramp.set_level != 0) {
             return;
         }
@@ -129,7 +129,7 @@ void soundSlotStop(int index)
     SoundSlot *slot;
 
     if (index < 2) {
-        slot = &soundSlots[index];
+        slot = &soundCtrl.slots[index];
         func_00183220(slot->driver_id);
         func_00184310(slot->driver_id, 0);
     }
@@ -196,7 +196,7 @@ int soundSlotStatus(int index)
     if (index >= 2) {
         return -1;
     }
-    return func_001832E0(soundSlots[index].driver_id);
+    return func_001832E0(soundCtrl.slots[index].driver_id);
 }
 
 int func_00184220(int id);
@@ -207,7 +207,7 @@ int func_001A43A8(int index)
     if (index >= 2) {
         return -1;
     }
-    return func_00184220(soundSlots[index].driver_id);
+    return func_00184220(soundCtrl.slots[index].driver_id);
 }
 
 /* The same as soundSlotStartFile. */

@@ -6,6 +6,7 @@
 #include "main/tu021.h"
 #include "main/tu022.h"
 #include "main/tu024.h"
+#include "main/xgl_cd.h"
 
 /* First address of the work heap WorkEnd tracks. */
 #define WORK_HEAP_START 0xB00000
@@ -42,8 +43,6 @@ int sceSifLoadFileReset(void);
 int sceCdMmode(int media);
 int sceFsReset(void);
 
-int xglCdSifLoadModule(const char *path, const char *args);
-void xglCdInitial(void);
 void xglPadInitial(void);
 void xglMcInitial(void);
 void *xglTaskInitial(void *manager, int capacity, int reset_gs);
@@ -97,12 +96,9 @@ void InitializeSystem(void) {
     xglMenuInitial();
 }
 
-void xglCdOpenDevice(void);
 void xglRenderAndMovieInit(void);
-void xglCdControlThread(void);
 void xglStudioSetup(void);
 void xglRenderDispOn(void);
-void xglCdLoadOverlay(int overlay);
 
 /* ov02 (the title overlay): an empty function, the logo screen and the title screen. */
 void func_00A80790(void);
@@ -112,9 +108,6 @@ unsigned int Title(void);
 extern int mainParamArgc;
 extern char **mainParamArgv;
 extern const char soundEffectBankName[];
-
-/* Overlay numbers for xglCdLoadOverlay. */
-#define OVERLAY_TITLE 2
 
 /* Title's result: the low 24 bits are the entry address of the chosen screen, the top byte its overlay. */
 #define TITLE_ENTRY_MASK 0xFFFFFF

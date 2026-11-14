@@ -12,13 +12,13 @@
 void func_00138D78(int slot);
 int func_00139060(int slot, unsigned int lbn, int record_byte_27);
 void func_001391D8(int slot, unsigned int lbn, int record_byte_27);
-int func_0013A338(int slot, unsigned int lbn, int record_byte_27, int option);
+int func_0013A338(int slot, unsigned int lbn, int record_byte_27, int bank_size);
 
 /* Loads the bank `name` of `directory` into `slot`: clears the slot, gives the driver the position
- * of <directory><name>.vsf (func_0013A338 when `option` is set, else func_00139060) and then of
+ * of <directory><name>.vsf (func_0013A338 with `bank_size` when it is set, else func_00139060) and then of
  * the .prj file. Returns the size of the .vsf file, 0 for a slot out of range or no name, or the
  * negative result of the failing step. */
-int seBankLoadFile(int slot, const char *name, const char *directory, int option)
+int seBankLoadFile(int slot, const char *name, const char *directory, int bank_size)
 {
     CdFilePosition record;
     char path[SE_PATH_MAX];
@@ -57,8 +57,8 @@ int seBankLoadFile(int slot, const char *name, const char *directory, int option
         return result;
     }
     size = record.size_bytes;
-    if (option != 0) {
-        result = func_0013A338(slot, record.lbn, record.unmodeled_27, option);
+    if (bank_size != 0) {
+        result = func_0013A338(slot, record.lbn, record.unmodeled_27, bank_size);
     } else {
         result = func_00139060(slot, record.lbn, record.unmodeled_27);
     }
@@ -75,22 +75,24 @@ int seBankLoadFile(int slot, const char *name, const char *directory, int option
 
 extern const char *seBankDirectory;
 
-/* Loads the bank `name` into `slot`, its files taken from the global directory seBankDirectory. */
-int seBankLoad(int slot, const char *name, int option) {
-    return seBankLoadFile(slot, name, seBankDirectory, option);
+/* Loads the bank `name` into `slot`, its files taken from the global directory seBankDirectory.
+ * `bank_size` is the room the sound driver keeps for the bank (res_get_path.c's per-slot table:
+ * 0x19000, 0x5000 for the system sound effects, ...); 0 loads without one. */
+int seBankLoad(int slot, const char *name, int bank_size) {
+    return seBankLoadFile(slot, name, seBankDirectory, bank_size);
 }
 
-/* Loads the bank `name` into `slot` with no option. */
+/* Loads the bank `name` into `slot` with no bank size. */
 int seBankLoadDefault(int slot, const char *name) {
     return seBankLoad(slot, name, 0);
 }
 
 int func_0013A098(int slot, int vsf);
 int func_0013A128(int slot, int prj);
-int func_0013A578(int slot, int vsf, int option);
+int func_0013A578(int slot, int vsf, int bank_size);
 
 /* The memory form of seBankLoadFile: `vsf` and `prj` are the two bank files already in memory. */
-int seBankLoadMemory(int slot, int vsf, int prj, int option)
+int seBankLoadMemory(int slot, int vsf, int prj, int bank_size)
 {
     int result;
 
@@ -104,8 +106,8 @@ int seBankLoadMemory(int slot, int vsf, int prj, int option)
     if (prj == 0) {
         return 0;
     }
-    if (option != 0) {
-        result = func_0013A578(slot, vsf, option);
+    if (bank_size != 0) {
+        result = func_0013A578(slot, vsf, bank_size);
     } else {
         result = func_0013A098(slot, vsf);
     }
@@ -130,7 +132,7 @@ int func_00139978(int packed, unsigned int lbn, int record_byte_27);
 /* Loads the song `name` (three digits) from seMidiDirectory: its bank into slot 0, then, for a
  * `packed` id up to SE_BGM_ID_MAX, the .mid file, and records the song number (SE_SONG_NONE when
  * the name does not start with three digits). With no name it returns what the bank load returned. */
-int seBgmLoad(int packed, const char *name, int option)
+int seBgmLoad(int packed, const char *name, int bank_size)
 {
     CdFilePosition record;
     char path[SE_PATH_MAX];
@@ -143,7 +145,7 @@ int seBgmLoad(int packed, const char *name, int option)
     if (!bank_only) {
         func_00139AF0(packed);
     }
-    result = seBankLoadFile(0, name, seMidiDirectory, option);
+    result = seBankLoadFile(0, name, seMidiDirectory, bank_size);
     if (name == 0) {
         return result;
     }
@@ -180,7 +182,7 @@ int seBgmLoad(int packed, const char *name, int option)
     return result;
 }
 
-/* Loads song `name` (three digits, then .mid) with no option. */
+/* Loads song `name` (three digits, then .mid) with no bank size. */
 void seBgmLoadDefault(int packed, const char *name) {
     seBgmLoad(packed, name, 0);
 }
@@ -189,9 +191,9 @@ void func_0013A1B8(int, int);
 
 /* The memory form of seBgmLoad: selects song `first`, loads its bank from the files `vsf` and `prj`
  * already in memory into slot 0 and, when `second` is set, passes it on with the song. */
-void seBgmLoadMemory(int first, int second, int vsf, int prj, int option) {
+void seBgmLoadMemory(int first, int second, int vsf, int prj, int bank_size) {
     func_00139AF0(first);
-    seBankLoadMemory(0, vsf, prj, option);
+    seBankLoadMemory(0, vsf, prj, bank_size);
     if (second != 0) {
         func_0013A1B8(first, second);
     }
@@ -240,7 +242,7 @@ void seVolumeSet(int, int);
 /* Above SE_BGM_ID_MAX: seBgmLoad loads the bank only. */
 #define SE_BGM_BANK_ONLY 0x10000
 #define SE_BGM_FADE_STEP 16
-void seBgmPlay(int packed, const char *name, int option) {
+void seBgmPlay(int packed, const char *name, int bank_size) {
     int *mode_ref;
     int mode;
     int id;
@@ -256,7 +258,7 @@ void seBgmPlay(int packed, const char *name, int option) {
         func_00139C20(0, id);
         func_001394B8(1, 0);
         mode_ref = &mode;
-        seBgmLoad(next_id, name, option);
+        seBgmLoad(next_id, name, bank_size);
         if (name != 0) {
             seBgmStart(id, next_id);
             /* the address taken here makes this test reload mode */
@@ -268,7 +270,7 @@ void seBgmPlay(int packed, const char *name, int option) {
         return;
 
     case SE_BGM_BANK:
-        seBgmLoad(SE_BGM_BANK_ONLY + SE_BGM_LOAD_OFFSET + id, name, option);
+        seBgmLoad(SE_BGM_BANK_ONLY + SE_BGM_LOAD_OFFSET + id, name, bank_size);
         if (name != 0) {
             seVolumeSet(0, 0);
             seSetMuted(id, 0);
@@ -389,10 +391,10 @@ void seVoiceStartDefault(int voice) {
 
 /* The channel group a voice kind plays on: kinds 3 and 4 have their own group, every other kind
  * shares SE_GROUP_VOICE. */
-#define SE_KIND_GROUP2 3
-#define SE_KIND_GROUP3 4
-#define SE_GROUP_KIND3 2
-#define SE_GROUP_KIND4 3
+#define SE_VOICE_KIND_3 3
+#define SE_VOICE_KIND_4 4
+#define SE_GROUP_OF_KIND_3 2
+#define SE_GROUP_OF_KIND_4 3
 #define SE_GROUP_VOICE 4
 /* seTonePlay's channel group. */
 #define SE_GROUP_TONE 1
@@ -402,11 +404,11 @@ int seVoiceKindGroup(int kind)
     int group;
 
     switch (kind) {
-    case SE_KIND_GROUP2:
-        group = SE_GROUP_KIND3;
+    case SE_VOICE_KIND_3:
+        group = SE_GROUP_OF_KIND_3;
         break;
-    case SE_KIND_GROUP3:
-        group = SE_GROUP_KIND4;
+    case SE_VOICE_KIND_4:
+        group = SE_GROUP_OF_KIND_4;
         break;
     default:
         group = SE_GROUP_VOICE;
@@ -447,7 +449,7 @@ void seVoiceStart(int voice, int volume, int pan)
     if (volume > SOUND_LEVEL_MAX) {
         volume = SOUND_LEVEL_MAX;
     }
-    func_0013A938(group, channel | SE_MSG_DATA2(kind) | SE_MSG_CONTROL_CHANGE, 0);
+    func_0013A938(group, channel | SE_MSG_CONTROL(SE_CONTROLLER_BANK, kind), 0);
     func_0013A938(group, channel | SE_MSG_DATA2(pan)
                   | SE_MSG_CONTROL_CHANGE | SE_MSG_DATA1(SE_CONTROLLER_PAN), 0);
     func_0013A938(group, channel | SE_MSG_DATA2(volume)

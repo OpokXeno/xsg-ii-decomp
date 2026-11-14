@@ -6,10 +6,10 @@
 void func_001A3A18(void);
 void seSetMuted(int first, int flag);
 void seVoiceStartDefault(int voice);
-int seBankLoad(int slot, const char *name, int option);
+int seBankLoad(int slot, const char *name, int bank_size);
 int seBankLoadDefault(int slot, const char *name);
-int seBankLoadMemory(int slot, int vsf, int prj, int option);
-void seBgmPlay(int packed, const char *name, int option);
+int seBankLoadMemory(int slot, int vsf, int prj, int bank_size);
+void seBgmPlay(int packed, const char *name, int bank_size);
 void seVolumeSet(int level, int step);
 void seVoiceStart(int voice, int volume, int pan);
 void seVoiceStop(int voice);
