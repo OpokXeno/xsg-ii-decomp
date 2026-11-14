@@ -381,7 +381,7 @@ int UsbInit(void (*statusHandler)(void), int device) {
     netWorkBase = (WorkEnd + 64) & -64;
     netWork = netWorkBase;
     WorkEnd = netWorkBase + 0x8010;
-    func_00122D68(0);
+    sceSifInitRpc(0);
     xglCdSifLoadModule(D_0069E030, 0);
     xglCdSifLoadModule(D_0069E038, D_00645208);
     if (device == NET_DEVICE_USB) {

@@ -14,9 +14,6 @@
 /* Overlay loaded when the menu opens (its name is not known from this file). */
 #define TEST_MENU_OVERLAY 98
 
-int xglDebFileRead(const char *name, void *buffer);
-int xglDebFileSize(const char *name);
-
 extern char D_0068C788[4];
 extern char D_0068C790[4];
 extern PadRecord PadData;

@@ -106,7 +106,6 @@ extern void xglHddErrorScreen(void);
 /* A CD sector is fixed at 2048 bytes on this drive/read path (see also
  * xglCdStreamReadRing's own `& -2048` sector rounding later in this TU). */
 #define CD_SECTOR_BYTES 2048
-#define CD_SECTOR_SHIFT 11
 #define ARC_RECORD_EXTENDED        0x80
 #define ARC_RECORD_TYPE_EXTENDED   0x40
 #define ARC_RECORD_LENGTH_MASK     0x3f
