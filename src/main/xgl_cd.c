@@ -2060,7 +2060,7 @@ int xglCdFileSelect(CdFileSelect *select)
 
 /* Loads IOP module "cdrom0:\IOP\<PATH>.IRX;1" (path upper-cased) with the double-NUL-terminated
  * argument list args. */
-void xglCdSifLoadModule(const char *path, const char *args)
+int xglCdSifLoadModule(const char *path, const char *args)
 {
     char name[CD_PATH_MAX];
     const char *src;
@@ -2098,7 +2098,7 @@ void xglCdSifLoadModule(const char *path, const char *args)
             }
         }
     }
-    sceSifLoadModule(name, args_length, args);
+    return sceSifLoadModule(name, args_length, args);
 }
 
 /* EE memory the overlays load into, cleared before each load. */

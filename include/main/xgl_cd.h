@@ -93,7 +93,7 @@ typedef void CdCompletionCallback(int event, int value, int tag);
 int xglCdReadFilePart(const char *name, void *buffer, int mode,
                       CdCompletionCallback *notify, int offset, int length);
 int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-void xglCdSifLoadModule(const char *path, const char *args);
+int xglCdSifLoadModule(const char *path, const char *args);
 void xglCdInitial(void);
 void xglCdOpenDevice(void);
 void xglCdControlThread(void);
