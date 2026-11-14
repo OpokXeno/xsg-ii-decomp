@@ -374,7 +374,8 @@ int movieRenderBufferAlloc(MoviePlayerRecord *record, int cursor, int extra_enab
     cursor += (layout.size + MOVIE_ALIGN - 1) & align_mask;
     record->handle = func_0014FD80(&layout);
     record->chain_address = cursor;
-    cursor += ((makeGstransChain(cursor, 0, layout.max_width, layout.max_height) * 0x10) + MOVIE_ALIGN - 1) & align_mask;
+    cursor += ((makeGstransChain(cursor, 0, layout.max_width, layout.max_height) * 0x10) + MOVIE_ALIGN - 1)
+              & align_mask;
     if (record->extra_enabled != 0) {
         int extra_size;
 

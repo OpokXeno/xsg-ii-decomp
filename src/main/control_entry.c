@@ -7,6 +7,7 @@
 #include "main/tu022.h"
 #include "main/tu024.h"
 #include "main/xgl_cd.h"
+#include "main/xgl_menu.h"
 
 /* First address of the work heap WorkEnd tracks. */
 #define WORK_HEAP_START 0xB00000
@@ -52,7 +53,6 @@ void xglPacketSystemInit(u32 buffer, u32 size, float rate);
 void xglRenderInit(void);
 void xglFontInitial(void);
 void xglMovieInit(void);
-void xglMenuInitial(void);
 
 /*
  * Reboots the IOP with IOPRP271, loads the SIF/CD/memory-card/pad/sound IOP

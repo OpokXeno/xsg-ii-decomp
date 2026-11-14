@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/tu005.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_hdd.h"
 #include "main/pad.h"
@@ -1734,7 +1735,6 @@ typedef struct CdFileSelect {
 
 /* ".filelist", the name list file read from the selected directory. */
 extern const char xglCdFileListName[];
-int xglDebFileRead(const char *name, void *buffer);
 
 /* Reloads the .filelist name list of the selected directory through
  * xglDebFileRead and turns its lines into NUL-terminated names. */

@@ -3,6 +3,7 @@
 #include "main/tu026.h"
 #include "main/tu092.h"
 #include "main/tu097.h"
+#include "main/tu021.h"
 #include "main/tu101.h"
 #include "main/xgl_cd.h"
 #include "main/yg2path.h"
@@ -640,7 +641,6 @@ void ysegfDrawItemPage(void)
 extern int ysegfExitFlag;
 extern unsigned char D_0068B438[];
 void soundRestart(void);
-void seBgmPlay(int mode, unsigned char *name, int size);
 void seVoiceStartDefault(int voice);
 void func_001BA68C(void);
 void XenoActorSetFlagAll(int flag);
