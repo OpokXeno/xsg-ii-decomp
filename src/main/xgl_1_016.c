@@ -35,6 +35,17 @@ static void setD4_CHCR(u32 value)
     EIntr();
 }
 
+/* Writes D3_CHCR (the IPU output channel) the same way. Inline: the original has this block in its
+ * callers (as a plain static function it would be called, unlike setD4_CHCR). */
+static inline void setD3_CHCR(u32 value)
+{
+    DIntr();
+    *D_ENABLEW = *D_ENABLEW | D_ENABLE_HOLD;
+    *D3_CHCR = value;
+    *D_ENABLEW = *D_ENABLEW & ~D_ENABLE_HOLD;
+    EIntr();
+}
+
 /* Clears the tag ID and IRQ bits, turning a REF tag into REFE. */
 #define DMA_TAG_ID_CLEAR_MASK 0x0fffffff
 /* Dn_CHCR of the D4 (IPU_to) channel: chain mode, from memory, started. */
@@ -235,7 +246,7 @@ int xglMovieOpen(XglMovieWork *info, const char *name)
         chain[2].tag = info->sourceSize / MOVIE_DMA_QWORD;
         chain[2].address = (unsigned int) info->source + info->sourceSize;
         chain[2].upperQword = 0;
-        chain[3].tag = (info->stream.file_byte_count % info->sourceSize + 15) / MOVIE_DMA_QWORD;
+        chain[3].tag = (info->stream.file_byte_count % info->sourceSize + MOVIE_DMA_QWORD - 1) / MOVIE_DMA_QWORD;
         chain[3].address = (unsigned int) info->source
                                  + info->sourceSize * (info->stream.file_byte_count / info->sourceSize & 1);
         chain[3].upperQword = 0;
@@ -442,11 +453,7 @@ int xglMoviePlay(XglMovieWork *info)
         if (info->loop == 0) {
             info->currentFrame = info->frameCount;
             setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
-            DIntr();
-            *D_ENABLEW = *D_ENABLEW | D_ENABLE_HOLD;
-            *D3_CHCR = 0;
-            *D_ENABLEW = *D_ENABLEW & ~D_ENABLE_HOLD;
-            EIntr();
+            setD3_CHCR(0);
         } else {
             xglMovieRewind(info);
         }
@@ -486,11 +493,7 @@ int xglMovieRewind(XglMovieWork *info)
 {
     info->currentFrame = 0;
     setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
-    DIntr();
-    *D_ENABLEW = *D_ENABLEW | D_ENABLE_HOLD;
-    *D3_CHCR = 0;
-    *D_ENABLEW = *D_ENABLEW & ~D_ENABLE_HOLD;
-    EIntr();
+    setD3_CHCR(0);
     if (info->streamOpen) {
         xglCdStreamRewind(&info->stream);
         info->stream.ring.write_position = 0;
