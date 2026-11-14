@@ -66,6 +66,9 @@ struct CdStreamParam {
     StreamRing alternate_ring;  /* +0x30 */
 };
 
+/* A CD sector is 2048 bytes (1 << CD_SECTOR_SHIFT). */
+#define CD_SECTOR_SHIFT 11
+
 /* Probes path and fills a CdFilePosition at record (lsn at +0, size at +4,
  * see tu022.c); -1 when the file is missing, 0 otherwise. The callers pass
  * work buffers they reuse for the record. */

@@ -35,4 +35,8 @@ typedef union DoublewordVector4 {
 /* Row-major 4x4 float matrix. */
 typedef float Matrix4[4][4];
 
+
+/* The end of an INTC/DMAC handler (SDK eekernel.h ExitHandler): sync, then re-enable interrupts. */
+#define ExitHandler() __asm__ volatile("sync\n\tei" ::: "memory")
+
 #endif /* INCLUDE_SHARED_H */

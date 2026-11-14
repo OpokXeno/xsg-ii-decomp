@@ -1,26 +1,73 @@
 #include "common.h"
+#include "shared.h"
+#include "main/tu024.h"
 
-/* Interrupt handlers of main/tu023. Each handler takes an index, maps it through xglIntcSlotMap to a
- * 16-byte record in xglIntcEventCounts and adds 1 to the word at its start. Nine of the ten handlers are the
- * same code; the table of handler addresses starts at 0x00644FC4 with 16-byte entries. */
+/* The INTC handlers registered in xglIntcRecords (main/tu024.h), one per cause: GS, VBlank start,
+ * VBlank end, VIF0, VIF1, VU0, VU1, IPU, timer 0, timer 1 (causes 0 and 2..10). Each bumps the
+ * count of its cause's record; nine of the ten are the same code, the VIF1 one also runs the timer
+ * accumulator. */
 
-INCLUDE_ASM("asm/main/nonmatchings/tu023", func_001A4768);
+/* EE timer 1 count, and VIF1_FBRST, whose STC bit cancels a VIF1 stall. */
+#define T1_COUNT ((volatile u32 *) 0x10000800)
+#define VIF1_FBRST ((volatile u32 *) 0x10003c10)
+#define VIF_FBRST_STC 8
 
-INCLUDE_ASM("asm/main/nonmatchings/tu023", func_001A47A8);
+int xglIntcHandlerGs(int cause)
+{
+    int *count = &xglIntcRecords[xglIntcSlotMap[cause]].count;
 
-INCLUDE_ASM("asm/main/nonmatchings/tu023", func_001A47E8);
+    (*count)++;
+    ExitHandler();
+    return 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/tu023", func_001A4828);
+int xglIntcHandlerVblankStart(int index)
+{
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-/* Timer accumulator. It reads the EE timer 1 count (0x10000800). When intrTimerActive is set it adds the
- * ticks since the start count to intrTimerAccum and clears the flag; otherwise it sets the flag and
- * records the start count. The same handler also bumps its counter record. */
-INCLUDE_ASM("asm/main/nonmatchings/tu023", intrTimerAccumulate);
+    (*count)++;
+    ExitHandler();
+    return 0;
+}
 
-/* Timer accumulator: intrTimerActive active flag, intrTimerStart start count, intrTimerAccum ticks total. */
-extern int intrTimerActive;
-extern int intrTimerStart;
-extern int intrTimerAccum;
+int xglIntcHandlerVblankEnd(int index)
+{
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
+
+    (*count)++;
+    ExitHandler();
+    return 0;
+}
+
+int xglIntcHandlerVif0(int index)
+{
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
+
+    (*count)++;
+    ExitHandler();
+    return 0;
+}
+
+/* The VIF1 handler and timer accumulator. It reads the EE timer 1 count (0x10000800). When
+ * intrTimerActive is set it adds the ticks since the start count to intrTimerAccum and clears the
+ * flag; otherwise it sets the flag and records the start count. It also bumps its count and
+ * cancels a VIF1 stall. */
+int intrTimerAccumulate(int index)
+{
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
+
+    (*count)++;
+    if (intrTimerActive) {
+        intrTimerAccum += *T1_COUNT - intrTimerStart;
+        intrTimerActive = 0;
+    } else {
+        intrTimerStart = *T1_COUNT;
+        intrTimerActive = 1;
+    }
+    *VIF1_FBRST = VIF_FBRST_STC;
+    ExitHandler();
+    return 0;
+}
 
 /* Clears the timer accumulator. */
 void intrTimerReset(void)
@@ -36,12 +83,47 @@ int intrTimerGetAccum(void)
     return intrTimerAccum;
 }
 
-INCLUDE_ASM("asm/main/nonmatchings/tu023", func_001A4918);
+int xglIntcHandlerVu0(int index)
+{
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-INCLUDE_ASM("asm/main/nonmatchings/tu023", func_001A4958);
+    (*count)++;
+    ExitHandler();
+    return 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/tu023", func_001A4998);
+int xglIntcHandlerVu1(int index)
+{
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
 
-INCLUDE_ASM("asm/main/nonmatchings/tu023", func_001A49D8);
+    (*count)++;
+    ExitHandler();
+    return 0;
+}
 
-INCLUDE_ASM("asm/main/nonmatchings/tu023", func_001A4A18);
+int xglIntcHandlerIpu(int index)
+{
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
+
+    (*count)++;
+    ExitHandler();
+    return 0;
+}
+
+int xglIntcHandlerTimer0(int index)
+{
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
+
+    (*count)++;
+    ExitHandler();
+    return 0;
+}
+
+int xglIntcHandlerTimer1(int index)
+{
+    int *count = &xglIntcRecords[xglIntcSlotMap[index]].count;
+
+    (*count)++;
+    ExitHandler();
+    return 0;
+}

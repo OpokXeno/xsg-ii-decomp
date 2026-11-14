@@ -515,7 +515,6 @@ void fadeStartIn(int frames);
 void xglPadSetRepeat(int port, int mask, int a, int b);
 void pxyTickScaleDoubleOverride(int enable);
 int xglCdServiceIfPending(void);
-void soundSlotReopen(int index);
 void seVoiceStartDefault(int voice);
 void XenoActorSetFlagAll(int flag);
 void bgLayerClearAllFlags(void);

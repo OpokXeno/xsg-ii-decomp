@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/xgl_timer0.h"
 #include "main/xgl_cd.h"
 
 /* Writes the low 16 bits of number as a 6-byte name: "cf" then four decimal digits, no NUL. */
@@ -746,7 +747,6 @@ int xglCdLoadFileSet(unsigned int file_id, unsigned int slot, int tag)
 }
 
 void *memset(void *dest, int value, unsigned int count);
-int xglGetLanguageCode(char *buffer);
 extern u32 gameWork[];
 extern char *D_002B5DBC[];
 
@@ -1206,10 +1206,6 @@ typedef struct SeVoiceEntry {
 } SeVoiceEntry;
 
 extern int D_002BB5B8[];
-int seBankLoadDefault(int bank, int force);
-int seBankLoad(int bank, int a, int b);
-void func_001A37E0(int packed, int name, int option);
-void seVoiceStart(int voice, int a, int b);
 void seFootBanksLoad(void);
 
 void resResetKindState(int mode) {
@@ -1233,7 +1229,7 @@ void resResetKindState(int mode) {
         return;
     }
     if (seBgmName[0] != 0) {
-        func_001A37E0(mode + 1, (int)seBgmName, 0x19000);
+        seBgmPlay(mode + 1, seBgmName, 0x19000);
     }
     for (i = 0; i < SE_RECORD_COUNT; i++) {
         flags = resRecordTable[i].flags;
@@ -1308,8 +1304,6 @@ int seNameCopyIfChanged(char *dst, char *src)
 
 #include "main/tu051.h"
 
-void func_001A3D88(u32 handle);
-void soundInitIfNeeded(void);
 
 void resReleaseRecordsOfType(int kind, int forward) {
     int i;
@@ -1321,7 +1315,7 @@ void resReleaseRecordsOfType(int kind, int forward) {
         record = (ResKindRecord *)(base + 12);
         for (i = 0; i < SE_RECORD_COUNT; i++, record++) {
             if (((record->kindWord >> 24) & 0x7f) == kind) {
-                func_001A3D88(record->kindWord);
+                seVoiceStop(record->kindWord);
                 record->kindWord = 0;
             }
         }
@@ -1330,7 +1324,7 @@ void resReleaseRecordsOfType(int kind, int forward) {
         record = (ResKindRecord *)(base + 12);
         for (i = SE_RECORD_COUNT - 1; i >= 0; i--, record++) {
             if ((record->kindWord >> 24) == kind) {
-                func_001A3D88(record->kindWord);
+                seVoiceStop(record->kindWord);
                 record->kindWord = 0;
             }
         }
@@ -1402,11 +1396,11 @@ int seBankSetName(int kind, char *text)
     }
     if (kind == 3) {
         seBankLoad(4, 0, 0);
-        bankSize = seBankLoad(3, (int)name, D_002BB5B8[3]);
+        bankSize = seBankLoad(3, name, D_002BB5B8[3]);
         D_002BB5B8[4] = 0xBE000 + ((bankSize + 255) & -256);
         return bankSize;
     }
-    return seBankLoad(kind, (int)name, D_002BB5B8[kind]);
+    return seBankLoad(kind, name, D_002BB5B8[kind]);
 }
 
 void func_0013A618(int, int);
@@ -1425,25 +1419,22 @@ void soundReset(void) {
 
 extern unsigned char D_0069CFD0;
 extern signed char seBgmVolume;
-void seVolumeSet(int value, int flags);
 
 void seBgmNameSet(signed char *name)
 {
     if (*name == 0) {
-        func_001A37E0(1, 0, 0x19000);
+        seBgmPlay(1, 0, 0x19000);
         func_001A3A18();
         seBgmName[0] = 0;
         return;
     }
     if (seNameCopyIfChanged(seBgmName, name) != 0) {
         seVolumeSet(seBgmVolume, 0);
-        func_001A37E0(0x20001, seBgmName, 0x19000);
+        seBgmPlay(0x20001, seBgmName, 0x19000);
     } else {
         seVolumeSet(seBgmVolume, 16);
     }
 }
-
-void seVoiceSetPanVolume(u32 key, u32 volume, u32 pan);
 
 void seVoiceRecordSet(u32 voice, u32 volume, u32 pan) {
     int freeSlot = -1;
@@ -1468,11 +1459,11 @@ void seVoiceRecordSet(u32 voice, u32 volume, u32 pan) {
                         return;
                     }
                 }
-                func_001A3D88(voice);
+                seVoiceStop(voice);
                 return;
             }
             resRecordTable[i].flags = 0;
-            func_001A3D88(voice);
+            seVoiceStop(voice);
             return;
         }
     }
@@ -3244,7 +3235,7 @@ extern FootRecord D_0033FDC4[];
 extern u8 D_002BB748[];
 extern u8 D_002BB758[];
 int xglFlagsGet8(int flag);
-void func_001A3E10(int mode);
+void seTonePlay(int mode);
 int seBankSetName(int kind, char *text);
 float seSetMaxDistance(float maxDistance);
 
@@ -3293,10 +3284,10 @@ done:
     }
     if (materialGroup < 7) {
         seSetMaxDistance(10);
-        func_001A3E10(-1);
+        seTonePlay(-1);
     } else {
         seSetMaxDistance(60);
-        func_001A3E10(-2);
+        seTonePlay(-2);
     }
     seBankSetName(SE_BANK_FOOT, 0);
     for (i = SE_BANK_FOOT_MATERIAL; i < SE_BANK_ENEMY_FOOT; i++) {

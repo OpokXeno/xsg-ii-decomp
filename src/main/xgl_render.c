@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/tu024.h"
 #include "shared.h"
 #include "main/tu017.h"
 #include "main/tu022.h"
@@ -1013,7 +1014,6 @@ void func_00129C28(void);
 void func_0012A510(int);
 void xglRenderGlobalFadeReset(void);
 void pxyInit(void);
-void xglIntcEnable(int);
 
 void xglRenderInit(void)
 {
