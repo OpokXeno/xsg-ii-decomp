@@ -124,7 +124,7 @@ void cfeInit(void) {
     cfePlugInTextReset();
 }
 
-int func_00124AC8(int, int, int);
+int sceLseek(int, int, int);
 int sceOpen(const char *, int, ...);
 
 /* Opens `path` for writing, creating it (O_WRONLY | O_CREAT = 0x202, mode 0666 = 0x1B6). */
@@ -133,7 +133,7 @@ int cfeFileOpenWrite(const char *path) {
 
     fd = sceOpen(path, 0x202, 0x1B6);
     if (fd >= 0) {
-        func_00124AC8(fd, 0, 0);
+        sceLseek(fd, 0, 0);
     }
     return fd;
 }

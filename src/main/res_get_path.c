@@ -436,7 +436,6 @@ void xglCdSetSlotValue(int value)
     xglCdSlotValue = value;
 }
 
-int xglCdGetFileSize(const char *name);
 
 int xglCdReadFileTagged(const char *name, void *buffer, int unused_arg2, int tag) {
     int status;
@@ -2752,7 +2751,6 @@ void resResetNameTables(void)
     resCfCurrent.kind = 0;
 }
 
-void xglCdReadCancel(int);
 void resResetNameTables(void);
 
 void resResetScriptState(void) {

@@ -860,8 +860,6 @@ int xglHddUninstall(void)
     return result < 0 ? -5 : 0;
 }
 
-int xglCdReadCancel(int);
-
 /* The progress block at hddInstallContext that xglHddInstallReadCB updates: the
  * installed callback receives a stage, an offset and `param`. */
 struct HddInstallCBParam {
@@ -874,7 +872,7 @@ struct HddInstallCBParam {
 
 extern struct HddInstallCBParam *hddInstallContext;
 
-void xglHddInstallReadCB(int event, int value) {
+void xglHddInstallReadCB(int event, int value, int tag) {
     struct HddInstallCBParam *cb;
     int result;
 
@@ -939,9 +937,6 @@ struct HddInstallImage {
 
 extern int sprintf(char *buffer, const char *format, ...);
 extern int sceFormat(const char *mount_point, const char *device, void *payload, int payload_length);
-extern int xglCdGetFileSize(const char *name);
-extern int xglCdReadFilePart(const char *name, void *buffer, int mode,
-                             void (*callback)(int event, int value), int offset, int length);
 int xglHddDummyCallback(int stage, int offset, void *param);
 /* The resource file, the partition spec format, the 256 MB sub-partition
  * size, the pfs device, the installed data file and the disc archive name
@@ -1072,7 +1067,7 @@ int xglHddInstall(int (*callback)(int stage, int offset, void *param), void *par
                 length = HDD_INSTALL_ARCHIVE_SIZE;
             }
             context.base = archives++;
-            xglCdReadFilePart(dvdname_2, image, 2, xglHddInstallReadCB, offset, length);
+            xglCdReadFilePart(dvdname_2, image, CD_READ_NO_EXTRACT, xglHddInstallReadCB, offset, length);
             offset += length;
             if (context.status != 0) {
                 sceClose(descriptor);

@@ -9348,7 +9348,7 @@
      2
     ],
     [
-     "func_00124AC8",
+     "sceLseek",
      1198792,
      568,
      2
@@ -9510,7 +9510,7 @@
      2
     ],
     [
-     "func_00127500",
+     "sceSifAllocIopHeap",
      1209600,
      112,
      2
@@ -9660,7 +9660,7 @@
      2
     ],
     [
-     "func_00128530",
+     "sceSifLoadElf",
      1213744,
      40,
      2
@@ -10572,7 +10572,7 @@
      2
     ],
     [
-     "func_0012D8F0",
+     "sceCdLayerSearchFile",
      1235184,
      788,
      2
@@ -10620,7 +10620,7 @@
      2
     ],
     [
-     "func_0012E160",
+     "sceCdInit",
      1237344,
      736,
      2
@@ -10638,7 +10638,7 @@
      2
     ],
     [
-     "func_0012E840",
+     "sceCdGetReadPos",
      1239104,
      48,
      2
@@ -10656,31 +10656,31 @@
      2
     ],
     [
-     "func_0012EB20",
+     "sceCdPause",
      1239840,
      172,
      2
     ],
     [
-     "func_0012EBD0",
+     "sceCdGetDiskType",
      1240016,
      152,
      2
     ],
     [
-     "func_0012EC68",
+     "sceCdGetError",
      1240168,
      152,
      2
     ],
     [
-     "func_0012ED00",
+     "sceCdStatus",
      1240320,
      184,
      2
     ],
     [
-     "func_0012EDB8",
+     "sceCdBreak",
      1240504,
      184,
      2
@@ -10692,19 +10692,19 @@
      2
     ],
     [
-     "func_0012EF48",
+     "sceCdReadDvdDualInfo",
      1240904,
      208,
      2
     ],
     [
-     "func_0012F018",
+     "sceCdPowerOff",
      1241112,
      180,
      2
     ],
     [
-     "func_0012F0D0",
+     "sceCdMmode",
      1241296,
      208,
      2
@@ -10716,19 +10716,19 @@
      2
     ],
     [
-     "func_0012F298",
+     "sceCdTrayReq",
      1241752,
      236,
      2
     ],
     [
-     "func_0012F388",
+     "sceCdStInit",
      1241992,
      44,
      2
     ],
     [
-     "func_0012F3B8",
+     "sceCdStStart",
      1242040,
      52,
      2
@@ -10740,19 +10740,19 @@
      2
     ],
     [
-     "func_0012F420",
+     "sceCdStSeek",
      1242144,
      44,
      2
     ],
     [
-     "func_0012F450",
+     "sceCdStStop",
      1242192,
      56,
      2
     ],
     [
-     "func_0012F488",
+     "sceCdStRead",
      1242248,
      392,
      2
@@ -10770,7 +10770,7 @@
      2
     ],
     [
-     "func_0012F6B8",
+     "sceCdStStat",
      1242808,
      72,
      2
@@ -29718,7 +29718,7 @@
      2
     ],
     [
-     "func_0019B398",
+     "xglCdArcNameExpand",
      1684376,
      192,
      2

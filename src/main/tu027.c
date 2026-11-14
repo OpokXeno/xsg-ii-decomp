@@ -1,4 +1,5 @@
 #include "common.h"
+#include "main/xgl_cd.h"
 
 /* Host-link constants: chunk size of one transfer, timeouts in ms (-1 waits forever), and the byte
  * lengths of the command verbs sent to the host ("SIZE ", "GET ", "PUT ", "SEND ", "RECV ", "CLOSE"). */
@@ -360,7 +361,6 @@ extern const char D_0068E4F0[];
 extern const char D_0068E508[];
 extern const char D_0068E528[];
 extern const char D_0068E538[];
-int xglCdSifLoadModule(const char *, const char *);
 void func_00122D68(int);
 void func_0029F008(int);
 int func_002A06F0(void *, int, int, int);

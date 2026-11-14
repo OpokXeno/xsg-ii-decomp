@@ -13,8 +13,8 @@
 /* Overlay loaded when the menu opens (its name is not known from this file). */
 #define TEST_MENU_OVERLAY 98
 
-int xglDebFileRead(int file, int address);
-int xglDebFileSize(int file);
+int xglDebFileRead(const char *name, void *buffer);
+int xglDebFileSize(const char *name);
 extern char D_0068C788[4];
 extern char D_0068C790[4];
 extern PadRecord PadData;
@@ -81,19 +81,20 @@ void testMenuRun(void)
  * cursor (*bufferCursor) and returns its address, or 0 for an empty file.
  * The NULL check is the assert on pData at ../test.euc.c line 95.
  */
-int testLoadFile(int *bufferCursor, int fileHandle) {
+int testLoadFile(int *bufferCursor, const char *name) {
     int buffer;
     int size;
 
     buffer = 0;
-    size = xglDebFileSize(fileHandle);
+    size = xglDebFileSize(name);
     if (size > 0) {
         buffer = *bufferCursor;
         *bufferCursor = (buffer + size + 0xF) & ~0xF;
         if (buffer == 0) {
             assertFailed(D_0068C788, D_0068C790, 95);
         }
-        xglDebFileRead(fileHandle, buffer);
+        /* The test heap keeps its cursor as an address word. */
+        xglDebFileRead(name, (void *) buffer);
     }
     return buffer;
 }
