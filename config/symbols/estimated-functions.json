@@ -7824,7 +7824,7 @@
      2
     ],
     [
-     "func_00120200",
+     "AddIntcHandler",
      1180160,
      16,
      2
@@ -7842,7 +7842,7 @@
      2
     ],
     [
-     "func_00120230",
+     "AddDmacHandler",
      1180208,
      16,
      2
@@ -8694,25 +8694,25 @@
      2
     ],
     [
-     "func_00121000",
+     "DisableIntc",
      1183744,
      104,
      2
     ],
     [
-     "func_00121068",
+     "EnableIntc",
      1183848,
      104,
      2
     ],
     [
-     "func_001210D0",
+     "DisableDmac",
      1183952,
      104,
      2
     ],
     [
-     "func_00121138",
+     "EnableDmac",
      1184056,
      104,
      2
@@ -9102,7 +9102,7 @@
      2
     ],
     [
-     "func_00122D68",
+     "sceSifInitRpc",
      1191272,
      412,
      2
@@ -9330,7 +9330,7 @@
      2
     ],
     [
-     "func_00124688",
+     "sceFsReset",
      1197704,
      52,
      2
@@ -9504,7 +9504,7 @@
      2
     ],
     [
-     "func_00127478",
+     "sceSifInitIopHeap",
      1209464,
      136,
      2
@@ -9582,7 +9582,7 @@
      2
     ],
     [
-     "func_00127B58",
+     "sceSifLoadFileReset",
      1211224,
      56,
      2
@@ -9690,13 +9690,13 @@
      2
     ],
     [
-     "func_00128890",
+     "sceSifSyncIop",
      1214608,
      56,
      2
     ],
     [
-     "func_001288C8",
+     "sceSifRebootIop",
      1214664,
      272,
      2
@@ -29058,7 +29058,7 @@
      2
     ],
     [
-     "gameMain",
+     "main",
      1656760,
      216,
      2
@@ -29520,7 +29520,7 @@
      2
     ],
     [
-     "func_00199428",
+     "xglDmaInitial",
      1676328,
      8,
      2
@@ -30072,31 +30072,31 @@
      2
     ],
     [
-     "func_001A0378",
+     "moviePlayerStartFile",
      1704824,
      292,
      2
     ],
     [
-     "func_001A04A0",
+     "moviePlayerUpdate",
      1705120,
      484,
      2
     ],
     [
-     "func_001A0688",
+     "moviePlayerPause",
      1705608,
      44,
      2
     ],
     [
-     "func_001A06B8",
+     "moviePlayerDestroy",
      1705656,
      140,
      2
     ],
     [
-     "func_001A0748",
+     "moviePlayerParamsInit",
      1705800,
      108,
      2
@@ -30114,7 +30114,7 @@
      2
     ],
     [
-     "func_001A0920",
+     "xglMovieInit",
      1706272,
      20,
      2
@@ -30402,7 +30402,7 @@
      2
     ],
     [
-     "func_001A33F8",
+     "seBankLoadMemory",
      1717240,
      188,
      2
@@ -30420,25 +30420,25 @@
      2
     ],
     [
-     "func_001A3668",
+     "seBgmLoadMemory",
      1717864,
      152,
      2
     ],
     [
-     "func_001A3700",
+     "seBgmSetSongLevel",
      1718016,
      220,
      2
     ],
     [
-     "func_001A37E0",
+     "seBgmPlay",
      1718240,
      284,
      2
     ],
     [
-     "func_001A3900",
+     "seBgmStart",
      1718528,
      280,
      2
@@ -30468,7 +30468,7 @@
      2
     ],
     [
-     "func_001A3B38",
+     "seVoiceKindGroup",
      1719096,
      40,
      2
@@ -30486,13 +30486,13 @@
      2
     ],
     [
-     "func_001A3D88",
+     "seVoiceStop",
      1719688,
      136,
      2
     ],
     [
-     "func_001A3E10",
+     "seTonePlay",
      1719824,
      408,
      2
@@ -30528,7 +30528,7 @@
      2
     ],
     [
-     "func_001A41C8",
+     "soundSlotSetLevelIfUnset",
      1720776,
      64,
      2
@@ -30624,25 +30624,25 @@
      2
     ],
     [
-     "func_001A4768",
+     "xglIntcHandlerGs",
      1722216,
      64,
      2
     ],
     [
-     "func_001A47A8",
+     "xglIntcHandlerVblankStart",
      1722280,
      64,
      2
     ],
     [
-     "func_001A47E8",
+     "xglIntcHandlerVblankEnd",
      1722344,
      64,
      2
     ],
     [
-     "func_001A4828",
+     "xglIntcHandlerVif0",
      1722408,
      64,
      2
@@ -30666,73 +30666,73 @@
      2
     ],
     [
-     "func_001A4918",
+     "xglIntcHandlerVu0",
      1722648,
      64,
      2
     ],
     [
-     "func_001A4958",
+     "xglIntcHandlerVu1",
      1722712,
      64,
      2
     ],
     [
-     "func_001A4998",
+     "xglIntcHandlerIpu",
      1722776,
      64,
      2
     ],
     [
-     "func_001A49D8",
+     "xglIntcHandlerTimer0",
      1722840,
      64,
      2
     ],
     [
-     "func_001A4A18",
+     "xglIntcHandlerTimer1",
      1722904,
      64,
      2
     ],
     [
-     "xglDmaEventHandler",
+     "xglDmaHandlerVif0",
      1722968,
      64,
      2
     ],
     [
-     "func_001A4A98",
+     "xglDmaHandlerVif1",
      1723032,
      64,
      2
     ],
     [
-     "func_001A4AD8",
+     "xglDmaHandlerGif",
      1723096,
      64,
      2
     ],
     [
-     "func_001A4B18",
+     "xglDmaHandlerFromIpu",
      1723160,
      64,
      2
     ],
     [
-     "func_001A4B58",
+     "xglDmaHandlerToIpu",
      1723224,
      64,
      2
     ],
     [
-     "func_001A4B98",
+     "xglDmaHandlerFromSpr",
      1723288,
      64,
      2
     ],
     [
-     "func_001A4BD8",
+     "xglDmaHandlerToSpr",
      1723352,
      64,
      2
@@ -52398,7 +52398,7 @@
      2
     ],
     [
-     "func_002A6D50",
+     "__main",
      2780496,
      56,
      2

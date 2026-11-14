@@ -32,7 +32,7 @@ int seFootBankFromKind(int key, int bank);
 int seVoicePanVolumeFromPosition(Vector4 *position);
 void sefSetRecordOwner(void *effect, struct XenoActor *actor);
 void *sefSpawnEffectRecordById(int id, int arg1, int arg2);
-void func_001A3E10(int value);
+void seTonePlay(int value);
 
 typedef struct FootStepEntry {
     int key;
@@ -224,11 +224,11 @@ skipFlag:
             }
             if (stepped == 1) {
                 if (index == uwamonoCurrentIndex) {
-                    func_001A3E10(soundCue);
+                    seTonePlay(soundCue);
                 } else {
                     int pan = seVoicePanVolumeFromPosition(position);
                     if (pan != 0) {
-                        func_001A3E10((pan << 8) + soundCue + 0x01000000);
+                        seTonePlay((pan << 8) + soundCue + 0x01000000);
                     }
                 }
             }

@@ -1,5 +1,6 @@
 #include "common.h"
 #include "shared.h"
+#include "main/tu005.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_hdd.h"
 #include "main/pad.h"
@@ -106,7 +107,6 @@ extern void xglHddErrorScreen(void);
 /* A CD sector is fixed at 2048 bytes on this drive/read path (see also
  * xglCdStreamReadRing's own `& -2048` sector rounding later in this TU). */
 #define CD_SECTOR_BYTES 2048
-#define CD_SECTOR_SHIFT 11
 #define ARC_RECORD_EXTENDED        0x80
 #define ARC_RECORD_TYPE_EXTENDED   0x40
 #define ARC_RECORD_LENGTH_MASK     0x3f
@@ -1735,7 +1735,6 @@ typedef struct CdFileSelect {
 
 /* ".filelist", the name list file read from the selected directory. */
 extern const char xglCdFileListName[];
-int xglDebFileRead(const char *name, void *buffer);
 
 /* Reloads the .filelist name list of the selected directory through
  * xglDebFileRead and turns its lines into NUL-terminated names. */

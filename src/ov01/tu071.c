@@ -48,7 +48,6 @@ struct TableKeyOwner {
     struct TableKey *key;
 };
 
-void soundSlotReopen(int);
 int func_00A835D0(s16);
 
 /* Plays the stream that the owner's table key maps to, on slot 1 at the stream level. */

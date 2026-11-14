@@ -2,6 +2,7 @@
  * OV01 original TU 8: 0x00a818e8..0x00a83d28 (53 functions)
  */
 #include "common.h"
+#include "main/tu021.h"
 #include "ov01/tu008.h"
 #include "ov01/tu009.h"
 #include "ov01/tu070.h"
@@ -124,11 +125,10 @@ typedef struct DataVoiceBlock {
     int vsf_size;
 } DataVoiceBlock;
 
-int func_001A33F8(int, int, int, int);
 int ov01HeapFree(int);
 
 void dataBattleSeRelease(void) {
-    func_001A33F8(2, dataBattleSeRecords.vsf.buffer, dataBattleSeRecords.prj.buffer, 0);
+    seBankLoadMemory(2, dataBattleSeRecords.vsf.buffer, dataBattleSeRecords.prj.buffer, 0);
     ov01HeapFree(dataBattleSeRecords.prj.buffer);
     ov01HeapFree(dataBattleSeRecords.vsf.buffer);
 }
@@ -213,7 +213,7 @@ void dataSlotUnload(struct DataSlot *slot) {
     int result;
 
     result = handleAddressGet(slot->handle);
-    func_001A33F8(slot->handle, slot->reset_area.second_value, slot->reset_area.first_value, result);
+    seBankLoadMemory(slot->handle, slot->reset_area.second_value, slot->reset_area.first_value, result);
     handleStateSet(slot->handle);
     ov01HeapFree(slot->reset_area.first_value);
 }

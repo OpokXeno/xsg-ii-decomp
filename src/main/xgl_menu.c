@@ -1,33 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "main/pad.h"
-
-typedef struct XglMenuNode XglMenuNode;
-
-/*
- * The row's link word is either the child menu node pointer or, for a row that
- * ends the menu, a plain result value; xgl_menu.c reads it through both views.
- */
-typedef union XglMenuRowLink {
-    XglMenuNode *node;
-    int result;
-} XglMenuRowLink;
-
-typedef struct XglMenuRow {
-    const char *text;
-    XglMenuRowLink next;
-} XglMenuRow;
-
-struct XglMenuNode {
-    unsigned char item_count;
-    struct { signed char initial_selected_item; unsigned char flags; unsigned char row_spacing; } initial;
-    signed char selected_item;
-    unsigned char unmodeled_05[3];
-    int enter_result;
-    int cancel_result;
-    unsigned char unmodeled_10[8];
-    XglMenuRow *rows;
-};
+#include "main/xgl_menu.h"
 
 typedef struct XglMenuListData {
     short position_x;
@@ -58,6 +32,12 @@ typedef struct XglMenuSpriteData {
     unsigned char unmodeled_38[4];
 } XglMenuSpriteData;
 
+/* The per-type data of a menu entry: list menus and sprite menus share the space. */
+typedef union XglMenuPayload {
+    XglMenuListData list;
+    XglMenuSpriteData sprite;
+} XglMenuPayload;
+
 /*
  * Partial view of one entry of the menutbl array (main 0x0021ce18/0x0021ce7c,
  * a 0x80-byte stride): xglMenuDrawType0 only touches the active flag at
@@ -79,12 +59,15 @@ typedef struct {
     int result_value;
     int *result_out;
     unsigned char unmodeled_14[0x0c];
-    union {
-        XglMenuListData list;
-        XglMenuSpriteData sprite;
-    } payload;
+    XglMenuPayload payload;
     short sprite_row_marks[18];
 } XglMenuEntry;
+
+float I2F(int value);
+
+/* The initial alpha and row mark of a sprite menu. */
+#define XGL_MENU_SPRITE_ALPHA 100
+#define XGL_MENU_SPRITE_ROW_MARK 0x3000
 
 /* Functions and data used by other translation units. */
 extern const char darkRedTextFormat[];
@@ -134,7 +117,67 @@ extern const char dimTextFormat[8];
 /* Text: {reset}%s */
 extern const char plainTextFormat[4];
 
-INCLUDE_ASM("asm/main/nonmatchings/xgl_menu", xglMenuOpen);
+/* Opens a menu from `params` in `slot`, or in the first inactive slot when `slot` is
+ * XGL_MENU_SLOT_ANY. Returns the slot used, or -1 when no slot is free. */
+int xglMenuOpen(int slot, XglMenuParams *params)
+{
+    XglMenuListData *list;
+    XglMenuEntry *entry;
+    XglMenuPayload *payload;
+    int i;
+
+    if (slot == XGL_MENU_SLOT_ANY) {
+        slot = 0;
+        while (slot < MENU_TABLE_COUNT && menutbl[slot].active) {
+            slot++;
+        }
+        if (slot == MENU_TABLE_COUNT) {
+            return -1;
+        }
+    }
+
+    entry = &menutbl[slot];
+    entry->type = params->type;
+    entry->select_flags = params->select_flags;
+    entry->active = XGL_MENU_ACTIVE_OPEN;
+    entry->root = params->root;
+    entry->default_result = params->default_result;
+    entry->result_out = params->result_out;
+
+    switch (params->type) {
+    case XGL_MENU_TYPE_SPRITE:
+        payload = &entry->payload;
+        payload->sprite.alpha = XGL_MENU_SPRITE_ALPHA;
+        payload->sprite.flags = 0;
+        payload->sprite.x = I2F(params->x);
+        payload->sprite.y = I2F(params->y);
+        payload->sprite.z = I2F(params->z);
+        /* This store order (unit_params[4] last) reproduces the original instruction order. */
+        payload->sprite.unit_params[0] = 1.0f;
+        payload->sprite.unit_params[1] = 1.0f;
+        payload->sprite.unit_params[2] = 1.0f;
+        payload->sprite.unit_params[3] = 1.0f;
+        payload->sprite.offsets[3] = 0;
+        payload->sprite.offsets[0] = 0;
+        payload->sprite.offsets[1] = 0;
+        payload->sprite.offsets[2] = 0;
+        payload->sprite.unit_params[4] = 1.0f;
+        for (i = 0; i < entry->root->item_count; i++) {
+            entry->sprite_row_marks[i] = XGL_MENU_SPRITE_ROW_MARK;
+        }
+        break;
+    case XGL_MENU_TYPE_LIST:
+        list = &entry->payload.list;
+        list->current_index = 0;
+        list->position_x = params->x;
+        list->position_y = params->y;
+        list->position_z = params->z;
+        list->flags = 0;
+        list->items[0] = params->root;
+        break;
+    }
+    return slot;
+}
 
 static void xglMenuDrawType0(XglMenuEntry *entry, XglMenuDrawContext *context) {
     entry->active = 0;

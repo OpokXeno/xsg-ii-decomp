@@ -2,9 +2,11 @@
 #include "gs.h"
 #include "shared.h"
 #include "main/pad.h"
+#include "main/tu017.h"
 #include "main/tu021.h"
 #include "main/tu051.h"
 #include "main/xgl_font.h"
+#include "main/xgl_timer0.h"
 
 char *caption_nextline(char *cursor);
 char *caption_getparam(char *cursor, int *time, char *out);
@@ -291,17 +293,6 @@ void func_001E7C08(void)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-/* The movie player record (AllocRecord of src/main/tu017.c), with the frame counter read back here. */
-typedef struct AllocRecord {
-    int handle;
-    int data_start;
-    int frame;                 /* +0x08 */
-    unsigned char clear_state;
-    unsigned char extra_enabled; /* +0x0D: written by movieRenderBufferAlloc (tu017.c) from its third argument */
-    signed char max_value;
-    unsigned char unmodeled_0f;
-} AllocRecord;
-
 /* The fields of the global game block this file uses: the control word, the pad input delay and the current map. */
 typedef struct MovieGameWork {
     unsigned char unmodeled_00[8];
@@ -333,21 +324,12 @@ extern const char D_00688430[]; /* the "seek error" message with its replay/skip
 
 void fadeClear(void);
 void soundRestart(void);
-int movieRenderBufferSize(int include_extra);
-int movieRenderBufferAlloc(AllocRecord *player, int cursor, int extra_enabled);
 void *GameResArenaReserve(unsigned int bytesWanted);
 void GameResArenaRelease(void);
 int xglCdServiceIfPending(void);
 unsigned char xglFontLoad(int, int);
 void xglRenderClearDepth(void);
-/* Also returns the two-letter code (daddu $2,$3 before its jr); declaring it void moves the '/' constant
- * from $3 to $2. */
-int xglGetLanguageCode(char *code);
 int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-int func_001A0378(AllocRecord *player, const char *name);
-int func_001A04A0(AllocRecord *player);
-int func_001A0688(AllocRecord *player, int pause);
-int func_001A06B8(AllocRecord *player);
 void xglFontPrintDirect(const char *text);
 char *func_00195E90(int mode, char *cursor, int flag);
 int sprintf(char *destination, const char *format, ...);
@@ -364,7 +346,7 @@ void xglClockAccumulate(void);
 void GameMovieCaptionPlay(const char *name)
 {
     char path[0x40];
-    AllocRecord player;
+    MoviePlayerRecord player;
     char position_control[0x20];
     int replay;
     char *buffer;
@@ -439,18 +421,18 @@ void GameMovieCaptionPlay(const char *name)
             text = buffer;
         }
         movieRenderBufferAlloc(&player, (int)(buffer + ((size + 63) & ~63)), SaveData.dolby_digital);
-        if (func_001A0378(&player, path) >= 0) {
+        if (moviePlayerStartFile(&player, path) >= 0) {
             sRender.movie_active = 1;
             D_0069E094 = StudioEntrySkip = 1;
             gameWork.input_delay = 32;
             for (;;) {
-                status = func_001A04A0(&player);
+                status = moviePlayerUpdate(&player);
                 if (text != 0) {
                     entry = (unsigned char *)text;
                     while (*entry++ != 0) {
                     }
                     time = entry[0] + (entry[1] << 8);
-                    if (time >= 0 && player.frame >= time) {
+                    if (time >= 0 && player.frame_stamp >= time) {
                         text = (char *)(entry + 2);
                     }
                     xglFontPrint(0, 317, 0xFFFFFF, movieCaptionControl);
@@ -498,11 +480,11 @@ void GameMovieCaptionPlay(const char *name)
                 if (status > 0) {
                     break;
                 }
-                if (player.frame >= 0) {
+                if (player.frame_stamp >= 0) {
                     if (gameWork.input_delay != 0) {
                         gameWork.input_delay--;
                     } else if (PadData.pressed & PAD_START) {
-                        func_001A0688(&player, 1);
+                        moviePlayerPause(&player, 1);
                         xglClockSampleDayTime();
                         gameWork.input_delay = 32;
                         if ((PadData.held & PAD_SOFT_RESET_HELD) == PAD_SOFT_RESET_HELD) {
@@ -540,7 +522,7 @@ void GameMovieCaptionPlay(const char *name)
                             break;
                         }
                         xglClockAccumulate();
-                        func_001A0688(&player, 0);
+                        moviePlayerPause(&player, 0);
                     }
                 }
                 xglSleep();
@@ -549,7 +531,7 @@ void GameMovieCaptionPlay(const char *name)
             D_0069E094 = 2;
             sRender.movie_active = 0;
         }
-        func_001A06B8(&player);
+        moviePlayerDestroy(&player);
     } while (replay);
     /* The maps on which the movie skips its closing fadeStartOut and keeps the screen as it is; every
      * other map fades out. */

@@ -361,7 +361,7 @@ extern const char D_0068E4F0[];
 extern const char D_0068E508[];
 extern const char D_0068E528[];
 extern const char D_0068E538[];
-void func_00122D68(int);
+void sceSifInitRpc(unsigned int mode);
 void func_0029F008(int);
 int func_002A06F0(void *, int, int, int);
 int func_002A0848(void *, int);
@@ -381,7 +381,7 @@ int UsbInit(void (*statusHandler)(void), int device) {
     netWorkBase = (WorkEnd + 64) & -64;
     netWork = netWorkBase;
     WorkEnd = netWorkBase + 0x8010;
-    func_00122D68(0);
+    sceSifInitRpc(0);
     xglCdSifLoadModule(D_0069E030, 0);
     xglCdSifLoadModule(D_0069E038, D_00645208);
     if (device == NET_DEVICE_USB) {

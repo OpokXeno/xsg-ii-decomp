@@ -161,9 +161,7 @@ extern const char D_006885E0[];
 void *memset(void *destination, int value, unsigned int count);
 int xglJpegDecode(JpegDecodeRequest *request);
 void xglRenderDrawFlipPk(XglPacket *packet);
-void func_001A37E0(int packed, const char *name, int option);
 void *func_001DF9F0(unsigned int *size);
-void seVolumeSet(int value, int flags);
 extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
@@ -453,7 +451,7 @@ void GameOver(void)
         framebuffer = IMAGE_FRAME_BUFFER;
         jpeg_source = IMAGE_LOAD_BUFFER;
         GameCopyFrame();
-        func_001A37E0(1, D_00688558, 0x19000);
+        seBgmPlay(1, D_00688558, 0x19000);
         xglCdReadFile(D_00688568, (void *)jpeg_source, 0, 1);
         memset(&jpeg, 0, sizeof(jpeg));
         jpeg.source = jpeg_source;
@@ -501,7 +499,7 @@ void GameOver(void)
                 break;
             }
         }
-        func_001A37E0(1, 0, 0x19000);
+        seBgmPlay(1, 0, 0x19000);
         GameCopyFrame();
         xglSleep();
         xglSleep();
