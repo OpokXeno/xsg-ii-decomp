@@ -23,6 +23,7 @@ typedef union MenuColor {
 
 /* Functions of src/ov01/tu062.c that other files call. */
 void menuPanelCreate(void);
+void menuPanelShow(void);
 /* Opens a stat panel of kind. */
 void menuStatPanelNew(int kind);
 

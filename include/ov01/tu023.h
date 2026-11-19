@@ -48,6 +48,9 @@ struct ActStock {
 
 struct ActStock *actStockGet(void);
 int battleEffectResolve(struct Ov01Object *command, int index, struct Ov01Object *entity);
+int calcStatusHitRoll(struct Ov01Object *source, struct Ov01Object *target, int actionIdx);
+void actEntryFlagSet(int index);
+void func_00A91B68(int index);
 
 /*
  * Hit record of one target: calcHitRoll rolls for it and calcHitRecordFill fills it; the status

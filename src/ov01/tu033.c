@@ -95,7 +95,14 @@ typedef struct EventQueueEntry {
 enum {
     EVENT_KIND_WAIT_UNIT_QUEUE = 2,     /* eventWaitUnitQueue */
     EVENT_KIND_ATTACK = 3,              /* eventAttackRun: shows the attack (unitsMarkUninvolved) */
+    EVENT_KIND_ACTION_LOAD = 6,         /* actionResourcesLoad */
     EVENT_KIND_LOADS_IDLE = 7,          /* ov01LoadsIdle */
+    EVENT_KIND_ATTACH = 8,              /* unitAttachRequest */
+    EVENT_KIND_SPAWN = 9,               /* unitSpawnFromRequest */
+    EVENT_KIND_BIND = 10,               /* unitBindRequest */
+    EVENT_KIND_REMOVE_DEFEATED = 11,    /* unitsRemoveDefeated */
+    EVENT_KIND_RESOLVE_STATUS = 12,     /* battleResolveStatus */
+    EVENT_KIND_STATUS_QUEUE_WAIT = 13,  /* battleStatusQueueWait */
     EVENT_KIND_STREAM_OPEN = 14,        /* ov01StreamOpen */
     EVENT_KIND_STREAM_BIND = 15,        /* ov01StreamBind */
     EVENT_KIND_PAIR_BEGIN = 16,         /* eventPairBegin: unbinds the pair and hides its monster slots */
@@ -191,11 +198,252 @@ int cmdListRunHead(void)
 }
 
 /* cmdExecute: runs one command body, a switch on its kind, queueing events on the way. */
-INCLUDE_ASM("asm/nonmatchings/ov01/tu033", cmdExecute);
+/* The 0x20-byte command record cmdExecute builds on its frame: queued as a CmdListBody (eventQueueAddKind1) and
+ * run as the unit's Ov01Command. UNIT_CMD_TURN_AIM carries its aim point at +0x8 and, at +0x14
+ * (Ov01Command.poseIndex, read by unitCmdTurnAim), whether the unit turns to that point. */
+typedef union UnitCommandRecord {
+    CmdListBody body;
+    Ov01Command full;
+    struct {
+        int command;
+        int state;
+        float point[3];
+        int toPoint;
+        int pad[2];
+    } aim;
+} UnitCommandRecord;
+
+/* The key row entry a unit takes over as its technique when calcStatusHitRoll turns a command on it. */
+#define KEY_ROW_SWAP_CODE 2
+/* A unit that only poses in place instead of moving to its target: a target in battle state 3, or a target with
+ * default code bit 0 against a technique with hit flag 0x200 used by unit key 2 or 4. */
+#define TARGET_STATE_STAND_OFF 3
+#define TARGET_DEFAULT_CODE_STAND_OFF 1
+#define TEC_HIT_STAND_OFF 0x200
+#define STAND_OFF_UNIT_KEY_A 4
+#define STAND_OFF_UNIT_KEY_B 2
+/* Techniques with these codes make the unit wait for code step CODE_WAIT_STEP first (UNIT_CMD_CODE_WAIT). */
+#define TEC_CODE_WAIT_FIRST 0x22
+#define TEC_CODE_WAIT_COUNT 4
+#define CODE_WAIT_STEP 4
+/* The move commands (UNIT_CMD_MOVE_CHA .. UNIT_CMD_MOVE_POS_HOVER) a target may still be running. */
+#define UNIT_CMD_MOVES_COUNT (UNIT_CMD_MOVE_POS_HOVER - UNIT_CMD_MOVE_CHA + 1)
+/* StatBlock.facing is in radians; the spawn request takes the angle in whole degrees. */
+#define RADIANS_PER_DEGREE 0.017453292f
 
 void eventQueueAdd(int kind, EventQueueArgs *args);
 void eventQueueAddKind1(void *object, CmdListBody *args);
 void func_00A92C18(Ov01Object *unit, CmdListBody *command);
+void cmdStockRun(Ov01Object *unit, CmdListBody *command, EventQueueArgs *args);
+void cmdPairRun(Ov01Object *unit, CmdListBody *command, EventQueueArgs *args);
+struct Tu033CallSource;
+int cmdFindFirstTarget(int target, struct Tu033CallSource *source);
+
+/*
+ * Runs one command body of unit (the head of the command list) and queues the events and unit commands it needs.
+ * A technique, lookup or item command finds its first target (calcStatusHitRoll may turn a technique on the
+ * attacker: the target then acts with its key row technique), moves or poses the unit, aims a technique at all
+ * targets, and runs the action through the pair, the stock or the plain path. The think end brings the unit back,
+ * a swap spawns the unit's replacement, a leave command goes to every unit of the side. Returns 0 when a command
+ * finds no target, else 1.
+ * Forms that keep the original's code: every case ends with break and one return 1 follows the switch (the case
+ * tails then cross-jump as in the original), the think end sets code before command, and the swap reads all its
+ * values before it stores them.
+ */
+int cmdExecute(Ov01Object *unit, CmdListBody *body)
+{
+    UnitCommandRecord command;
+    EventQueueArgs args;
+    Ov01Object **units;
+    Ov01Object *target;
+    Ov01Object *other;
+    Ov01Object *swap;
+    Ov01Command *current;
+    StatBlock *stats;
+    float *point;
+    short *keyRow;
+    int flagged;
+    int count;
+    int found;
+    int code;
+    int index;
+    int angle;
+    int i;
+    int swapped;
+
+    switch (body->command) {
+    case CMD_KIND_TECHNIQUE:
+    case CMD_KIND_LOOKUP:
+    case CMD_KIND_ITEM:
+        args.unit = unit;
+        eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
+        if (body->command == CMD_KIND_TECHNIQUE) {
+            body->code = battleEffectResolve(unit, body->code, body->arg.target);
+        }
+        target = (Ov01Object *)cmdFindFirstTarget((int)unit, (struct Tu033CallSource *)body);
+        if (target == 0) {
+            return 0;
+        }
+        if (body->command == CMD_KIND_TECHNIQUE && calcStatusHitRoll(unit, target, body->code) != 0) {
+            swap = target;
+            target = unit;
+            unit = swap;
+            body->arg.target = target;
+            swapped = 1;
+            keyRow = tableKeyRowGet(unit->stats->key);
+            body->code = keyRow[KEY_ROW_SWAP_CODE];
+            unit->stats->rollPercent = 0;
+            menuPanelShow();
+            target = (Ov01Object *)cmdFindFirstTarget((int)unit, (struct Tu033CallSource *)body);
+            if (target == 0) {
+                return 0;
+            }
+        } else {
+            swapped = 0;
+        }
+        unit->commandTarget = (int)target;
+        unit->commandCode = body->code;
+        if (body->command != CMD_KIND_ITEM) {
+            flagged = tecRecordGet(body->code)->flags & TEC_FLAG_SCRIPT_FLAGGED;
+            if (flagged == 0
+                && (target->stats->state70 == TARGET_STATE_STAND_OFF
+                    || ((target->stats->defaultCode & TARGET_DEFAULT_CODE_STAND_OFF)
+                        && (tecRecordGet(body->code)->hitFlags & TEC_HIT_STAND_OFF)
+                        && (unit->stats->key == STAND_OFF_UNIT_KEY_A || unit->stats->key == STAND_OFF_UNIT_KEY_B)))) {
+                if (!(unit->flags & UNIT_FLAG_POSED_OUT)) {
+                    if (unit->flags & UNIT_FLAG_MOVED_OUT) {
+                        command.body.command = UNIT_CMD_PHASE_0E_WAIT;
+                        eventQueueAddKind1(unit, &command.body);
+                    } else {
+                        command.body.command = UNIT_CMD_POSE_ARRIVE;
+                        eventQueueAddKind1(unit, &command.body);
+                    }
+                    unit->flags |= UNIT_FLAG_POSED_OUT;
+                }
+            } else if (flagged == 0 && !(unit->flags & (UNIT_FLAG_MOVED_OUT | UNIT_FLAG_POSED_OUT))) {
+                command.body.command = UNIT_CMD_MOVE_CHA;
+                eventQueueAddKind1(unit, &command.body);
+                unit->flags |= UNIT_FLAG_MOVED_OUT;
+            }
+            if (body->command == CMD_KIND_TECHNIQUE && flagged != 0
+                && tecRecordGet(body->code)->gateFlag != TEC_GATE_PAIR) {
+                if (!(tecRecordGet(body->code)->flags & TEC_TARGET_ALL)) {
+                    command.aim.command = UNIT_CMD_TURN_AIM;
+                    command.aim.toPoint = 0;
+                    eventQueueAddKind1(unit, &command.body);
+                } else if (unit->stats->key < UNIT_KEY_OTHER_FIRST && tecRecordGet(body->code)->code == 0) {
+                    /* Aims at the middle of the targets the technique applies to. */
+                    point = command.aim.point;
+                    found = 0;
+                    point[0] = point[1] = point[2] = 0.0f;
+                    count = unitTblGet(tgtSideOf(unit, tecRecordGet(body->code)->flags), &units);
+                    for (i = 0; i < count; i++) {
+                        other = units[i];
+                        if (other == 0 || (other->flags & UNIT_FLAG_DOWN)) {
+                            continue;
+                        }
+                        if (battleEffectApplies(unit, body->code, other) != 0) {
+                            found++;
+                            point[0] += units[i]->pose.snapshot.vector.x;
+                            point[2] += units[i]->pose.snapshot.vector.z;
+                        }
+                    }
+                    point[0] /= (float)found;
+                    point[2] /= (float)found;
+                    command.aim.command = UNIT_CMD_TURN_AIM;
+                    command.aim.toPoint = 1;
+                    eventQueueAddKind1(unit, &command.body);
+                }
+                if ((unsigned int)(body->code - TEC_CODE_WAIT_FIRST) < TEC_CODE_WAIT_COUNT) {
+                    command.full.command = UNIT_CMD_CODE_WAIT;
+                    command.full.code = CODE_WAIT_STEP;
+                    command.full.arg.wait = 1;
+                    eventQueueAddKind1(unit, &command.body);
+                }
+                current = dataLookupCurrent(&target->commandQueue);
+                if (current != 0 && (unsigned int)(current->command - UNIT_CMD_MOVE_CHA) < UNIT_CMD_MOVES_COUNT) {
+                    args.unit = target;
+                    eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
+                }
+            }
+            args.unit = unit;
+            eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
+        }
+        args.unit = unit;
+        args.tecIndex = body->code;
+        args.pairIndex = body->pairIndex;
+        eventQueueAdd(EVENT_KIND_ACTION_LOAD, &args);
+        eventQueueAdd(EVENT_KIND_LOADS_IDLE, &args);
+        eventQueueAdd(EVENT_KIND_ATTACH, &args);
+        if (tecRecordGet(body->code)->gateFlag == TEC_GATE_PAIR) {
+            cmdPairRun(unit, body, &args);
+            actEntryFlagSet(body->pairIndex);
+        } else if (tecRecordGet(body->code)->gateFlag == TEC_GATE_STOCK) {
+            cmdStockRun(unit, body, &args);
+        } else {
+            eventQueueAddKind1(unit, body);
+            if ((unsigned int)(body->command - CMD_KIND_LOOKUP) <= CMD_KIND_ITEM - CMD_KIND_LOOKUP) {
+                eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
+            }
+            func_00A92C18(unit, body);
+            func_00A95608(unit);
+            if (tecRecordGet(body->code)->gateFlag == TEC_GATE_SLOT_MARK) {
+                func_00A91B68(body->pairIndex);
+            }
+        }
+        if (swapped == 1) {
+            command.body.command = CMD_KIND_THINK_END;
+            eventQueueAddKind1(unit, &command.body);
+        }
+        break;
+    case CMD_KIND_THINK_END:
+        if (unit->flags & UNIT_FLAG_POSED_OUT) {
+            command.full.code = unit->stats->posIndex;
+            command.full.command = UNIT_CMD_POSE_ARRIVE_WAIT;
+            eventQueueAddKind1(unit, &command.body);
+        } else if (unit->flags & UNIT_FLAG_MOVED_OUT) {
+            command.full.code = unit->stats->posIndex;
+            command.full.command = UNIT_CMD_MOVE_POS;
+            eventQueueAddKind1(unit, &command.body);
+        }
+        unit->flags &= ~UNIT_FLAGS_ACTION;
+        eventQueueAddKind1(unit, body);
+        eventQueueAdd(EVENT_KIND_RESOLVE_STATUS, 0);
+        eventQueueAdd(EVENT_KIND_REMOVE_DEFEATED, 0);
+        eventQueueAdd(EVENT_KIND_STATUS_QUEUE_WAIT, 0);
+        break;
+    case CMD_KIND_SWAP:
+        eventQueueAddKind1(unit, body);
+        args.unit = unit;
+        eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
+        code = body->code;
+        stats = unit->stats;
+        angle = stats->facing / RADIANS_PER_DEGREE;
+        index = stats->posIndex;
+        args.actions = code;
+        args.tecIndex = index;
+        args.pairIndex = angle;
+        eventQueueAdd(EVENT_KIND_SPAWN, &args);
+        eventQueueAdd(EVENT_KIND_LOADS_IDLE, &args);
+        eventQueueAdd(EVENT_KIND_BIND, &args);
+        command.body.command = UNIT_CMD_STREAM_PLAY;
+        eventQueueAddKind1(unit, &command.body);
+        break;
+    case CMD_KIND_LEAVE:
+        count = unitTblGet(unit->stats->key >= UNIT_KEY_OTHER_FIRST, &units);
+        for (i = 0; i < count; i++) {
+            if (units[i] != 0) {
+                eventQueueAddKind1(units[i], body);
+            }
+        }
+        break;
+    default:
+        eventQueueAddKind1(unit, body);
+        break;
+    }
+    return 1;
+}
+
 Ov01Object *unitPairPartnerFind(Ov01Object *unit, int value);
 
 /* Unit command indices (CmdListBody.command) the two command handlers below queue. */
@@ -780,8 +1028,6 @@ int func_00A93708(void) {
 #define MOVE_CHA_SCRIPT_EVENT 3
 #define PHASE_0E_WAIT_SCRIPT_EVENT 11
 #define POSE_ARRIVE_WAIT_SCRIPT_EVENT 13
-/* TecRecord.flags bit 0x20 (also tested with calcStatGet(unit, 4, 0x2000)). */
-#define TEC_FLAG_SCRIPT_FLAGGED 0x20
 
 /*
  * Kind-1 event handler: appends the queued command to the unit's command queue, keeps the unit and command kind in

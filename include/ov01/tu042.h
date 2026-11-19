@@ -186,10 +186,15 @@ struct TecRecord {
 /* TecRecord.flags target bit 8 (all targets): such a technique leaves the partner object where it is
  * (eventPairBegin, eventPairEnd) and gives no act stock (unitTryActStock). */
 #define TEC_TARGET_ALL 8
+/* TecRecord.flags bit 0x20 (also tested with calcStatGet(unit, 4, 0x2000)): cmdExecute does not send the unit to
+ * its target, eventUnitCommand reports the technique with its flagged script event. */
+#define TEC_FLAG_SCRIPT_FLAGGED 0x20
 
 /* TecRecord.gateFlag values with an evidenced role (tu033). */
 #define TEC_GATE_NONE 0             /* calcHitRowGate walks the row gates; the hit adds percent and boost progress */
 #define TEC_GATE_PAIR 1             /* pair technique: the partner (unitPairPartnerFind) acts with the unit */
+#define TEC_GATE_SLOT_MARK 2        /* cmdExecute marks the pair record's slot (func_00A91B68) */
+#define TEC_GATE_STOCK 3            /* cmdExecute runs the command through the action stock (cmdStockRun) */
 #define TEC_GATE_SHOW_CHILD 4       /* shows one of the attacker's children during the attack (eventAttackRun) */
 #define TEC_GATE_TARGET_MODEL 5     /* loads the model of the target record (tgtIdRecordGet) */
 #define TEC_GATE_CURRENT_DRAIN 10   /* takes 100 of the target's current value (attackHitApply) */
