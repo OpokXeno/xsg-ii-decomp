@@ -3978,42 +3978,12 @@
     ".rodata": "asm",
     ".lit4": "asm",
     ".sdata": "asm",
-    ".bss": "asm"
-   },
-   "evidence": "reports/x2-compiler-calibration.md",
-   "all_functions_accepted": false,
-   "accepted_functions": "0/43",
-   "assembler_options": [
-    "-g"
-   ]
-  },
-  "tu185": {
-   "id": "main/tu185",
-   "ordinal": 185,
-   "path": "src/main/tu185.c",
-   "kind": "gcc",
-   "category": "game",
-   "in_scope": true,
-   "mode": "asm",
-   "language": "c",
-   "compiler_profile": "ee-gcc2_96-realconv-lp7",
-   "flags": [
-    "-O2",
-    "-G8"
-   ],
-   "assembler": "LA29-vsqrt-swap-g (corrected ee-as with the per-object flag -g)",
-   "owners": {
-    ".text": "asm",
-    ".data": "asm",
-    ".rodata": "asm",
-    ".lit4": "asm",
-    ".sdata": "asm",
     ".sbss": "asm",
     ".bss": "asm"
    },
    "evidence": "reports/x2-compiler-calibration.md",
    "all_functions_accepted": false,
-   "accepted_functions": "0/55",
+   "accepted_functions": "0/98",
    "assembler_options": [
     "-g"
    ]

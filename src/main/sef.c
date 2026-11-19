@@ -7,7 +7,6 @@
 #include "main/srs.h"
 #include "main/tu045.h"
 #include "main/tu155.h"
-#include "main/tu185.h"
 #include "main/tu187.h"
 #include "quadword.h"
 #include "vu0_macro.h"
@@ -7672,7 +7671,8 @@ void sefFlagToggle(int mask) {
     sefFlagWord ^= mask;
 }
 
-/* Layout shared with the effect records of tu175: flags at +0x44, enabled at +0x48 (the callee tu185 sefObjectClearFlags reads FlaggedObject.enabled at +0x188; reconcile in the integrator). */
+/* Layout shared with the effect records of tu175: flags at +0x44, enabled at +0x48 (the callee
+   sefObjectClearFlags in sdv_181.c reads FlaggedObject.enabled at +0x188; reconcile in the integrator). */
 typedef struct FlagRequest {
     u8 unmodeled_00[0x40];
     int request;

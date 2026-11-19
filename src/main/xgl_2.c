@@ -1669,7 +1669,7 @@ void xglVectorSubXYZ_001AF3F0(AlignedVector4 *dst, AlignedVector4 *minuend, Alig
 void xglVectorSub(AlignedVector4 *dst, AlignedVector4 *minuend, AlignedVector4 *subtrahend);
 void xglVectorInner(float *destination, const Vector4 *left, const Vector4 *right);
 void xglMatrixStackMulVector(Vector4 *destination, const Vector4 *source);
-float func_002A1DC8(float);
+float acosf(float);
 
 /* One light of a light pack (0x50 bytes per element). */
 typedef struct XglLightKey {
@@ -1819,7 +1819,7 @@ int xglLightSpotColor(Vector4 *color, Vector4 *lightDirection, XglLightKey *key,
     xglMatrixStackRotX(key->rotation.x);
     xglMatrixStackMulVector(&coneAxis.vector, &coneAxis.vector);
     xglVectorInner(&angle, &coneAxis.vector, lightDirection);
-    angle = func_002A1DC8(angle);
+    angle = acosf(angle);
     if (angle > halfCone) {
         return 0;
     }

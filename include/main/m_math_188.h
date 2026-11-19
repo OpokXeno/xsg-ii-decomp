@@ -10,9 +10,8 @@ typedef struct {
     float w;
 } HermiteVector;
 
-float *MMathCalcHermite(float *destination, float parameter,
-                         HermiteVector *tangent_first, HermiteVector *tangent_second,
-                         HermiteVector *endpoint_first, HermiteVector *endpoint_second);
+float *MMathCalcHermite(float *destination, HermiteVector *tangent_first, HermiteVector *tangent_second,
+                         HermiteVector *endpoint_first, HermiteVector *endpoint_second, float parameter);
 
 void MMathCalcHermitePrm(HermiteVector *tangent_start, HermiteVector *tangent_end,
                           const HermiteVector *point_prev, const HermiteVector *point_start,

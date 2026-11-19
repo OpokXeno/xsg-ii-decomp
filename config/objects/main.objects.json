@@ -418,19 +418,11 @@
     },
     {
      "c_split": false,
-     "end": "0x005E6E70",
+     "end": "0x0061B2C0",
      "ordinal": 181,
      "piece": "sdv_181",
      "start": "0x005E6D60",
      "tu": "sdv_181"
-    },
-    {
-     "c_split": false,
-     "end": "0x0061B2C0",
-     "ordinal": 185,
-     "piece": "tu185",
-     "start": "0x005E6E70",
-     "tu": "tu185"
     },
     {
      "c_split": false,
@@ -1233,19 +1225,11 @@
     },
     {
      "c_split": false,
-     "end": "0x0068C5E8",
+     "end": "0x0068C660",
      "ordinal": 181,
      "piece": "sdv_181",
      "start": "0x0068C530",
      "tu": "sdv_181"
-    },
-    {
-     "c_split": false,
-     "end": "0x0068C660",
-     "ordinal": 185,
-     "piece": "tu185",
-     "start": "0x0068C5E8",
-     "tu": "tu185"
     },
     {
      "c_split": false,
@@ -2024,19 +2008,11 @@
     },
     {
      "c_split": false,
-     "end": "0x0069B3A8",
+     "end": "0x0069B4E4",
      "ordinal": 181,
      "piece": "sdv_181",
      "start": "0x0069B324",
      "tu": "sdv_181"
-    },
-    {
-     "c_split": false,
-     "end": "0x0069B4E4",
-     "ordinal": 185,
-     "piece": "tu185",
-     "start": "0x0069B3A8",
-     "tu": "tu185"
     },
     {
      "c_split": false,
@@ -2599,19 +2575,11 @@
     },
     {
      "c_split": false,
-     "end": "0x0069DC48",
+     "end": "0x0069DC58",
      "ordinal": 181,
      "piece": "sdv_181",
      "start": "0x0069DC38",
      "tu": "sdv_181"
-    },
-    {
-     "c_split": false,
-     "end": "0x0069DC58",
-     "ordinal": 185,
-     "piece": "tu185",
-     "start": "0x0069DC48",
-     "tu": "tu185"
     },
     {
      "c_split": false,
@@ -3079,10 +3047,10 @@
     {
      "c_split": false,
      "end": "0x0069E338",
-     "ordinal": 185,
-     "piece": "tu185",
+     "ordinal": 181,
+     "piece": "sdv_181",
      "start": "0x0069E32C",
-     "tu": "tu185"
+     "tu": "sdv_181"
     },
     {
      "c_split": false,
@@ -3405,19 +3373,11 @@
     },
     {
      "c_split": false,
-     "end": "0x00831610",
+     "end": "0x00881810",
      "ordinal": 181,
      "piece": "sdv_181",
      "start": "0x00807EA0",
      "tu": "sdv_181"
-    },
-    {
-     "c_split": false,
-     "end": "0x00881810",
-     "ordinal": 185,
-     "piece": "tu185",
-     "start": "0x00831610",
-     "tu": "tu185"
     },
     {
      "c_split": false,
@@ -3848,7 +3808,6 @@
   "tu179",
   "sdv_180",
   "sdv_181",
-  "tu185",
   "sm_initilize",
   "tu187",
   "m_math_188",
@@ -82079,7 +82038,7 @@
    "accepted": {
     "all_functions_accepted": false,
     "functions": 0,
-    "of": 43,
+    "of": 98,
     "migration_hints": [],
     "records": []
    },
@@ -82470,220 +82429,7 @@
      "va": "0x0026bb78",
      "name_basis": "address",
      "provenance": "estimated"
-    }
-   ],
-   "owners": {
-    ".text": "c",
-    ".data": "asm",
-    ".rodata": "asm",
-    ".lit4": "asm",
-    ".sdata": "asm",
-    ".bss": "asm"
-   },
-   "sections": {
-    ".data": {
-     "anchored": [
-      "0x005e6d60",
-      "0x005e7a99"
-     ],
-     "bounds": [
-      "0x005e6d51",
-      "0x005e6e70"
-     ],
-     "end": "0x005E6E70",
-     "evidence_source": "map",
-     "rule": "anchored start",
-     "pieces": [
-      {
-       "c_split": false,
-       "end": "0x005E6E70",
-       "name": "sdv_181",
-       "start": "0x005E6D60"
-      }
-     ],
-     "size": 272,
-     "splat_type": "data",
-     "start": "0x005E6D60"
     },
-    ".rodata": {
-     "anchored": [
-      "0x0068c530",
-      "0x0068c5e1"
-     ],
-     "bounds": [
-      "0x0068c521",
-      "0x0068c5e8"
-     ],
-     "end": "0x0068C5E8",
-     "evidence_source": "map",
-     "rule": "anchored start",
-     "pieces": [
-      {
-       "c_split": false,
-       "end": "0x0068C5E8",
-       "name": "sdv_181",
-       "start": "0x0068C530"
-      }
-     ],
-     "size": 184,
-     "splat_type": "rodata",
-     "start": "0x0068C530"
-    },
-    ".lit4": {
-     "anchored": [
-      "0x0069b324",
-      "0x0069b3a5"
-     ],
-     "bounds": [
-      "0x0069b321",
-      "0x0069b3a8"
-     ],
-     "end": "0x0069B3A8",
-     "evidence_source": "map",
-     "rule": "anchored start",
-     "pieces": [
-      {
-       "c_split": false,
-       "end": "0x0069B3A8",
-       "name": "sdv_181",
-       "start": "0x0069B324"
-      }
-     ],
-     "size": 132,
-     "splat_type": "lit4",
-     "start": "0x0069B324"
-    },
-    ".sdata": {
-     "anchored": [
-      "0x0069dc38",
-      "0x0069dc45"
-     ],
-     "bounds": [
-      "0x0069dc35",
-      "0x0069dc48"
-     ],
-     "end": "0x0069DC48",
-     "evidence_source": "map",
-     "rule": "anchored start",
-     "pieces": [
-      {
-       "c_split": false,
-       "end": "0x0069DC48",
-       "name": "sdv_181",
-       "start": "0x0069DC38"
-      }
-     ],
-     "size": 16,
-     "splat_type": "sdata",
-     "start": "0x0069DC38"
-    },
-    ".bss": {
-     "anchored": [
-      "0x00807ea0",
-      "0x00808cd1"
-     ],
-     "bounds": [
-      "0x00807da1",
-      "0x00831610"
-     ],
-     "end": "0x00831610",
-     "evidence_source": "map",
-     "rule": "anchored start",
-     "pieces": [
-      {
-       "c_split": false,
-       "end": "0x00831610",
-       "name": "sdv_181",
-       "start": "0x00807EA0"
-      }
-     ],
-     "size": 169840,
-     "splat_type": "bss",
-     "start": "0x00807EA0"
-    }
-   },
-   "text": {
-    "start": "0x00266f68",
-    "end": "0x0026bc28",
-    "code_end": "0x0026bc24",
-    "size": 19648,
-    "splat": "c",
-    "splat_range": [
-     "0x00266f68",
-     "0x0026bc28"
-    ],
-    "note": null
-   },
-   "import": {
-    "mode": "c",
-    "note": "origin 57073757 (PRs #24-#29): TUs upstream turned to C",
-    "source": {
-     "kind": "file",
-     "path": "src/main/sdv_181.c",
-     "include_dirs": [
-      "include"
-     ]
-    }
-   }
-  },
-  {
-   "id": "main/tu185",
-   "unit": "main",
-   "ordinal": 185,
-   "name": "tu185",
-   "path": "src/main/tu185.c",
-   "scaffold_path": "scaffold/src/main/tu185.c",
-   "kind": "gcc",
-   "mode": "c",
-   "category": "game",
-   "map_class": "game",
-   "domain": null,
-   "in_scope": true,
-   "boundary_kind": "inferred",
-   "boundary_evidence": [
-    "model log-odds -0.92",
-    "precision of this score band on X1, held out: 0.188 (12/64)"
-   ],
-   "boundary_confidence": "low",
-   "provisional": true,
-   "name_basis": "no name evidence",
-   "name_confidence": "none",
-   "contract": {
-    "assembler": "LA29-vsqrt-swap-g (corrected ee-as with the per-object flag -g)",
-    "assembler_path": "tool:ee-as-la29-vsqrt-swap",
-    "assembler_sha256": "448143a3f1f7ecd4fffb79ea3e641afa36863895366873f93462028535f95494",
-    "cc1_sha256": "25944d5c023a48316d719ff10b13a366afc31c3209662f28e440a90eb43d3b17",
-    "cc_dir": "tool:ee-gcc2.96-realconv-lp7",
-    "compiler_profile": "ee-gcc2_96-realconv-lp7",
-    "flags": [
-     "-O2",
-     "-G8"
-    ],
-    "language": "c",
-    "source_class": "c",
-    "assembler_options": [
-     "-g"
-    ]
-   },
-   "contract_evidence": {
-    "compiler": "2.96",
-    "compiler_confidence": "medium",
-    "assembler_class": "LA29",
-    "assembler_confidence": "medium",
-    "g_flag": "-G8",
-    "g_basis": "104 gp-relative instructions in the code",
-    "g_confidence": "high",
-    "optimization": "-O2",
-    "source": "reports/x2-compiler-calibration.md"
-   },
-   "accepted": {
-    "all_functions_accepted": false,
-    "functions": 0,
-    "of": 55,
-    "migration_hints": [],
-    "records": []
-   },
-   "functions": [
     {
      "binding": "GLOBAL",
      "name": "sefResetPool",
@@ -83192,11 +82938,11 @@
    "sections": {
     ".data": {
      "anchored": [
-      "0x005e6e70",
+      "0x005e6d60",
       "0x00607b09"
      ],
      "bounds": [
-      "0x005e7a99",
+      "0x005e6d51",
       "0x0061b2c0"
      ],
      "end": "0x0061B2C0",
@@ -83206,21 +82952,21 @@
       {
        "c_split": false,
        "end": "0x0061B2C0",
-       "name": "tu185",
-       "start": "0x005E6E70"
+       "name": "sdv_181",
+       "start": "0x005E6D60"
       }
      ],
-     "size": 214096,
+     "size": 214368,
      "splat_type": "data",
-     "start": "0x005E6E70"
+     "start": "0x005E6D60"
     },
     ".rodata": {
      "anchored": [
-      "0x0068c5e8",
+      "0x0068c530",
       "0x0068c651"
      ],
      "bounds": [
-      "0x0068c5e1",
+      "0x0068c521",
       "0x0068c660"
      ],
      "end": "0x0068C660",
@@ -83230,21 +82976,21 @@
       {
        "c_split": false,
        "end": "0x0068C660",
-       "name": "tu185",
-       "start": "0x0068C5E8"
+       "name": "sdv_181",
+       "start": "0x0068C530"
       }
      ],
-     "size": 120,
+     "size": 304,
      "splat_type": "rodata",
-     "start": "0x0068C5E8"
+     "start": "0x0068C530"
     },
     ".lit4": {
      "anchored": [
-      "0x0069b3a8",
+      "0x0069b324",
       "0x0069b4e1"
      ],
      "bounds": [
-      "0x0069b3a5",
+      "0x0069b321",
       "0x0069b4e4"
      ],
      "end": "0x0069B4E4",
@@ -83254,21 +83000,21 @@
       {
        "c_split": false,
        "end": "0x0069B4E4",
-       "name": "tu185",
-       "start": "0x0069B3A8"
+       "name": "sdv_181",
+       "start": "0x0069B324"
       }
      ],
-     "size": 316,
+     "size": 448,
      "splat_type": "lit4",
-     "start": "0x0069B3A8"
+     "start": "0x0069B324"
     },
     ".sdata": {
      "anchored": [
-      "0x0069dc48",
+      "0x0069dc38",
       "0x0069dc4d"
      ],
      "bounds": [
-      "0x0069dc45",
+      "0x0069dc35",
       "0x0069dc58"
      ],
      "end": "0x0069DC58",
@@ -83278,13 +83024,37 @@
       {
        "c_split": false,
        "end": "0x0069DC58",
-       "name": "tu185",
-       "start": "0x0069DC48"
+       "name": "sdv_181",
+       "start": "0x0069DC38"
       }
      ],
-     "size": 16,
+     "size": 32,
      "splat_type": "sdata",
-     "start": "0x0069DC48"
+     "start": "0x0069DC38"
+    },
+    ".bss": {
+     "anchored": [
+      "0x00807ea0",
+      "0x00881801"
+     ],
+     "bounds": [
+      "0x00807da1",
+      "0x00881810"
+     ],
+     "end": "0x00881810",
+     "evidence_source": "map",
+     "rule": "anchored start",
+     "pieces": [
+      {
+       "c_split": false,
+       "end": "0x00881810",
+       "name": "sdv_181",
+       "start": "0x00807EA0"
+      }
+     ],
+     "size": 498032,
+     "splat_type": "bss",
+     "start": "0x00807EA0"
     },
     ".sbss": {
      "anchored": [
@@ -83302,57 +83072,33 @@
       {
        "c_split": false,
        "end": "0x0069E338",
-       "name": "tu185",
+       "name": "sdv_181",
        "start": "0x0069E32C"
       }
      ],
      "size": 12,
      "splat_type": "sbss",
      "start": "0x0069E32C"
-    },
-    ".bss": {
-     "anchored": [
-      "0x00831610",
-      "0x00881801"
-     ],
-     "bounds": [
-      "0x00808cd1",
-      "0x00881810"
-     ],
-     "end": "0x00881810",
-     "evidence_source": "map",
-     "rule": "anchored start",
-     "pieces": [
-      {
-       "c_split": false,
-       "end": "0x00881810",
-       "name": "tu185",
-       "start": "0x00831610"
-      }
-     ],
-     "size": 328192,
-     "splat_type": "bss",
-     "start": "0x00831610"
     }
    },
    "text": {
-    "start": "0x0026bc28",
+    "start": "0x00266f68",
     "end": "0x00271458",
     "code_end": "0x00271458",
-    "size": 22576,
+    "size": 42224,
     "splat": "c",
     "splat_range": [
-     "0x0026bc28",
+     "0x00266f68",
      "0x00271458"
     ],
     "note": null
    },
    "import": {
     "mode": "c",
-    "note": "Express publication, order \"Haz 1\" (user 2026-11-05)",
+    "note": "origin 57073757 (PRs #24-#29): TUs upstream turned to C; joined sdv_181, tu185 into sdv_181.c (Opok, PR review 2026-11-17: the callee compiled earlier in the file)",
     "source": {
      "kind": "file",
-     "path": "src/main/tu185.c",
+     "path": "src/main/sdv_181.c",
      "include_dirs": [
       "include"
      ]

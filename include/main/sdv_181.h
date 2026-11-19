@@ -5,5 +5,6 @@
 
 void sdvInitAlters(void);
 void tiWindClearFirstSlot(void);
+void sefResetResourceTable(void);
 
 #endif /* INCLUDE_MAIN_SDV_181_H */

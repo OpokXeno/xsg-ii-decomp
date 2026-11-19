@@ -111264,18 +111264,21 @@
     {
      "range": [
       "0x00807ea0",
-      "0x00831610"
+      "0x00881810"
      ],
      "generated": [
       "0x00807ea0",
-      "0x00831610"
+      "0x00881810"
      ],
      "generated_by": [],
      "c_owned_symbols": [
       "tiWindSlots",
       "_sdvSpecialBuf",
       "sdvSpecialTable",
-      "sdvAlterTable"
+      "sdvAlterTable",
+      "sefViewCameraMatrix",
+      "sefEntryPool",
+      "sefVuPacket"
      ],
      "also_referenced_by_c": [],
      "c_input_spans": [
@@ -111283,17 +111286,20 @@
        "section": ".bss",
        "range": [
         "0x00807ea0",
-        "0x00831610"
+        "0x00881810"
        ],
        "object_range": [
         0,
-        169840
+        498032
        ],
        "symbols": [
         "tiWindSlots",
         "_sdvSpecialBuf",
         "sdvSpecialTable",
-        "sdvAlterTable"
+        "sdvAlterTable",
+        "sefViewCameraMatrix",
+        "sefEntryPool",
+        "sefVuPacket"
        ]
       }
      ],
@@ -111352,7 +111358,7 @@
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_005E6D78"
+      "sdvLinkedPartsA"
      ],
      "c_input_spans": [
       {
@@ -111366,7 +111372,7 @@
         88
        ],
        "symbols": [
-        "D_005E6D78"
+        "sdvLinkedPartsA"
        ]
       }
      ],
@@ -111387,7 +111393,7 @@
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_005E6DB8"
+      "sdvLinkedPartsB"
      ],
      "c_input_spans": [
       {
@@ -111401,7 +111407,7 @@
         128
        ],
        "symbols": [
-        "D_005E6DB8"
+        "sdvLinkedPartsB"
        ]
       }
      ],
@@ -111422,7 +111428,7 @@
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_005E6DE0"
+      "sdvAxisPositiveX"
      ],
      "c_input_spans": [
       {
@@ -111436,7 +111442,7 @@
         144
        ],
        "symbols": [
-        "D_005E6DE0"
+        "sdvAxisPositiveX"
        ]
       }
      ],
@@ -111457,7 +111463,7 @@
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_005E6DF0"
+      "sdvAxisNegativeX"
      ],
      "c_input_spans": [
       {
@@ -111471,7 +111477,7 @@
         160
        ],
        "symbols": [
-        "D_005E6DF0"
+        "sdvAxisNegativeX"
        ]
       }
      ],
@@ -111492,7 +111498,7 @@
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_005E6E00"
+      "sdvAlterEnvironment"
      ],
      "c_input_spans": [
       {
@@ -111506,7 +111512,813 @@
         272
        ],
        "symbols": [
-        "D_005E6E00"
+        "sdvAlterEnvironment"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e6e70",
+      "0x005e6ea8"
+     ],
+     "generated": [
+      "0x005e6e70",
+      "0x005e6ea8"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefRingSizes"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e6e70",
+        "0x005e6ea8"
+       ],
+       "object_range": [
+        272,
+        328
+       ],
+       "symbols": [
+        "sefRingSizes"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e6ea8",
+      "0x005e6ee0"
+     ],
+     "generated": [
+      "0x005e6ea8",
+      "0x005e6ee0"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKinds0To2Params"
+     ],
+     "c_input_spans": [
+      {
+       "zero_padding_tail": 8,
+       "section": ".data",
+       "range": [
+        "0x005e6ea8",
+        "0x005e6ee0"
+       ],
+       "object_range": [
+        328,
+        384
+       ],
+       "symbols": [
+        "sefKinds0To2Params"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e6ee0",
+      "0x005e6ef0"
+     ],
+     "generated": [
+      "0x005e6ee0",
+      "0x005e6ef0"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKinds0To2Origin"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e6ee0",
+        "0x005e6ef0"
+       ],
+       "object_range": [
+        384,
+        400
+       ],
+       "symbols": [
+        "sefKinds0To2Origin"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e6ef0",
+      "0x005e6f00"
+     ],
+     "generated": [
+      "0x005e6ef0",
+      "0x005e6f00"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKinds0To2AimCenter"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e6ef0",
+        "0x005e6f00"
+       ],
+       "object_range": [
+        400,
+        416
+       ],
+       "symbols": [
+        "sefKinds0To2AimCenter"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e6f00",
+      "0x005e6f40"
+     ],
+     "generated": [
+      "0x005e6f00",
+      "0x005e6f40"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKinds0To2AimMatrix"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e6f00",
+        "0x005e6f40"
+       ],
+       "object_range": [
+        416,
+        480
+       ],
+       "symbols": [
+        "sefKinds0To2AimMatrix"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e6f40",
+      "0x005e6f50"
+     ],
+     "generated": [
+      "0x005e6f40",
+      "0x005e6f50"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKinds0To2Shades"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e6f40",
+        "0x005e6f50"
+       ],
+       "object_range": [
+        480,
+        496
+       ],
+       "symbols": [
+        "sefKinds0To2Shades"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e6f50",
+      "0x005e6f60"
+     ],
+     "generated": [
+      "0x005e6f50",
+      "0x005e6f60"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKinds3To4GrowthOffset"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e6f50",
+        "0x005e6f60"
+       ],
+       "object_range": [
+        496,
+        512
+       ],
+       "symbols": [
+        "sefKinds3To4GrowthOffset"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e6f60",
+      "0x005e6f70"
+     ],
+     "generated": [
+      "0x005e6f60",
+      "0x005e6f70"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKinds3To4Speeds"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e6f60",
+        "0x005e6f70"
+       ],
+       "object_range": [
+        512,
+        528
+       ],
+       "symbols": [
+        "sefKinds3To4Speeds"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e6f70",
+      "0x005e6f80"
+     ],
+     "generated": [
+      "0x005e6f70",
+      "0x005e6f80"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKinds3To4Counts"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e6f70",
+        "0x005e6f80"
+       ],
+       "object_range": [
+        528,
+        544
+       ],
+       "symbols": [
+        "sefKinds3To4Counts"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e6f80",
+      "0x005e7100"
+     ],
+     "generated": [
+      "0x005e6f80",
+      "0x005e7100"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefEmitterParamsKinds5To7"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e6f80",
+        "0x005e7100"
+       ],
+       "object_range": [
+        544,
+        928
+       ],
+       "symbols": [
+        "sefEmitterParamsKinds5To7"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e7100",
+      "0x005e7280"
+     ],
+     "generated": [
+      "0x005e7100",
+      "0x005e7280"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefEmitterParamsKinds8To10"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e7100",
+        "0x005e7280"
+       ],
+       "object_range": [
+        928,
+        1312
+       ],
+       "symbols": [
+        "sefEmitterParamsKinds8To10"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e7280",
+      "0x005e7460"
+     ],
+     "generated": [
+      "0x005e7280",
+      "0x005e7460"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefEmitterParamsKinds11To13"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e7280",
+        "0x005e7460"
+       ],
+       "object_range": [
+        1312,
+        1792
+       ],
+       "symbols": [
+        "sefEmitterParamsKinds11To13"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e7460",
+      "0x005e75e0"
+     ],
+     "generated": [
+      "0x005e7460",
+      "0x005e75e0"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefEmitterParamsKinds22Up"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e7460",
+        "0x005e75e0"
+       ],
+       "object_range": [
+        1792,
+        2176
+       ],
+       "symbols": [
+        "sefEmitterParamsKinds22Up"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e75e0",
+      "0x005e77c0"
+     ],
+     "generated": [
+      "0x005e75e0",
+      "0x005e77c0"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefEmitterParamsKinds14To16"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e75e0",
+        "0x005e77c0"
+       ],
+       "object_range": [
+        2176,
+        2656
+       ],
+       "symbols": [
+        "sefEmitterParamsKinds14To16"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e77c0",
+      "0x005e79a0"
+     ],
+     "generated": [
+      "0x005e77c0",
+      "0x005e79a0"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefEmitterParamsKinds17To19"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e77c0",
+        "0x005e79a0"
+       ],
+       "object_range": [
+        2656,
+        3136
+       ],
+       "symbols": [
+        "sefEmitterParamsKinds17To19"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e79a0",
+      "0x005e79a8"
+     ],
+     "generated": [
+      "0x005e79a0",
+      "0x005e79a8"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKind20Intervals"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e79a0",
+        "0x005e79a8"
+       ],
+       "object_range": [
+        3136,
+        3144
+       ],
+       "symbols": [
+        "sefKind20Intervals"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e79a8",
+      "0x005e79b8"
+     ],
+     "generated": [
+      "0x005e79a8",
+      "0x005e79b8"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKind20Sizes"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e79a8",
+        "0x005e79b8"
+       ],
+       "object_range": [
+        3144,
+        3160
+       ],
+       "symbols": [
+        "sefKind20Sizes"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e79b8",
+      "0x005e79c8"
+     ],
+     "generated": [
+      "0x005e79b8",
+      "0x005e79c8"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefKinds3To4Lift"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e79b8",
+        "0x005e79c8"
+       ],
+       "object_range": [
+        3160,
+        3176
+       ],
+       "symbols": [
+        "sefKinds3To4Lift"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e79c8",
+      "0x005e7a30"
+     ],
+     "generated": [
+      "0x005e79c8",
+      "0x005e7a30"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefSpawnHandlers"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e79c8",
+        "0x005e7a30"
+       ],
+       "object_range": [
+        3176,
+        3280
+       ],
+       "symbols": [
+        "sefSpawnHandlers"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e7a30",
+      "0x005e7a98"
+     ],
+     "generated": [
+      "0x005e7a30",
+      "0x005e7a98"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefUpdateHandlers"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e7a30",
+        "0x005e7a98"
+       ],
+       "object_range": [
+        3280,
+        3384
+       ],
+       "symbols": [
+        "sefUpdateHandlers"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e7a98",
+      "0x005e7ac0"
+     ],
+     "generated": [
+      "0x005e7a98",
+      "0x005e7ac0"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sdvCameraKeyLog"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e7a98",
+        "0x005e7ac0"
+       ],
+       "object_range": [
+        3384,
+        3424
+       ],
+       "symbols": [
+        "sdvCameraKeyLog"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x005e7ac0",
+      "0x00607ac0"
+     ],
+     "generated": [
+      "0x005e7ac0",
+      "0x00607ac0"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefSmallHeap"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x005e7ac0",
+        "0x00607ac0"
+       ],
+       "object_range": [
+        3424,
+        134496
+       ],
+       "symbols": [
+        "sefSmallHeap"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x00607ac0",
+      "0x0061b2c0"
+     ],
+     "generated": [
+      "0x00607ac0",
+      "0x0061b2c0"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefResourceTable"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".data",
+       "range": [
+        "0x00607ac0",
+        "0x0061b2c0"
+       ],
+       "object_range": [
+        134496,
+        214368
+       ],
+       "symbols": [
+        "sefResourceTable"
        ]
       }
      ],
@@ -111521,11 +112333,11 @@
     {
      "range": [
       "0x0069b324",
-      "0x0069b374"
+      "0x0069b3a8"
      ],
      "generated": [
       "0x0069b324",
-      "0x0069b374"
+      "0x0069b3a8"
      ],
      "generated_by": [],
      "c_owned_symbols": [
@@ -111548,21 +112360,34 @@
       "D_0069B364",
       "D_0069B368",
       "D_0069B36C",
-      "D_0069B370"
+      "D_0069B370",
+      "D_0069B374",
+      "D_0069B378",
+      "D_0069B37C",
+      "D_0069B380",
+      "D_0069B384",
+      "D_0069B388",
+      "D_0069B38C",
+      "D_0069B390",
+      "D_0069B394",
+      "D_0069B398",
+      "D_0069B39C",
+      "D_0069B3A0",
+      "D_0069B3A4"
      ],
      "c_input_spans": [
       {
        "section": ".lit4",
        "range": [
         "0x0069b324",
-        "0x0069b374"
+        "0x0069b3a8"
        ],
        "symbols": [],
        "anonymous_emission": true,
        "credit": "verified",
        "object_range": [
         0,
-        80
+        132
        ]
       }
      ],
@@ -111574,31 +112399,108 @@
     },
     {
      "range": [
-      "0x0069b378",
-      "0x0069b380"
+      "0x0069b3a8",
+      "0x0069b4e4"
      ],
      "generated": [
-      "0x0069b378",
-      "0x0069b380"
+      "0x0069b3a8",
+      "0x0069b4e4"
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_0069B378",
-      "D_0069B37C"
+      "D_0069B3A8",
+      "D_0069B3AC",
+      "D_0069B3B0",
+      "D_0069B3B4",
+      "D_0069B3B8",
+      "D_0069B3BC",
+      "D_0069B3C0",
+      "D_0069B3C4",
+      "D_0069B3C8",
+      "D_0069B3CC",
+      "D_0069B3D0",
+      "D_0069B3D4",
+      "D_0069B3D8",
+      "D_0069B3DC",
+      "D_0069B3E0",
+      "D_0069B3E4",
+      "D_0069B3E8",
+      "D_0069B3EC",
+      "D_0069B3F0",
+      "D_0069B3F4",
+      "D_0069B3F8",
+      "D_0069B3FC",
+      "D_0069B400",
+      "D_0069B404",
+      "D_0069B408",
+      "D_0069B40C",
+      "D_0069B410",
+      "D_0069B414",
+      "D_0069B418",
+      "D_0069B41C",
+      "D_0069B420",
+      "D_0069B424",
+      "D_0069B428",
+      "D_0069B42C",
+      "D_0069B430",
+      "D_0069B434",
+      "D_0069B438",
+      "D_0069B43C",
+      "D_0069B440",
+      "D_0069B444",
+      "D_0069B448",
+      "D_0069B44C",
+      "D_0069B450",
+      "D_0069B454",
+      "D_0069B458",
+      "D_0069B45C",
+      "D_0069B460",
+      "D_0069B464",
+      "D_0069B468",
+      "D_0069B46C",
+      "D_0069B470",
+      "D_0069B474",
+      "D_0069B478",
+      "D_0069B47C",
+      "D_0069B480",
+      "D_0069B484",
+      "D_0069B488",
+      "D_0069B48C",
+      "D_0069B490",
+      "D_0069B494",
+      "D_0069B498",
+      "D_0069B49C",
+      "D_0069B4A0",
+      "D_0069B4A4",
+      "D_0069B4A8",
+      "D_0069B4AC",
+      "D_0069B4B0",
+      "D_0069B4B4",
+      "D_0069B4B8",
+      "D_0069B4BC",
+      "D_0069B4C0",
+      "D_0069B4C4",
+      "D_0069B4C8",
+      "D_0069B4CC",
+      "D_0069B4D0",
+      "D_0069B4D4",
+      "D_0069B4D8",
+      "D_0069B4DC",
+      "D_0069B4E0"
      ],
      "c_input_spans": [
       {
        "section": ".lit4",
        "range": [
-        "0x0069b378",
-        "0x0069b380"
+        "0x0069b3a8",
+        "0x0069b4e4"
        ],
        "symbols": [],
        "anonymous_emission": true,
        "credit": "verified",
        "object_range": [
-        80,
-        88
+        132,
+        448
        ]
       }
      ],
@@ -111621,7 +112523,7 @@
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_0068C530"
+      "sdvAlterForward"
      ],
      "c_input_spans": [
       {
@@ -111635,7 +112537,7 @@
         16
        ],
        "symbols": [
-        "D_0068C530"
+        "sdvAlterForward"
        ]
       }
      ],
@@ -111648,29 +112550,64 @@
     {
      "range": [
       "0x0068c540",
-      "0x0068c560"
+      "0x0068c550"
      ],
      "generated": [
       "0x0068c540",
-      "0x0068c560"
+      "0x0068c550"
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_0068C540"
+      "sdvAlterStartDelta"
      ],
      "c_input_spans": [
       {
        "section": ".rodata",
        "range": [
         "0x0068c540",
-        "0x0068c560"
+        "0x0068c550"
        ],
        "object_range": [
         16,
+        32
+       ],
+       "symbols": [
+        "sdvAlterStartDelta"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x0068c550",
+      "0x0068c560"
+     ],
+     "generated": [
+      "0x0068c550",
+      "0x0068c560"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "D_0068C550"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".rodata",
+       "range": [
+        "0x0068c550",
+        "0x0068c560"
+       ],
+       "object_range": [
+        32,
         48
        ],
        "symbols": [
-        "D_0068C540"
+        "D_0068C550"
        ]
       }
      ],
@@ -111683,29 +112620,64 @@
     {
      "range": [
       "0x0068c560",
-      "0x0068c580"
+      "0x0068c570"
      ],
      "generated": [
       "0x0068c560",
-      "0x0068c580"
+      "0x0068c570"
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_0068C560"
+      "sdvAlterMirrorXY"
      ],
      "c_input_spans": [
       {
        "section": ".rodata",
        "range": [
         "0x0068c560",
-        "0x0068c580"
+        "0x0068c570"
        ],
        "object_range": [
         48,
+        64
+       ],
+       "symbols": [
+        "sdvAlterMirrorXY"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x0068c570",
+      "0x0068c580"
+     ],
+     "generated": [
+      "0x0068c570",
+      "0x0068c580"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "D_0068C570"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".rodata",
+       "range": [
+        "0x0068c570",
+        "0x0068c580"
+       ],
+       "object_range": [
+        64,
         80
        ],
        "symbols": [
-        "D_0068C560"
+        "D_0068C570"
        ]
       }
      ],
@@ -111788,15 +112760,16 @@
     {
      "range": [
       "0x0068c5a0",
-      "0x0068c5e0"
+      "0x0068c5e8"
      ],
      "generated": [
       "0x0068c5a0",
-      "0x0068c5e0"
+      "0x0068c5e8"
      ],
      "generated_by": [],
      "c_owned_symbols": [
       "D_0068C5D8",
+      "D_0068C5E0",
       "jtbl_0068C5A0"
      ],
      "c_input_spans": [
@@ -111804,14 +112777,119 @@
        "section": ".rodata",
        "range": [
         "0x0068c5a0",
-        "0x0068c5e0"
+        "0x0068c5e8"
        ],
        "symbols": [],
        "anonymous_emission": true,
        "credit": "verified",
        "object_range": [
         112,
-        176
+        184
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x0068c5e8",
+      "0x0068c608"
+     ],
+     "generated": [
+      "0x0068c5e8",
+      "0x0068c608"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefAlphaBlendValues"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".rodata",
+       "range": [
+        "0x0068c5e8",
+        "0x0068c608"
+       ],
+       "object_range": [
+        184,
+        216
+       ],
+       "symbols": [
+        "sefAlphaBlendValues"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x0068c610",
+      "0x0068c650"
+     ],
+     "generated": [
+      "0x0068c610",
+      "0x0068c650"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "sefQuadCorners"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".rodata",
+       "range": [
+        "0x0068c610",
+        "0x0068c650"
+       ],
+       "object_range": [
+        216,
+        280
+       ],
+       "symbols": [
+        "sefQuadCorners"
+       ]
+      }
+     ],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "build/main/build/c/sdv_181.o"
+     }
+    },
+    {
+     "range": [
+      "0x0068c650",
+      "0x0068c658"
+     ],
+     "generated": [
+      "0x0068c650",
+      "0x0068c658"
+     ],
+     "generated_by": [],
+     "c_owned_symbols": [
+      "D_0068C650"
+     ],
+     "c_input_spans": [
+      {
+       "section": ".rodata",
+       "range": [
+        "0x0068c650",
+        "0x0068c658"
+       ],
+       "symbols": [],
+       "anonymous_emission": true,
+       "credit": "verified",
+       "object_range": [
+        280,
+        288
        ]
       }
      ],
@@ -111904,7 +112982,7 @@
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_0069DC44"
+      "sdvSlerpNudgeCount"
      ],
      "c_input_spans": [
       {
@@ -111918,7 +112996,7 @@
         12
        ],
        "symbols": [
-        "D_0069DC44"
+        "sdvSlerpNudgeCount"
        ]
       }
      ],
@@ -111927,1157 +113005,7 @@
       "tool": "tools/tu/data_carve.py derive",
       "object": "build/main/build/c/sdv_181.o"
      }
-    }
-   ]
-  },
-  "main/tu185": {
-   ".bss": [
-    {
-     "range": [
-      "0x00831610",
-      "0x00881810"
-     ],
-     "generated": [
-      "0x00831610",
-      "0x00881810"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefViewCameraMatrix",
-      "sefEntryPool",
-      "sefVuPacket"
-     ],
-     "also_referenced_by_c": [],
-     "c_input_spans": [
-      {
-       "section": ".bss",
-       "range": [
-        "0x00831610",
-        "0x00881810"
-       ],
-       "object_range": [
-        0,
-        328192
-       ],
-       "symbols": [
-        "sefViewCameraMatrix",
-        "sefEntryPool",
-        "sefVuPacket"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    }
-   ],
-   ".data": [
-    {
-     "range": [
-      "0x005e6e70",
-      "0x005e6ea8"
-     ],
-     "generated": [
-      "0x005e6e70",
-      "0x005e6ea8"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefRingSizes"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e6e70",
-        "0x005e6ea8"
-       ],
-       "object_range": [
-        0,
-        56
-       ],
-       "symbols": [
-        "sefRingSizes"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
     },
-    {
-     "range": [
-      "0x005e6ea8",
-      "0x005e6ee0"
-     ],
-     "generated": [
-      "0x005e6ea8",
-      "0x005e6ee0"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_005E6EA8"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e6ea8",
-        "0x005e6ee0"
-       ],
-       "object_range": [
-        56,
-        112
-       ],
-       "symbols": [
-        "D_005E6EA8"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e6ee0",
-      "0x005e6ef0"
-     ],
-     "generated": [
-      "0x005e6ee0",
-      "0x005e6ef0"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_005E6EE0"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e6ee0",
-        "0x005e6ef0"
-       ],
-       "object_range": [
-        112,
-        128
-       ],
-       "symbols": [
-        "D_005E6EE0"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e6ef0",
-      "0x005e6f00"
-     ],
-     "generated": [
-      "0x005e6ef0",
-      "0x005e6f00"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_005E6EF0"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e6ef0",
-        "0x005e6f00"
-       ],
-       "object_range": [
-        128,
-        144
-       ],
-       "symbols": [
-        "D_005E6EF0"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e6f00",
-      "0x005e6f40"
-     ],
-     "generated": [
-      "0x005e6f00",
-      "0x005e6f40"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_005E6F00"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e6f00",
-        "0x005e6f40"
-       ],
-       "object_range": [
-        144,
-        208
-       ],
-       "symbols": [
-        "D_005E6F00"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e6f40",
-      "0x005e6f50"
-     ],
-     "generated": [
-      "0x005e6f40",
-      "0x005e6f50"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_005E6F40"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e6f40",
-        "0x005e6f50"
-       ],
-       "object_range": [
-        208,
-        224
-       ],
-       "symbols": [
-        "D_005E6F40"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e6f50",
-      "0x005e6f60"
-     ],
-     "generated": [
-      "0x005e6f50",
-      "0x005e6f60"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_005E6F50"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e6f50",
-        "0x005e6f60"
-       ],
-       "object_range": [
-        224,
-        240
-       ],
-       "symbols": [
-        "D_005E6F50"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e6f60",
-      "0x005e6f70"
-     ],
-     "generated": [
-      "0x005e6f60",
-      "0x005e6f70"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_005E6F60"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e6f60",
-        "0x005e6f70"
-       ],
-       "object_range": [
-        240,
-        256
-       ],
-       "symbols": [
-        "D_005E6F60"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e6f70",
-      "0x005e6f80"
-     ],
-     "generated": [
-      "0x005e6f70",
-      "0x005e6f80"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_005E6F70"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e6f70",
-        "0x005e6f80"
-       ],
-       "object_range": [
-        256,
-        272
-       ],
-       "symbols": [
-        "D_005E6F70"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e6f80",
-      "0x005e7100"
-     ],
-     "generated": [
-      "0x005e6f80",
-      "0x005e7100"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefEmitterParamsKinds5To7"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e6f80",
-        "0x005e7100"
-       ],
-       "object_range": [
-        272,
-        656
-       ],
-       "symbols": [
-        "sefEmitterParamsKinds5To7"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e7100",
-      "0x005e7280"
-     ],
-     "generated": [
-      "0x005e7100",
-      "0x005e7280"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefEmitterParamsKinds8To10"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e7100",
-        "0x005e7280"
-       ],
-       "object_range": [
-        656,
-        1040
-       ],
-       "symbols": [
-        "sefEmitterParamsKinds8To10"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e7280",
-      "0x005e7460"
-     ],
-     "generated": [
-      "0x005e7280",
-      "0x005e7460"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefEmitterParamsKinds11To13"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e7280",
-        "0x005e7460"
-       ],
-       "object_range": [
-        1040,
-        1520
-       ],
-       "symbols": [
-        "sefEmitterParamsKinds11To13"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e7460",
-      "0x005e75e0"
-     ],
-     "generated": [
-      "0x005e7460",
-      "0x005e75e0"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefEmitterParamsKinds22Up"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e7460",
-        "0x005e75e0"
-       ],
-       "object_range": [
-        1520,
-        1904
-       ],
-       "symbols": [
-        "sefEmitterParamsKinds22Up"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e75e0",
-      "0x005e77c0"
-     ],
-     "generated": [
-      "0x005e75e0",
-      "0x005e77c0"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefEmitterParamsKinds14To16"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e75e0",
-        "0x005e77c0"
-       ],
-       "object_range": [
-        1904,
-        2384
-       ],
-       "symbols": [
-        "sefEmitterParamsKinds14To16"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e77c0",
-      "0x005e79a0"
-     ],
-     "generated": [
-      "0x005e77c0",
-      "0x005e79a0"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefEmitterParamsKinds17To19"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e77c0",
-        "0x005e79a0"
-       ],
-       "object_range": [
-        2384,
-        2864
-       ],
-       "symbols": [
-        "sefEmitterParamsKinds17To19"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e79a0",
-      "0x005e79a8"
-     ],
-     "generated": [
-      "0x005e79a0",
-      "0x005e79a8"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefKind20Intervals"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e79a0",
-        "0x005e79a8"
-       ],
-       "object_range": [
-        2864,
-        2872
-       ],
-       "symbols": [
-        "sefKind20Intervals"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e79a8",
-      "0x005e79b8"
-     ],
-     "generated": [
-      "0x005e79a8",
-      "0x005e79b8"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefKind20Sizes"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e79a8",
-        "0x005e79b8"
-       ],
-       "object_range": [
-        2872,
-        2888
-       ],
-       "symbols": [
-        "sefKind20Sizes"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e79b8",
-      "0x005e79c8"
-     ],
-     "generated": [
-      "0x005e79b8",
-      "0x005e79c8"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_005E79B8"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e79b8",
-        "0x005e79c8"
-       ],
-       "object_range": [
-        2888,
-        2904
-       ],
-       "symbols": [
-        "D_005E79B8"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e79c8",
-      "0x005e7a30"
-     ],
-     "generated": [
-      "0x005e79c8",
-      "0x005e7a30"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefSpawnHandlers"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e79c8",
-        "0x005e7a30"
-       ],
-       "object_range": [
-        2904,
-        3008
-       ],
-       "symbols": [
-        "sefSpawnHandlers"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e7a30",
-      "0x005e7a98"
-     ],
-     "generated": [
-      "0x005e7a30",
-      "0x005e7a98"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefUpdateHandlers"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e7a30",
-        "0x005e7a98"
-       ],
-       "object_range": [
-        3008,
-        3112
-       ],
-       "symbols": [
-        "sefUpdateHandlers"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e7a98",
-      "0x005e7ac0"
-     ],
-     "generated": [
-      "0x005e7a98",
-      "0x005e7ac0"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sdvCameraKeyLog"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e7a98",
-        "0x005e7ac0"
-       ],
-       "object_range": [
-        3112,
-        3152
-       ],
-       "symbols": [
-        "sdvCameraKeyLog"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x005e7ac0",
-      "0x00607ac0"
-     ],
-     "generated": [
-      "0x005e7ac0",
-      "0x00607ac0"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefSmallHeap"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x005e7ac0",
-        "0x00607ac0"
-       ],
-       "object_range": [
-        3152,
-        134224
-       ],
-       "symbols": [
-        "sefSmallHeap"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x00607ac0",
-      "0x0061b2c0"
-     ],
-     "generated": [
-      "0x00607ac0",
-      "0x0061b2c0"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefResourceTable"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".data",
-       "range": [
-        "0x00607ac0",
-        "0x0061b2c0"
-       ],
-       "object_range": [
-        134224,
-        214096
-       ],
-       "symbols": [
-        "sefResourceTable"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    }
-   ],
-   ".lit4": [
-    {
-     "range": [
-      "0x0069b3d4",
-      "0x0069b438"
-     ],
-     "generated": [
-      "0x0069b3d4",
-      "0x0069b438"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_0069B3D4",
-      "D_0069B3D8",
-      "D_0069B3DC",
-      "D_0069B3E0",
-      "D_0069B3E4",
-      "D_0069B3E8",
-      "D_0069B3EC",
-      "D_0069B3F0",
-      "D_0069B3F4",
-      "D_0069B3F8",
-      "D_0069B3FC",
-      "D_0069B400",
-      "D_0069B404",
-      "D_0069B408",
-      "D_0069B40C",
-      "D_0069B410",
-      "D_0069B414",
-      "D_0069B418",
-      "D_0069B41C",
-      "D_0069B420",
-      "D_0069B424",
-      "D_0069B428",
-      "D_0069B42C",
-      "D_0069B430",
-      "D_0069B434"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".lit4",
-       "range": [
-        "0x0069b3d4",
-        "0x0069b438"
-       ],
-       "symbols": [],
-       "anonymous_emission": true,
-       "credit": "verified",
-       "object_range": [
-        0,
-        100
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x0069b440",
-      "0x0069b45c"
-     ],
-     "generated": [
-      "0x0069b440",
-      "0x0069b45c"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_0069B440",
-      "D_0069B444",
-      "D_0069B448",
-      "D_0069B44C",
-      "D_0069B450",
-      "D_0069B454",
-      "D_0069B458"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".lit4",
-       "range": [
-        "0x0069b440",
-        "0x0069b45c"
-       ],
-       "symbols": [],
-       "anonymous_emission": true,
-       "credit": "verified",
-       "object_range": [
-        100,
-        128
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x0069b4b4",
-      "0x0069b4e4"
-     ],
-     "generated": [
-      "0x0069b4b4",
-      "0x0069b4e4"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_0069B4B4",
-      "D_0069B4B8",
-      "D_0069B4BC",
-      "D_0069B4C0",
-      "D_0069B4C4",
-      "D_0069B4C8",
-      "D_0069B4CC",
-      "D_0069B4D0",
-      "D_0069B4D4",
-      "D_0069B4D8",
-      "D_0069B4DC",
-      "D_0069B4E0"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".lit4",
-       "range": [
-        "0x0069b4b4",
-        "0x0069b4e4"
-       ],
-       "symbols": [],
-       "anonymous_emission": true,
-       "credit": "verified",
-       "object_range": [
-        128,
-        176
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    }
-   ],
-   ".rodata": [
-    {
-     "range": [
-      "0x0068c5e8",
-      "0x0068c608"
-     ],
-     "generated": [
-      "0x0068c5e8",
-      "0x0068c608"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefAlphaBlendValues"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".rodata",
-       "range": [
-        "0x0068c5e8",
-        "0x0068c608"
-       ],
-       "object_range": [
-        0,
-        32
-       ],
-       "symbols": [
-        "sefAlphaBlendValues"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x0068c610",
-      "0x0068c650"
-     ],
-     "generated": [
-      "0x0068c610",
-      "0x0068c650"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefQuadCorners"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".rodata",
-       "range": [
-        "0x0068c610",
-        "0x0068c650"
-       ],
-       "object_range": [
-        32,
-        96
-       ],
-       "symbols": [
-        "sefQuadCorners"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x0068c650",
-      "0x0068c660"
-     ],
-     "generated": [
-      "0x0068c650",
-      "0x0068c660"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_0068C650"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".rodata",
-       "range": [
-        "0x0068c650",
-        "0x0068c660"
-       ],
-       "object_range": [
-        96,
-        112
-       ],
-       "symbols": [
-        "D_0068C650"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    }
-   ],
-   ".sbss": [
-    {
-     "range": [
-      "0x0069e32c",
-      "0x0069e338"
-     ],
-     "generated": [
-      "0x0069e32c",
-      "0x0069e338"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "sefViewMatrixPtr",
-      "sefLastDrawnKind",
-      "sefFloorHeight"
-     ],
-     "also_referenced_by_c": [],
-     "c_input_spans": [
-      {
-       "section": ".sbss",
-       "range": [
-        "0x0069e32c",
-        "0x0069e338"
-       ],
-       "object_range": [
-        0,
-        12
-       ],
-       "symbols": [
-        "sefViewMatrixPtr",
-        "sefLastDrawnKind",
-        "sefFloorHeight"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    }
-   ],
-   ".sdata": [
     {
      "range": [
       "0x0069dc48",
@@ -113100,8 +113028,8 @@
         "0x0069dc4c"
        ],
        "object_range": [
-        0,
-        4
+        12,
+        16
        ],
        "symbols": [
         "sefPoolFull"
@@ -113111,7 +113039,7 @@
      "basis": {
       "kind": "derived",
       "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
+      "object": "build/main/build/c/sdv_181.o"
      }
     },
     {
@@ -113135,8 +113063,8 @@
         "0x0069dc50"
        ],
        "object_range": [
-        4,
-        8
+        16,
+        20
        ],
        "symbols": [
         "sefActiveCount"
@@ -113146,77 +113074,42 @@
      "basis": {
       "kind": "derived",
       "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
+      "object": "build/main/build/c/sdv_181.o"
      }
     },
     {
      "range": [
       "0x0069dc50",
-      "0x0069dc54"
+      "0x0069dc58"
      ],
      "generated": [
       "0x0069dc50",
-      "0x0069dc54"
+      "0x0069dc58"
      ],
      "generated_by": [],
      "c_owned_symbols": [
-      "D_0069DC50"
+      "sefKind3StartRadii"
      ],
      "c_input_spans": [
       {
        "section": ".sdata",
        "range": [
         "0x0069dc50",
-        "0x0069dc54"
-       ],
-       "object_range": [
-        8,
-        12
-       ],
-       "symbols": [
-        "D_0069DC50"
-       ]
-      }
-     ],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
-     }
-    },
-    {
-     "range": [
-      "0x0069dc54",
-      "0x0069dc58"
-     ],
-     "generated": [
-      "0x0069dc54",
-      "0x0069dc58"
-     ],
-     "generated_by": [],
-     "c_owned_symbols": [
-      "D_0069DC54"
-     ],
-     "c_input_spans": [
-      {
-       "section": ".sdata",
-       "range": [
-        "0x0069dc54",
         "0x0069dc58"
        ],
        "object_range": [
-        12,
-        16
+        24,
+        32
        ],
        "symbols": [
-        "D_0069DC54"
+        "sefKind3StartRadii"
        ]
       }
      ],
      "basis": {
       "kind": "derived",
       "tool": "tools/tu/data_carve.py derive",
-      "object": "build/main/build/c/tu185.o"
+      "object": "build/main/build/c/sdv_181.o"
      }
     }
    ]

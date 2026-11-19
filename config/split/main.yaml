@@ -206,7 +206,6 @@ segments:
       - [0x1479F0, c, tu179]
       - [0x147B50, c, sdv_180]
       - [0x147F68, c, sdv_181]
-      - [0x14CC28, c, tu185]
       - [0x152458, c, sm_initilize]
       - [0x1527C0, c, tu187]
       - [0x152DA8, c, m_math_188]
@@ -342,7 +341,6 @@ segments:
       - [0x4C75C0, data, srs]
       - [0x4C7D28, data, sdv_180]
       - [0x4C7D60, data, sdv_181]
-      - [0x4C7E70, data, tu185]
       - [0x4FC2C0, data, tu197]
       - [0x512140, data, test_129]
       - [0x512440, data, gifState]
@@ -450,7 +448,6 @@ segments:
       - [0x56D210, rodata, sef]
       - [0x56D480, rodata, srs]
       - [0x56D530, rodata, sdv_181]
-      - [0x56D5E8, rodata, tu185]
       - [0x56D660, rodata, sm_initilize]
       - [0x56D6F8, rodata, tu187]
       - [0x56D730, rodata, test_129]
@@ -549,7 +546,6 @@ segments:
       - [0x57C2B0, lit4, sv_get_image_item]
       - [0x57C2B8, lit4, sef]
       - [0x57C324, lit4, sdv_181]
-      - [0x57C3A8, lit4, tu185]
       - [0x57C4E4, lit4, tu187]
       - [0x57C500, lit4, m_math_188]
       - [0x57C510, lit4, tu196]
@@ -621,7 +617,6 @@ segments:
       - [0x57EBE0, sdata, srs]
       - [0x57EC30, sdata, sdv_180]
       - [0x57EC38, sdata, sdv_181]
-      - [0x57EC48, sdata, tu185]
       - [0x57EC58, sdata, tu187]
       - [0x57EC68, sdata, tu197]
       - [0x57EC88, sdata, tu198]
@@ -680,7 +675,7 @@ segments:
       - { type: sbss, vram: 0x0069E31C, name: sef }
       - { type: sbss, vram: 0x0069E320, name: srs }
       - { type: sbss, vram: 0x0069E324, name: sdv_180 }
-      - { type: sbss, vram: 0x0069E32C, name: tu185 }
+      - { type: sbss, vram: 0x0069E32C, name: sdv_181 }
       - { type: sbss, vram: 0x0069E338, name: tu242 }
       - { type: sbss, vram: 0x0069E33C, name: tu246 }
       - { type: sbss, vram: 0x0069E348, name: tu206 }
@@ -722,7 +717,6 @@ segments:
       - { type: bss, vram: 0x006DE840, name: sef }
       - { type: bss, vram: 0x00807B90, name: srs }
       - { type: bss, vram: 0x00807EA0, name: sdv_181 }
-      - { type: bss, vram: 0x00831610, name: tu185 }
       - { type: bss, vram: 0x00881810, name: sm_initilize }
       - { type: bss, vram: 0x00881840, name: tu187 }
       - { type: bss, vram: 0x00882300, name: test_129 }

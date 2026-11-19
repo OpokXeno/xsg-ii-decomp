@@ -359,6 +359,17 @@
         : "r" (destination), "r" (source) \
         : "memory")
 
+/* A point stored as the translation row (row 3, +48) of a matrix, w = 1 from vf0 (Vu0MMathCopyPoint with the row offset
+ * in the sqc2). */
+#define Vu0MMathSetTranslation(matrix, point) \
+    __asm__ __volatile__( \
+        "lqc2 vf1, 0(%1)\n" \
+        "vmove.w vf1, vf0\n" \
+        "sqc2 vf1, 48(%0)\n" \
+        : \
+        : "r" (matrix), "r" (point) \
+        : "memory")
+
 #define Vu0SetOrigin(destination) \
     __asm__ __volatile__( \
         "sqc2 vf0, 0(%0)\n" \
@@ -499,6 +510,18 @@
     __asm__ __volatile__( \
         "mfc1 $8, %1\n" \
         "qmtc2 $8, vf4\n" \
+        "vcallms 0x20\n" \
+        "qmfc2.i $8, vf1\n" \
+        "mtc1 $8, %0\n" \
+        : "=f" (result) \
+        : "f" (angle) \
+        : "$8", "memory")
+
+/* Vu0Sin with the non-interlocking qmtc2.ni move into the VU0 register (the form sdvExecAlter's original uses). */
+#define Vu0SinNI(result, angle) \
+    __asm__ __volatile__( \
+        "mfc1 $8, %1\n" \
+        "qmtc2.ni $8, vf4\n" \
         "vcallms 0x20\n" \
         "qmfc2.i $8, vf1\n" \
         "mtc1 $8, %0\n" \

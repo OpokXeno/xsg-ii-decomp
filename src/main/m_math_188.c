@@ -17,9 +17,8 @@
  * here (t2), because $8 and $9 would be the fifth and sixth argument
  * registers of this six-argument function.
  */
-float *MMathCalcHermite(float *destination, float parameter,
-                         HermiteVector *tangent_first, HermiteVector *tangent_second,
-                         HermiteVector *endpoint_first, HermiteVector *endpoint_second)
+float *MMathCalcHermite(float *destination, HermiteVector *tangent_first, HermiteVector *tangent_second,
+                         HermiteVector *endpoint_first, HermiteVector *endpoint_second, float parameter)
 {
     __asm__ __volatile__(
         "mfc1 $10, %0\n"

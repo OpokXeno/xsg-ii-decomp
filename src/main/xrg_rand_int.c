@@ -100,16 +100,16 @@ void XrgQuaternionToEuler(Vector4 *euler, Vector4 *quaternion)
     }
 }
 
-f32 func_002A1DC8(f32);
+f32 acosf(f32);
 
-/* Axis-angle from a quaternion: angle is twice the value func_002A1DC8 returns for w (an inverse cosine,
- * presumably acosf); the axis is xyz divided by sin(angle / 2), with a zero sine clamped to 1e-6. */
+/* Axis-angle from a quaternion: angle is twice acosf(w); the axis is xyz divided by sin(angle / 2), with a zero
+ * sine clamped to 1e-6. */
 void XrgQuaternionToAxisAngle(Vector4 *axis_angle, Vector4 *quaternion)
 {
     f32 angle;
     f32 divisor;
 
-    angle = 2.0f * func_002A1DC8(quaternion->w);
+    angle = 2.0f * acosf(quaternion->w);
     divisor = sinf(angle * 0.5f);
     if (divisor == 0.0f)
     {
@@ -214,7 +214,7 @@ void XrgQuaternionSlerp(Vector4 *result, Vector4 *from, Vector4 *to, f32 t)
         to->z = -to->z;
         to->w = -to->w;
     }
-    theta = func_002A1DC8(dot);
+    theta = acosf(dot);
     inv_sin = sinf(theta);
     to_weight = sinf(theta * t);
     from_weight = sinf(theta * (1.0f - t));

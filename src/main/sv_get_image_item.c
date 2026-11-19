@@ -4285,7 +4285,7 @@ typedef struct SvDrawSlot {
 extern SvDrawSlot D_0046E120[];
 extern int svVisibleEntryCount;
 extern int sefEffectRecordCount;
-void func_00271150(void);
+void sefCullResourceSlots(void);
 
 /* Culls the effect records into D_0046E120 (visible ones only, with their depth), then sorts them by depth, largest first. */
 void sefCullSchedulerEntries(void) {
@@ -4339,7 +4339,7 @@ void sefCullSchedulerEntries(void) {
     }
     svVisibleEntryCount = visibleCount;
     if (sefClipTestDisabled == 0) {
-        func_00271150();
+        sefCullResourceSlots();
         visibleCount = svVisibleEntryCount;
     }
     i = 1;

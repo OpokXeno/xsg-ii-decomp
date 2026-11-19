@@ -68,7 +68,7 @@ void MMathEvalHermiteKeys(Vector4 *result, MMathHermiteKey *keys, float time)
     parameter = (time - keys[first].key.time) / (float) (keys[next].key.time - keys[first].key.time);
     MMathCalcHermitePrm(&tangent[0], &tangent[1], &keys[previous].point, &keys[first].point,
                         &keys[next].point, &keys[after].point);
-    MMathCalcHermite(&result->x, parameter, &tangent[0], &tangent[1], &keys[first].point, &keys[next].point);
+    MMathCalcHermite(&result->x, &tangent[0], &tangent[1], &keys[first].point, &keys[next].point, parameter);
     result->w = 1.0f;
 }
 
