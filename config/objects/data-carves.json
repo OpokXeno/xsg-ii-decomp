@@ -122998,6 +122998,55 @@
    ]
   },
   "ov01/tu042": {
+   ".data": [
+    {
+     "range": [
+      "0x00ab5f28",
+      "0x00ab5f90"
+     ],
+     "generated": [
+      "0x00ab5f28",
+      "0x00ab5f90"
+     ],
+     "generated_by": [
+      "dataModelKeyGet"
+     ],
+     "c_owned_symbols": [
+      "dataModelKeyTbl"
+     ],
+     "also_referenced_by_c": [],
+     "basis": {
+      "kind": "derived",
+      "tool": "tools/tu/data_carve.py derive",
+      "object": "/home/pc/xenosaga2-port/xenosga-ii-decomp/.work/x2-data7/alloc/ov01/tu042.o"
+     }
+    }
+   ]
+  },
+  "ov01/tu091": {
+   ".rodata": [
+    {
+     "range": [
+      "0x00aba6a0",
+      "0x00aba880"
+     ],
+     "generated": [
+      "0x00aba6a0",
+      "0x00aba878"
+     ],
+     "generated_by": [
+      "thinkDispatch",
+      "unitParaFieldGet",
+      "unitParaFieldSet"
+     ],
+     "c_owned_symbols": [
+      "jtbl_00ABA6A0",
+      "jtbl_00ABA740",
+      "jtbl_00ABA7E0"
+     ],
+     "also_referenced_by_c": []
+    }
+   ],
    ".bss": [
     {
      "range": [
@@ -123036,53 +123085,6 @@
       "tool": "tools/tu/data_carve.py derive",
       "object": "/home/pc/xenosaga2-port/xenosga-ii-decomp/.work/x2-data7/alloc/ov01/tu042.o"
      }
-    }
-   ],
-   ".data": [
-    {
-     "range": [
-      "0x00ab5f28",
-      "0x00ab5f90"
-     ],
-     "generated": [
-      "0x00ab5f28",
-      "0x00ab5f90"
-     ],
-     "generated_by": [
-      "dataModelKeyGet"
-     ],
-     "c_owned_symbols": [
-      "dataModelKeyTbl"
-     ],
-     "also_referenced_by_c": [],
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "/home/pc/xenosaga2-port/xenosga-ii-decomp/.work/x2-data7/alloc/ov01/tu042.o"
-     }
-    }
-   ],
-   ".rodata": [
-    {
-     "range": [
-      "0x00aba6a0",
-      "0x00aba880"
-     ],
-     "generated": [
-      "0x00aba6a0",
-      "0x00aba878"
-     ],
-     "generated_by": [
-      "thinkDispatch",
-      "unitParaFieldGet",
-      "unitParaFieldSet"
-     ],
-     "c_owned_symbols": [
-      "jtbl_00ABA6A0",
-      "jtbl_00ABA740",
-      "jtbl_00ABA7E0"
-     ],
-     "also_referenced_by_c": []
     }
    ]
   },

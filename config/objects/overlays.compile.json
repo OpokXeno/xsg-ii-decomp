@@ -2549,9 +2549,9 @@
      "name": "tu042",
      "text": [
       "0x00a9b280",
-      "0x00a9c610"
+      "0x00a9bc08"
      ],
-     "functions": 49,
+     "functions": 32,
      "category": "game",
      "in_scope": true,
      "toolchain_classification": {
@@ -2622,24 +2622,80 @@
       "asm/nonmatchings/ov01/tu042/pairLinkTextGet.s",
       "asm/nonmatchings/ov01/tu042/calcLevelTextGet.s",
       "asm/nonmatchings/ov01/tu042/tgtIdTextGet.s",
-      "asm/nonmatchings/ov01/tu042/tableStringGet.s",
-      "asm/nonmatchings/ov01/tu042/msgReset.s",
-      "asm/nonmatchings/ov01/tu042/unitScriptPairEventSend.s",
-      "asm/nonmatchings/ov01/tu042/unitScriptEventSend.s",
-      "asm/nonmatchings/ov01/tu042/thinkDispatch.s",
-      "asm/nonmatchings/ov01/tu042/thinkSendEnd.s",
-      "asm/nonmatchings/ov01/tu042/atkTblBuild.s",
-      "asm/nonmatchings/ov01/tu042/atkTblFieldGet.s",
-      "asm/nonmatchings/ov01/tu042/unitParaFieldGet.s",
-      "asm/nonmatchings/ov01/tu042/unitParaFieldSet.s",
-      "asm/nonmatchings/ov01/tu042/effectSendOwned.s",
-      "asm/nonmatchings/ov01/tu042/effectSendValue.s",
-      "asm/nonmatchings/ov01/tu042/tecParaFieldGet.s",
-      "asm/nonmatchings/ov01/tu042/msgPutObject.s",
-      "asm/nonmatchings/ov01/tu042/msgObjRelease.s",
-      "asm/nonmatchings/ov01/tu042/msgIsIdle.s",
-      "asm/nonmatchings/ov01/tu042/partyDataGetSlot.s",
-      "asm/nonmatchings/ov01/tu042/partyDataSetSlot.s"
+      "asm/nonmatchings/ov01/tu042/tableStringGet.s"
+     ],
+     "accepted_asm_files": [],
+     "c_functions": [],
+     "accepted_asm_functions": [],
+     "local_renames": {},
+     "adaptations": [],
+     "header_divergence": []
+    },
+    {
+     "ordinal": 91,
+     "id": "ov01/tu091_00a9bc08",
+     "name": "tu091",
+     "text": [
+      "0x00a9bc08",
+      "0x00a9c610"
+     ],
+     "functions": 17,
+     "category": "game",
+     "in_scope": true,
+     "toolchain_classification": {
+      "compiler": "2.96",
+      "assembler": "legacy-buggy",
+      "g_flag": "-G0",
+      "id": "ov01#91"
+     },
+     "accepted_records": [],
+     "accepted_functions": [],
+     "kind": "c",
+     "source": "src/ov01/tu091.c",
+     "object": "build/src/ov01/tu091.o",
+     "compiler": {
+      "id": "ee-gcc2_96-realconv-lp7",
+      "version": "2.96-ee-001003-1",
+      "dir": "tool:ee-gcc2.96-realconv-lp7",
+      "sha256": {
+       "cc1": "25944d5c023a48316d719ff10b13a366afc31c3209662f28e440a90eb43d3b17"
+      },
+      "source": "pinned release"
+     },
+     "flags": [
+      "-O2",
+      "-G0"
+     ],
+     "assembler": {
+      "id": "LA29-vsqrt-swap-g (corrected ee-as with the per-object flag -g)",
+      "path": "tool:ee-as-la29-vsqrt-swap",
+      "sha256": "448143a3f1f7ecd4fffb79ea3e641afa36863895366873f93462028535f95494",
+      "argv": "-EL -m5900 -mabi=eabi <G> -g -I .",
+      "basis": "X1's last patched cc1 and corrected assembler with -g; see reports/x2-compiler-calibration.md"
+     },
+     "contract_basis": {
+      "decision": "X1's last patched cc1 and corrected assembler with -g; see reports/x2-compiler-calibration.md",
+      "g_flag_classification": "-G0",
+      "g_basis": "no gp-relative instruction in the whole overlay"
+     },
+     "include_asm_files": [
+      "asm/nonmatchings/ov01/tu091/msgReset.s",
+      "asm/nonmatchings/ov01/tu091/unitScriptPairEventSend.s",
+      "asm/nonmatchings/ov01/tu091/unitScriptEventSend.s",
+      "asm/nonmatchings/ov01/tu091/thinkDispatch.s",
+      "asm/nonmatchings/ov01/tu091/thinkSendEnd.s",
+      "asm/nonmatchings/ov01/tu091/atkTblBuild.s",
+      "asm/nonmatchings/ov01/tu091/atkTblFieldGet.s",
+      "asm/nonmatchings/ov01/tu091/unitParaFieldGet.s",
+      "asm/nonmatchings/ov01/tu091/unitParaFieldSet.s",
+      "asm/nonmatchings/ov01/tu091/effectSendOwned.s",
+      "asm/nonmatchings/ov01/tu091/effectSendValue.s",
+      "asm/nonmatchings/ov01/tu091/tecParaFieldGet.s",
+      "asm/nonmatchings/ov01/tu091/msgPutObject.s",
+      "asm/nonmatchings/ov01/tu091/msgObjRelease.s",
+      "asm/nonmatchings/ov01/tu091/msgIsIdle.s",
+      "asm/nonmatchings/ov01/tu091/partyDataGetSlot.s",
+      "asm/nonmatchings/ov01/tu091/partyDataSetSlot.s"
      ],
      "accepted_asm_files": [],
      "c_functions": [],

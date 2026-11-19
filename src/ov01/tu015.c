@@ -8,6 +8,7 @@
 #include "ov01/tu033.h"
 #include "ov01/tu041.h"
 #include "ov01/tu042.h"
+#include "ov01/tu091.h"
 #include "ov01/tu071.h"
 
 /* Values of Ov01Motion.moveMode: unitCmdMoveRatio sets RATIO, the pose ramp (unitCmdMoveRamp) sets RAMP. */

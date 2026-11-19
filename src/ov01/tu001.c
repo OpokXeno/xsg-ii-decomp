@@ -4,6 +4,7 @@
 #include "common.h"
 #include "ov01/tu000.h"
 #include "ov01/tu001.h"
+#include "ov01/tu091.h"
 
 /* Entries in the 32-record task table ov01TaskTable. */
 #define OV01_TASK_COUNT 32
