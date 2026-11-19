@@ -39,6 +39,7 @@
 #include "ov01/tu062.h"
 #include "ov01/tu070.h"
 #include "ov01/tu071.h"
+#include "ov01/tu091.h"
 
 /*
  * Spawn record of the party list ov01PartyList and the enemy list ov01EnemyList.

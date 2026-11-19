@@ -13,6 +13,7 @@
 #include "ov01/tu033.h"
 #include "ov01/tu036.h"
 #include "ov01/tu042.h"
+#include "ov01/tu091.h"
 #include "ov01/tu043.h"
 #include "ov01/tu056.h"
 
@@ -1016,7 +1017,7 @@ int battleSelectionGet(Ov01Object *unit, CmdListBody *command, Ov01Object *targe
             code = tableKeyEntryGet(unit, tgtSelectState.selection, target);
             command->command = CMD_KIND_TECHNIQUE;
             command->code = code;
-            command->arg.target = target;
+            command->arg.target = (int)target;
         }
     } else {
         switch (selection) {
@@ -1026,35 +1027,35 @@ int battleSelectionGet(Ov01Object *unit, CmdListBody *command, Ov01Object *targe
         case SELECT_LOOKUP:
             command->command = CMD_KIND_LOOKUP;
             lookup = battleLookupGet(tgtSelectState.selectionIndex);
-            command->arg.target = target;
+            command->arg.target = (int)target;
             command->code = lookup->tecIndex;
             command->pairIndex = tgtSelectState.selectionIndex;
             break;
         case SELECT_HIT_ACTION:
             command->command = CMD_KIND_ITEM;
             hitAction = hitActionGet(tgtSelectState.selectionIndex);
-            command->arg.target = target;
+            command->arg.target = (int)target;
             command->code = hitAction->entry;
             command->pairIndex = tgtSelectState.selectionIndex;
             break;
         case SELECT_LEVEL:
             command->command = CMD_KIND_TECHNIQUE;
             level = calcLevelRecordGet(tgtSelectState.selectionIndex);
-            command->arg.target = target;
+            command->arg.target = (int)target;
             command->code = level->tecIndex;
             command->pairIndex = tgtSelectState.selectionIndex;
             break;
         case SELECT_PAIR:
             command->command = CMD_KIND_TECHNIQUE;
             pair = pairLinkGet(tgtSelectState.selectionIndex);
-            command->arg.target = target;
+            command->arg.target = (int)target;
             command->code = pair->tecIndex;
             command->pairIndex = tgtSelectState.selectionIndex;
             break;
         case SELECT_TGT_ID:
             command->command = CMD_KIND_TECHNIQUE;
             tgtId = tgtIdRecordGet(tgtSelectState.selectionIndex);
-            command->arg.target = target;
+            command->arg.target = (int)target;
             command->code = tgtId->actionIndex;
             command->pairIndex = tgtSelectState.selectionIndex;
             break;

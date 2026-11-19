@@ -90,6 +90,7 @@ segments:
       - [0x1C0F8, c, ov01/tu040]
       - [0x1C120, c, ov01/tu041]
       - [0x1C280, c, ov01/tu042]
+      - [0x1CC08, c, ov01/tu091]
       - [0x1D610, c, ov01/tu043]
       - [0x1D928, c, ov01/tu044]
       - [0x1FE28, c, ov01/tu045]
@@ -175,7 +176,7 @@ segments:
       - [0x3B440, rodata, ov01/tu033]
       - [0x3B590, rodata, ov01/tu035]
       - [0x3B5B0, rodata, ov01/tu036]
-      - [0x3B6A0, rodata, ov01/tu042]
+      - [0x3B6A0, rodata, ov01/tu091]
       - [0x3B880, rodata, ov01/tu044]
       - [0x3B8D0, rodata, ov01/tu047]
       - [0x3BCA8, rodata, ov01/tu048]
@@ -215,7 +216,7 @@ segments:
       - { type: bss, vram: 0x00AC4190, name: ov01/tu037 }
       - { type: bss, vram: 0x00AC41A0, name: ov01/tu038 }
       - { type: bss, vram: 0x00AC51A8, name: ov01/tu041 }
-      - { type: bss, vram: 0x00AC51B0, name: ov01/tu042 }
+      - { type: bss, vram: 0x00AC51B0, name: ov01/tu091 }
       - { type: bss, vram: 0x00AC51C0, name: ov01/tu044 }
       - { type: bss, vram: 0x00AE0C20, name: ov01/tu046 }
       - { type: bss, vram: 0x00AE0C2C, name: ov01/tu047 }

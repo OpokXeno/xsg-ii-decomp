@@ -6,6 +6,7 @@
  * name table. A thread is one 0x40-byte SbThread record of sbThreadTable.
  */
 #include "common.h"
+#include "unaligned.h"
 #include "shared.h"
 #include "ov01/tu044.h"
 #include "ov01/tu046.h"
@@ -301,7 +302,86 @@ int sbLibraryLink(struct SbImageHeader *image, struct VmKeyTable *library)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/tu044", sbLinkImage);
+/* Opcode whose operand is an import index until sbLinkImage replaces it with the native id. */
+#define SB_OP_CALL_NATIVE 0x15
+/* sbFlags bit: link an image even when natives are missing (their call opcodes are blanked out). */
+#define SB_FLAG_ALLOW_MISSING_NATIVES 1
+/* Native id stored for an import sbFindNative does not know (its own "not found" result). */
+#define SB_NATIVE_MISSING (-1)
+
+int sbFindNative(const char *ownerName, const char *methodName);
+int sbFlagsGet(void);
+
+/*
+ * Resolves the image's imports (owner name offset in the high half of each word, method name offset in the low
+ * half, both into the name strings after the words) to native ids, then rewrites the import index of every
+ * SB_OP_CALL_NATIVE in the code to the native id. Returns 0 when a native is missing and that is not allowed.
+ */
+/* An import word holds the offsets (from the name block) of its owner name in the high half and of its method
+ * name in the low half. */
+#define SB_IMPORT_OWNER_SHIFT 16
+#define SB_IMPORT_METHOD_MASK 0xFFFF
+
+int sbLinkImage(struct SbImageHeader *image, struct VmKeyTable *library)
+{
+    int operand;
+    /* Taking the address up front puts operand on the stack before loop 1, so all its accesses share one form
+     * and gcse keeps loop 1's value in the register of loop 2's sbOpLength argument ($5). */
+    int *operandSlot = &operand;
+    int *imports;
+    char *names;
+    u16 *code;
+    u16 *arg;
+    int count;
+    int index;
+    int length;
+    u16 opcode;
+
+    if (sbIsSbImage((int *)image) == 0) {
+        for (;;) {
+        }
+    }
+    if (image->flags & SB_IMAGE_LINKED) {
+        return 1;
+    }
+    count = image->import_count;
+    imports = (int *)((char *)image + image->import_offset);
+    image->flags |= SB_IMAGE_LINKED;
+    names = (char *)(imports + count);
+    for (index = 0; index < count; index++) {
+        int word = imports[index];
+
+        operand = sbFindNative(names + (word >> SB_IMPORT_OWNER_SHIFT), names + (word & SB_IMPORT_METHOD_MASK));
+        if (operand < 0) {
+            /* if/else, not an early return: that form fills the delay slot of the return 0 branch with the -1 */
+            if (sbFlagsGet() & SB_FLAG_ALLOW_MISSING_NATIVES) {
+                operand = SB_NATIVE_MISSING;
+            } else {
+                return 0;
+            }
+        }
+        imports[index] = operand;
+    }
+    code = (u16 *)((char *)image + image->code_offset);
+    length = (unsigned int)(image->global_offset - image->code_offset) / sizeof(u16);
+    for (index = 0; index < length; index += sbOpLength(opcode, operand)) {
+        opcode = code[index];
+        arg = &code[index + 1];
+        UnalignedWordCopy(operandSlot, arg);
+        if (opcode == SB_OP_CALL_NATIVE) {
+            UnalignedWordCopy(arg, &imports[operand]);
+            if (sbFlagsGet() & SB_FLAG_ALLOW_MISSING_NATIVES) {
+                if (imports[operand] == SB_NATIVE_MISSING) {
+                    code[index] = 0;
+                    arg[0] = 0;
+                    code[index + 2] = 0;
+                    code[index + 3] = 0;
+                }
+            }
+        }
+    }
+    return 1;
+}
 
 int strcmp(const char *a, const char *b);
 
@@ -629,7 +709,18 @@ u16 sbCodeU16(SbThread *thread, int index) {
     return ((u16 *) ((unsigned char *) layout + layout->code_offset))[index];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/tu044", sbCodeS32);
+/*
+ * The 32-bit code word at halfword `index` of the code stream. It sits at a halfword position, so it is copied
+ * bytewise (UnalignedWordCopy, see unaligned.h).
+ */
+int sbCodeS32(SbThread *thread, int index) {
+    struct SbImageHeader *layout;
+    int value;
+
+    layout = thread->image;
+    UnalignedWordCopy(&value, (u16 *) ((unsigned char *) layout + layout->code_offset) + index);
+    return value;
+}
 
 int sbGlobalGet(SbThread *thread, int index) {
     struct SbImageHeader *layout;

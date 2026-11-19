@@ -16,8 +16,11 @@ enum {
     UNIT_CMD_MODE_DISPATCH = 0x0A,
     UNIT_CMD_JUMP_EFFECT = 0x0B,    /* func_00A85EA0: issues UNIT_CMD_MOVE_CHA_JUMP and effect 0xB */
     UNIT_CMD_HOVER_EFFECT = 0x0C,   /* func_00A85F30: issues UNIT_CMD_MOVE_CHA_HOVER and effect 0xC */
+    UNIT_CMD_CODE_WAIT = 0x0E,      /* unitCmdCodeWait */
     UNIT_CMD_MOVE_CHA = 0x10,       /* unitCmdMoveCha */
+    UNIT_CMD_MOVE_POS = 0x11,       /* unitCmdMovePos */
     UNIT_CMD_PHASE_0E_WAIT = 0x12,  /* unitCmdPhase0EWait */
+    UNIT_CMD_POSE_ARRIVE = 0x14,    /* unitCmdPoseArrive */
     UNIT_CMD_POSE_ARRIVE_WAIT = 0x15, /* unitCmdPoseArriveWait */
     UNIT_CMD_MOVE_CHA_RUN = 0x16,
     UNIT_CMD_MOVE_POS_JUMP = 0x17,
@@ -32,6 +35,8 @@ enum {
     UNIT_CMD_CLEAR_ACTIVE = 0x20,
     UNIT_CMD_PHASE_2B_WAIT = 0x21,
     UNIT_CMD_DEACTIVATE = 0x22,     /* func_00A86CB0: clears UNIT_FLAG_ACTIVE */
+    UNIT_CMD_TURN_AIM = 0x23,       /* unitCmdTurnAim */
+    UNIT_CMD_STREAM_PLAY = 0x24,    /* unitCmdStreamPlay */
     UNIT_CMD_FINISH_REFRESH = 0x26, /* unitCmdFinishRefresh */
     UNIT_CMD_MODE_START = 0x27
 };
@@ -180,6 +185,13 @@ typedef struct Ov01Command {
  * func_00A86F20 clears both. */
 #define UNIT_FLAG_HIT_REACTED 0x100
 #define UNIT_FLAG_HIT_PANELS 0x40000
+/* Set by cmdExecute when it sends the unit to its target (UNIT_CMD_MOVE_CHA) or poses it in place
+ * (UNIT_CMD_PHASE_0E_WAIT / UNIT_CMD_POSE_ARRIVE); the think end brings it back and clears UNIT_FLAGS_ACTION. */
+#define UNIT_FLAG_MOVED_OUT 0x80
+#define UNIT_FLAG_POSED_OUT 0x400
+/* The flags the think end clears: UNIT_FLAG_MOVED_OUT, UNIT_FLAG_POSED_OUT, 0x800 and the phase flag 0x2000
+ * (unitCmdSetPhase). */
+#define UNIT_FLAGS_ACTION 0x2C80
 
 struct Ov01Object {
     union {

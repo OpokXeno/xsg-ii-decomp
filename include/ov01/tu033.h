@@ -11,10 +11,12 @@ typedef struct CmdListBody {
     int command;                        /* +0x00 */
     unsigned char unmodeled_04[0x4];
     int code;                           /* +0x08: the key-row entry, technique or argument thinkDispatch passes */
-    union {
-        struct Ov01Object *target;      /* the target unit of the think commands */
-        int flag;                       /* 1 for think command 14 */
-    } arg;                              /* +0x0C */
+    /* +0x0C: the target unit of the think commands as a word, like CmdListEntry.unit (think command 14 stores 1
+     * here). One int member, not a union of a pointer and an int: a store through a union conflicts with every
+     * load, and cmdExecute's original loads unit->stats before its arg.target store reaches memory. */
+    struct {
+        int target;
+    } arg;
     int pairIndex;                      /* +0x10: the pair record unitPairPartnerFind reads; the battle lookup of
                                          * think command 3 */
     unsigned char unmodeled_14[0x4];
@@ -33,7 +35,10 @@ enum {
     CMD_KIND_SNAPSHOT = 6,              /* unitCmdLoadSnapshot: the unit fades over to snapshot `code` */
     CMD_KIND_LEAVE = 7,                 /* unitCmdSetBattleTransition: every unit of the side fades out of the battle */
     CMD_KIND_REFRESH = 8,               /* unitCmdRefreshPhase */
-    CMD_KIND_THINK_END = 9              /* unitCmdUnbind: the end of a unit's think step (thinkSendEnd) */
+    CMD_KIND_THINK_END = 9,             /* unitCmdUnbind: the end of a unit's think step (thinkSendEnd) */
+    CMD_KIND_CODE_WAIT = 14,            /* unitCmdCodeWait: sets phase `code`, then waits for unitIsDone when the
+                                         * wait flag (arg.target) is set */
+    CMD_KIND_REMOVE = 37                /* unitCmdRemove: unitRemove */
 };
 
 void cmdListPtrGet(void **fifo_out, void **list_out);

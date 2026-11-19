@@ -30,6 +30,7 @@
 #include "ov01/tu023.h"
 #include "ov01/tu033.h"
 #include "ov01/tu042.h"
+#include "ov01/tu091.h"
 #include "ov01/tu043.h"
 #include "ov01/tu050.h"
 #include "ov01/tu036.h"
@@ -95,7 +96,14 @@ typedef struct EventQueueEntry {
 enum {
     EVENT_KIND_WAIT_UNIT_QUEUE = 2,     /* eventWaitUnitQueue */
     EVENT_KIND_ATTACK = 3,              /* eventAttackRun: shows the attack (unitsMarkUninvolved) */
+    EVENT_KIND_ACTION_LOAD = 6,         /* actionResourcesLoad */
     EVENT_KIND_LOADS_IDLE = 7,          /* ov01LoadsIdle */
+    EVENT_KIND_ATTACH = 8,              /* unitAttachRequest */
+    EVENT_KIND_SPAWN = 9,               /* unitSpawnFromRequest */
+    EVENT_KIND_BIND = 10,               /* unitBindRequest */
+    EVENT_KIND_REMOVE_DEFEATED = 11,    /* unitsRemoveDefeated */
+    EVENT_KIND_RESOLVE_STATUS = 12,     /* battleResolveStatus */
+    EVENT_KIND_STATUS_QUEUE_WAIT = 13,  /* battleStatusQueueWait */
     EVENT_KIND_STREAM_OPEN = 14,        /* ov01StreamOpen */
     EVENT_KIND_STREAM_BIND = 15,        /* ov01StreamBind */
     EVENT_KIND_PAIR_BEGIN = 16,         /* eventPairBegin: unbinds the pair and hides its monster slots */
@@ -191,11 +199,252 @@ int cmdListRunHead(void)
 }
 
 /* cmdExecute: runs one command body, a switch on its kind, queueing events on the way. */
-INCLUDE_ASM("asm/nonmatchings/ov01/tu033", cmdExecute);
+/* The 0x20-byte command record cmdExecute builds on its frame: queued as a CmdListBody (eventQueueAddKind1) and
+ * run as the unit's Ov01Command. UNIT_CMD_TURN_AIM carries its aim point at +0x8 and, at +0x14
+ * (Ov01Command.poseIndex, read by unitCmdTurnAim), whether the unit turns to that point. */
+typedef union UnitCommandRecord {
+    CmdListBody body;
+    Ov01Command full;
+    struct {
+        int command;
+        int state;
+        float point[3];
+        int toPoint;
+        int pad[2];
+    } aim;
+} UnitCommandRecord;
+
+/* The key row entry a unit takes over as its technique when calcStatusHitRoll turns a command on it. */
+#define KEY_ROW_SWAP_CODE 2
+/* A unit that only poses in place instead of moving to its target: a target in battle state 3, or a target with
+ * default code bit 0 against a technique with hit flag 0x200 used by unit key 2 or 4. */
+#define TARGET_STATE_STAND_OFF 3
+#define TARGET_DEFAULT_CODE_STAND_OFF 1
+#define TEC_HIT_STAND_OFF 0x200
+#define STAND_OFF_UNIT_KEY_A 4
+#define STAND_OFF_UNIT_KEY_B 2
+/* Techniques with these codes make the unit wait for code step CODE_WAIT_STEP first (UNIT_CMD_CODE_WAIT). */
+#define TEC_CODE_WAIT_FIRST 0x22
+#define TEC_CODE_WAIT_COUNT 4
+#define CODE_WAIT_STEP 4
+/* The move commands (UNIT_CMD_MOVE_CHA .. UNIT_CMD_MOVE_POS_HOVER) a target may still be running. */
+#define UNIT_CMD_MOVES_COUNT (UNIT_CMD_MOVE_POS_HOVER - UNIT_CMD_MOVE_CHA + 1)
+/* StatBlock.facing is in radians; the spawn request takes the angle in whole degrees. */
+#define RADIANS_PER_DEGREE 0.017453292f
 
 void eventQueueAdd(int kind, EventQueueArgs *args);
 void eventQueueAddKind1(void *object, CmdListBody *args);
 void func_00A92C18(Ov01Object *unit, CmdListBody *command);
+void cmdStockRun(Ov01Object *unit, CmdListBody *command, EventQueueArgs *args);
+void cmdPairRun(Ov01Object *unit, CmdListBody *command, EventQueueArgs *args);
+struct Tu033CallSource;
+int cmdFindFirstTarget(int target, struct Tu033CallSource *source);
+
+/*
+ * Runs one command body of unit (the head of the command list) and queues the events and unit commands it needs.
+ * A technique, lookup or item command finds its first target (calcStatusHitRoll may turn a technique on the
+ * attacker: the target then acts with its key row technique), moves or poses the unit, aims a technique at all
+ * targets, and runs the action through the pair, the stock or the plain path. The think end brings the unit back,
+ * a swap spawns the unit's replacement, a leave command goes to every unit of the side. Returns 0 when a command
+ * finds no target, else 1.
+ * Forms that keep the original's code: every case ends with break and one return 1 follows the switch (the case
+ * tails then cross-jump as in the original), the think end sets code before command, and the swap reads all its
+ * values before it stores them.
+ */
+int cmdExecute(Ov01Object *unit, CmdListBody *body)
+{
+    UnitCommandRecord command;
+    EventQueueArgs args;
+    Ov01Object **units;
+    Ov01Object *target;
+    Ov01Object *other;
+    Ov01Object *swap;
+    Ov01Command *current;
+    StatBlock *stats;
+    float *point;
+    short *keyRow;
+    int flagged;
+    int count;
+    int found;
+    int code;
+    int index;
+    int angle;
+    int i;
+    int swapped;
+
+    switch (body->command) {
+    case CMD_KIND_TECHNIQUE:
+    case CMD_KIND_LOOKUP:
+    case CMD_KIND_ITEM:
+        args.unit = unit;
+        eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
+        if (body->command == CMD_KIND_TECHNIQUE) {
+            body->code = battleEffectResolve(unit, body->code, (Ov01Object *)body->arg.target);
+        }
+        target = (Ov01Object *)cmdFindFirstTarget((int)unit, (struct Tu033CallSource *)body);
+        if (target == 0) {
+            return 0;
+        }
+        if (body->command == CMD_KIND_TECHNIQUE && calcStatusHitRoll(unit, target, body->code) != 0) {
+            swap = target;
+            target = unit;
+            unit = swap;
+            body->arg.target = (int)target;
+            swapped = 1;
+            keyRow = tableKeyRowGet(unit->stats->key);
+            body->code = keyRow[KEY_ROW_SWAP_CODE];
+            unit->stats->rollPercent = 0;
+            menuPanelShow();
+            target = (Ov01Object *)cmdFindFirstTarget((int)unit, (struct Tu033CallSource *)body);
+            if (target == 0) {
+                return 0;
+            }
+        } else {
+            swapped = 0;
+        }
+        unit->commandTarget = (int)target;
+        unit->commandCode = body->code;
+        if (body->command != CMD_KIND_ITEM) {
+            flagged = tecRecordGet(body->code)->flags & TEC_FLAG_SCRIPT_FLAGGED;
+            if (flagged == 0
+                && (target->stats->state70 == TARGET_STATE_STAND_OFF
+                    || ((target->stats->defaultCode & TARGET_DEFAULT_CODE_STAND_OFF)
+                        && (tecRecordGet(body->code)->hitFlags & TEC_HIT_STAND_OFF)
+                        && (unit->stats->key == STAND_OFF_UNIT_KEY_A || unit->stats->key == STAND_OFF_UNIT_KEY_B)))) {
+                if (!(unit->flags & UNIT_FLAG_POSED_OUT)) {
+                    if (unit->flags & UNIT_FLAG_MOVED_OUT) {
+                        command.body.command = UNIT_CMD_PHASE_0E_WAIT;
+                        eventQueueAddKind1(unit, &command.body);
+                    } else {
+                        command.body.command = UNIT_CMD_POSE_ARRIVE;
+                        eventQueueAddKind1(unit, &command.body);
+                    }
+                    unit->flags |= UNIT_FLAG_POSED_OUT;
+                }
+            } else if (flagged == 0 && !(unit->flags & (UNIT_FLAG_MOVED_OUT | UNIT_FLAG_POSED_OUT))) {
+                command.body.command = UNIT_CMD_MOVE_CHA;
+                eventQueueAddKind1(unit, &command.body);
+                unit->flags |= UNIT_FLAG_MOVED_OUT;
+            }
+            if (body->command == CMD_KIND_TECHNIQUE && flagged != 0
+                && tecRecordGet(body->code)->gateFlag != TEC_GATE_PAIR) {
+                if (!(tecRecordGet(body->code)->flags & TEC_TARGET_ALL)) {
+                    command.aim.command = UNIT_CMD_TURN_AIM;
+                    command.aim.toPoint = 0;
+                    eventQueueAddKind1(unit, &command.body);
+                } else if (unit->stats->key < UNIT_KEY_OTHER_FIRST && tecRecordGet(body->code)->code == 0) {
+                    /* Aims at the middle of the targets the technique applies to. */
+                    point = command.aim.point;
+                    found = 0;
+                    point[0] = point[1] = point[2] = 0.0f;
+                    count = unitTblGet(tgtSideOf(unit, tecRecordGet(body->code)->flags), &units);
+                    for (i = 0; i < count; i++) {
+                        other = units[i];
+                        if (other == 0 || (other->flags & UNIT_FLAG_DOWN)) {
+                            continue;
+                        }
+                        if (battleEffectApplies(unit, body->code, other) != 0) {
+                            found++;
+                            point[0] += units[i]->pose.snapshot.vector.x;
+                            point[2] += units[i]->pose.snapshot.vector.z;
+                        }
+                    }
+                    point[0] /= (float)found;
+                    point[2] /= (float)found;
+                    command.aim.command = UNIT_CMD_TURN_AIM;
+                    command.aim.toPoint = 1;
+                    eventQueueAddKind1(unit, &command.body);
+                }
+                if ((unsigned int)(body->code - TEC_CODE_WAIT_FIRST) < TEC_CODE_WAIT_COUNT) {
+                    command.full.command = UNIT_CMD_CODE_WAIT;
+                    command.full.code = CODE_WAIT_STEP;
+                    command.full.arg.wait = 1;
+                    eventQueueAddKind1(unit, &command.body);
+                }
+                current = dataLookupCurrent(&target->commandQueue);
+                if (current != 0 && (unsigned int)(current->command - UNIT_CMD_MOVE_CHA) < UNIT_CMD_MOVES_COUNT) {
+                    args.unit = target;
+                    eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
+                }
+            }
+            args.unit = unit;
+            eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
+        }
+        args.unit = unit;
+        args.tecIndex = body->code;
+        args.pairIndex = body->pairIndex;
+        eventQueueAdd(EVENT_KIND_ACTION_LOAD, &args);
+        eventQueueAdd(EVENT_KIND_LOADS_IDLE, &args);
+        eventQueueAdd(EVENT_KIND_ATTACH, &args);
+        if (tecRecordGet(body->code)->gateFlag == TEC_GATE_PAIR) {
+            cmdPairRun(unit, body, &args);
+            actEntryFlagSet(body->pairIndex);
+        } else if (tecRecordGet(body->code)->gateFlag == TEC_GATE_STOCK) {
+            cmdStockRun(unit, body, &args);
+        } else {
+            eventQueueAddKind1(unit, body);
+            if ((unsigned int)(body->command - CMD_KIND_LOOKUP) <= CMD_KIND_ITEM - CMD_KIND_LOOKUP) {
+                eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
+            }
+            func_00A92C18(unit, body);
+            func_00A95608(unit);
+            if (tecRecordGet(body->code)->gateFlag == TEC_GATE_SLOT_MARK) {
+                func_00A91B68(body->pairIndex);
+            }
+        }
+        if (swapped == 1) {
+            command.body.command = CMD_KIND_THINK_END;
+            eventQueueAddKind1(unit, &command.body);
+        }
+        break;
+    case CMD_KIND_THINK_END:
+        if (unit->flags & UNIT_FLAG_POSED_OUT) {
+            command.full.code = unit->stats->posIndex;
+            command.full.command = UNIT_CMD_POSE_ARRIVE_WAIT;
+            eventQueueAddKind1(unit, &command.body);
+        } else if (unit->flags & UNIT_FLAG_MOVED_OUT) {
+            command.full.code = unit->stats->posIndex;
+            command.full.command = UNIT_CMD_MOVE_POS;
+            eventQueueAddKind1(unit, &command.body);
+        }
+        unit->flags &= ~UNIT_FLAGS_ACTION;
+        eventQueueAddKind1(unit, body);
+        eventQueueAdd(EVENT_KIND_RESOLVE_STATUS, 0);
+        eventQueueAdd(EVENT_KIND_REMOVE_DEFEATED, 0);
+        eventQueueAdd(EVENT_KIND_STATUS_QUEUE_WAIT, 0);
+        break;
+    case CMD_KIND_SWAP:
+        eventQueueAddKind1(unit, body);
+        args.unit = unit;
+        eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
+        code = body->code;
+        stats = unit->stats;
+        angle = stats->facing / RADIANS_PER_DEGREE;
+        index = stats->posIndex;
+        args.actions = code;
+        args.tecIndex = index;
+        args.pairIndex = angle;
+        eventQueueAdd(EVENT_KIND_SPAWN, &args);
+        eventQueueAdd(EVENT_KIND_LOADS_IDLE, &args);
+        eventQueueAdd(EVENT_KIND_BIND, &args);
+        command.body.command = UNIT_CMD_STREAM_PLAY;
+        eventQueueAddKind1(unit, &command.body);
+        break;
+    case CMD_KIND_LEAVE:
+        count = unitTblGet(unit->stats->key >= UNIT_KEY_OTHER_FIRST, &units);
+        for (i = 0; i < count; i++) {
+            if (units[i] != 0) {
+                eventQueueAddKind1(units[i], body);
+            }
+        }
+        break;
+    default:
+        eventQueueAddKind1(unit, body);
+        break;
+    }
+    return 1;
+}
+
 Ov01Object *unitPairPartnerFind(Ov01Object *unit, int value);
 
 /* Unit command indices (CmdListBody.command) the two command handlers below queue. */
@@ -780,8 +1029,6 @@ int func_00A93708(void) {
 #define MOVE_CHA_SCRIPT_EVENT 3
 #define PHASE_0E_WAIT_SCRIPT_EVENT 11
 #define POSE_ARRIVE_WAIT_SCRIPT_EVENT 13
-/* TecRecord.flags bit 0x20 (also tested with calcStatGet(unit, 4, 0x2000)). */
-#define TEC_FLAG_SCRIPT_FLAGGED 0x20
 
 /*
  * Kind-1 event handler: appends the queued command to the unit's command queue, keeps the unit and command kind in
@@ -2037,10 +2284,159 @@ void unitStatusAuraUpdate(Ov01Object *object)
     }
 }
 
-const char D_00ABA568[] = "ck_sc3m01";
-const char D_00ABA578[] = "ck_sc3m02";
+void unitSlotShowPart(Ov01Object *object);
+void unitSlotHidePart(Ov01Object *object);
+void unitSlotShowHidePart(Ov01Object *object, int index);
+void unitSlotHideShowPart(Ov01Object *object, int index);
+struct FadeTask *func_00A95CB0(Ov01Object *object, int index);
+struct FadeTask *func_00A95CC8(Ov01Object *object, int index);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/tu033", func_00A95810);
+/* Bits of the attacker's sef entry flags (sefGetEntryFlags) that func_00A95810 acts on, named by the call each
+ * one triggers. */
+#define SEF_ENTRY_DECO_CLEAR 0x2                /* decoFlagsClearAll */
+#define SEF_ENTRY_SLOT0_HIDE_SHOW 0x10          /* unitSlotHideShowPart(unit, 0) */
+#define SEF_ENTRY_SLOT0_SHOW_HIDE 0x20          /* unitSlotShowHidePart(unit, 0) */
+#define SEF_ENTRY_SLOT1_HIDE_SHOW 0x40          /* unitSlotHideShowPart(unit, 1) */
+#define SEF_ENTRY_SLOT1_SHOW_HIDE 0x80          /* unitSlotShowHidePart(unit, 1) */
+#define SEF_ENTRY_SLOT0_OUT 0x100               /* slot 0 fades out or pauses */
+#define SEF_ENTRY_SLOT0_IN 0x200                /* slot 0 fades in or resumes */
+#define SEF_ENTRY_SLOT1_OUT 0x400               /* slot 1 fades out or pauses */
+#define SEF_ENTRY_SLOT1_IN 0x800                /* slot 1 fades in or resumes */
+#define SEF_ENTRY_SCRIPT_EVENT 0x1000           /* unitScriptEventSend(SEF_ENTRY_SCRIPT_EVENT_KIND) */
+#define SEF_ENTRY_PLAY_ACTION_SOUND 0x2000             /* unitPlayActionSound with the action index */
+#define SEF_ENTRY_SLOT_FADE 0x4000              /* the slot in/out bits fade instead of pause/resume */
+#define SEF_ENTRY_SLOT1_PART_HIDE 0x10000       /* unitSlotHidePart */
+#define SEF_ENTRY_SLOT1_PART_SHOW 0x20000       /* unitSlotShowPart */
+#define SEF_ENTRY_MONS_PARTS_HIDE 0x40000       /* hides the "ck_sc3m" parts of the first monster slot */
+#define SEF_ENTRY_SIDE1_UNBIND 0x800000         /* unitUnbind on every side-1 unit */
+#define SEF_ENTRY_SELECTOR_MASK 0xF000000       /* unitSetSelector(unit, field - 1) when nonzero */
+#define SEF_ENTRY_SELECTOR_SHIFT 24
+#define SEF_ENTRY_SIDE1_BIND 0x10000000         /* unitBindSetup on every side-1 unit */
+#define SEF_ENTRY_MONS_SLOT1_HIDE 0x20000000    /* monsSlotHide on the second monster slot */
+#define SEF_ENTRY_DECO_SET 0x40000000           /* decoFlagsSetAll */
+
+/* The unitScriptEventSend kind SEF_ENTRY_SCRIPT_EVENT sends. */
+#define SEF_ENTRY_SCRIPT_EVENT_KIND 12
+
+/*
+ * Runs the scene actions of an attack: the flags of the sef entry of the attacker's actor (sefGetEntryFlags) select
+ * them bit by bit: show/hide the actor slots and parts, fade or pause the slots (SEF_ENTRY_SLOT_FADE picks
+ * fading), hide the two "ck_sc3m" parts of the first monster slot, set the unit's selector
+ * (SEF_ENTRY_SELECTOR_MASK), unbind or bind the side-1 units, hide the second monster slot, set or clear the deco
+ * flags, send a script event and play the action sound (unitPlayActionSound).
+ */
+void func_00A95810(struct AttackCommand *command)
+{
+    UnitScriptEvent event;
+    Ov01Object *unit;
+    unsigned int flags;
+    unsigned int selector;
+
+    unit = command->attacker;
+    flags = sefGetEntryFlags((int)unit->unit);
+    if (flags & SEF_ENTRY_SLOT0_HIDE_SHOW) {
+        unitSlotHideShowPart(unit, 0);
+    }
+    if (flags & SEF_ENTRY_SLOT0_SHOW_HIDE) {
+        unitSlotShowHidePart(unit, 0);
+    }
+    if (flags & SEF_ENTRY_SLOT1_HIDE_SHOW) {
+        unitSlotHideShowPart(unit, 1);
+    }
+    if (flags & SEF_ENTRY_SLOT1_SHOW_HIDE) {
+        unitSlotShowHidePart(unit, 1);
+    }
+    if (flags & SEF_ENTRY_SLOT1_PART_HIDE) {
+        unitSlotHidePart(unit);
+    }
+    if (flags & SEF_ENTRY_SLOT1_PART_SHOW) {
+        unitSlotShowPart(unit);
+    }
+    if (flags & SEF_ENTRY_SLOT_FADE) {
+        if (flags & SEF_ENTRY_SLOT0_OUT) {
+            func_00A95CC8(unit, 0);
+        }
+        if (flags & SEF_ENTRY_SLOT0_IN) {
+            func_00A95CB0(unit, 0);
+        }
+        if (flags & SEF_ENTRY_SLOT1_OUT) {
+            func_00A95CC8(unit, 1);
+        }
+        if (flags & SEF_ENTRY_SLOT1_IN) {
+            func_00A95CB0(unit, 1);
+        }
+    } else {
+        if (flags & SEF_ENTRY_SLOT0_OUT) {
+            unitSlotPause(unit, 0);
+        }
+        if (flags & SEF_ENTRY_SLOT0_IN) {
+            unitSlotResume(unit, 0);
+        }
+        if (flags & SEF_ENTRY_SLOT1_OUT) {
+            unitSlotPause(unit, 1);
+        }
+        if (flags & SEF_ENTRY_SLOT1_IN) {
+            unitSlotResume(unit, 1);
+        }
+    }
+    /* Each block keeps its own slots/units local: the original gives all four their own stack word. */
+    if (flags & SEF_ENTRY_MONS_PARTS_HIDE) {
+        struct MonsSlot **slots;
+
+        monsActiveSlotsGet(&slots);
+        XenoActorHidePart(slots[0]->actor, "ck_sc3m01");
+        XenoActorHidePart(slots[0]->actor, "ck_sc3m02");
+    }
+    selector = flags & SEF_ENTRY_SELECTOR_MASK;
+    if (selector != 0) {
+        unitSetSelector(unit, (selector >> SEF_ENTRY_SELECTOR_SHIFT) - 1);
+    }
+    if (flags & SEF_ENTRY_SIDE1_UNBIND) {
+        Ov01Object **units;
+        int count;
+        int i;
+
+        count = unitTblGet(1, &units);
+        for (i = 0; i < count; i++) {
+            if (units[i] != 0) {
+                unitUnbind(units[i]);
+            }
+        }
+    }
+    if (flags & SEF_ENTRY_SIDE1_BIND) {
+        Ov01Object **units;
+        int count;
+        int i;
+
+        count = unitTblGet(1, &units);
+        for (i = 0; i < count; i++) {
+            if (units[i] != 0) {
+                unitBindSetup(units[i]);
+            }
+        }
+    }
+    if (flags & SEF_ENTRY_MONS_SLOT1_HIDE) {
+        struct MonsSlot **slots;
+
+        monsActiveSlotsGet(&slots);
+        if (slots[1] != 0) {
+            monsSlotHide(slots[1]);
+        }
+    }
+    if (flags & SEF_ENTRY_DECO_SET) {
+        decoFlagsSetAll();
+    }
+    if (flags & SEF_ENTRY_DECO_CLEAR) {
+        decoFlagsClearAll();
+    }
+    if (flags & SEF_ENTRY_SCRIPT_EVENT) {
+        event.unit = unit;
+        unitScriptEventSend(SEF_ENTRY_SCRIPT_EVENT_KIND, &event);
+    }
+    if (flags & SEF_ENTRY_PLAY_ACTION_SOUND) {
+        unitPlayActionSound(unit, command->actionIdx);
+    }
+}
 
 /* unitSlotResume: clears the pause bit of the slot and sets its alpha to 1.0. */
 void unitSlotResume(Ov01Object *object, int index)
