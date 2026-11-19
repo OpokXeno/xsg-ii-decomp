@@ -20,15 +20,20 @@ struct VmKeyTable;
  * offset at +0x14, the global table offset at +0x18 and the name table offset
  * at +0x20 (offsets count from the header). */
 struct SbImageHeader {
-    unsigned char unmodeled_00[0x08];
+    int magic;                          /* +0x00: "SB  " (sbIsSbImage) or "SBL " (sbIsSblImage) */
+    int flags;                          /* +0x04: SB_IMAGE_LINKED once sbLinkImage ran */
     int entry;                          /* +0x08: the code entry sbStartImage starts */
     int name_count;                     /* +0x0C */
-    unsigned char unmodeled_10[0x04];
+    int import_count;                   /* +0x10: native imports sbLinkImage resolves */
     int code_offset;                    /* +0x14 */
     int global_offset;                  /* +0x18 */
     struct VmKeyTable *keys;            /* +0x1C: the keyed table vmKeyedEntryGet (tu046) reads */
     int name_offset;                    /* +0x20 */
+    int import_offset;                  /* +0x24: the import words, followed by their name strings */
 };
+
+/* SbImageHeader.flags bit sbLinkImage sets after resolving the imports. */
+#define SB_IMAGE_LINKED 0x80000000
 
 /* One entry of an image's name table: the name (offset from the header) and its value. */
 typedef struct SbNameEntry {
