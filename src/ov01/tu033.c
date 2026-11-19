@@ -278,7 +278,7 @@ int cmdExecute(Ov01Object *unit, CmdListBody *body)
         args.unit = unit;
         eventQueueAdd(EVENT_KIND_WAIT_UNIT_QUEUE, &args);
         if (body->command == CMD_KIND_TECHNIQUE) {
-            body->code = battleEffectResolve(unit, body->code, body->arg.target);
+            body->code = battleEffectResolve(unit, body->code, (Ov01Object *)body->arg.target);
         }
         target = (Ov01Object *)cmdFindFirstTarget((int)unit, (struct Tu033CallSource *)body);
         if (target == 0) {
@@ -288,7 +288,7 @@ int cmdExecute(Ov01Object *unit, CmdListBody *body)
             swap = target;
             target = unit;
             unit = swap;
-            body->arg.target = target;
+            body->arg.target = (int)target;
             swapped = 1;
             keyRow = tableKeyRowGet(unit->stats->key);
             body->code = keyRow[KEY_ROW_SWAP_CODE];

@@ -11,11 +11,11 @@ typedef struct CmdListBody {
     int command;                        /* +0x00 */
     unsigned char unmodeled_04[0x4];
     int code;                           /* +0x08: the key-row entry, technique or argument thinkDispatch passes */
-    /* +0x0C: a struct, not a union with an int view (think command 14 stores 1 here): a store through a union
-     * conflicts with every load, and cmdExecute's original loads unit->stats before its body->arg.target store
-     * reaches memory. */
+    /* +0x0C: the target unit of the think commands as a word, like CmdListEntry.unit (think command 14 stores 1
+     * here). One int member, not a union of a pointer and an int: a store through a union conflicts with every
+     * load, and cmdExecute's original loads unit->stats before its arg.target store reaches memory. */
     struct {
-        struct Ov01Object *target;      /* the target unit of the think commands */
+        int target;
     } arg;
     int pairIndex;                      /* +0x10: the pair record unitPairPartnerFind reads; the battle lookup of
                                          * think command 3 */
