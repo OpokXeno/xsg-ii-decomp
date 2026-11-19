@@ -122342,6 +122342,7 @@
       "attackQueue",
       "attackSpecialStep",
       "cmdExecute",
+      "func_00A95810",
       "itemRandomPick",
       "tecEffectGroupGet",
       "unitCmdRequestQueue",

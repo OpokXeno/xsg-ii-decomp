@@ -2283,10 +2283,159 @@ void unitStatusAuraUpdate(Ov01Object *object)
     }
 }
 
-const char D_00ABA568[] = "ck_sc3m01";
-const char D_00ABA578[] = "ck_sc3m02";
+void unitSlotShowPart(Ov01Object *object);
+void unitSlotHidePart(Ov01Object *object);
+void unitSlotShowHidePart(Ov01Object *object, int index);
+void unitSlotHideShowPart(Ov01Object *object, int index);
+struct FadeTask *func_00A95CB0(Ov01Object *object, int index);
+struct FadeTask *func_00A95CC8(Ov01Object *object, int index);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/tu033", func_00A95810);
+/* Bits of the attacker's sef entry flags (sefGetEntryFlags) that func_00A95810 acts on, named by the call each
+ * one triggers. */
+#define SEF_ENTRY_DECO_CLEAR 0x2                /* decoFlagsClearAll */
+#define SEF_ENTRY_SLOT0_HIDE_SHOW 0x10          /* unitSlotHideShowPart(unit, 0) */
+#define SEF_ENTRY_SLOT0_SHOW_HIDE 0x20          /* unitSlotShowHidePart(unit, 0) */
+#define SEF_ENTRY_SLOT1_HIDE_SHOW 0x40          /* unitSlotHideShowPart(unit, 1) */
+#define SEF_ENTRY_SLOT1_SHOW_HIDE 0x80          /* unitSlotShowHidePart(unit, 1) */
+#define SEF_ENTRY_SLOT0_OUT 0x100               /* slot 0 fades out or pauses */
+#define SEF_ENTRY_SLOT0_IN 0x200                /* slot 0 fades in or resumes */
+#define SEF_ENTRY_SLOT1_OUT 0x400               /* slot 1 fades out or pauses */
+#define SEF_ENTRY_SLOT1_IN 0x800                /* slot 1 fades in or resumes */
+#define SEF_ENTRY_SCRIPT_EVENT 0x1000           /* unitScriptEventSend(SEF_ENTRY_SCRIPT_EVENT_KIND) */
+#define SEF_ENTRY_PLAY_ACTION_SOUND 0x2000             /* unitPlayActionSound with the action index */
+#define SEF_ENTRY_SLOT_FADE 0x4000              /* the slot in/out bits fade instead of pause/resume */
+#define SEF_ENTRY_SLOT1_PART_HIDE 0x10000       /* unitSlotHidePart */
+#define SEF_ENTRY_SLOT1_PART_SHOW 0x20000       /* unitSlotShowPart */
+#define SEF_ENTRY_MONS_PARTS_HIDE 0x40000       /* hides the "ck_sc3m" parts of the first monster slot */
+#define SEF_ENTRY_SIDE1_UNBIND 0x800000         /* unitUnbind on every side-1 unit */
+#define SEF_ENTRY_SELECTOR_MASK 0xF000000       /* unitSetSelector(unit, field - 1) when nonzero */
+#define SEF_ENTRY_SELECTOR_SHIFT 24
+#define SEF_ENTRY_SIDE1_BIND 0x10000000         /* unitBindSetup on every side-1 unit */
+#define SEF_ENTRY_MONS_SLOT1_HIDE 0x20000000    /* monsSlotHide on the second monster slot */
+#define SEF_ENTRY_DECO_SET 0x40000000           /* decoFlagsSetAll */
+
+/* The unitScriptEventSend kind SEF_ENTRY_SCRIPT_EVENT sends. */
+#define SEF_ENTRY_SCRIPT_EVENT_KIND 12
+
+/*
+ * Runs the scene actions of an attack: the flags of the sef entry of the attacker's actor (sefGetEntryFlags) select
+ * them bit by bit: show/hide the actor slots and parts, fade or pause the slots (SEF_ENTRY_SLOT_FADE picks
+ * fading), hide the two "ck_sc3m" parts of the first monster slot, set the unit's selector
+ * (SEF_ENTRY_SELECTOR_MASK), unbind or bind the side-1 units, hide the second monster slot, set or clear the deco
+ * flags, send a script event and play the action sound (unitPlayActionSound).
+ */
+void func_00A95810(struct AttackCommand *command)
+{
+    UnitScriptEvent event;
+    Ov01Object *unit;
+    unsigned int flags;
+    unsigned int selector;
+
+    unit = command->attacker;
+    flags = sefGetEntryFlags((int)unit->unit);
+    if (flags & SEF_ENTRY_SLOT0_HIDE_SHOW) {
+        unitSlotHideShowPart(unit, 0);
+    }
+    if (flags & SEF_ENTRY_SLOT0_SHOW_HIDE) {
+        unitSlotShowHidePart(unit, 0);
+    }
+    if (flags & SEF_ENTRY_SLOT1_HIDE_SHOW) {
+        unitSlotHideShowPart(unit, 1);
+    }
+    if (flags & SEF_ENTRY_SLOT1_SHOW_HIDE) {
+        unitSlotShowHidePart(unit, 1);
+    }
+    if (flags & SEF_ENTRY_SLOT1_PART_HIDE) {
+        unitSlotHidePart(unit);
+    }
+    if (flags & SEF_ENTRY_SLOT1_PART_SHOW) {
+        unitSlotShowPart(unit);
+    }
+    if (flags & SEF_ENTRY_SLOT_FADE) {
+        if (flags & SEF_ENTRY_SLOT0_OUT) {
+            func_00A95CC8(unit, 0);
+        }
+        if (flags & SEF_ENTRY_SLOT0_IN) {
+            func_00A95CB0(unit, 0);
+        }
+        if (flags & SEF_ENTRY_SLOT1_OUT) {
+            func_00A95CC8(unit, 1);
+        }
+        if (flags & SEF_ENTRY_SLOT1_IN) {
+            func_00A95CB0(unit, 1);
+        }
+    } else {
+        if (flags & SEF_ENTRY_SLOT0_OUT) {
+            unitSlotPause(unit, 0);
+        }
+        if (flags & SEF_ENTRY_SLOT0_IN) {
+            unitSlotResume(unit, 0);
+        }
+        if (flags & SEF_ENTRY_SLOT1_OUT) {
+            unitSlotPause(unit, 1);
+        }
+        if (flags & SEF_ENTRY_SLOT1_IN) {
+            unitSlotResume(unit, 1);
+        }
+    }
+    /* Each block keeps its own slots/units local: the original gives all four their own stack word. */
+    if (flags & SEF_ENTRY_MONS_PARTS_HIDE) {
+        struct MonsSlot **slots;
+
+        monsActiveSlotsGet(&slots);
+        XenoActorHidePart(slots[0]->actor, "ck_sc3m01");
+        XenoActorHidePart(slots[0]->actor, "ck_sc3m02");
+    }
+    selector = flags & SEF_ENTRY_SELECTOR_MASK;
+    if (selector != 0) {
+        unitSetSelector(unit, (selector >> SEF_ENTRY_SELECTOR_SHIFT) - 1);
+    }
+    if (flags & SEF_ENTRY_SIDE1_UNBIND) {
+        Ov01Object **units;
+        int count;
+        int i;
+
+        count = unitTblGet(1, &units);
+        for (i = 0; i < count; i++) {
+            if (units[i] != 0) {
+                unitUnbind(units[i]);
+            }
+        }
+    }
+    if (flags & SEF_ENTRY_SIDE1_BIND) {
+        Ov01Object **units;
+        int count;
+        int i;
+
+        count = unitTblGet(1, &units);
+        for (i = 0; i < count; i++) {
+            if (units[i] != 0) {
+                unitBindSetup(units[i]);
+            }
+        }
+    }
+    if (flags & SEF_ENTRY_MONS_SLOT1_HIDE) {
+        struct MonsSlot **slots;
+
+        monsActiveSlotsGet(&slots);
+        if (slots[1] != 0) {
+            monsSlotHide(slots[1]);
+        }
+    }
+    if (flags & SEF_ENTRY_DECO_SET) {
+        decoFlagsSetAll();
+    }
+    if (flags & SEF_ENTRY_DECO_CLEAR) {
+        decoFlagsClearAll();
+    }
+    if (flags & SEF_ENTRY_SCRIPT_EVENT) {
+        event.unit = unit;
+        unitScriptEventSend(SEF_ENTRY_SCRIPT_EVENT_KIND, &event);
+    }
+    if (flags & SEF_ENTRY_PLAY_ACTION_SOUND) {
+        unitPlayActionSound(unit, command->actionIdx);
+    }
+}
 
 /* unitSlotResume: clears the pause bit of the slot and sets its alpha to 1.0. */
 void unitSlotResume(Ov01Object *object, int index)
