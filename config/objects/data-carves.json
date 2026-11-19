@@ -123519,18 +123519,20 @@
    ".rodata": [
     {
      "range": [
-      "0x00aba8f0",
+      "0x00aba8d0",
       "0x00abaca8"
      ],
      "generated": [
-      "0x00aba8f0",
+      "0x00aba8d0",
       "0x00abaca4"
      ],
      "generated_by": [
       "runtimeInit",
-      "runtimeInitState"
+      "runtimeInitState",
+      "runtimeSetLight"
      ],
      "c_owned_symbols": [
+      "jtbl_00ABA8D0",
       "D_00ABA8F0",
       "D_00ABA8F8",
       "D_00ABA900",
@@ -123669,11 +123671,6 @@
       "D_00ABAC60": "D_00AB60A0",
       "D_00ABAC70": "D_00AB60A0",
       "D_00ABAC80": "D_00AB60A0"
-     },
-     "basis": {
-      "kind": "derived",
-      "tool": "tools/tu/data_carve.py derive",
-      "object": "/home/pc/xenosaga2-port/xenosga-ii-decomp/.work/x2-data7/alloc/ov01/tu047.o"
      }
     }
    ]

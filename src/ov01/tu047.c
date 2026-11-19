@@ -2,6 +2,8 @@
  * OV01 original TU 47: 0x00a9ff80..0x00aa1be0 (52 functions)
  */
 #include "common.h"
+#include "quadword.h"
+#include "vu0_macro.h"
 #include "main/tu022.h"
 #include "main/tu156.h"
 #include "main/xgl_2.h"
@@ -224,7 +226,98 @@ LightBlocks *lightBlockGet(void) {
     return &lightBlock;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/tu047", runtimeSetLight);
+/* runtime.setLight kinds: 0-2 the directional lights (sDir/sCol 0-2), 3 the view light (sDir 6, sCol 6), 4 the
+ * lower ambient colour (sCol 7), 5-7 the shadow directions (sSha 0-2). */
+#define LIGHT_KIND_VIEW 3
+#define LIGHT_KIND_AMBIENT_LOWER 4
+#define LIGHT_KIND_SHADOW 5
+/* Colour arguments are 0..255 per channel, direction arguments hundredths. */
+#define LIGHT_COLOR_SCALE (1.0f / 255.0f)
+#define LIGHT_DIRECTION_SCALE 0.01f
+
+void unitTblBodySetLight(LightBlocks *light);
+
+/* One quadword copy. An inline function, not the macro directly: its asm keeps one source line for every caller,
+ * so jump2 can cross-jump the three identical bodies of kinds 0-2 after register allocation. */
+static inline void lightCopy(Vector4 *destination, AlignedVector4 *source)
+{
+    QuadwordCopyT0(destination, source);
+}
+
+/* Native runtime.setLight(kind, red, green, blue, x, y, z): writes a colour and a direction into light KIND of the
+ * light block (grey and +z without arguments) and makes the block the default light set again. */
+int runtimeSetLight(SbThread *call)
+{
+    XglLightSet *lights;
+    AlignedVector4 color;
+    AlignedVector4 direction;
+    AlignedVector4 *dir;
+    int kind;
+    int index;
+
+    lights = (XglLightSet *)lightBlockGet();
+    if (VM_PLUGIN_CNT_GET(call) <= 0) {
+        sbSlotJumpRequest(call, SB_JUMP_ARGUMENTS);
+        return 0;
+    }
+    Vu0SetOrigin(&color);
+    Vu0SetOrigin(&direction);
+    kind = vmArgGet(call, 1);
+    color.x = vmArgGet(call, 2) * LIGHT_COLOR_SCALE;
+    color.y = vmArgGet(call, 3) * LIGHT_COLOR_SCALE;
+    color.z = vmArgGet(call, 4) * LIGHT_COLOR_SCALE;
+    direction.x = vmArgGet(call, 5) * LIGHT_DIRECTION_SCALE;
+    direction.y = vmArgGet(call, 6) * LIGHT_DIRECTION_SCALE;
+    direction.z = vmArgGet(call, 7) * LIGHT_DIRECTION_SCALE;
+    /* The copies below go through this pointer: the &direction of Vu0SetOrigin then stays a block-local pseudo
+     * in $16 and dir takes $16 by copy preference after call, lights and kind got $17-$19 (original order). */
+    dir = &direction;
+    if (vmArgTagIsZero(call, 2)) {
+        color.x = 0.5f;
+        color.y = 0.5f;
+        color.z = 0.5f;
+    }
+    if (vmArgTagIsZero(call, 5)) {
+        direction.x = 0.0f;
+        direction.y = 0.0f;
+        direction.z = 1.0f;
+    }
+    /* Kinds 0-2 as three identical bodies (merged by jump2): their extra uses raise the priority of dir. */
+    switch (kind) {
+    case 0:
+        lightCopy((Vector4 *)lights->directions[kind], dir);
+        lightCopy((Vector4 *)lights->colors[kind], &color);
+        break;
+    case 1:
+        lightCopy((Vector4 *)lights->directions[kind], dir);
+        lightCopy((Vector4 *)lights->colors[kind], &color);
+        break;
+    case 2:
+        lightCopy((Vector4 *)lights->directions[kind], dir);
+        lightCopy((Vector4 *)lights->colors[kind], &color);
+        break;
+    case LIGHT_KIND_VIEW:
+        lightCopy(&lights->viewDirection, dir);
+        lightCopy(&lights->ambientColor, &color);
+        break;
+    case LIGHT_KIND_AMBIENT_LOWER:
+        lightCopy(&lights->ambientColorLower, &color);
+        break;
+    case LIGHT_KIND_SHADOW:
+    case LIGHT_KIND_SHADOW + 1:
+    case LIGHT_KIND_SHADOW + 2:
+        index = kind - LIGHT_KIND_SHADOW;
+        lightCopy(&lights->shadows[index], dir);
+        if (vmArgTagIsZero(call, 2) || vmArgTagIsZero(call, 5)) {
+            lights->shadows[index].w = 0.0f;
+        }
+        break;
+    }
+    pxySetDefaultLight(lights);
+    func_00253048(lights);
+    unitTblBodySetLight((LightBlocks *)lights);
+    return 1;
+}
 
 /* Copies the light blocks into the actor of every unit of unitTblGet(2). */
 void unitTblBodySetLight(LightBlocks *light)

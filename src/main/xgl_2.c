@@ -2089,13 +2089,13 @@ void xglLightPackBuildLightSet(XglLightPack *pack, XglLightSet *lightSet, Vector
             case 10:
                 axisDir.z = 1.0f;
                 LOAD_KEY_ROTATION(key)
-                                xglMatrixStackMulVector(&lightSet->forward, &axisDir);
-                lightSet->forward.w = 1.0f;
+                                xglMatrixStackMulVector(&lightSet->shadows[0], &axisDir);
+                lightSet->shadows[0].w = 1.0f;
                 break;
             case 11:
-                xglVectorSubXYZ_001AF3F0(&lightSet->forward, &key->position, receiver);
-                xglVectorNormal_001A9200(&lightSet->forward, &lightSet->forward);
-                lightSet->forward.w = 1.0f;
+                xglVectorSubXYZ_001AF3F0(&lightSet->shadows[0], &key->position, receiver);
+                xglVectorNormal_001A9200(&lightSet->shadows[0], &lightSet->shadows[0]);
+                lightSet->shadows[0].w = 1.0f;
                 break;
             }
         } else {
