@@ -355,3 +355,23 @@ void logoShowCredits(void)
 void func_00A80790(void) {
 
 }
+
+/* .data of this TU (address order). */
+u64 D_00A82848[1] = { 0 };
+u64 D_00A82850[12] = { 0x0000000000000000ULL, 0x5100000500000000ULL, 0x1000000000000004ULL, 0x000000000000000eULL, 0x0000000000000000ULL, 0x0000000000000050ULL, 0x0000000000000000ULL, 0x0000000000000051ULL, 0x000001c000000200ULL, 0x0000000000000052ULL, 0x0000000000000000ULL, 0x0000000000000053ULL };
+u64 D_00A828B0[4] = { 0x0000000000000000ULL, 0x5100000100000000ULL, 0x0800000000007000ULL, 0x0000000000000000ULL };
+u64 D_00A828D0[6] = { 0x0000000000000000ULL, 0x5100000200000000ULL, 0x1000000000008001ULL, 0x000000000000000eULL, 0x0000000000000000ULL, 0x000000000000003fULL };
+u32 D_00A82900[42] = { 0x00000000, 0x00000000, 0x00000000, 0x51000006, 0x00008001, 0x50234000, 0x000551EE, 0x00000000, 0x00030000, 0x00000000, 0x00000047, 0x00000000, 0x00000044, 0x00000000, 0x00000042, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000080, 0x00006FF8, 0x000071F7, 0x00000000, 0x00000000, 0x00008FF8, 0x00008DF7, 0x00000000, 0x00000000, 0x00000000, 0x631EDA80, 0x01AAAB80, 0x011EECD8, 0x0123C600, 0x0123CF78, 0x01251E30, 0x01AAAD50, 0x0123E978, 0x00000000, 0x63A81EF0, 0x63A82600, 0x63A828E4, 0x00000000 };
+
+/* .rodata of this TU (address order). */
+
+const char deviceCheckFontModeText[8] = "\031\003";
+const char logoSaveSpaceHeaderText[72] = "\n\n\031\003Xenosaga Episode II requires 34KB of free space to\nsave data.";
+const char logoNoCardText[96] = "\031\003No memory card (8MB) (for PlayStation\244\2452)\nin MEMORY CARD slot 1 and MEMORY CARD slot 2.";
+const char logoNoSpaceSlot1Text[88] = "\031\003Insufficient space on\nmemory card (8MB) (for PlayStation\244\2452)\nin MEMORY CARD slot 1.";
+const char logoNoSpaceSlot2Text[88] = "\031\003Insufficient space on\nmemory card (8MB) (for PlayStation\244\2452)\nin MEMORY CARD slot 2.";
+const char logoNoSpaceBothText[112] = "\031\003Insufficient space on\nmemory card (8MB) (for PlayStation\244\2452)\nin MEMORY CARD slot 1 and MEMORY CARD slot 2.";
+const char logoStartGamePromptText[72] = "\n\n\031\003Start game?\n\n\014\200  \031\000\241\373\031\003\014\200\200\200 button: Yes/\014  \200\031\000\241\337\031\003\014\200\200\200 button: No";
+const char logoInsertCardText[168] = "\031\003Please insert a memory card (8MB) (for PlayStation\244\2452)\nwith at least 34KB of free space into\nMEMORY CARD slot 1 or MEMORY CARD slot 2.\n\n\014  \200\241\337\014\200\200\200 button: Cancel";
+const char D_00A83438[8] = "\031";
+const char logoCreditPath[16] = "credit.bin";

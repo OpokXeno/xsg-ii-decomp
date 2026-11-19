@@ -1482,6 +1482,11 @@ DATA_OWNERS = [
      'It is given to sef_print.c, the object whose data it adjoins; sef.c reads it as an extern. Without '
      'this the span of sef.c starts at 0x69DAD0 and its real run 0x69DB48-0x69DBE0 (sefEffectRecordCount, '
      'D_0069DB8C, ...) falls into the piece of sv_get_image_item.c (2026-11-15)'),
+    (0x0068C5E8, 0x0026C0A8,
+     'sefAlphaBlendValues: the GS ALPHA table { 0x44, 0x48, 0x8000000042, 0x6A } of sefBuildModelPacket (tu185), '
+     'which reads entry 0 through a lui in a branch delay slot (the reference scan misses it) and entry 1 as '
+     'D_0068C5F0; without this the .rodata of tu185 starts at entry 1 and sdv_181 holds entry 0 (data pass 7, '
+     '2026-11-19)'),
 ]
 
 
@@ -2032,6 +2037,83 @@ def overlay_rodata_pieces(unit, tus, low, high):
     return pieces, monotonic
 
 
+# The `.data` and `.bss` output sections of an overlay's data half are cut per TU like `.rodata`, but by the
+# link order rule of main's data map (cross-section consistency, 2026-11-17): every section of one object
+# follows the same order as its `.text`, so the TU pieces are the longest chain of single-TU code references
+# whose TU ordinals never decrease with the address. A reference outside that chain is a global of the TU whose
+# piece holds it, read by another file (ov01 .bss: 0xABFF20 read by tu009 inside tu005's piece, the 0xAC0010
+# buffer read by tu036 inside tu008's, 0xAE0E08 read by tu056 inside tu048's; data pass 7, 2026-11-19).
+OVERLAY_DATA_SECTIONS = ('.data', '.bss')
+
+# References to an inner address of an object that another TU defines (a field or an element view read through
+# its own label): not a piece start. Each one was cut out of its object by the chain above (data pass 7,
+# 2026-11-19).
+OVERLAY_INNER_REFERENCES = [
+    ('ov01', 0x00AC104C,
+     'unitTbl+0xC, read by tu017: unitTbl is the 32-byte slot table of tu010 (unitInit memsets 0x20 bytes from '
+     '0xAC1040, tu017 indexes 8 slots); the cut at 0xAC104C gave tu010 12 bytes and tu017 the 20-byte tail'),
+    ('ov01', 0x00AE0F20,
+     'handleSlots+8, the state word of the 12-byte HandleSlot records that tu070 reads as D_00AE0F20[i]: '
+     'handleSlots (0xAE0F18, 6 records, 72 bytes) and handleBumpCursor (0xAE0F60) are tu069\'s (handleInit '
+     'memsets sizeof(handleSlots) and sets the cursor)'),
+]
+
+# References whose address lies in front of the object they index (`table[i - 1]` folds the -1 into the address):
+# the object, and so the piece of its TU, starts at the second address (data pass 7, 2026-11-19).
+OVERLAY_BIASED_REFERENCES = [
+    ('ov01', 0x00AB6AB4, 0x00AB6AB8,
+     'bgmTrackHandles[track - 1] of bgmPlayTrack (tu071, tracks 1 to 6): the table of six file names starts at '
+     '0xAB6AB8 (alignment 8); 0xAB6AB4 is the ALPHA high word of tu063\'s 16-byte menuStatusIconsTexRecord'),
+]
+
+
+def overlay_link_order_pieces(unit, unit_name, tus, low, high):
+    """([(ordinal, start, end, anchors)], [(target, ordinal) outside the chain]) of [low, high) of an overlay."""
+    owner = {i: tu['ordinal'] for tu in tus for i in tu['_indices']}
+    users = collections.defaultdict(set)
+    for table in (unit.users, unit.indexed_users):
+        for target, who in table.items():
+            if low <= target < high:
+                users[target] |= who
+    # Every reference is a candidate (target, ordinal of one reader); a single-reader one weighs 2, a shared
+    # one 1, so a shared global anchors a TU only where that reader lies inside the link-order interval.
+    candidates = []
+    inner = {target for name, target, _ in OVERLAY_INNER_REFERENCES if name == unit_name}
+    for name, target, start, _ in OVERLAY_BIASED_REFERENCES:
+        if name == unit_name and target in users:
+            users[start] |= users.pop(target)
+    for target in sorted(users):
+        if target in inner:
+            continue
+        ordinals = {owner.get(i) for i in users[target]} - {None}
+        weight = 2 if len(ordinals) == 1 and all(i in owner for i in users[target]) else 1
+        candidates += [(target, ordinal, weight) for ordinal in sorted(ordinals)]
+    # Heaviest chain with strictly increasing targets and non-decreasing ordinals (O(n^2), n is small).
+    best = [w for _, _, w in candidates]
+    back = [-1] * len(candidates)
+    for k, (target, ordinal, weight) in enumerate(candidates):
+        for j in range(k):
+            if candidates[j][0] < target and candidates[j][1] <= ordinal and best[j] + weight > best[k]:
+                best[k], back[k] = best[j] + weight, j
+    chain = []
+    k = max(range(len(candidates)), key=lambda i: (best[i], -i)) if candidates else -1
+    while k >= 0:
+        chain.append(candidates[k][:2])
+        k = back[k]
+    chain.reverse()
+    kept = {target for target, _ in chain}
+    outside = [(target, ordinal) for target, ordinal, weight in candidates if weight == 2 and target not in kept]
+    starts, counts = [], collections.Counter(ordinal for _, ordinal in chain)
+    for target, ordinal in chain:
+        if not starts or starts[-1][1] != ordinal:
+            starts.append((target & ~3, ordinal))
+    if starts:
+        starts[0] = (low, starts[0][1])
+    pieces = [(ordinal, start, starts[k + 1][0] if k + 1 < len(starts) else high, counts[ordinal])
+              for k, (start, ordinal) in enumerate(starts)]
+    return pieces, outside
+
+
 def close_gaps(unit, tus, zones):
     """Each TU runs to the next one's first function, so the records cover the zone with no hole."""
     for position, tu in enumerate(tus):
@@ -2158,16 +2240,25 @@ def generate(root=ROOT):
             rodata_start, why = OVERLAY_RODATA[unit_name]
             pieces, monotonic = overlay_rodata_pieces(unit, tus, rodata_start, bss_start)
             ids = {r['ordinal']: r['id'] for r in records}
+            data_pieces, data_outside = overlay_link_order_pieces(unit, unit_name, tus, image.text_end, rodata_start)
+            bss_pieces, bss_outside = overlay_link_order_pieces(unit, unit_name, tus, bss_start, section_end)
+
+            def linked(family, section_name, low, high, rows, outside):
+                return dict(family=family, section=section_name, start=hex32(low), end=hex32(high), size=high - low,
+                            anchors_kept=sum(p[3] for p in rows),
+                            owners=[dict(ordinal=o, id=ids[o], start=hex32(a), end=hex32(b),
+                                         anchors=dict(code_ref_link_order=n)) for o, a, b, n in rows],
+                            evidence_kinds=dict(code_ref_link_order=len(rows)),
+                            read_by_other_tus=[dict(target=hex32(t), reader=ids[o]) for t, o in outside],
+                            evidence='OVERLAY_DATA_SECTIONS: link-order chain of code references (data pass 7, 2026-11-19)')
             families = [
-                dict(family='unsplit', section='.data', start=hex32(image.text_end), end=hex32(rodata_start),
-                     size=rodata_start - image.text_end, anchors_kept=0, owners=[], evidence_kinds={}),
+                linked('data', '.data', image.text_end, rodata_start, data_pieces, data_outside),
                 dict(family='rodata', section='.rodata', start=hex32(rodata_start), end=hex32(bss_start),
                      size=bss_start - rodata_start, anchors_kept=sum(p[3] for p in pieces),
                      owners=[dict(ordinal=o, id=ids[o], start=hex32(a), end=hex32(b), anchors=dict(code_ref_single_tu=n))
                              for o, a, b, n in pieces],
                      evidence_kinds=dict(code_ref_single_tu=len(pieces)), evidence=why),
-                dict(family='unsplit', section='.bss', start=hex32(bss_start), end=hex32(section_end),
-                     size=section_end - bss_start, anchors_kept=0, owners=[], evidence_kinds={})]
+                linked('bss', '.bss', bss_start, section_end, bss_pieces, bss_outside)]
         overlays[unit_name] = dict(
             unit=unit_name, path=f'game/extracted-iso/{file_name}', sha256=image.sha256,
             section=dict(name=unit_name, index=section['index'], va=hex32(section['va']), size=section['size'],
@@ -2502,7 +2593,7 @@ def write_report(root=ROOT):
               'boundary can cost a match as well as readability.', '',
               '## Not done here', '',
               '- Compiler evidence from matching is not recorded yet, so nothing corrects the map as functions match.',
-              '- Overlay data: ov01 (0xAB8CA0-0xABB870) and ov02 (0xA83178-0xA83C48) have a per-TU `.rodata` family (OVERLAY_RODATA); their `.data` and `.bss` are still one unsplit family each.',
+              '- Overlay data: ov01 (0xAB8CA0-0xABB870) and ov02 (0xA83178-0xA83C48) have a per-TU `.rodata` family (OVERLAY_RODATA) and per-TU `.data` and `.bss` families cut by link order (OVERLAY_DATA_SECTIONS).',
               '- VU programs are listed, not split, and the VU tools have not been tried on X2.',
               '- `section_order` covers code-referenced data only. `binding` is `unknown` for every function.', '']
     (root / 'reports/x2-tu-map.md').write_text('\n'.join(lines))

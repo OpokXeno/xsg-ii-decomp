@@ -114,7 +114,8 @@ typedef struct SefPool {
     int cursor;                 /* +0x500A0: where the next search starts */
 } SefPool;
 
-extern SefPool sefEntryPool;
+static Matrix4 sefViewCameraMatrix;
+static SefPool sefEntryPool;
 
 void sefResetPool(void) {
     memset(&sefEntryPool, 0, sizeof(SefPool));
@@ -129,7 +130,7 @@ void sefResetBuffers(void) {
 }
 
 /* Set when sefPoolAlloc finds no free entry; sefRunEmitters clears it every frame. */
-extern s16 sefPoolFull;
+s16 sefPoolFull = 0;
 
 /* Returns the sefEntryPool index of a free entry (ring entry r is entries[r + 1]), searching the ring from the
  * cursor; the cursor moves to the ring entry after the one handed out. Returns 0 and sets sefPoolFull when no
@@ -271,7 +272,7 @@ typedef struct SefVuPacket {
     u64 testRegister;         /* +0x108: GS_TEST_1 */
 } SefVuPacket;
 
-extern SefVuPacket sefVuPacket;
+static SefVuPacket sefVuPacket;
 extern unsigned char D_1F70[];
 extern unsigned char D_1FD0[];
 
@@ -302,8 +303,9 @@ void sefBuildVuPacket(int kind, int alternate) {
 }
 
 Matrix4 *MMathMulMatrix(Matrix4 *out, const Matrix4 *rhs, const Matrix4 *lhs);
-extern const Matrix4 *sefViewMatrixPtr;
-extern Matrix4 sefViewCameraMatrix;
+static const Matrix4 *sefViewMatrixPtr;
+static int sefLastDrawnKind;
+static f32 sefFloorHeight;
 XglCamera *xglStudioGetActiveCamera(void);
 extern Matrix4 sefCameraMatrix[1];
 /* The unit quad (rodata). Declared without const: as a const object its loads cannot conflict with the packet stores,
@@ -373,7 +375,9 @@ void sefBuildModelPacket(u64 tex0, const Matrix4 *matrix, int blendKind, int emi
     sefVuPacket.alphaRegister = GS_ALPHA_1;
 }
 
-extern int sefActiveCount;
+int sefActiveCount = 0;
+float D_0069DC50 = 0.2f;
+float D_0069DC54 = 0.1f;
 
 int sefGetActiveCount(void) {
     return sefActiveCount;
@@ -1899,7 +1903,6 @@ typedef struct SefOwner SefOwner;
 
 void uwamonoReleaseOwnedRecords(SefOwner *owner);
 extern s16 sefClipTestDisabled;
-extern f32 sefFloorHeight;
 extern SefEmitterFunc sefSpawnHandlers[];
 extern SefEmitterFunc sefUpdateHandlers[];
 
@@ -2192,7 +2195,6 @@ ResourceSlot *sefGetResourceSlot(int index) {
 
 void svLoadDrawViewMatrix(void);
 void svBuildDrawStatePacket(void);
-extern int sefLastDrawnKind;
 
 /* Rebuilds the draw-state and VU packets, then draws every emitter of slot
  * slotIndex (one call per emitter, up to emitterCount); nothing when no particle
@@ -2273,3 +2275,178 @@ void sefCollectPersistentSlots(SefSavedEffect *list, int count) {
         }
     }
 }
+
+/* GS ALPHA register values of the effect blend modes: (Cs - Cd) * As + Cd, (Cs - 0) * As + Cd, the fixed-alpha
+ * (Cs - Cd) * 0x80 + Cd, and (0 - Cs) * As + Cd. */
+const u64 sefAlphaBlendValues[4] = { 0x44ULL, 0x48ULL, 0x0000008000000042ULL, 0x6AULL };
+
+const SefQuadCorners sefQuadCorners = {
+    { { -1.0f, 1.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, -1.0f, 0.0f, 1.0f }, { 1.0f, -1.0f, 0.0f, 1.0f } }
+};
+
+const double D_0068C650[2] = { 0.00125, 0.0 };
+
+/* The scaffold assembly functions the handler tables name. */
+void func_0026CF90(ResourceSlot *slot, int index);
+void func_0026D2B8(ResourceSlot *slot, int index);
+void func_0026F010(ResourceSlot *slot, int index);
+void func_0026F4C8(ResourceSlot *slot, int index);
+void func_0026F7D8(ResourceSlot *slot, int index);
+void func_0026FB88(ResourceSlot *slot, int index);
+void func_0026FFE0(ResourceSlot *slot, int index);
+
+/* Particle ring size (entries per emitter) of each effect kind. */
+short sefRingSizes[28] = {
+    32, 32, 32, 128, 128, 32, 32, 64,
+    32, 64, 64, 64, 64, 64, 64, 64,
+    64, 64, 64, 128, 16, 16, 64, 64,
+    64, 0, 0, 0
+};
+
+int D_005E6EA8[14] = { 4, 1, 0, 4, 1, 0, 4, 1, 0, 4, 1, 0, 0, 0 };
+Vector4 D_005E6EE0 = { 0.0f, 0.5f, 0.0f, 1.0f };
+Vector4 D_005E6EF0 = { 0.0f, 10.0f, 0.0f, 1.0f };
+Matrix4 D_005E6F00 = {
+    { 1.0f, 0.0f, 0.0f, 0.0f },
+    { 0.0f, 0.0f, 1.0f, 0.0f },
+    { 0.0f, -1.0f, 0.0f, 0.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f }
+};
+int D_005E6F40[4] = { 80, 50, 25, 25 };
+Vector4 D_005E6F50 = { 1.0f, 1.0f, 1.0f, 1.0f };
+Vector4 D_005E6F60 = { 0.01f, 0.01f, 0.005f, 0.005f };
+Vector4 D_005E6F70 = { 3.0f, 3.0f, 3.0f, 2.0f };
+
+SefEmitterParams sefEmitterParamsKinds5To7[12] = {
+    { 2, 2, 30.0f, -0.3f, 0.3f, 0.22399999f, 128, 128, 10 },
+    { 2, 3, 40.0f, -0.4f, 0.75f, 0.512f, 25, 0, 10 },
+    { 2, 2, 30.0f, -0.3f, 0.3f, 0.22399999f, 128, 128, 10 },
+    { 2, 3, 40.0f, -0.4f, 0.75f, 0.512f, 25, 0, 10 },
+    { 2, 2, 30.0f, -0.3f, 0.3f, 0.24f, 128, 128, 10 },
+    { 2, 3, 40.0f, -0.4f, 0.85f, 0.544f, 25, 0, 10 },
+    { 2, 2, 30.0f, -0.3f, 0.3f, 0.24f, 128, 128, 10 },
+    { 2, 3, 40.0f, -0.4f, 0.85f, 0.544f, 25, 0, 10 },
+    { 2, 2, 30.0f, -0.4f, 0.3f, 0.24f, 128, 128, 10 },
+    { 2, 3, 40.0f, -0.7f, 0.4f, 0.41599998f, 25, 255, 10 },
+    { 2, 2, 30.0f, -0.4f, 0.3f, 0.24f, 128, 128, 10 },
+    { 2, 3, 40.0f, -0.7f, 0.4f, 0.41599998f, 25, 255, 16 }
+};
+
+SefEmitterParams sefEmitterParamsKinds8To10[12] = {
+    { 2, 5, 30.0f, 1.2f, 0.5f, 0.768f, 64, 150, 2 },
+    { 100, 8, 30.0f, 0.6f, 1.5f, 0.128f, 64, 150, 2 },
+    { 100, 5, 30.0f, 0.6f, 1.0f, 0.128f, 64, 150, 2 },
+    { 2, 4, 30.0f, 1.2f, 0.5f, 0.64f, 64, 150, 2 },
+    { 2, 5, 30.0f, 1.4f, 0.5f, 0.89599997f, 64, 150, 4 },
+    { 2, 10, 30.0f, 0.8f, 1.5f, 0.128f, 64, 150, 2 },
+    { 2, 5, 30.0f, 0.8f, 1.0f, 0.128f, 64, 150, 4 },
+    { 2, 4, 30.0f, 1.4f, 0.5f, 0.768f, 64, 150, 4 },
+    { 2, 5, 30.0f, 1.6f, 0.5f, 0.96f, 64, 150, 4 },
+    { 2, 10, 30.0f, 0.8f, 1.5f, 0.128f, 64, 150, 2 },
+    { 2, 5, 30.0f, 0.8f, 1.0f, 0.128f, 64, 150, 4 },
+    { 2, 4, 30.0f, 1.6f, 0.5f, 0.89599997f, 64, 150, 4 }
+};
+
+SefEmitterParams sefEmitterParamsKinds11To13[15] = {
+    { 2, 3, 10.0f, 0.6f, 0.5f, 0.22399999f, 128, 192, 2 },
+    { 2, 2, 30.0f, 0.8f, 0.6f, 0.576f, 25, 255, 2 },
+    { 2, 5, 30.0f, 0.2f, 1.0f, 0.0448f, 40, 128, 2 },
+    { 2, 3, 10.0f, 0.6f, 0.5f, 0.22399999f, 128, 192, 2 },
+    { 2, 2, 30.0f, 0.8f, 0.6f, 0.576f, 25, 255, 2 },
+    { 2, 4, 10.0f, 0.7f, 0.5f, 0.272f, 128, 192, 2 },
+    { 2, 2, 30.0f, 1.0f, 0.6f, 0.64f, 25, 255, 2 },
+    { 2, 5, 30.0f, 0.3f, 1.0f, 0.048f, 40, 128, 2 },
+    { 2, 3, 10.0f, 0.7f, 0.5f, 0.272f, 128, 192, 2 },
+    { 2, 3, 30.0f, 1.0f, 0.6f, 0.64f, 25, 255, 2 },
+    { 2, 4, 10.0f, 0.85f, 0.5f, 0.32f, 128, 192, 2 },
+    { 2, 3, 30.0f, 1.1f, 0.6f, 0.768f, 25, 255, 2 },
+    { 2, 6, 30.0f, 0.4f, 1.0f, 0.0512f, 40, 128, 2 },
+    { 2, 3, 10.0f, 0.85f, 0.5f, 0.32f, 128, 192, 2 },
+    { 2, 3, 30.0f, 1.1f, 0.6f, 0.768f, 25, 255, 2 }
+};
+
+SefEmitterParams sefEmitterParamsKinds22Up[12] = {
+    { 2, 5, 30.0f, 1.2f, 0.5f, 0.768f, 64, 150, 2 },
+    { 2, 5, 30.0f, 0.2f, 1.0f, 0.0448f, 110, 128, 2 },
+    { 2, 7, 30.0f, 0.9f, 1.0f, 0.016f, 120, 255, 3 },
+    { 2, 4, 30.0f, 1.2f, 0.5f, 0.64f, 64, 150, 2 },
+    { 2, 5, 30.0f, 1.4f, 0.5f, 0.89599997f, 64, 150, 4 },
+    { 2, 5, 30.0f, 0.3f, 1.0f, 0.048f, 110, 128, 2 },
+    { 2, 6, 30.0f, 0.8f, 1.0f, 0.0139999995f, 120, 255, 3 },
+    { 2, 4, 30.0f, 1.4f, 0.5f, 0.768f, 64, 150, 4 },
+    { 2, 5, 30.0f, 1.6f, 0.5f, 0.96f, 64, 150, 4 },
+    { 2, 6, 30.0f, 0.4f, 1.0f, 0.0512f, 110, 128, 2 },
+    { 2, 4, 30.0f, 0.6f, 1.0f, 0.012f, 120, 255, 3 },
+    { 2, 4, 30.0f, 1.6f, 0.5f, 0.89599997f, 64, 150, 4 }
+};
+
+SefEmitterParams sefEmitterParamsKinds14To16[15] = {
+    { 2, 4, 30.0f, 0.7f, 0.7f, 0.32f, 80, 128, 4 },
+    { 2, 4, 30.0f, 0.6f, 1.0f, 0.012f, 90, 255, 3 },
+    { 2, 8, 30.0f, 0.8f, 0.7f, 0.64f, 80, 128, 2 },
+    { 2, 4, 30.0f, 0.3f, 2.4f, 0.048f, 128, 200, 2 },
+    { 2, 6, 30.0f, 0.3f, 1.4f, 0.032f, 128, 200, 2 },
+    { 2, 4, 30.0f, 0.8f, 0.7f, 0.352f, 80, 128, 4 },
+    { 2, 6, 30.0f, 0.8f, 1.0f, 0.0139999995f, 90, 255, 3 },
+    { 2, 10, 30.0f, 0.9f, 0.7f, 0.768f, 80, 128, 2 },
+    { 2, 4, 30.0f, 0.7f, 2.4f, 0.055999998f, 128, 200, 2 },
+    { 2, 5, 30.0f, 0.7f, 1.4f, 0.04f, 128, 200, 2 },
+    { 2, 4, 30.0f, 0.9f, 0.7f, 0.41599998f, 80, 128, 4 },
+    { 2, 7, 30.0f, 0.9f, 1.0f, 0.016f, 90, 255, 3 },
+    { 2, 10, 30.0f, 1.0f, 0.7f, 0.89599997f, 80, 128, 2 },
+    { 2, 4, 30.0f, 0.9f, 2.4f, 0.064f, 128, 200, 2 },
+    { 2, 5, 30.0f, 0.9f, 1.4f, 0.048f, 128, 200, 2 }
+};
+
+SefEmitterParams sefEmitterParamsKinds17To19[15] = {
+    { 100, 1, 40.0f, 0.2f, 0.5f, 0.32f, 25, 0, 2 },
+    { 100, 4, 40.0f, 0.2f, 0.5f, 0.384f, 25, 255, 2 },
+    { 100, 1, 2.0f, 0.0f, 1.0f, 0.384f, 128, 128, 2 },
+    { 2, 1, 30.0f, 0.2f, 1.0f, 0.064f, 128, 128, 4 },
+    { 2, 1, 30.0f, 0.2f, 1.0f, 0.096f, 128, 128, 4 },
+    { 100, 1, 40.0f, 0.3f, 0.5f, 0.384f, 25, 0, 2 },
+    { 2, 4, 40.0f, 0.2f, 0.5f, 0.384f, 25, 255, 4 },
+    { 2, 1, 2.0f, 0.0f, 1.0f, 0.384f, 128, 128, 2 },
+    { 2, 1, 30.0f, 0.2f, 1.0f, 0.064f, 128, 128, 4 },
+    { 2, 1, 30.0f, 0.2f, 1.0f, 0.096f, 128, 128, 4 },
+    { 100, 1, 40.0f, 0.5f, 0.8f, 0.41599998f, 25, 0, 2 },
+    { 2, 4, 40.0f, 0.5f, 0.8f, 0.41599998f, 25, 255, 8 },
+    { 2, 1, 2.0f, 0.0f, 1.0f, 0.48f, 128, 128, 8 },
+    { 2, 2, 30.0f, 0.2f, 1.0f, 0.064f, 128, 128, 8 },
+    { 2, 2, 30.0f, 0.2f, 1.0f, 0.096f, 128, 128, 8 }
+};
+
+short sefKind20Intervals[] = { 60, 30, 60, 0 };
+float sefKind20Sizes[4] = { 0.64f, 0.288f, 0.32f, 0.0f };
+float D_005E79B8[4] = { 0.002f, 0.0032f, 0.0005f, 0.0008f };
+
+SefEmitterFunc sefSpawnHandlers[26] = {
+    func_0026CF90, func_0026CF90, func_0026CF90, func_0026D2B8, func_0026D2B8,
+    sefSpawnKinds5To7, sefSpawnKinds5To7, sefSpawnKinds5To7,
+    sefSpawnKinds8To10, sefSpawnKinds8To10, sefSpawnKinds8To10,
+    sefSpawnKinds11To13, sefSpawnKinds11To13, sefSpawnKinds11To13,
+    sefSpawnKinds14To16, sefSpawnKinds14To16, sefSpawnKinds14To16,
+    sefSpawnKinds17To19, sefSpawnKinds17To19, sefSpawnKinds17To19,
+    sefSpawnKind20, sefSpawnKind21,
+    sefSpawnKinds22Up, sefSpawnKinds22Up, sefSpawnKinds22Up,
+    0
+};
+
+SefEmitterFunc sefUpdateHandlers[26] = {
+    sefUpdateBurstParticles, sefUpdateBurstParticles, sefUpdateBurstParticles, func_0026F010, func_0026F010,
+    sefUpdateFadeOutParticles, sefUpdateFadeOutParticles, sefUpdateFadeOutParticles,
+    func_0026F4C8, func_0026F4C8, func_0026F4C8,
+    func_0026F7D8, func_0026F7D8, func_0026F7D8,
+    func_0026FB88, func_0026FB88, func_0026FB88,
+    func_0026FFE0, func_0026FFE0, func_0026FFE0,
+    sefUpdateKind20Particles, sefUpdateSpinParticles,
+    func_0026F4C8, func_0026F4C8, func_0026F4C8,
+    0
+};
+
+/* Last look-at and position keys applied by sdv_181.c (its SdvCameraKeyLog, 0x28 bytes). */
+short sdvCameraKeyLog[20] = { 0 };
+
+/* The small-cell heap handed to smInitilizeSmall (0x20000 bytes), and the resource slot table behind it. */
+unsigned char sefSmallHeap[0x20000] = { 0 };
+ResourceSlot sefResourceTable[SEF_RESOURCE_SLOT_COUNT] = { 0 };

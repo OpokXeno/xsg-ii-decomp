@@ -56,7 +56,7 @@ void streamSlotStop(int index)
 
 void soundSlotStop(int index);
 void func_001EDC20(int index);
-extern char *bgmTrackHandles[];
+extern char *bgmTrackHandles[BGM_TRACK_COUNT];
 
 /* Plays background music track `track` (1 to BGM_TRACK_COUNT) on stream slot 0, from its handle in bgmTrackHandles. */
 void bgmPlayTrack(int track)
@@ -64,7 +64,7 @@ void bgmPlayTrack(int track)
     if ((unsigned int) (track - 1) < BGM_TRACK_COUNT) {
         soundSlotStop(0);
         func_001EDC20(0);
-        streamSlotSetFile(0, bgmTrackHandles[track]);
+        streamSlotSetFile(0, bgmTrackHandles[track - 1]);
     }
 }
 
@@ -133,3 +133,20 @@ void streamPlayByKey(Ov01Object *unit, int mode)
         streamSlotSetFile(1, path);
     }
 }
+
+/* Music track names of tu056's rodata, indexed by track (track 0 is unused). */
+extern char D_00ABAD08[];
+extern char D_00ABAD18[];
+extern char D_00ABAD28[];
+extern char D_00ABAD30[];
+extern char D_00ABAD38[];
+extern char D_00ABAD48[];
+
+char *bgmTrackHandles[BGM_TRACK_COUNT] = {
+    D_00ABAD48,
+    D_00ABAD38,
+    D_00ABAD30,
+    D_00ABAD28,
+    D_00ABAD18,
+    D_00ABAD08,
+};

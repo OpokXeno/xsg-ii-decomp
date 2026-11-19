@@ -36,8 +36,8 @@ void *memset(void *, int, unsigned int);
  *. monsSlotInsert fills a free entry and bumps the
  * count, monsSlotRemove clears one and drops the count.
  */
-extern struct MonsSlot *monsActiveSlots[MONS_ACTIVE_SLOT_COUNT];
-extern int monsActiveCount;
+static struct MonsSlot *monsActiveSlots[MONS_ACTIVE_SLOT_COUNT];
+static int monsActiveCount;
 
 struct MonsSlot *monsSlotNew(void);
 void monsSlotEmptyUpdate(void);

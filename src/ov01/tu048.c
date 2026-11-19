@@ -173,7 +173,7 @@ typedef struct GrRenderState {
 
 extern GrRenderState sRender;
 /* Framebuffer base addresses; grFBAdrGet indexes this table. */
-extern int fb[4];
+int fb[4] = { 112, 224, 336, 0xFFFFF };
 
 /* VIF FLUSH code (command 0x11 in bits 24..30, no immediate). */
 #define VIF_CODE_FLUSH 0x11000000
@@ -206,11 +206,11 @@ typedef struct GrPutTag {
     int count;     /* +0x04 */
 } GrPutTag;
 
-extern GrPutTag grPutF2Tag;
-extern GrPutTag grPutF4Tag;
-extern GrPutTag grPutFT4Tag;
-extern GrPutTag grPutFT4STQTag;
-extern GrPutTag grPutSprTag;
+static GrPutTag grPutF2Tag;
+static GrPutTag grPutF4Tag;
+static GrPutTag grPutFT4Tag;
+static GrPutTag grPutFT4STQTag;
+static GrPutTag grPutSprTag;
 
 /* Offset to the GS window that the 12.4 screen coordinates are biased by. */
 #define GR_GS_WINDOW_OFFSET_X 0x7000
@@ -617,8 +617,9 @@ typedef struct GrFrameBaseTable {
     unsigned short base[3];
 } GrFrameBaseTable;
 
-extern const GrFrameBaseTable grFrameBaseTable;
-extern const GrVramCopyParams grVramCopyParams;
+const GrFrameBaseTable grFrameBaseTable = { { 0x0E00, 0x1C00, 0x2A00 } };
+const GrVramCopyParams grVramCopyParams = { 0, 8, 0, 8, 0, 0, 0, 0, 512, 448 };
+char menuTgtStatusTextBuffer[128];
 
 /* Copies framebuffer source to framebuffer destination (indices into the
  * base table); unlike XS1's grVramCopyFBtoFB the indices are not checked. */

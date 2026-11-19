@@ -93,12 +93,12 @@ void func_00AA9378(void) {
 }
 
 extern int configThinkNo;
-extern enum ConfigPage configPageState;
-extern int configScriptNumber;
-extern int configMainColumn;
-extern int configMainRow;
-extern int configEquipColumn;
-extern int configEquipRow;
+static enum ConfigPage configPageState;
+static int configMainColumn;
+static int configMainRow;
+static int configEquipColumn;
+static int configEquipRow;
+static int configScriptNumber;
 int thinkNoGet(void);
 int cfEventGet(void);
 void ptReset(void);
@@ -186,7 +186,6 @@ int configMenuRun(int mode)
     return 1;
 }
 
-extern char configCursorGlyph[];
 void xglFontDebugPrintf(int x, int y, const char *format, ...);
 void debugValUD(int *value, int min, int max, int step);
 
@@ -206,7 +205,7 @@ int configMenuUpdate(int (**rowHandlers)(void), int baseX, int baseY, int *marke
     if (oldRow != *cursorRow) {
         *markerColumn = 0;
     }
-    xglFontDebugPrintf(baseX + *markerColumn * CONFIG_GLYPH_WIDTH, baseY + *cursorRow * CONFIG_ROW_HEIGHT + CONFIG_ROW_HEIGHT, configCursorGlyph);
+    xglFontDebugPrintf(baseX + *markerColumn * CONFIG_GLYPH_WIDTH, baseY + *cursorRow * CONFIG_ROW_HEIGHT + CONFIG_ROW_HEIGHT, ">");
     rowHandlers[*cursorRow]();
 }
 
@@ -277,27 +276,6 @@ int configMenuFrame(int param)
     return 0;
 }
 
-extern const char configTextMainTitle[];
-extern const char configTextRuleHead[];
-extern const char configTextThink[];
-extern const char configTextMonsterSet[];
-extern const char configTextPlayer1[];
-extern const char configTextPlayer2[];
-extern const char configTextPlayer3[];
-extern const char configTextPlayer1Pos[];
-extern const char configTextPlayer2Pos[];
-extern const char configTextPlayer3Pos[];
-extern const char configTextPlMuteki[];
-extern const char configTextEnMuteki[];
-extern const char configTextPlIchigeki[];
-extern const char configTextStockMugen[];
-extern const char configTextLearnAll[];
-extern const char configTextRuleGroup[];
-extern const char configTextCfFlag[];
-extern const char configTextCpuDisp[];
-extern const char configTextGattai[];
-extern const char configTextMember[];
-extern const char configTextUnitEquip[];
 extern int configUnitIndex;
 int gattaiCodeGet(void);
 
@@ -307,50 +285,49 @@ void configMainPageDraw(int x, int y)
     ConfigPartyRecord *partyRecords;
 
     partyRecords = ov01PartyListGet();
-    xglFontDebugPrintf(x, y, configTextMainTitle);
+    xglFontDebugPrintf(x, y, "\x0b--BATTLE CONFIG MAIN--");
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextRuleHead);
+    xglFontDebugPrintf(x, y, "\x0c\x80\0\0 BATTLE START");
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextThink, configThinkNo);
+    xglFontDebugPrintf(x, y, "\x0b THINK= %3d", configThinkNo);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextMonsterSet, configMonsSetNo);
+    xglFontDebugPrintf(x, y, "\x0b MONSTER SET= %3d", configMonsSetNo);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextPlayer1, batUnitNameGet(partyRecords[0].charaId));
+    xglFontDebugPrintf(x, y, "\x0b PLAYER1= %s", batUnitNameGet(partyRecords[0].charaId));
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextPlayer2, batUnitNameGet(partyRecords[1].charaId));
+    xglFontDebugPrintf(x, y, "\x0b PLAYER2= %s", batUnitNameGet(partyRecords[1].charaId));
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextPlayer3, batUnitNameGet(partyRecords[2].charaId));
-    xglFontDebugPrintf(x, y += CONFIG_ROW_HEIGHT, configTextPlayer1Pos, partyRecords[0].position);
+    xglFontDebugPrintf(x, y, "\x0b PLAYER3= %s", batUnitNameGet(partyRecords[2].charaId));
+    xglFontDebugPrintf(x, y += CONFIG_ROW_HEIGHT, "\x0b PLAYER1 POS= %2d", partyRecords[0].position);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextPlayer2Pos, partyRecords[1].position);
+    xglFontDebugPrintf(x, y, "\x0b PLAYER2 POS= %2d", partyRecords[1].position);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextPlayer3Pos, partyRecords[2].position);
+    xglFontDebugPrintf(x, y, "\x0b PLAYER3 POS= %2d", partyRecords[2].position);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextPlMuteki, configPlMutekiGet());
+    xglFontDebugPrintf(x, y, "\x0b PL MUTEKI= %1d", configPlMutekiGet());
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextEnMuteki, configEnMutekiGet());
+    xglFontDebugPrintf(x, y, "\x0b EN MUTEKI= %1d", configEnMutekiGet());
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextPlIchigeki, configPlIchigekiGet());
+    xglFontDebugPrintf(x, y, "\x0b PL ICHIGEKI= %1d", configPlIchigekiGet());
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextStockMugen, configStockMugenGet());
+    xglFontDebugPrintf(x, y, "\x0b STOCK MUGEN= %1d", configStockMugenGet());
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextLearnAll, configLearnAllFlag);
+    xglFontDebugPrintf(x, y, "\x0b LEARN ALL= %1d", configLearnAllFlag);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextRuleGroup);
+    xglFontDebugPrintf(x, y, "\x0c\x80\0\0 TENT");
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextCfFlag, configCFFlagValue);
+    xglFontDebugPrintf(x, y, "\x0b CF FLAG= %4x", configCFFlagValue);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextCpuDisp, configCpUDispFlag);
+    xglFontDebugPrintf(x, y, "\x0b CPU DISP= %1d", configCpUDispFlag);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextGattai, gattaiCodeGet() - CONFIG_GATTAI_BASE);
+    xglFontDebugPrintf(x, y, "\x0b GATTAI= %2d", gattaiCodeGet() - CONFIG_GATTAI_BASE);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextMember, ((ConfigGlobalBlock *) ptGetStatusBlock())->member);
+    xglFontDebugPrintf(x, y, "\x0b MEMBER= %4x", ((ConfigGlobalBlock *) ptGetStatusBlock())->member);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextUnitEquip, batUnitNameGet(configUnitIndex));
+    xglFontDebugPrintf(x, y, "\x0b EQUIP= %s", batUnitNameGet(configUnitIndex));
 }
 
 char *xglCdFindFileName(unsigned int file_id);
-extern char configNullName[];
 
 /* Cloth name of a unit: table entry unit + 1 resolved to a name, "NULL" when missing. */
 void *unitClothNameGet(int unit)
@@ -365,17 +342,10 @@ void *unitClothNameGet(int unit)
             return clothName;
         }
     }
-    return &configNullName;
+    return "NULL";
 }
 
 int unitLearnMaskGet(int unit);
-extern char configTextEquipTitle[];
-extern char configTextEquipSkill[];
-extern char configTextLearnSkill[];
-extern char configTextAcc[];
-extern char configTextCloth[];
-extern char configTextSubPilot[];
-extern char configTextLvUp[];
 
 /* Equip page: one text row per field of the selected unit, ten pixels apart. */
 void configEquipPageDraw(int x, int y)
@@ -387,21 +357,21 @@ void configEquipPageDraw(int x, int y)
     unit = battleSlotGet(configUnitIndex);
     subPilotId = unit->linkedSlots[1];
     learnMask = unitLearnMaskGet(configUnitIndex);
-    xglFontDebugPrintf(x, y, configTextEquipTitle);
+    xglFontDebugPrintf(x, y, "\x0b--BATTLE CONFIG EQUIP--");
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextEquipSkill, unit->effectCode[0], unit->effectCode[1], unit->effectCode[2], unit->effectCode[3]);
+    xglFontDebugPrintf(x, y, "\x0b EQUIP SKILL= %2d  %2d  %2d  %2d", unit->effectCode[0], unit->effectCode[1], unit->effectCode[2], unit->effectCode[3]);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextLearnSkill, learnMask >> 24, (learnMask >> 16) & 0xff, (learnMask & 0xff00) >> 8, learnMask & 0xff);
+    xglFontDebugPrintf(x, y, "\x0b LEARN SKILL= %2x  %2x  %2x  %2x", learnMask >> 24, (learnMask >> 16) & 0xff, (learnMask & 0xff00) >> 8, learnMask & 0xff);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextAcc, unit->equipId[0], unit->equipId[1], unit->equipId[2], unit->equipId[3]);
+    xglFontDebugPrintf(x, y, "\x0b ACC= %2d  %2d  %2d  %2d", unit->equipId[0], unit->equipId[1], unit->equipId[2], unit->equipId[3]);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextCloth, unitClothNameGet(configUnitIndex));
+    xglFontDebugPrintf(x, y, "\x0b CLOTH= %s", unitClothNameGet(configUnitIndex));
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextSubPilot, batUnitNameGet(subPilotId));
+    xglFontDebugPrintf(x, y, "\x0b SUB PILOT= %s", batUnitNameGet(subPilotId));
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextLvUp, unit->expLevel);
+    xglFontDebugPrintf(x, y, "\x0b LV UP = %2d", unit->expLevel);
     y += CONFIG_ROW_HEIGHT;
-    xglFontDebugPrintf(x, y, configTextUnitEquip, batUnitNameGet(configUnitIndex));
+    xglFontDebugPrintf(x, y, "\x0b EQUIP= %s", batUnitNameGet(configUnitIndex));
 }
 
 /* STOCK MUGEN apply: run by configMenuFrame only when the
@@ -492,13 +462,10 @@ void unitLearnMaskSet(int unit, int mask)
 }
 
 extern int (*configScriptRows[])(void);
-extern int configScriptPrefix;
-extern char configScriptPath[];
-extern int configScriptImage;
-extern char configTextScriptTitle[];
-extern char configTextScript[];
-extern char D_00ABB000[];
-extern char D_00ABB008[];
+extern char D_00ABAD58[];
+extern const char *configScriptPrefix;
+static unsigned char configScriptImage[0xC000];
+static char configScriptPath[256];
 int sprintf(char *, const char *, ...);
 char *strcat(char *, const char *);
 int xglCdReadFile(const char *, void *, int, int);
@@ -511,19 +478,19 @@ int configScriptPage(void)
     int result;
 
     result = configMenuUpdate(configScriptRows, CONFIG_MENU_X, CONFIG_MENU_Y, &configMainColumn, &configMainRow);
-    xglFontDebugPrintf(CONFIG_MENU_X, CONFIG_MENU_Y, configTextScriptTitle);
-    xglFontDebugPrintf(CONFIG_MENU_X, CONFIG_MENU_Y + CONFIG_ROW_HEIGHT, configTextScript, configScriptNumber);
+    xglFontDebugPrintf(CONFIG_MENU_X, CONFIG_MENU_Y, "\x0b--SCRIPT CONFIG--");
+    xglFontDebugPrintf(CONFIG_MENU_X, CONFIG_MENU_Y + CONFIG_ROW_HEIGHT, "\x0b SCRIPT= %4d", configScriptNumber);
     if (configCancelPressed() == 0 && result == 0) {
         return 0;
     }
-    sprintf(configScriptPath, D_00ABB000, configScriptPrefix, configScriptNumber);
-    strcat(configScriptPath, D_00ABB008);
-    xglCdReadFile(configScriptPath, &configScriptImage, 0, 0);
-    if (sbLinkImage(&configScriptImage) == 0) {
+    sprintf(configScriptPath, "%s%04d", configScriptPrefix, configScriptNumber);
+    strcat(configScriptPath, ".sb");
+    xglCdReadFile(configScriptPath, configScriptImage, 0, 0);
+    if (sbLinkImage(configScriptImage) == 0) {
         while (1) {
         }
     }
-    sbStartImage(&configScriptImage);
+    sbStartImage(configScriptImage);
     return 1;
 }
 
@@ -897,3 +864,63 @@ int configScriptNo(void)
     flags = textOptionFlags[0] & TEXT_OPTION_SELECT;
     return flags != 0;
 }
+
+/* Handlers of the row tables return nothing or a "leave the row" flag. */
+typedef int (*ConfigRowHandler)(void);
+
+int configThinkNo = 0;
+int configMonsSetNo = 0;
+int configCFFlagValue = 0;
+int configCpUDispFlag = 0;
+int configUnitIndex = 1;
+int configPlMutekiFlag = 0;
+int configEnMutekiFlag = 0;
+int configPlIchigekiFlag = 0;
+int configStockMugenFlag = 0;
+int configLearnAllFlag = 0;
+const char *configScriptPrefix = D_00ABAD58;
+
+/* Main page rows, in screen order; the list ends with a null entry. */
+ConfigRowHandler configMainRows[21] = {
+    configSelectPressed,
+    configThink,
+    configMonsSet,
+    (ConfigRowHandler) configPlayer1,
+    (ConfigRowHandler) configPlayer2,
+    (ConfigRowHandler) configPlayer3,
+    (ConfigRowHandler) configPlPos1,
+    (ConfigRowHandler) configPlPos2,
+    (ConfigRowHandler) configPlPos3,
+    configPlMuteki,
+    configEnMuteki,
+    configPlIchigeki,
+    configStockMugen,
+    configLearnAll,
+    configBattleSlotsRefresh,
+    configCFFlag,
+    configCpUDisp,
+    configGattai,
+    configMember,
+    configUnitSelect,
+    0
+};
+
+ConfigRowHandler configEquipRows[8] = {
+    configEquipSkill,
+    configLearnSkill,
+    configAcc,
+    configCloth,
+    configSubPilot,
+    configLvUp,
+    configUnitSelect,
+    0
+};
+
+ConfigRowHandler configScriptRows[2] = {
+    configScriptNo,
+    0
+};
+
+int configEquipSkillColumns[SKILL_CYCLE_LEN] = { 0, 13, 16, 20, 23 };
+int configLearnSkillColumns[SKILL_CYCLE_LEN] = { 0, 13, 16, 20, 23 };
+int configAccColumns[SKILL_CYCLE_LEN] = { 0, 5, 8, 11, 14 };

@@ -473,3 +473,10 @@ void MEfTickLifetime34(MEfPathEffect *object)
         MSeObjRequestFree(object);
     }
 }
+
+/* Path-effect tables of the 31-sample effect: the spark stencil alpha, the sample jitter and the quad sizes. */
+long long mefSparkStencilAlpha31 = 0x48;
+
+float mefSampleJitter31[4] = { 0.05f, 0.04f, 0.03f, 0.02f };
+
+float mefQuadSize31[4] = { 1.0f, 0.55f, 0.35f, 0.2f };

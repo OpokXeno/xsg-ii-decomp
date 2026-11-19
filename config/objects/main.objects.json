@@ -1233,7 +1233,7 @@
     },
     {
      "c_split": false,
-     "end": "0x0068C5F0",
+     "end": "0x0068C5E8",
      "ordinal": 181,
      "piece": "sdv_181",
      "start": "0x0068C530",
@@ -1244,7 +1244,7 @@
      "end": "0x0068C660",
      "ordinal": 185,
      "piece": "tu185",
-     "start": "0x0068C5F0",
+     "start": "0x0068C5E8",
      "tu": "tu185"
     },
     {
@@ -82512,20 +82512,20 @@
      ],
      "bounds": [
       "0x0068c521",
-      "0x0068c5f0"
+      "0x0068c5e8"
      ],
-     "end": "0x0068C5F0",
+     "end": "0x0068C5E8",
      "evidence_source": "map",
      "rule": "anchored start",
      "pieces": [
       {
        "c_split": false,
-       "end": "0x0068C5F0",
+       "end": "0x0068C5E8",
        "name": "sdv_181",
        "start": "0x0068C530"
       }
      ],
-     "size": 192,
+     "size": 184,
      "splat_type": "rodata",
      "start": "0x0068C530"
     },
@@ -83216,7 +83216,7 @@
     },
     ".rodata": {
      "anchored": [
-      "0x0068c5f0",
+      "0x0068c5e8",
       "0x0068c651"
      ],
      "bounds": [
@@ -83231,12 +83231,12 @@
        "c_split": false,
        "end": "0x0068C660",
        "name": "tu185",
-       "start": "0x0068C5F0"
+       "start": "0x0068C5E8"
       }
      ],
-     "size": 112,
+     "size": 120,
      "splat_type": "rodata",
-     "start": "0x0068C5F0"
+     "start": "0x0068C5E8"
     },
     ".lit4": {
      "anchored": [

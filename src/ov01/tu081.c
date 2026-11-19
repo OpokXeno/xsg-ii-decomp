@@ -89,12 +89,9 @@ extern Quadword McEfSTQtbl[4];
 
 extern MEfPathCurve mefPathCurve;
 extern Vector4 MMathUnitVector;
-extern unsigned char mefThunderModelName[];
-extern unsigned char mefThunderTexName[];
 extern long long mefSparkStencilAlpha25;
 extern float mefSampleJitter25[];
 extern float mefQuadSize25[];
-extern unsigned char mefHikariTexName[];
 
 short ov01LastValueGet(void);
 /* ov01RecordInit: the definition is tu076.c; this file keeps its own view (void * record). */
@@ -292,7 +289,7 @@ void MEfDrawSparkModels25(MEfPathEffect *object)
 
     block = &object->block;
     if ((short) block->ticks < MEF_PATH_SAMPLES) {
-        svGetPrmFromName(mefThunderModelName, 0, &param);
+        svGetPrmFromName("de_thun01.pxy", 0, &param);
         for (i = 0; i < 6; i++) {
             MEfMakeRandomVector(&angles);
             MMathRotateMatrixXYZ(&rotation, 0, &angles);
@@ -316,7 +313,7 @@ void MEfDrawSparkModels25(MEfPathEffect *object)
             nmlModelSetStencil(1);
             pxySubmitModel(param.primaryData);
         }
-        svGetPrmFromName(mefThunderTexName, object->paramName, &param);
+        svGetPrmFromName("tex_thun01.pxy", object->paramName, &param);
         for (j = 0; j < 4; j++) {
             MEfMakeRandomVector(&angles);
             MMathRotateMatrixXYZ(&rotation, 0, &angles);
@@ -393,7 +390,7 @@ void MEfDrawQuadPacket25(MEfPathEffect *object)
     SetRegister(&setup[4], MEF_GS_ZBUF_1, MEF_GS_ZBUF_1_NO_DEPTH_WRITE);
     SetRegister(&setup[5], MEF_GS_ALPHA_1, MEF_GS_ALPHA_1_ADDITIVE_FIX);
     CloseTag(packet, 5);
-    svGetPrmFromName(mefHikariTexName, object->paramName, &param);
+    svGetPrmFromName("sh_hikari.bmp", object->paramName, &param);
 
     for (layer = 0; layer < 4; layer++) {
         sampleIndex = (short)block->ticks - layer;
@@ -430,3 +427,10 @@ void MEfTickLifetime28(MEfPathEffect *object)
         MSeObjRequestFree(object);
     }
 }
+
+/* Path-effect tables of the 25-sample effect: the spark stencil alpha, the sample jitter and the quad sizes. */
+long long mefSparkStencilAlpha25 = 0x48;
+
+float mefSampleJitter25[4] = { 0.05f, 0.04f, 0.03f, 0.02f };
+
+float mefQuadSize25[4] = { 1.0f, 0.55f, 0.35f, 0.2f };

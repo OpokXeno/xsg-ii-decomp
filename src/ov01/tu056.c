@@ -39,7 +39,7 @@ typedef struct ColourPair {
     unsigned char bytes[8];
 } ColourPair;
 
-extern ColourPair menuWepSpRowColors;
+extern const ColourPair menuWepSpRowColors;
 
 /* The row table dataSlotRowGet returns: word 0 is a count, words 1 to 5 are slots. */
 struct DataSlotRow {
@@ -411,7 +411,7 @@ union MenuStatusText {
     unsigned long long words[5];
     unsigned char text[41];
 };
-extern union MenuStatusText menuTgtStatusTextTemplate;
+extern const union MenuStatusText menuTgtStatusTextTemplate;
 extern union MenuStatusText menuTgtStatusTextBuffer;
 
 /*
@@ -566,3 +566,29 @@ void menuRollPercentDraw(Ov01Object *unit) {
     menuNumDraw(packet, 0x1AE, 0x154, unit->stats->rollPercent, 3, 2);
     grPacketSend(packet);
 }
+
+/* The panels of this file, common globals: menuTgtStatusPanel is named by tu066 too. */
+MenuState *menuWepSpPanel;
+MenuState *menuTargetListPanel;
+MenuState *menuTgtStatusPanel;
+
+/* Wep-special table: technique id, source x and y of its icon; a zero id ends it. */
+WepSpEntry wepSpTbl[10] = {
+    { 11, 256, 130 }, { 12, 256, 147 }, { 13, 256, 164 }, { 14, 256, 181 }, { 15, 338, 181 },
+    { 16, 338, 130 }, { 17, 338, 147 }, { 18, 338, 164 }, { 19, 338, 147 }, { 0, 0, 0 }
+};
+
+/* The two 4-byte row colours of menuWepSpPanelDraw. */
+const ColourPair menuWepSpRowColors = { { 0x80, 0x80, 0x80, 0x80, 0x20, 0x20, 0x20, 0x80 } };
+
+/* The status text template of menuTgtStatusDraw: 40 characters, then zero bytes up to 48. */
+const union MenuStatusText menuTgtStatusTextTemplate = { .text = "$han1;$prop1;$zoom15,10;$colc0c0c0;$bg3;" };
+
+/* Name strings stored in .rodata, one array each; no reader in this file. */
+const char D_00ABAD08[16] = "fanfale01";
+const char D_00ABAD18[16] = "bosslast";
+const char D_00ABAD28[8] = "boss02";
+const char D_00ABAD30[8] = "boss01";
+const char D_00ABAD38[16] = "battle02";
+const char D_00ABAD48[16] = "battle01";
+const char D_00ABAD58[8] = "cf\\sc";

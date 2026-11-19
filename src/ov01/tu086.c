@@ -71,8 +71,8 @@ struct SprayHost {
     SprayBlock block;                /* +0x20 */
 };
 
-extern SprayQword mefSprayColors[2];     /* the two spray colours */
-extern int mefSprayAlphas[4][4];          /* alpha of the four points, per ring */
+extern const SprayQword mefSprayColors[2];     /* the two spray colours */
+extern const int mefSprayAlphas[4][4];          /* alpha of the four points, per ring */
 
 int MMathRandomNext(void);
 
@@ -326,3 +326,16 @@ void MEfTickLifetime121(SprayHost *host)
         MSeObjRequestFree(host);
     }
 }
+
+/* The two spray colours (RGBA words of each quadword), then the alpha of the four points per ring. */
+const SprayQword mefSprayColors[2] = {
+    0x000000ff000000400000006000000070,
+    0x000000ff000000500000006800000070,
+};
+
+const int mefSprayAlphas[4][4] = {
+    { 0xff, 0xaa, 0x55, 0x00 },
+    { 0x58, 0x3a, 0x1d, 0x00 },
+    { 0x38, 0x25, 0x12, 0x00 },
+    { 0x28, 0x1a, 0x0d, 0x00 },
+};

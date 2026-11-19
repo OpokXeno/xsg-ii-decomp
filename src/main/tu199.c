@@ -1,5 +1,10 @@
 #include "common.h"
 
+typedef struct FadeNativeEntry {
+    const char *name;
+    int (*function)(void *call);
+} FadeNativeEntry;
+
 int func_A9F0A8(void *call);
 int func_A9F0C0(void *call, int index);
 void fadeSetColor(float red, float green, float blue);
@@ -90,10 +95,24 @@ int ColorfadeAlpha(void *call) {
 }
 
 void func_A9CDB0(void *name, void *table);
-extern unsigned char fadeCommandTable[];
-extern unsigned char D_0068D2A0[];
+extern FadeNativeEntry fadeCommandTable[];
 
-/* Registers the fade script commands (command table fadeCommandTable, module name string D_0068D2A0). */
+/* Registers the fade script commands (command table fadeCommandTable, module name "Samplefade"). */
 void fadeRegisterCommands(void) {
-    func_A9CDB0(D_0068D2A0, fadeCommandTable);
+    func_A9CDB0("Samplefade", fadeCommandTable);
 }
+
+extern const char D_0068D270[];
+extern const char D_0068D280[];
+extern const char D_0068D290[];
+extern char D_0069DC90[];
+extern char D_0069DC98[];
+
+FadeNativeEntry fadeCommandTable[6] = {
+    { D_0068D290, ColorSet },
+    { D_0069DC98, Fadein },
+    { D_0069DC90, Fadeout },
+    { D_0068D280, Colorfade },
+    { D_0068D270, ColorfadeAlpha },
+    { 0, 0 },
+};

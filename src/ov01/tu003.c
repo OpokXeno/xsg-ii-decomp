@@ -22,7 +22,7 @@ typedef struct UnitSideSlot {
     unsigned char unmodeled_0C[0x1F0 - 0x0C];
 } UnitSideSlot;
 
-extern UnitSideSlot unitSideTable[UNIT_SIDE_COUNT];
+static UnitSideSlot unitSideTable[UNIT_SIDE_COUNT];
 
 /*
  * Releases one MonsSlot record (monsSlotReleaseRecord): the only caller is monsSlotRelease (tu019, monsSlotRelease),

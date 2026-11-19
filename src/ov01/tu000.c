@@ -24,7 +24,7 @@ struct CallbackSlot {
     unsigned char unmodeled_0C[0x54];
 };
 
-extern CallbackSlot ov01CallbackSlotTable[];
+static CallbackSlot ov01CallbackSlotTable[OV01_CALLBACK_SLOT_COUNT];
 
 void ov01SlotClear(void *slot) {
     CallbackSlot *callback = slot;

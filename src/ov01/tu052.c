@@ -179,3 +179,16 @@ void menuIconTableDraw(MenuObject *list)
     }
     grPacketSend(&packet);
 }
+
+/* The icon list object, a common global: tu066 names it too. */
+MenuObject *menuIconListObj;
+
+/* The row lists of menuIconTableDraw inside the row array ov01/tu051 defines as D_00AB63C0. */
+extern MenuIconRow D_00AB63C0[];
+
+MenuIconRow *menuIconTablesKeyed[12] = {
+    &D_00AB63C0[1], &D_00AB63C0[8], &D_00AB63C0[12], &D_00AB63C0[16],
+    &D_00AB63C0[16], &D_00AB63C0[16], &D_00AB63C0[16], &D_00AB63C0[19],
+    &D_00AB63C0[22], &D_00AB63C0[25], 0, 0
+};
+MenuIconRow *menuIconTablesOther[4] = { &D_00AB63C0[28], 0, 0, 0 };

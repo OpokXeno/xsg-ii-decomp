@@ -88,7 +88,7 @@ enum {
 
 extern void grPutSpr(GrPacket *packet, GrSprite *sprite, int flags);
 
-extern MenuState *menuPanelCurrent;
+static MenuState *menuPanelCurrent;
 
 typedef int s32;
 
@@ -638,7 +638,7 @@ void menuStatusIconPut(GrPacket *packet, s32 x, s32 y)
   grPutSprClose();
 }
 
-extern unsigned int menuStatSpriteColor;
+extern unsigned long long menuStatSpriteColor;
 
 /* Sprite with the colour word at menuStatSpriteColor */
 void menuStatSprite(GrPacket *packet, int x, int y, int width, int height, int srcX, int srcY)
@@ -659,7 +659,7 @@ void menuStatSprite(GrPacket *packet, int x, int y, int width, int height, int s
     grPutSpr(packet, &sprite, 0);
 }
 
-extern unsigned int menuStatSprite2Color;
+extern unsigned long long menuStatSprite2Color;
 
 /* Sprite with independent texel bounds and the colour word at menuStatSprite2Color */
 void menuStatSprite2(GrPacket *packet, int x, int y, int width, int height, int u0, int v0, int u1, int v1)
@@ -715,3 +715,70 @@ void menuStatSprite2RGB(GrPacket *packet, int x, int y, int width, int height, i
     sprite.color.rgba = color->rgba;
     grPutSpr(packet, &sprite, 0);
 }
+
+/* Stat panel rectangles: texel srcX, srcY, width and height of each kind (menuStatRects[kind]). */
+MenuStatRect menuStatRects[11] = {
+    { 0x92, 0x27, 0x40, 0x11 },
+    { 0x92, 0x38, 0x4a, 0x11 },
+    { 0x92, 0x49, 0x40, 0x11 },
+    { 0x122, 0x36, 0x5d, 0x12 },
+    { 0x100, 0x36, 0x7f, 0x12 },
+    { 0x100, 0x56, 0x70, 0x12 },
+    { 0x1ad, 0x56, 0x50, 0x12 },
+    { 0x17f, 0x0, 0x5d, 0x12 },
+    { 0x100, 0x0, 0x80, 0x12 },
+    { 0x100, 0x12, 0x80, 0x12 },
+    { 0x100, 0x24, 0x80, 0x12 },
+};
+
+/* The number colour sets: menuNumColors[colorMode] (MENU_NUM_COLOR_*). */
+MenuRGBA menuNumColors[4] = {
+    { 0xa0, 0xa0, 0xa0, 0x80 },
+    { 0xff, 0xff, 0x60, 0x80 },
+    { 0xff, 0x60, 0x60, 0x80 },
+    { 0x00, 0x00, 0x00, 0x00 },
+};
+
+/* Digit styles of menuNumDrawMode: ten digit widths, then the ten texel x of the digits. */
+MenuDigitStyle menuStyleTable[4] = {
+    {
+        { 0xc, 0x8, 0xb, 0xb, 0xb, 0xa, 0xb, 0xa, 0xc, 0xb },
+        { 0x0, 0xc, 0x14, 0x1f, 0x2a, 0x35, 0x3f, 0x4a, 0x54, 0x60 },
+    },
+    {
+        { 0xf, 0x9, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf },
+        { 0x0, 0xf, 0x18, 0x27, 0x36, 0x45, 0x54, 0x63, 0x72, 0x80 },
+    },
+    {
+        { 0x9, 0x7, 0x9, 0x9, 0x9, 0x8, 0x8, 0x8, 0x8, 0x9 },
+        { 0x0, 0x9, 0x10, 0x19, 0x22, 0x2b, 0x33, 0x3b, 0x43, 0x4b },
+    },
+    {
+        { 0xd, 0xa, 0xd, 0xd, 0xd, 0xd, 0xd, 0xd, 0xd, 0xd },
+        { 0x180, 0x18d, 0x197, 0x1a4, 0x1b1, 0x1be, 0x1cb, 0x1d8, 0x1e5, 0x1f2 },
+    },
+};
+
+/* Texel position of each status icon bit (menuStatusIconsDraw). */
+MenuStatusUV menuStatusIconUVs[10] = {
+    { 0x29c, 0x8a },
+    { 0x278, 0x8a },
+    { 0x2c0, 0x79 },
+    { 0x278, 0x79 },
+    { 0x29c, 0x79 },
+    { 0x2c0, 0x68 },
+    { 0x29c, 0x68 },
+    { 0x278, 0x68 },
+    { 0x278, 0x9b },
+    { 0x2c0, 0x8a },
+};
+
+/* Colour word of menuStatSpriteColor. */
+unsigned long long menuStatSpriteColor = 0x80808080ULL;
+
+/* Colour word of menuStatSprite2Color. */
+unsigned long long menuStatSprite2Color = 0x80808080ULL;
+
+
+/* Object of the arrow sprite (set and released by tu054). */
+int arrowObj;

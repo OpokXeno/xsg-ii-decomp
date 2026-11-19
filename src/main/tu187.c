@@ -9,8 +9,7 @@ typedef char *va_list;
 int sprintf(char *buffer, const char *format, ...);
 /* Prints format with the variadic arguments args (libc, next to vsprintf; errorFatal in tu026.c calls it too). */
 void func_002AF028(const char *format, va_list args);
-extern char MOutputDebugInfoFormat[];
-extern char MOutputDebugBuffer[];
+static char MOutputDebugBuffer[256];
 
 /* Debug message, info colour ("MDMSG:" in cyan): formats message into MOutputDebugBuffer, then prints
  * that with the variadic arguments. */
@@ -19,11 +18,9 @@ void MOutputDebugString(char *message, ...)
     va_list ap;
     va_start(ap, message);
 
-    sprintf(MOutputDebugBuffer, MOutputDebugInfoFormat, message);
+    sprintf(MOutputDebugBuffer, "\x1b[1;36mMDMSG:\x1b[m %s\n", message);
     func_002AF028(MOutputDebugBuffer, ap);
 }
-
-extern char MOutputDebugWarnFormat[];
 
 /* Debug message, warning colour ("MDMSG:" in magenta): formats message into MOutputDebugBuffer, then prints
  * that with the variadic arguments. */
@@ -32,7 +29,7 @@ void MOutputDebugStringWarn(char *message, ...)
     va_list ap;
     va_start(ap, message);
 
-    sprintf(MOutputDebugBuffer, MOutputDebugWarnFormat, message);
+    sprintf(MOutputDebugBuffer, "\x1b[1;35mMDMSG:\x1b[m %s\n", message);
     func_002AF028(MOutputDebugBuffer, ap);
 }
 
@@ -49,7 +46,7 @@ void MOutputDebugStringWarn(char *message, ...)
 
 extern int MMathRandomIndex;
 extern int MMathRandomLastSeed;
-extern u32 MMathRandomState[MT_STATE_WORDS];
+static u32 MMathRandomState[MT_STATE_WORDS];
 
 /* init_genrand: a zero seed means the previous seed plus 0x1571. */
 void MMathRandomSeed(int seed)
@@ -149,8 +146,6 @@ f32 MMathMakeRandomPI(void)
 }
 
 float fmodf(float, float);
-extern float MMathRotNearTwoPi;
-extern float MMathRotNearPi;
 
 /* Shortest signed difference toAngle - fromAngle, wrapped into [-pi, pi]. */
 f32 MMathCalcRotNear(f32 fromAngle, f32 toAngle)
@@ -158,9 +153,9 @@ f32 MMathCalcRotNear(f32 fromAngle, f32 toAngle)
     f32 twoPi;
     f32 result;
 
-    twoPi = MMathRotNearTwoPi;
+    twoPi = 6.2831850f;
     result = fmodf(toAngle - fromAngle, twoPi);
-    if (MMathRotNearPi < __builtin_fabsf(result))
+    if (3.14159274f < __builtin_fabsf(result))
     {
         if (result < 0.0f)
         {
@@ -174,8 +169,6 @@ f32 MMathCalcRotNear(f32 fromAngle, f32 toAngle)
     return result;
 }
 
-extern float MMathRotFarTwoPi;
-extern float MMathRotFarPi;
 
 /* Difference toAngle - fromAngle wrapped into the other half-turn (|difference| >= pi). */
 f32 MMathCalcRotFar(f32 fromAngle, f32 toAngle)
@@ -183,9 +176,9 @@ f32 MMathCalcRotFar(f32 fromAngle, f32 toAngle)
     f32 twoPi;
     f32 result;
 
-    twoPi = MMathRotFarTwoPi;
+    twoPi = 6.2831850f;
     result = fmodf(toAngle - fromAngle, twoPi);
-    if (__builtin_fabsf(result) < MMathRotFarPi)
+    if (__builtin_fabsf(result) < 3.14159274f)
     {
         if (result < 0.0f)
         {
@@ -198,3 +191,11 @@ f32 MMathCalcRotFar(f32 fromAngle, f32 toAngle)
     }
     return result;
 }
+
+/* Unreferenced in this TU: two words, 0x319 and 0. */
+const int D_0068C728[] = { 0x319, 0 };
+
+/* Small data of the Mersenne Twister: the index starts past the end of the state (MT_STATE_WORDS + 1). */
+int MMathRandomIndex = 625;
+int MMathRandomLastSeed = 0;
+u32 MMathRandomMag01[2] = { 0x00000000, 0x9908B0DF };

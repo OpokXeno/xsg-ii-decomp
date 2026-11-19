@@ -191,3 +191,5 @@ void screenFadeDraw(struct ScreenFade *fade)
         screenFadeTask = 0;
     }
 }
+
+int screenFadeTask;

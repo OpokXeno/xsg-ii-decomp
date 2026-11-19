@@ -450,7 +450,7 @@ segments:
       - [0x56D210, rodata, sef]
       - [0x56D480, rodata, srs]
       - [0x56D530, rodata, sdv_181]
-      - [0x56D5F0, rodata, tu185]
+      - [0x56D5E8, rodata, tu185]
       - [0x56D660, rodata, sm_initilize]
       - [0x56D6F8, rodata, tu187]
       - [0x56D730, rodata, test_129]

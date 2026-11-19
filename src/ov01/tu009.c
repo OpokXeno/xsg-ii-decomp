@@ -11,7 +11,7 @@ extern void *GameResArenaReserve(unsigned int bytesWanted);
 extern u32 GameResFindID(int key, void *buffer);
 /* Overlay data this TU reads: the CD pending count, the heap range (word 0 is the first block,
  * word 1 the end, set by ov01HeapInit) and the heap end used by ov01HeapNextBlock. */
-extern int ov01CdPendingCount;
+static int ov01CdPendingCount;
 extern u32 ov01HeapStart[2];
 extern u32 ov01HeapEnd;
 /* Overlay heap size in bytes; ov01HeapInit reserves it from the base. */

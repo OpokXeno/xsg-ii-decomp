@@ -80,3 +80,12 @@ void actStepIconDraw(Ov01Object *object)
     grPutSprClose();
     grPacketSend(&packet);
 }
+
+/* The step icon object, a common global: tu066 names it too (as unsigned int *). */
+void *actStepIconObj;
+
+/* Texture table of actStepIconDraw: the u and v of each of the eight sprite entries. */
+int actStepIconTexTable[16] = {
+    440, 130, 464, 130, 488, 130, 488, 172,
+    440, 172, 464, 172, 488, 172, 440, 214
+};

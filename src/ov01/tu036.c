@@ -23,25 +23,47 @@
  * definitions together lets the guarded overlay linker map each exact object
  * to its original storage span.
  */
+
+static int thinkNo;
+static int gattaiCode;
+static int itemMenuChoice;
+static int tecMenuChoice;
+static int levelMenuChoice;
+static int levelMenuIds[7];
+static int levelMenuCount;
+static int pairMenuChoice;
+static int pairMenuIds[17];
+static int pairMenuCount;
+static int pairedMenuChoice;
+static int pairedMenuIds[8];
+static int pairedMenuCount;
+static int tgtIdMenuChoice;
+static int tgtIdMenuIds[8];
+static int tgtIdMenuCount;
+static unsigned char *choiceMenuItems[128];
+static short choiceMenuValues[128];
+static short choiceMenuEntryIds[128];
+static unsigned char choiceMenuEntryFlags[128];
+static TextEntry *choiceMenuTextTask;
+static unsigned char *choiceMenuPages[2];
+static TextEntry *pTaskEnCur;
+static unsigned char *enemyCursorPages[2];
+static int enemyCursorRow;
+static int enemyCursorBit;
+static int enemyCursorTimer;
+
+extern int statBitValues[];
 /* The enemy-cursor task: enemyCursorOpen opens it, enemyCursorClose and objCurRemove
  * remove it. X1 names the same global the enemy-cursor task (battle_init.c). */
-extern TextEntry *pTaskEnCur;
 /* Text task that the choice-menu openers allocate (the textEntryAlloc result) and the close functions remove. */
-extern TextEntry *choiceMenuTextTask;
 /* The choice menu's text page list for textEntryAlloc: the text of the entry under the cursor (set by the pickers),
  * then 0. */
-extern unsigned char *choiceMenuPages[2];
 /* The text page list of the enemy cursor (and of the paired technique menu): the text (set by pairedMenuPick and
  * enemyCursorStep), then 0. */
-extern unsigned char *enemyCursorPages[2];
 
 /* The lists the choice-menu openers fill for choice slot 0: the entry texts (0 after the last), the value shown with
  * each entry, its id and its flag (CHOICE_ENTRY_DISABLED greys it out). The pickers index ids and flags with the
  * 1-based cursor. */
-extern unsigned char *choiceMenuItems[];
-extern short choiceMenuValues[];
-extern short choiceMenuEntryIds[];
-extern unsigned char choiceMenuEntryFlags[];
 
 #define CHOICE_ENTRY_DISABLED 3
 /* Layout of the openers' choice menu (slot 0) and of their text entry below it; each opener has its own style
@@ -103,7 +125,6 @@ void choiceMenuTextClose(void) {
 
 int choiceMenuIsOpen(int);
 int choiceMenuGetResult(int);
-extern int itemMenuChoice;
 
 /* Cursor entry of choice slot 0 (choiceMenuGetResult): caches its id in itemMenuChoice, 0 when choiceMenuEntryFlags
  * flags it. */
@@ -167,7 +188,6 @@ void func_00A98180(void) {
     choiceMenuTextTask = 0;
 }
 
-extern int tecMenuChoice;
 
 /* Cursor entry of choice slot 0 (choiceMenuGetResult): caches its id in tecMenuChoice, 0 when choiceMenuEntryFlags
  * flags it. */
@@ -193,8 +213,6 @@ int tecMenuPick(void) {
 
 /* The level record indices calcKeyBandRecords wrote for the level menu, and their count (each record menu has
  * its own pair). */
-extern int levelMenuIds[];
-extern int levelMenuCount;
 
 #define LEVEL_MENU_STYLE 4
 #define LEVEL_MENU_UNIT_SIZE 1
@@ -233,7 +251,6 @@ void func_00A98408(void) {
     choiceMenuTextTask = 0;
 }
 
-extern int levelMenuChoice;
 
 /* Cursor entry of choice slot 0 (choiceMenuGetResult): caches its id in levelMenuChoice, 0 when choiceMenuEntryFlags
  * flags it.
@@ -258,8 +275,6 @@ int levelMenuPick(Ov01Object *unit) {
     return levelMenuChoice;
 }
 
-extern int pairMenuIds[];
-extern int pairMenuCount;
 
 #define PAIR_MENU_STYLE 3
 #define PAIR_MENU_UNIT_SIZE 1
@@ -298,7 +313,6 @@ void func_00A98690(void) {
     choiceMenuTextTask = 0;
 }
 
-extern int pairMenuChoice;
 
 /* Cursor entry of choice slot 0 (choiceMenuGetResult): caches its id in pairMenuChoice, 0 when choiceMenuEntryFlags
  * flags it.
@@ -323,8 +337,6 @@ int pairMenuPick(Ov01Object *unit) {
     return pairMenuChoice;
 }
 
-extern int pairedMenuIds[];
-extern int pairedMenuCount;
 
 #define PAIRED_MENU_STYLE 1
 #define PAIRED_MENU_UNIT_SIZE 1
@@ -364,7 +376,6 @@ void enemyCursorClose(void) {
     pTaskEnCur = 0;
 }
 
-extern int pairedMenuChoice;
 
 /* Cursor entry of choice slot 0 (choiceMenuGetResult): caches its id in pairedMenuChoice, 0 when choiceMenuEntryFlags
  * flags it; the text goes to enemyCursorPages instead of choiceMenuPages, the list the other pickers use.
@@ -389,8 +400,6 @@ int pairedMenuPick(Ov01Object *unit) {
     return pairedMenuChoice;
 }
 
-extern int tgtIdMenuIds[];
-extern int tgtIdMenuCount;
 
 #define TGT_ID_MENU_STYLE 4
 #define TGT_ID_MENU_UNIT_SIZE 1
@@ -429,7 +438,6 @@ void func_00A98BB0(void) {
     choiceMenuTextTask = 0;
 }
 
-extern int tgtIdMenuChoice;
 
 /* Cursor entry of choice slot 0 (choiceMenuGetResult): caches its id in tgtIdMenuChoice, 0 when choiceMenuEntryFlags
  * flags it.
@@ -454,7 +462,6 @@ int tgtIdMenuPick(Ov01Object *unit) {
     return tgtIdMenuChoice;
 }
 
-extern int statBitValues[];
 
 /* Rows of status bits of a unit (StatBlock.activeMask; statBitValueGet indexes them). */
 #define STAT_BIT_ROWS 4
@@ -486,9 +493,6 @@ int statBitValueGet(Ov01Object *unit, int row, int mask) {
 
 /* The status shown by the enemy cursor: row and bit mask (enemyCursorStep walks them with statBitValueGet) and
  * the frames left before the next one. */
-extern int enemyCursorRow;
-extern int enemyCursorBit;
-extern int enemyCursorTimer;
 
 /* Opens the enemy cursor's text entry when the unit has any status bit set. */
 void enemyCursorOpen(Ov01Object *unit)
@@ -1114,7 +1118,6 @@ struct BattleState *battleStateGet(void) {
     return &tgtSelectState;
 }
 
-extern int thinkNo;
 
 int thinkNoGet(void) {
     return thinkNo;
@@ -1153,7 +1156,6 @@ void *ov01PartyListGet(void) {
 }
 
 /* Gattai code word: GATTAI_CODE_BASE plus the gattai id. gattaiCodeGet reads it back. */
-extern int gattaiCode;
 
 #define GATTAI_CODE_BASE 0x16000
 /* Story flag field (8 bits at flag 0x1EE) holding the current gattai id. */
@@ -1195,3 +1197,13 @@ void ov01InitAll(void) {
     sdvInitSpecialWork();
     gattaiCodeSet(0x16001);
 }
+
+/* Value of each status bit, four rows of sixteen (statBitValueGet); 0 = no value. */
+int statBitValues[64] = {
+    4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 0, 0, 0, 15, 0,
+    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 0, 29, 0,
+    30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 0, 0,
+    44, 45, 46, 47, 48, 0, 0, 0, 49, 50, 51, 52, 53, 54, 0, 0,
+};
+
+static const char D_00ABA698[8] = "NULL";

@@ -13,6 +13,7 @@ typedef struct MEfCameraParams {
     Matrix4 viewMatrix;             /* +0x10: camera->volume[0].viewMatrix */
     Vector4 rotation;               /* +0x50: camera->travel.rotation */
     Matrix4 rotationMatrix;         /* +0x60: MMathRotateMatrixYXZ of rotation */
+    unsigned char unmodeled_A0[0x20]; /* +0xA0: the .data object is 0xC0 bytes */
 } MEfCameraParams;
 
 extern MEfCameraParams MEfCamParams;

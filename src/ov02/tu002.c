@@ -82,11 +82,24 @@ struct HddInstallRenderState {
 
 extern struct HddInstallRenderState sRender;
 /* The installer keeps one transfer-buffer pointer in its own BSS. */
-extern struct HddInstallParams *HddInstallParam;
+struct HddInstallParams *HddInstallParam;
 /* DMA/VIF tags followed by the GS register data sent by HddInstallSync. */
-extern u64 TestEnv_0_00A830A0[12];
-extern u64 TransEnv_1_00A83100[4];
-extern u64 FlushEnv_2_00A83120[6];
+u64 TestEnv_0_00A830A0[12] = {
+    0, 0x5100000500000000, 0x1000000000000004, 0xE, 0, 0x50, 0, 0x51, 0x1C000000200, 0x52, 0, 0x53,
+};
+u64 TransEnv_1_00A83100[4] = { 0, 0x5100000100000000, 0x0800000000007000, 0 };
+u64 FlushEnv_2_00A83120[6] = { 0x0000000000000000ULL, 0x5100000200000000ULL, 0x1000000000008001ULL, 0x000000000000000eULL, 0x0000000000000000ULL, 0x000000000000003fULL };
+signed char D_00A83150[8] = { 0x2d, 0x7f, 0x7c, 0x2f, 0, 0, 0, 0 };
+char D_00A83158[8] = "%c";
+
+/* The install percentage format: "%3d" and two font control bytes. */
+static char hddPercentFormat[8] = "%3d\033\022";
+
+/* The message of each failure screen, HDD_SCREEN_MESSAGE_FIRST to HDD_SCREEN_MESSAGE_LAST (defined below). */
+extern const char hddNotAccessibleText[];
+extern const char D_00A83B38[];
+extern const char D_00A83A48[];
+static const char *hddScreenMessages[4] = { hddNotAccessibleText, D_00A83B38, D_00A83A48, 0 };
 /* Font control bytes passed to the existing font-script renderer. */
 extern const char installScreenFontText[8];
 
@@ -141,10 +154,7 @@ struct HddGauge {
 };
 
 
-extern u8 D_00A83E20;
-extern const signed char D_00A83150[4];
-extern const char D_00A83158[];
-extern const char *const D_00A83160[];
+static u8 D_00A83E20;
 extern const char D_00A83A30[];
 extern const char hddNotAccessibleText[];
 extern const char hddInstallAbortedText[];
@@ -178,6 +188,27 @@ long long func_002A5C88(long long percent, int count);
 
 /* Installer status callback: prints the step text for `event`, draws the
  * progress gauge for event 6, then waits on the pad once the install is done. */
+/* Text of the install screen, in the order the code draws it. */
+const char installScreenFontText[8] = "\017D\000\200\015\003";
+const char hddInstallingText[96] = "\031\001\245\244\245\363\245\271\245\310\241\274\245\353\303\346\244\307\244\271\241\243\241\310\243\320\243\354\243\341\243\371\243\323\243\364\243\341\243\364\243\351\243\357\243\356\010\210\000\010\243\262\241\311\313\334\302\316\244\316\n\n\305\305\270\273\244\362\300\332\244\351\244\312\244\244\244\307\244\257\244\300\244\265\244\244\241\243";
+const char hddStepInstallStartText[16] = "Install Start";
+const char hddStepCreatePartitionText[24] = "Create Partition";
+const char hddStepWriteResourceText[16] = "Write Resource";
+const char hddStepCreateSubPartitionText[32] = "Create Sub Partition %1d";
+const char hddStepFormatPartitionText[24] = "Format Partition";
+const char hddStepMountPartitionText[16] = "Mount Partition";
+const char hddStepStartInstallText[16] = "Start Install";
+const char hddAbortHintText[32] = "\031\000\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\303\346\303\307";
+const char hddAbortConfirmText[104] = "\245\244\245\363\245\271\245\310\241\274\245\353\244\317\244\336\244\300\264\260\316\273\244\267\244\306\244\244\244\336\244\273\244\363\241\243\n\n\303\346\303\307\244\267\244\336\244\271\244\253\241\251\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\303\346\303\307\241\277\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\267\321\302\263";
+const char D_00A836B0[24] = "CheckFile Create";
+const char D_00A836C8[16] = "CheckFile Write";
+const char D_00A836D8[16] = "CheckFile Close";
+const char D_00A836E8[24] = "CheckFile Unmount";
+const char D_00A83700[16] = "CheckFile Mount";
+const char D_00A83710[24] = "Install Complete";
+const char D_00A83728[16] = "%d:%d(%08x)\n";
+const char D_00A83738[24] = "Error %2d/%8x";
+
 int HddInstallCB(int command, int offset, int *status)
 {
     struct HddGauge gauge;
@@ -237,7 +268,7 @@ int HddInstallCB(int command, int offset, int *status)
         print_args[1] = (u32)D_00A83150[(D_00A83E20 >> 3) & 3];
         xglFontPrintf(HDD_COUNTER_X, HDD_COUNTER_Y, -1, print_args);
         D_00A83E20 += 1;
-        print_args[0] = (u32)D_00A83160;
+        print_args[0] = (u32)hddPercentFormat;
         print_args[1] = (u16)offset * 100 / progress_max;
         xglFontPrintf(HDD_PERCENT_X, HDD_PERCENT_Y, -1, print_args);
         step = func_002A5C88(print_args[1], HDD_PROGRESS_PERCENT_PER_IMAGE);
@@ -324,6 +355,20 @@ int HddInstallCB(int command, int offset, int *status)
 }
 
 /* TitleHddInstall install arm: start prompt, then the install and its completion or failure prompt. */
+/* Messages and paths of the install and uninstall screens. */
+const char hddInstallStartPromptText[112] = "\245\274\245\316\245\265\241\274\245\254\244\316\245\244\245\363\245\271\245\310\241\274\245\353\244\362\263\253\273\317\244\267\244\336\244\271\241\243\n\n\244\350\244\355\244\267\244\244\244\307\244\271\244\253\241\251\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\263\253\273\317\241\277\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\245\255\245\343\245\363\245\273\245\353";
+const char hddInstallDoneText[72] = "\245\244\245\363\245\271\245\310\241\274\245\353\244\254\300\265\276\357\244\313\275\252\316\273\244\267\244\336\244\267\244\277\241\243\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\245\277\245\244\245\310\245\353\244\313\314\341\244\353";
+const char hddInstallFailedPromptText[112] = "\245\244\245\363\245\271\245\310\241\274\245\353\244\313\274\272\307\324\244\267\244\336\244\267\244\277\241\243\n\n\245\244\245\363\245\271\245\310\241\274\245\353\244\362\303\346\273\337\244\267\244\336\244\271\244\253\241\251\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\244\317\244\244\241\277\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\244\244\244\244\244\250";
+const char hddUninstallStartPromptText[120] = "\245\274\245\316\245\265\241\274\245\254\244\316\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\362\263\253\273\317\244\267\244\336\244\271\241\243\n\n\244\350\244\355\244\267\244\244\244\307\244\271\244\253\241\251\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\263\253\273\317\241\277\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\245\255\245\343\245\363\245\273\245\353";
+const char hddUninstallDoneText[80] = "\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\254\300\265\276\357\244\313\275\252\316\273\244\267\244\336\244\267\244\277\241\243\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\245\277\245\244\245\310\245\353\244\313\314\341\244\353";
+const char hddUninstallFailedPromptText[120] = "\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\313\274\272\307\324\244\267\244\336\244\267\244\277\241\243\n\n\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\362\303\346\273\337\244\267\244\336\244\271\244\253\241\251\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\244\317\244\244\241\277\014  \200\241\337\014\200\200\200\245\334\245\277\245\363\241\247\244\244\244\244\244\250";
+const char D_00A83A30[24] = "data\\yajima\\hddi.bin";
+const char D_00A83A48[240] = "\245\317\241\274\245\311\245\307\245\243\245\271\245\257\245\311\245\351\245\244\245\326\244\313\241\242\245\274\245\316\245\265\241\274\245\254\244\316\n\n\245\244\245\363\245\271\245\310\241\274\245\353\244\313\311\254\315\327\244\312\266\365\244\255\315\306\316\314\244\254\302\255\244\352\244\336\244\273\244\363\241\243\n\n\010\210\377\370\241\312\266\365\244\255\315\306\316\314\244\310\244\267\244\306\031\001\243\261\243\267\243\271\243\262\243\315\243\302\031\000\260\312\276\345\311\254\315\327\244\307\244\271\241\243\010\210\377\370\241\313\n\n\n\n\302\276\244\316\245\242\245\327\245\352\245\261\241\274\245\267\245\347\245\363\244\362\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\271\244\353\244\310\241\242\n\n\245\244\245\363\245\271\245\310\241\274\245\353\244\307\244\255\244\353\244\350\244\246\244\313\244\312\244\353\262\304\307\275\300\255\244\254\244\242\244\352\244\336\244\271\241\243";
+const char D_00A83B38[56] = "\245\317\241\274\245\311\245\307\245\243\245\271\245\257\245\311\245\351\245\244\245\326\244\254\245\325\245\251\241\274\245\336\245\303\245\310\244\265\244\354\244\306\n\n\244\244\244\336\244\273\244\363\241\243";
+const char hddNotAccessibleText[48] = "\245\317\241\274\245\311\245\307\245\243\245\271\245\257\245\311\245\351\245\244\245\326\244\313\245\242\245\257\245\273\245\271\244\307\244\255\244\336\244\273\244\363\241\243";
+const char hddInstallAbortedText[72] = "\n\n\n\n\245\244\245\363\245\271\245\310\241\274\245\353\244\362\303\346\273\337\244\267\244\336\244\271\241\243\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\245\277\245\244\245\310\245\353\244\313\314\341\244\353";
+const char hddUninstallAbortedText[72] = "\n\n\n\n\245\242\245\363\245\244\245\363\245\271\245\310\241\274\245\353\244\362\303\346\273\337\244\267\244\336\244\271\241\243\n\n\014\200  \241\373\014\200\200\200\245\334\245\277\245\363\241\247\245\277\245\244\245\310\245\353\244\313\314\341\244\353";
+
 void TitleHddInstallSubInstall(void)
 {
     int installStatus;
@@ -525,7 +570,7 @@ void TitleHddInstall(int command)
             int frames = HDD_INPUT_DELAY;
 
             while (1) {
-                xglFontPrint(HDD_MESSAGE_X, HDD_MESSAGE_Y, -1, D_00A83160[command]);
+                xglFontPrint(HDD_MESSAGE_X, HDD_MESSAGE_Y, -1, hddScreenMessages[command - HDD_SCREEN_MESSAGE_FIRST]);
                 xglFontPrintDirectOT(-1, hddInstallAbortedText);
                 HddInstallSync();
                 if (frames > 0) {

@@ -100,8 +100,8 @@ void sefSetOverrideVectors(void *, void *);
 void unitBodySetPosDir(DoublewordVector4 *pos, DoublewordVector4 *dir);
 void unitTblBodySetPosDir(DoublewordVector4 *pos, DoublewordVector4 *dir);
 /* The runtime position and direction; tu010 copies them whole into every battle actor's runtimeVecA/B. */
-extern DoublewordVector4 runtimePos;
-extern DoublewordVector4 runtimeDir;
+static DoublewordVector4 runtimePos;
+static DoublewordVector4 runtimeDir;
 
 /* Script values in hundredths. */
 #define VM_FIXED_SCALE 100.0f
@@ -217,7 +217,7 @@ int initLight(void)
     return 1;
 }
 
-extern LightBlocks lightBlock;
+static LightBlocks lightBlock;
 
 /* Returns the light block that initLight and runtime.setLight start from. */
 LightBlocks *lightBlockGet(void) {
@@ -497,7 +497,7 @@ int arrowOff(void)
     return 1;
 }
 
-extern int bgmIndex;
+static int bgmIndex;
 
 int bgmPlay(SbThread *call)
 {
@@ -570,8 +570,8 @@ int unitDirChk(SbThread *call)
     return unitIsInFacingArc(unit, target);
 }
 
-extern int D_00AE0C2C;
-extern int D_00AE0C30;
+static int D_00AE0C2C;
+static int D_00AE0C30;
 
 int runEffSet(SbThread *call)
 {
@@ -909,18 +909,125 @@ int sampFontPut(SbThread *call)
     return 1;
 }
 
-void sbNativeOwnerAdd(char *, char *);
+/* One native method of an owner table: the script name and its function (a table ends with a null name). */
+typedef struct NativeMethod {
+    const char *name;
+    int (*func)();
+} NativeMethod;
+
+/* Natives of other files and of the asm-only runtimeSetLight, listed in the tables below. */
+int runtimeSetLight();
+int VPadDisable();
+int VPadEnable();
+int actorGet();
+int atkTbl();
+int atkTblGet();
+int boost();
+int cameraSet();
+int counterBoost();
+int createEffect();
+int createEffectPos();
+int loadEffect();
+int loadWaitEffect();
+int monsSetNoGet();
+int monsTblSet();
+int posDataSet();
+int tecParaGet();
+int thinkSet();
+int thinkSet2();
+int thinkSetEnd();
+int unitParaGet();
+int unitParaSet();
+int unitStatGet();
+int unitStatSet();
+
+/* Native method tables of the three owners registered by runtimeInit. */
+NativeMethod sampMethods[] = {
+    { "fontPut", sampFontPut },
+    { "padRead", sampPadRead },
+    { 0, 0 },
+};
+
+NativeMethod debMethods[] = {
+    { "put", put },
+    { 0, 0 },
+};
+
+NativeMethod batMethods[] = {
+    { "posDataSet", posDataSet },
+    { "monsTblSet", monsTblSet },
+    { "monsSetNoGet", monsSetNoGet },
+    { "thinkSet", thinkSet },
+    { "thinkSet2", thinkSet2 },
+    { "thinkSetEnd", thinkSetEnd },
+    { "atkTbl", atkTbl },
+    { "atkTblGet", atkTblGet },
+    { "cameraSet", cameraSet },
+    { "actorGet", actorGet },
+    { "unitParaGet", unitParaGet },
+    { "unitParaSet", unitParaSet },
+    { "createEffect", createEffect },
+    { "createEffectPos", createEffectPos },
+    { "loadEffect", loadEffect },
+    { "loadWaitEffect", loadWaitEffect },
+    { "tecParaGet", tecParaGet },
+    { "unitStatGet", unitStatGet },
+    { "unitStatSet", unitStatSet },
+    { "counterBoost", counterBoost },
+    { "boost", boost },
+    { "VPadEnable", VPadEnable },
+    { "VPadDisable", VPadDisable },
+    { "VPadSet", VPadSet },
+    { "msgPut", msgPut },
+    { "msgPutWait", msgPutWait },
+    { "setFog", runtimeSetFog },
+    { "setMoveCmd", setMoveCmd },
+    { "initLight", initLight },
+    { "setLight", runtimeSetLight },
+    { "pari", pari },
+    { "partyDataGet", partyDataGet },
+    { "partyDataSet", partyDataSet },
+    { "plPosInit", plPosInit },
+    { "plDirInit", plDirInit },
+    { "unitCreate", unitCreate },
+    { "unitLoad", unitLoad },
+    { "unitLoadWait", unitLoadWait },
+    { "unitBind", unitBind },
+    { "unitBind2", unitBind2 },
+    { "arrowOn", arrowOn },
+    { "arrowOff", arrowOff },
+    { "bgmPlay", bgmPlay },
+    { "bgmStop", bgmStop },
+    { "unitTblBitGet", unitTblBitGet },
+    { "frameCntGet", frameCntGet },
+    { "ETGet", ETGet },
+    { "unitDirChk", unitDirChk },
+    { "runEffSet", runEffSet },
+    { "decoDisp", decoDisp },
+    { "decoDisp2", decoDisp2 },
+    { "namePut", namePut },
+    { "scale", objx },
+    { "streamPlay", streamPlay },
+    { "unitDirGet", unitDirGet },
+    { "unitDefAreaGet", unitDefAreaGet },
+    { "cfFlagSet", cfFlagSet },
+    { "bgmFade", runtimeBgmFade },
+    { "unitFade", unitFade },
+    { "stockGet", stockGet },
+    { "unitMotWait", unitMotWait },
+    { "partsHide", partsHide },
+    { "partsShow", partsShow },
+    { 0, 0 },
+};
+
+void sbNativeOwnerAdd(const char *, NativeMethod *);
 void *memset(void *, int, unsigned int);
-extern char D_00AB6078[];
-extern char D_00AB6090[];
-extern char D_00ABAC90[];
-extern char D_00ABAC98[];
 
 /* Registers two command tables with sbNativeOwnerAdd, then clears the state the runtime commands write: the two words of runEffSet, the BGM index, the light block and both vectors. */
 void runtimeInitState(void)
 {
-    sbNativeOwnerAdd(D_00ABAC90, D_00AB6078);
-    sbNativeOwnerAdd(D_00ABAC98, D_00AB6090);
+    sbNativeOwnerAdd("samp", sampMethods);
+    sbNativeOwnerAdd("deb", debMethods);
     D_00AE0C2C = 0;
     D_00AE0C30 = 0;
     bgmIndex = 0;
@@ -930,15 +1037,14 @@ void runtimeInitState(void)
 }
 
 void runtimeInitState(void);
-extern char D_00AB60A0[];
-extern char D_00ABACA0[];
 
 /* Runtime start-up: resets the state, registers a third command table, then runs the two start calls. */
 void runtimeInit(void)
 {
     sbResetNativeCounts();
     runtimeInitState();
-    sbNativeOwnerAdd(D_00ABACA0, D_00AB60A0);
+    sbNativeOwnerAdd("bat", batMethods);
     mathInit();
     cameraRegisterNatives();
 }
+

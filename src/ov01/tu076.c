@@ -34,7 +34,7 @@ typedef union MEfScreenPoint {
 } MEfScreenPoint;
 
 extern Vector4 MMathUnitVector;
-extern Quadword mefAxisColors[3];
+extern const Quadword mefAxisColors[5];
 
 /* One 2D corner of a flat marker shape. */
 typedef struct MEfCorner {
@@ -42,7 +42,7 @@ typedef struct MEfCorner {
     float y;
 } MEfCorner;
 
-extern MEfCorner mefMarkerCorners[3];
+extern const MEfCorner mefMarkerCorners[3];
 int ov01TickCountGet(void);
 Matrix4 *MMathMulMatrix(Matrix4 *out, Matrix4 *rhs, Matrix4 *lhs);
 
@@ -328,3 +328,18 @@ void MEfDrawPathEndMarker(MGsPacket *packet, Vector4 *point, float scale)
         MMathRotateMatrixZ(&frame, &frame, 1.57079637f);
     }
 }
+
+/* Colours of the axis lines (the loop in this file reads the first three quadwords) and the marker corners. */
+const Quadword mefAxisColors[5] = {
+    0x000000ff00000000000000ff000000ff,
+    0x000000ff000000ff00000000000000ff,
+    0x000000ff000000ff000000ff00000000,
+    0x000000ff00000000000000ff00000000,
+    0x000000ff000000c00000006000000000,
+};
+
+const MEfCorner mefMarkerCorners[3] = {
+    { 0.0f, -0.8f },
+    { 0.4f, -1.666f },
+    { -0.4f, -1.666f },
+};

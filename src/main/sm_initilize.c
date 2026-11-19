@@ -37,8 +37,8 @@ typedef struct SmPool {
   int largest_free_block;
 } SmPool;
 
-extern SmPool smPool;
-extern SmPool smPoolSmall;
+static SmPool smPool;
+static SmPool smPoolSmall;
 
 /* Initial counters for a freshly-carved pool: one free block spanning the whole pool. */
 void smInitMemInfo(SmPool *pool, SmCell *first_cell, u32 unit_count)
@@ -225,3 +225,20 @@ void smPrintInfoSmall(void)
 {
   smWalkCells(smPoolSmall.first_cell);
 }
+
+/* Identity vector (w = 1) read by MMathCalcAngle and the other math helpers. */
+const Vector4 MMathUnitVector = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+/* Identity matrix read by the MMathRotateMatrix* helpers as their default input. */
+const Matrix4 MMathUnitMatrix = {
+    { 1.0f, 0.0f, 0.0f, 0.0f },
+    { 0.0f, 1.0f, 0.0f, 0.0f },
+    { 0.0f, 0.0f, 1.0f, 0.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+};
+
+/* Message of MSeObjInit, stored right after the identity matrix in the original. */
+const char MSeObjInitAllocMessage[40] = "MSeObjInit: Could not allocate memory";
+
+/* Message of MSeObjProc for an invalid object type. */
+const char D_0068C6D8[32] = "MSeObjProc: Invalid type [%d]";

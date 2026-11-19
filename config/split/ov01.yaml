@@ -134,7 +134,38 @@ segments:
       - [0x33750, c, ov01/tu086]
       - [0x34210, c, ov01/tu088]
       - [0x34CC8, c, ov01/tu089]
-      - [0x354FC, data, ov01/unsplit]
+      - [0x354FC, data, ov01/tu008]
+      - [0x36548, data, ov01/tu012]
+      - [0x365E8, data, ov01/tu020]
+      - [0x365F0, data, ov01/tu022]
+      - [0x36978, data, ov01/tu023]
+      - [0x36A40, data, ov01/tu033]
+      - [0x36B80, data, ov01/tu035]
+      - [0x36BD0, data, ov01/tu036]
+      - [0x36CD0, data, ov01/tu038]
+      - [0x36CF0, data, ov01/tu041]
+      - [0x36F28, data, ov01/tu042]
+      - [0x36F90, data, ov01/tu044]
+      - [0x37078, data, ov01/tu047]
+      - [0x372A0, data, ov01/tu048]
+      - [0x372B0, data, ov01/tu050]
+      - [0x372D8, data, ov01/tu051]
+      - [0x374C0, data, ov01/tu052]
+      - [0x37500, data, ov01/tu054]
+      - [0x37548, data, ov01/tu055]
+      - [0x37588, data, ov01/tu056]
+      - [0x37600, data, ov01/tu060]
+      - [0x37608, data, ov01/tu061]
+      - [0x37658, data, ov01/tu062]
+      - [0x378B8, data, ov01/tu063]
+      - [0x37AB8, data, ov01/tu071]
+      - [0x37AD0, data, ov01/tu072]
+      - [0x37BC4, data, ov01/tu075]
+      - [0x37C40, data, ov01/tu077]
+      - [0x39C40, data, ov01/tu078]
+      - [0x39C48, data, ov01/tu079]
+      - [0x39C50, data, ov01/tu081]
+      - [0x39C78, data, ov01/tu082]
       - [0x39CA0, rodata, ov01/tu008]
       - [0x3B260, rodata, ov01/tu013]
       - [0x3B280, rodata, ov01/tu014]
@@ -166,7 +197,45 @@ segments:
       - [0x3C7D0, rodata, ov01/tu088]
       - [0x3C850, rodata, ov01/tu089]
       - [0x3C870]
-      - { type: bss, vram: 0x00ABB870, name: ov01/unsplit }
+      - { type: bss, vram: 0x00ABB870, name: ov01/tu000 }
+      - { type: bss, vram: 0x00ABB930, name: ov01/tu001 }
+      - { type: bss, vram: 0x00ABBCB0, name: ov01/tu002 }
+      - { type: bss, vram: 0x00ABBDF0, name: ov01/tu003 }
+      - { type: bss, vram: 0x00ABCF60, name: ov01/tu004 }
+      - { type: bss, vram: 0x00ABD320, name: ov01/tu005 }
+      - { type: bss, vram: 0x00ABFF28, name: ov01/tu008 }
+      - { type: bss, vram: 0x00AC1038, name: ov01/tu009 }
+      - { type: bss, vram: 0x00AC1040, name: ov01/tu010 }
+      - { type: bss, vram: 0x00AC1068, name: ov01/tu019 }
+      - { type: bss, vram: 0x00AC1078, name: ov01/tu022 }
+      - { type: bss, vram: 0x00AC10B0, name: ov01/tu023 }
+      - { type: bss, vram: 0x00AC2AD0, name: ov01/tu033 }
+      - { type: bss, vram: 0x00AC3B98, name: ov01/tu035 }
+      - { type: bss, vram: 0x00AC3BFC, name: ov01/tu036 }
+      - { type: bss, vram: 0x00AC4190, name: ov01/tu037 }
+      - { type: bss, vram: 0x00AC41A0, name: ov01/tu038 }
+      - { type: bss, vram: 0x00AC51A8, name: ov01/tu041 }
+      - { type: bss, vram: 0x00AC51B0, name: ov01/tu042 }
+      - { type: bss, vram: 0x00AC51C0, name: ov01/tu044 }
+      - { type: bss, vram: 0x00AE0C20, name: ov01/tu046 }
+      - { type: bss, vram: 0x00AE0C2C, name: ov01/tu047 }
+      - { type: bss, vram: 0x00AE0DE0, name: ov01/tu048 }
+      - { type: bss, vram: 0x00AE0E88, name: ov01/tu049 }
+      - { type: bss, vram: 0x00AE0EA0, name: ov01/tu050 }
+      - { type: bss, vram: 0x00AE0EB4, name: ov01/tu051 }
+      - { type: bss, vram: 0x00AE0EB8, name: ov01/tu052 }
+      - { type: bss, vram: 0x00AE0EBC, name: ov01/tu053 }
+      - { type: bss, vram: 0x00AE0EC0, name: ov01/tu055 }
+      - { type: bss, vram: 0x00AE0EC4, name: ov01/tu056 }
+      - { type: bss, vram: 0x00AE0ED0, name: ov01/tu058 }
+      - { type: bss, vram: 0x00AE0ED4, name: ov01/tu060 }
+      - { type: bss, vram: 0x00AE0ED8, name: ov01/tu061 }
+      - { type: bss, vram: 0x00AE0EDC, name: ov01/tu062 }
+      - { type: bss, vram: 0x00AE0EE4, name: ov01/tu064 }
+      - { type: bss, vram: 0x00AE0EE8, name: ov01/tu068 }
+      - { type: bss, vram: 0x00AE0F18, name: ov01/tu069 }
+      - { type: bss, vram: 0x00AE0F68, name: ov01/tu072 }
+      - { type: bss, vram: 0x00AED080, name: ov01/tu075 }
   - [0x3C870, pad, ov01_bss_file_image]
   - [0x6E088, bin, elf_shstrtab]
   - [0x6E0A8, bin, elf_section_headers]

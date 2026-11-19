@@ -356,11 +356,26 @@ def build_overlay(unit, image, record, main_names, out):
                        for p in rodata["owners"]]
         if hx(rodata["end"]) != bss_start:
             raise SystemExit(f"x2_scaffold: {unit} .rodata family ends at {rodata['end']}, .bss starts at {h8(bss_start)}")
-    lines.append(f"      - [{up(text_end + base)}, data, {data_name}]")
+    # `.data` and `.bss` families cut per TU by link order (map_infer OVERLAY_DATA_SECTIONS): one splat
+    # subsegment per TU piece, as `.rodata`; without them the section stays one unsplit piece.
+    def family_rows(kind, low, high):
+        family = next((f for f in layout.get("families", []) if f["family"] == kind), None)
+        if not family or not family.get("owners"):
+            return [[data_name, h8(low), h8(high)]] if low < high else []
+        stem_of = {tu["ordinal"]: file_names[tu["ordinal"]] for tu in tus}
+        rows = [[f"{unit}/{stem_of[p['ordinal']]}", h8(hx(p["start"])), h8(hx(p["end"]))] for p in family["owners"]]
+        if hx(rows[0][1]) != low or hx(rows[-1][2]) != high:
+            raise SystemExit(f"x2_scaffold: {unit} {kind} family {rows[0][1]}..{rows[-1][2]} is not {h8(low)}..{h8(high)}")
+        return rows
+    data_rows = family_rows("data", text_end, data_end)
+    bss_rows = family_rows("bss", bss_start, section_end)
+    for name, start, _ in data_rows:
+        lines.append(f"      - [{up(hx(start) + base)}, data, {name}]")
     for name, start, _ in rodata_rows:
         lines.append(f"      - [{up(hx(start) + base)}, rodata, {name}]")
     lines.append(f"      - [{up(bss_start + base)}]")
-    lines.append(f"      - {{ type: bss, vram: 0x{bss_start:08X}, name: {data_name} }}")
+    for name, start, _ in bss_rows:
+        lines.append(f"      - {{ type: bss, vram: 0x{hx(start):08X}, name: {name} }}")
     lines.append(f"  - [{up(bss_start + base)}, pad, {unit}_bss_file_image]")
     shstrtab = image.sections[".shstrtab"]
     lines.append(f"  - [{up(shstrtab.offset)}, bin, elf_shstrtab]")
@@ -382,8 +397,7 @@ def build_overlay(unit, image, record, main_names, out):
         + "".join(f"{name} = 0x{va:08X};\n" for va, name in sorted(externals.items()))
         + "".join(f"{name} = 0x{va:08X}; /* {note} */\n" for name, va, note in hand_data)
         + overlay_main_data_lines(unit, own | set(externals.values()) | {name for name, _, _ in hand_data}))
-    families = {".data": [[data_name, h8(text_end), h8(data_end)]], ".rodata": rodata_rows}
-    families[".bss"] = [[data_name, h8(bss_start), h8(section_end)]] if bss_start < section_end else []
+    families = {".data": data_rows, ".rodata": rodata_rows, ".bss": bss_rows}
     out[f"config/objects/{unit}.layout.json"] = json_text(dict(
         provenance="estimated", text=layout_text, families=families,
         reference_witness_symbols={}, main_shadowed=[], reference_aliases={}))

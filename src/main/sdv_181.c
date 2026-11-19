@@ -11,6 +11,11 @@
 #include "quadword.h"
 #include "main/tu190.h"
 
+/* Quad-corner and unit-square tables of the alter strips (read by sdvCreateAlter and sdvExecAlter). */
+const float D_0068C530[4] = { 0.0f, 0.0f, -1.0f, 1.0f };
+const float D_0068C540[8] = { 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f };
+const float D_0068C560[8] = { -1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f };
+
 /* A key sequence: keys holds rows of stride halfwords, the first of each row being the frame
  * the row starts at (see the SDV_KEY_ values below). */
 typedef struct SdvSequence {
@@ -280,7 +285,7 @@ typedef struct TiWindSlot {
     short windKind;
 } TiWindSlot;
 
-extern TiWindSlot tiWindSlots[];
+static TiWindSlot tiWindSlots[4];
 
 /* Stores key, subkey and windKind in the first empty wind slot (key 0) and returns
  * its index, or -1 when all four slots are in use. */
@@ -516,7 +521,7 @@ void tiWindUpdateKeyframes(SdvSequence *sequence, int key, unsigned short subkey
 }
 
 void sdvClearSpecialWork(void);
-extern short _sdvSpecialBuf[8];
+static short _sdvSpecialBuf[8];
 void GameDefocusSet(int index, int type, const int *settings);
 
 /* A packed RGBA colour; the channels are written one by one as bit-fields. */
@@ -573,7 +578,7 @@ typedef struct SdvSpecialWork {
     Matrix4 matrix;           /* +0x30 */
 } SdvSpecialWork;
 
-extern SdvSpecialWork sdvSpecialTable[32];
+static SdvSpecialWork sdvSpecialTable[32];
 
 /* One key track of a camera schedule; sdvProgressPrm reads its key table at +0x04. */
 typedef struct SdvScheduleChannel {
@@ -1191,9 +1196,9 @@ INCLUDE_ASM("asm/main/nonmatchings/sdv_181", sdvFreeSpecialSlots);
 #define SDV_SPECIAL_KIND_SCREEN 10
 
 /* (0, 0, 0, 1): the offset sdvExecSpecial asks sefGetPoint for. */
-extern AlignedVector4 sdvOriginPoint;
+const AlignedVector4 sdvOriginPoint = { 0.0f, 0.0f, 0.0f, 1.0f };
 extern const Matrix4 MMathUnitMatrix;
-Matrix4 *sefGetPoint(Vector4 *destination, Vector4 *offset, int kind);
+Matrix4 *sefGetPoint(Vector4 *destination, const Vector4 *offset, int kind);
 
 /* One step of a key interpolation: from + (to - from) * blend / 256, rounded; from itself when both are equal. */
 #define SDV_LERP(from, to, blend) ((to) == (from) ? (from) : ((((to) - (from)) * (blend) + 0x80) >> 8) + (from))
@@ -1714,7 +1719,7 @@ typedef struct SdvAlter {
     unsigned char unmodeled_D3E[0xD40 - 0xD3E];
 } SdvAlter;
 
-extern SdvAlter sdvAlterTable[49];
+static SdvAlter sdvAlterTable[49];
 
 /* Zeroes one alter record (sdvInitAlter). */
 void sdvInitAlter(SdvAlter *alter)
@@ -1913,3 +1918,29 @@ void sdvDrawOwnerAlters(int owner)
         }
     }
 }
+
+short sdvDefocusSizeSteps[9] = { 1, 3, 7, 15, 31, 63, 127, 255, 511 };
+
+/* Zero-terminated lists of effect part ids walked by sdvScheduleAlter. */
+unsigned short D_005E6D78[32] = {
+    68, 69, 70, 71, 72, 73, 74, 75,
+    76, 77, 78, 79, 80, 81, 82, 83,
+    84, 85, 86, 87, 88, 89, 90, 91,
+    92, 93, 94, 95, 0, 0, 0, 0
+};
+unsigned short D_005E6DB8[20] = {
+    70, 72, 73, 74, 75, 76, 77, 78,
+    79, 80, 81, 82, 83, 84, 85, 86,
+    0, 0, 0, 0
+};
+float D_005E6DE0[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
+float D_005E6DF0[4] = { -1.0f, 0.0f, 0.0f, 1.0f };
+u64 D_005E6E00[14] = {
+    0x1000000000008006UL, 14, 0, 6, 0x5000DUL, 71, 96, 20,
+    5, 8, 0x131000000UL, 78, 72, 66
+};
+
+float sdvCameraDistance = 0.0f;
+int sdvAlterSerial = 0;
+int D_0069DC44 = 0;
+

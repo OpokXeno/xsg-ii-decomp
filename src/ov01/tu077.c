@@ -581,7 +581,7 @@ float MMathMakeRandom2PI(void);
 Vector4 *MMathApplyMatrix(Vector4 *out, float (*matrix)[4], const Vector4 *vector);
 
 typedef struct MEfPhaseBlock {
-    unsigned char cornerAngles[16];  /* four float corner bearings, read as float[4] by MEfMake4Vertex2 */
+    float cornerAngles[4];  /* four float corner bearings, read as float[4] by MEfMake4Vertex2 */
 } MEfPhaseBlock;
 
 typedef struct MEfCornerTable {
@@ -590,7 +590,7 @@ typedef struct MEfCornerTable {
     unsigned long long corner[2];            /* +0x18: the corner words MEfMakeCornerMatrix loads */
 } MEfCornerTable;
 
-extern MEfCornerTable MEfVertex2CornerTable;
+extern const MEfCornerTable MEfVertex2CornerTable;
 
 
 
@@ -668,12 +668,12 @@ static inline void CloseTag(MGsPacket *packet, int nloop)
 }
 
 /* Colour templates (two RGBAQ quadwords each) and the per-strand edge vectors read by MEfDrawStepTrail. */
-extern MEfGsColor mefStepHeadColors[2];
-extern MEfGsColor mefStepTailColors[2];
-extern AlignedVector4 D_00ABB1D0[4];
-extern AlignedVector4 D_00ABB210[4];
-extern AlignedVector4 D_00ABB270[4];
-extern AlignedVector4 D_00ABB2B0[4];
+extern const MEfGsColor mefStepHeadColors[2];
+extern const MEfGsColor mefStepTailColors[2];
+extern const DoublewordAlignedVector4 D_00ABB1D0[4];
+extern const DoublewordAlignedVector4 D_00ABB210[4];
+extern const DoublewordAlignedVector4 D_00ABB270[4];
+extern const DoublewordAlignedVector4 D_00ABB2B0[4];
 
 /*
  * The object the step functions below receive. Offsets follow their loads and
@@ -745,12 +745,10 @@ typedef struct MEfPathCurve {
 
 typedef union MEfPathCurveObject {
     MEfPathCurve curve;
-    Vector4 vectors[11];
+    Vector4 vectors[512];
 } MEfPathCurveObject;
 
 extern MEfPathCurveObject mefPathCurve;
-extern float D_00ABB2F0[4];
-extern float D_00ABB300[4];
 unsigned short xglSRand(void);
 /* ov01RecordInit: the definition is tu076.c; this file keeps its own view (void * record). */
 void ov01RecordInit(void *record, int value);
@@ -767,8 +765,6 @@ void MEfSetPhaseFlags(MEfStepObject *object);
 void MEfAdvanceStep(MEfStepObject *object);
 void MEfDrawStepTrail(MEfStepObject *object);
 extern Vector4 MMathUnitVector;
-extern float D_00ABB190[4];
-extern float D_00ABB1A0[4];
 /* MMathCalcHermiteKey(Prm): the tu076.c definitions take other argument types, so this file keeps its own view. */
 void MMathCalcHermiteKeyPrm(void *base, int index);
 void MMathCalcHermiteKey(Vector4 *destination, void *base, int index, float parameter);
@@ -1148,6 +1144,9 @@ int MEfCreateHermitePath(MEfStepObject *object)
 
 void MEfStartFromActor(MEfStepRecord *record)
 {
+    /* Corner offset tables, defined (const) at the end of this file. */
+    extern float D_00ABB190[4];
+    extern float D_00ABB1A0[4];
     Vector4 *curveKeys;
     Matrix4 matrix;
     Vector4 corner;
@@ -1619,6 +1618,9 @@ int MEfCreatePathStep(MEfPathObject *object)
 /* Path step set-up: samples the actor's matrix, moves the offset point into it, and fills the four curve points on a circle around that point. */
 void MEfStartPathFromActor(MEfPathRecord *record)
 {
+    /* Ring offset tables, defined (const) at the end of this file. */
+    extern float D_00ABB2F0[4];
+    extern float D_00ABB300[4];
     unsigned short randomBits;
     int i;
     Matrix4 matrix;
@@ -1782,12 +1784,12 @@ void MEfSetPathPhaseFlags(MEfStepObject *object)
 }
 
 /* Colour templates and per-strand edge vectors of the path trail (the layout of MEfDrawStepTrail's tables). */
-extern MEfGsColor mefPathHeadColors[2];
-extern MEfGsColor mefPathTailColors[2];
-extern AlignedVector4 D_00ABB330[4];
-extern AlignedVector4 D_00ABB370[4];
-extern AlignedVector4 D_00ABB3D0[4];
-extern AlignedVector4 D_00ABB410[4];
+extern const MEfGsColor mefPathHeadColors[2];
+extern const MEfGsColor mefPathTailColors[2];
+extern const DoublewordAlignedVector4 D_00ABB330[4];
+extern const DoublewordAlignedVector4 D_00ABB370[4];
+extern const DoublewordAlignedVector4 D_00ABB3D0[4];
+extern const DoublewordAlignedVector4 D_00ABB410[4];
 
 /* Draws the path trail the way MEfDrawStepTrail draws the stepped one, over its 19-step record. */
 void MEfDrawPathStepTrail(MEfPathObject *object)
@@ -1986,3 +1988,72 @@ void MEfAdvanceStepShort(MEfShortStepObject *record)
     MSeObjRequestFree(record);
   }
 }
+
+/* Read-only tables of the step and path trails (original .rodata), in address order. */
+/* Corner table of the vertex-2 corners: four corner bearings, then the two corner words. */
+const MEfCornerTable MEfVertex2CornerTable = {
+    { { 0.0f, 1.5707964f, 4.712389f, 3.1415927f } },
+    { 0 },
+    { 0x400000003f800000ULL, 0x3f80000040400000ULL },
+};
+
+const float D_00ABB180[4] = { -4.0f, 3.0f, -2.0f, 1.0f };
+const float D_00ABB190[4] = { 0.0f, 5.0f, 7.0f, 8.0f };
+const float D_00ABB1A0[4] = { 0.0f, 1.6f, 8.0f, 20.0f };
+const MEfGsColor mefStepHeadColors[2] = { { rgba: { 0x10, 0x30, 0xa0, 0xff } }, { rgba: { 0x00, 0x10, 0x80, 0xff } } };
+const DoublewordAlignedVector4 D_00ABB1D0[4] = {
+    { -0.005f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, -0.005f, 0.0f, 1.0f },
+    { 0.005f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.005f, 0.0f, 1.0f }
+};
+const DoublewordAlignedVector4 D_00ABB210[4] = {
+    { 0.06f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.06f, 0.0f, 1.0f },
+    { -0.06f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, -0.06f, 0.0f, 1.0f }
+};
+const MEfGsColor mefStepTailColors[2] = { { rgba: { 0x10, 0x30, 0xa0, 0xff } }, { rgba: { 0x00, 0x10, 0x80, 0xff } } };
+const DoublewordAlignedVector4 D_00ABB270[4] = {
+    { -0.003f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, -0.003f, 0.0f, 1.0f },
+    { 0.003f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.003f, 0.0f, 1.0f }
+};
+const DoublewordAlignedVector4 D_00ABB2B0[4] = {
+    { 0.03f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.03f, 0.0f, 1.0f },
+    { -0.03f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, -0.03f, 0.0f, 1.0f }
+};
+const float D_00ABB2F0[4] = { 0.0f, 30.0f, 42.0f, 48.0f };
+const float D_00ABB300[4] = { 0.0f, 30.4f, 152.0f, 380.0f };
+const MEfGsColor mefPathHeadColors[2] = { { rgba: { 0x10, 0x30, 0xa0, 0xff } }, { rgba: { 0x00, 0x10, 0x80, 0xff } } };
+const DoublewordAlignedVector4 D_00ABB330[4] = {
+    { -0.03f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, -0.03f, 0.0f, 1.0f },
+    { 0.03f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.03f, 0.0f, 1.0f }
+};
+const DoublewordAlignedVector4 D_00ABB370[4] = {
+    { 0.32f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.32f, 0.0f, 1.0f },
+    { -0.32f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, -0.32f, 0.0f, 1.0f }
+};
+const MEfGsColor mefPathTailColors[2] = { { rgba: { 0x10, 0x30, 0xa0, 0xff } }, { rgba: { 0x00, 0x10, 0x80, 0xff } } };
+const DoublewordAlignedVector4 D_00ABB3D0[4] = {
+    { -0.015f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, -0.015f, 0.0f, 1.0f },
+    { 0.015f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.015f, 0.0f, 1.0f }
+};
+const DoublewordAlignedVector4 D_00ABB410[4] = {
+    { 0.17f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.17f, 0.0f, 1.0f },
+    { -0.17f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, -0.17f, 0.0f, 1.0f }
+};
+
+/* mefPathCurve: 8192 bytes of zero storage, shared with the other path TUs. */
+MEfPathCurveObject mefPathCurve = { 0 };

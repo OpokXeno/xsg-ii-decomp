@@ -37,3 +37,6 @@ void monsTblValueSet(int value) {
 int monsTblValueGet(void) {
     return monsTblValue;
 }
+
+/* Initial value; the zero word after it is alignment fill up to the next 8-byte object. */
+int monsTblValue = 1;

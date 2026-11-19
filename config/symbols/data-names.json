@@ -1560,7 +1560,7 @@
    "0x00ae0ee8": "screenFillTask",
    "0x00ae0f18": "handleSlots",
    "0x00ae0f60": "handleBumpCursor",
-   "0x00ab6ab4": "bgmTrackHandles",
+   "0x00ab6ab8": "bgmTrackHandles",
    "0x00ab6ad0": "configThinkNo",
    "0x00ab6ad4": "configMonsSetNo",
    "0x00ab6ad8": "configCFFlagValue",

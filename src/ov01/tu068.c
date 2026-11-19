@@ -8,7 +8,10 @@
 #include "ov01/tu068.h"
 
 /* The running grey screen fill, 0 when none. */
-extern ScreenTask *screenFillTask;
+ScreenTask *screenFillTask;
+
+/* The ten menu panel row words that menuPanelRowsReset (tu049.c) clears. */
+int menuPanelRows[10];
 
 /* Starts a grey screen fill that lasts until screenFillEnd. */
 void screenFillStart(void)

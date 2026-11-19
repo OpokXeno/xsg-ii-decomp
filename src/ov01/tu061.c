@@ -272,3 +272,15 @@ void menuTimedSeqShow(Ov01Object *unit)
     sequence->origin.y = (f32) menuPanelRowAlloc();
     sequence->origin.x = 16.0f;
 }
+
+/* The timed sequence panel, a common global. */
+TimedSequence *menuTimedSeqPanel;
+
+/* Title rows of menuTimedPanelDraw: the sprite u, v and the size w, h of each title. */
+MenuTitleEntry menuTimedTitleTable[5] = {
+    { 370, 86, 57, 18 },
+    { 414, 107, 52, 18 },
+    { 256, 107, 70, 18 },
+    { 329, 107, 44, 18 },
+    { 375, 107, 37, 18 }
+};

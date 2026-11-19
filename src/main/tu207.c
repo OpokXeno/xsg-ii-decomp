@@ -20,7 +20,7 @@ typedef struct RecordBank {
 /* Declared as bytes, as recordClearBank below reads it. recordUpdateRenderHook indexes it as bytes and recordSetSlot
  * steps to the bank as bytes: through ((RecordBank *) recordBanks)[bankIndex] gcc adds the base before the slot
  * offset (fd.sh recordSetSlot: 12/32 in place, 32/32 with the byte step to the bank). */
-extern unsigned char recordBanks[];
+static unsigned char recordBanks[3720];
 
 /* Local view of sRender (0x00645820; RenderFrameState in main/tu093.h does not model +0x3C): the
  * render callback, called with the frame's packet (DefocusRenderState.callback in game_defocus.c). */
@@ -765,8 +765,8 @@ void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int qwc);
 void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 int recordAnyUsed(void);
 /* GIF data sent before (9 quadwords) and after (3 quadwords) the records are drawn. */
-extern const unsigned char recordPreDrawGifData[];
-extern const unsigned char recordPostDrawGifData[];
+extern u64 recordPreDrawGifData[];
+extern u64 recordPostDrawGifData[];
 /* Draw handlers of record types 1..21. The handlers of types 1, 3, 5, 6 and 7 build their own packet on the
  * scratchpad (xglPacketGetCurrent) and leave the packet argument unused. */
 extern void (*recordDrawHandlers[])(GsQueueContext *record, XglPacket *packet);
@@ -971,7 +971,7 @@ int recordStageSize(int mode, int fallback)
     }
 }
 
-extern int recordAngle;
+int recordAngle = 0;
 float sinf(float angle);
 
 /* Sprite color of stage mode: grey 0x808080 under alpha at stage 1, the fixed 0x40808080 (alpha 0x40, whatever alpha
@@ -1043,8 +1043,8 @@ void recordDrawType2(GsQueueContext *record, XglPacket *packet)
 
 void recordAdvanceRingRadius(int step);
 void recordRingPoint(float *point, float *clampedPoint, float angle, float radius);
-extern float recordTunnelDegToRad;
-extern int recordTunnelRadius;
+float recordTunnelDegToRad = 0.0174532887f;
+int recordTunnelRadius = 380;
 
 /* Ring spacing of the type 3 tunnel, the radius its first ring is kept below and the radius its rings stop at. */
 #define RECORD_TUNNEL_RING_SPACING 25
@@ -1176,8 +1176,8 @@ void recordAdvanceRingRadius(int step)
  * x recordGridHeight are in use; recordDrawType4 indexes a cell as column + row * 50. */
 #define RECORD_GRID_SIDE 50
 
-extern int recordGridWidth;
-extern int recordGridHeight;
+int recordGridWidth = 15;
+int recordGridHeight = 15;
 /* signed char: recordDrawType4 reads the flags with lb (fd.sh with unsigned char: lbu $2,0($4) at its first flag
  * read, 221/225). */
 extern signed char recordGridCells[];
@@ -1507,8 +1507,8 @@ void recordDrawType6(GsQueueContext *record, XglPacket *unused)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-extern float recordWarpAngle;
-extern float recordWarpVelocity;
+float recordWarpAngle = -1.37f;
+float recordWarpVelocity = 0.07f;
 
 /* Integrates recordWarpAngle by recordWarpVelocity and stops the motion once it crosses -1.0f. */
 void recordStepWarp(void)
@@ -1537,9 +1537,9 @@ void recordStepWarp(void)
 void xglMatrixUnit(Matrix4 matrix);
 void xglMatrixRotZ(Matrix4 destination, Matrix4 source, f32 angle);
 void xglMatrixScale(Matrix4 destination, Matrix4 source, const Vector4 *scale);
-extern AlignedVector4 recordWarpCenter;
-extern AlignedVector4 recordWarpScale;
-extern float recordWarpDegToRad;
+const AlignedVector4 recordWarpCenter = { 256.0f, 224.0f, 0.0f, 0.0f };
+const AlignedVector4 recordWarpScale = { 1.0f, 1.0f, 0.0f, 1.0f };
+float recordWarpDegToRad = 0.0174532887f;
 
 /* Rotates the point (x, y) about recordWarpCenter by recordWarpAngle * recordWarpDegToRad, scales it by
  * recordWarpScale and stores the resulting x and y in result. */
@@ -1574,7 +1574,7 @@ void recordStepRing(void);
 int recordRingInnerColor(void);
 int recordDefaultColor(void);
 void recordRingStep(float angle, Vector4 *screenPoints, Vector4 *texturePoints);
-extern float recordRingDegToRad;
+float recordRingDegToRad = 0.0174532887f;
 
 /*
  * Draw handler of record type 7 (recordDrawHandlers[6]): draws a textured ring as one triangle strip: for every step an
@@ -1701,3 +1701,54 @@ void recordRingStep(float angle, Vector4 *screenPoints, Vector4 *texturePoints)
     screenPoints->z = screenCos * 350.0f + 256.0f;
     screenPoints->w = screenSin * 350.0f + 224.0f;
 }
+
+/* Recovered data of this TU, in address order (the original .data and .bss of main/tu207). */
+u64 recordPreDrawGifData[18] = {
+    0x1000000000008008, 14, 0, 63, 0x131000000, 78, 1, 70,
+    0x6FC007FC00A, 8, 0, 74, 97, 20, 0, 73,
+    0x1BF000001FF0000, 64
+};
+
+/* Draw handlers of types 8..21, defined in tu208-tu212. */
+void recordDrawStrip(GsQueueContext *record, XglPacket *packet);
+void recordDrawTurnColumns(GsQueueContext *record, XglPacket *packet);
+void orbitDrawRing(GsQueueContext *record, XglPacket *packet);
+void quadDrawPreset(GsQueueContext *record, XglPacket *packet);
+void quadDrawPresetUv(GsQueueContext *record, XglPacket *packet);
+void circleDrawSegments(GsQueueContext *record, XglPacket *packet);
+void gridDrawCells(GsQueueContext *record, XglPacket *packet);
+void quadDrawRotating(GsQueueContext *record, XglPacket *packet);
+void pointGridDraw(GsQueueContext *record, XglPacket *packet);
+void quadOrbitGridDraw(GsQueueContext *record, XglPacket *packet);
+void ringWaveGridDraw(GsQueueContext *record, XglPacket *packet);
+/* These two are defined with other parameter lists (int *record; no parameters) and still fill their slots. */
+void recordSetAlphaFlags();
+void recordDrawType21();
+void (*recordDrawHandlers[22])(GsQueueContext *record, XglPacket *packet) = {
+    recordDrawType1,
+    recordDrawType2,
+    recordDrawType3,
+    recordDrawType4,
+    recordDrawType5,
+    recordDrawType6,
+    recordDrawType7,
+    recordDrawStrip,
+    recordDrawTurnColumns,
+    orbitDrawRing,
+    quadDrawPreset,
+    quadDrawPresetUv,
+    circleDrawSegments,
+    gridDrawCells,
+    recordSetAlphaFlags,
+    quadDrawRotating,
+    pointGridDraw,
+    quadOrbitGridDraw,
+    ringWaveGridDraw,
+    spriteBatchDraw,
+    recordDrawType21,
+    0
+};
+u64 recordPostDrawGifData[6] = {
+    0x1000000000008002, 14, 0, 63, 0x131000000, 78
+};
+signed char recordGridCells[2500] = { 0 };

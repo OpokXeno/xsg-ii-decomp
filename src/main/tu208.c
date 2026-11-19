@@ -290,3 +290,5 @@ void recordDrawFlatColumn(XglPacket *packet, Vector4 *corners, GsQueueContext *r
         while (remaining != 0);
     }
 }
+
+f32 recordTurnDegToRad = 0.017453289f;

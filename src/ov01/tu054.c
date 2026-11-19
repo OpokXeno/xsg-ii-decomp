@@ -313,3 +313,16 @@ void menuPopNumDrawDigits(GrPacket *packet, int x, int y, struct PopNumDrawObjec
         }
     }
 }
+
+/* Colours of the pop-up numbers (r, g, b, a), picked through menuPopNumColorIndex. */
+MenuRGBA menuPopNumColors[6] = {
+    { 0x80, 0x80, 0x80, 0x80 },
+    { 0x60, 0xff, 0x60, 0x80 },
+    { 0xff, 0x60, 0xff, 0x80 },
+    { 0x60, 0xff, 0xff, 0x80 },
+    { 0xf0, 0xfd, 0x95, 0x80 },
+    { 0, 0, 0, 0 }
+};
+
+/* Colour index of each pop-up kind (kind 0..11) into menuPopNumColors. */
+int menuPopNumColorIndex[12] = { 0, 0, 1, 2, 3, 0, 0, 4, 4, 2, 2, 0 };

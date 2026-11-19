@@ -69,9 +69,10 @@ typedef union UnitTableStorage {
     ObjectTask *tasks[8];
 } UnitTableStorage;
 
-extern UnitTableStorage unitTbl;
-extern int unitPlNum;
-extern int unitEnNum;
+/* The unit table (players from slot 0, enemies from slot 3) and the live counts; tu017.c reads them too. */
+UnitTableStorage unitTbl;
+int unitPlNum;
+int unitEnNum;
 
 void unitInit(void)
 {

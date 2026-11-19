@@ -583,3 +583,12 @@ int tgtSelectManual(Ov01Object *object)
     }
     return 0;
 }
+
+TgtSlot ov01PartyTable[4] = {
+    { 1, 0, 180 },
+    { 4, 1, 180 },
+    { 5, 2, 180 },
+    { 0 },
+};
+
+BattleState tgtSelectState;

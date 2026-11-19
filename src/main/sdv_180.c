@@ -170,8 +170,8 @@ void func_00266D88(void)
 }
 
 char *srsAnalyzeEftNo(int effect_no, int *char_no, int *effect_type);
-extern int D_0069E324;
-extern int D_0069E328;
+static int D_0069E324;
+static int D_0069E328;
 
 void sdvSetAmbStateSub(int state, int effect_no, int force)
 {
@@ -264,3 +264,10 @@ void sdvExecAmbient(void)
         sdvSetAmbient(&map_rgb, &ambient);
     }
 }
+
+/* Ambient data (.data), in address order. D_005E6D28 is never read by this TU. */
+unsigned char D_005E6D28[24] = { 0 };
+float _sdvMapRgb[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+float _sdvAmbient[4] = { 0.25f, 0.25f, 0.25f, 1.0f };
+int _sdvAmbFrame = 0;
+int _sdvAmbState = 0;

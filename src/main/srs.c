@@ -483,8 +483,6 @@ void srsResetKeyTable(void)
 #define SRS_SLOT_BUFFER_SIZE 0x1C000 /* buffer of a wait-slot record */
 #define SRS_BLOCK_BUFFER_SIZE 0x10000 /* buffer srsLoadEffectBlock gives wait slot 0 */
 
-extern const char srsEspCfdefPath[];
-extern const char srsEspDefaultPath[];
 
 /* Loads an effect package file ("esp/cfdef.esp" when cfdef is set, else
  * "esp/default.esp") into the buffer of record 0 of srsRecordTable, allocating
@@ -498,9 +496,9 @@ void srsLoadEspFile(int reload, int cfdef)
     int key;
 
     if (cfdef != 0) {
-        path = srsEspCfdefPath;
+        path = "esp/cfdef.esp";
     } else {
-        path = srsEspDefaultPath;
+        path = "esp/default.esp";
     }
     key = cfdef ? SRS_EFFECT_KEY(1, SRS_ESP_PACKAGE_INDEX, SRS_ESP_PACKAGE_SUB)
                 : SRS_EFFECT_KEY(0, SRS_ESP_PACKAGE_INDEX, SRS_ESP_PACKAGE_SUB);

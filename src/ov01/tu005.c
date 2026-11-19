@@ -52,7 +52,7 @@ void dataObjRelease(void *object) {
     ov01SlotRelease(object);
 }
 
-extern struct ObjSlot objSlotTable[];
+static struct ObjSlot objSlotTable[OBJ_SLOT_COUNT];
 
 /* objSlotClearAll: clears all OBJ_SLOT_COUNT slots. */
 void objSlotClearAll(void)
@@ -376,3 +376,6 @@ void ov01MatrixBlockInit(void *mat)
     block->m[3][1] = 1.0f;
     block->m[3][0] = 1.0f;
 }
+
+/* Overlay heap range (word 0 is the first block, word 1 the end; ov01HeapInit sets them, tu009 reads them). */
+u32 ov01HeapStart[2];

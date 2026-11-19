@@ -66,9 +66,9 @@ static inline void CloseTag(MGsPacket *packet, int nloop)
     }
 }
 
-extern MEfGsQword mefWaveColors[5];      /* colour quadwords */
-extern AlignedVector4 mefWaveTopOffsets[MEF_WAVE_RING_COUNT];  /* per-ring offset added to the top vertex (point0) */
-extern AlignedVector4 mefWaveBottomOffsets[MEF_WAVE_RING_COUNT];  /* per-ring offset added to the bottom vertex (point1) */
+extern const MEfGsQword mefWaveColors[5];      /* colour quadwords */
+extern const AlignedVector4 mefWaveTopOffsets[MEF_WAVE_RING_COUNT];  /* per-ring offset added to the top vertex (point0) */
+extern const AlignedVector4 mefWaveBottomOffsets[MEF_WAVE_RING_COUNT];  /* per-ring offset added to the bottom vertex (point1) */
 
 #define QuadwordCopyT0Dst(destination, source) \
     __asm__ __volatile__( \
@@ -444,3 +444,26 @@ void MEfAdvanceHistoryTrail(WaveHost *host)
         MSeObjRequestFree(host);
     }
 }
+
+/* Wave tables: the five colour quadwords, then the per-ring offsets of the top and bottom vertices. */
+const MEfGsQword mefWaveColors[5] = {
+    0x000000ff000000000000000000000000,
+    0x000000ff000000180000004200000050,
+    0x000000ff000000000000000000000004,
+    0x000000ff000000000000000000000000,
+    0x000000ff000000280000007000000080,
+};
+
+const AlignedVector4 mefWaveTopOffsets[MEF_WAVE_RING_COUNT] = {
+    { -0.005f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, -0.005f, 0.0f, 1.0f },
+    { 0.005f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.005f, 0.0f, 1.0f },
+};
+
+const AlignedVector4 mefWaveBottomOffsets[MEF_WAVE_RING_COUNT] = {
+    { 0.3f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.3f, 0.0f, 1.0f },
+    { -0.3f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, -0.3f, 0.0f, 1.0f },
+};

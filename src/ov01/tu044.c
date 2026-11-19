@@ -10,17 +10,17 @@
 #include "ov01/tu044.h"
 #include "ov01/tu046.h"
 
-extern SbThread sbThreadTable[SB_THREAD_COUNT];
+static SbThread sbThreadTable[SB_THREAD_COUNT];
 
 SbThread *sbThreadTableGet(void) {
     return sbThreadTable;
 }
 
-extern int sbFlags;
+static int sbFlags;
 /* The per-thread areas: operand stack, slot table and message queue of thread index. */
-extern int sbStacks[SB_THREAD_COUNT][SB_STACK_WORDS];
-extern SbSlot sbSlotTables[SB_THREAD_COUNT][SB_SLOT_COUNT];
-extern SbQueue sbChains[SB_THREAD_COUNT];
+static int sbStacks[SB_THREAD_COUNT][SB_STACK_WORDS];
+static SbSlot sbSlotTables[SB_THREAD_COUNT][SB_SLOT_COUNT];
+static SbQueue sbChains[SB_THREAD_COUNT];
 void *memset(void *destination, int value, unsigned int count);
 
 /* Frees every thread record and clears the per-thread areas and the native counts. */
@@ -55,10 +55,10 @@ typedef struct SbNativeOwner {
 #define SB_NATIVE_OWNER_MAX 0x600
 #define SB_NATIVE_METHOD_MAX 0x800
 
-extern SbNativeOwner sbNativeOwners[SB_NATIVE_OWNER_MAX];
-extern int sbNativeOwnerCount;
-extern SbNativeMethod sbNativeMethods[SB_NATIVE_METHOD_MAX];
-extern int sbNativeMethodCount;
+static SbNativeOwner sbNativeOwners[SB_NATIVE_OWNER_MAX];
+static int sbNativeOwnerCount;
+static SbNativeMethod sbNativeMethods[SB_NATIVE_METHOD_MAX];
+static int sbNativeMethodCount;
 
 void sbResetNativeCounts(void) {
     sbNativeMethodCount = 0;
@@ -324,7 +324,6 @@ int sbFindNative(const char *ownerName, const char *methodName)
     return -1;
 }
 
-extern int sbFlags;
 
 int sbFlagsGet(void) {
     return sbFlags;
@@ -1361,3 +1360,71 @@ int sbOpSwitch(SbThread *thread)
     thread->pc = sbCodeS32(thread, thread->pc + 3);
     return 0;
 }
+
+/* Operand length in halfwords of each opcode (sbOpLength); 0 for the variable-length switch. */
+signed char sbOpLengths[48] = {
+    1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1,
+    1, 1, 3, 3, 3, 1, 3, 1, 1, 3, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0,
+};
+
+/* Handlers 0x26..0x2C are in tu045. */
+int sbPushConst0(SbThread *thread, int opcode);
+int func_00A9EE78(SbThread *thread, int opcode);
+int sbPushConst1(SbThread *thread, int opcode);
+int sbPushConst2(SbThread *thread, int opcode);
+int sbPushConst3(SbThread *thread, int opcode);
+int sbPushConst4(SbThread *thread, int opcode);
+int sbPushConst5(SbThread *thread, int opcode);
+int sbPushConst6(SbThread *thread, int opcode);
+
+/* Handler of each opcode, indexed by opcode (sbStep). */
+int (*sbOpHandlers[46])(SbThread *, unsigned int) = {
+    sbOpNop,
+    sbOpBinary,
+    func_00A9DDE0,
+    sbOpPushWord,
+    func_00A9DE80,
+    func_00A9DEE0,
+    func_00A9DF20,
+    func_00A9DF80,
+    sbOpPushGlobal,
+    sbOpPushLocal,
+    sbOpStoreGlobal,
+    sbOpStoreLocal,
+    sbOpStoreGlobalKeep,
+    sbOpStoreLocalKeep,
+    sbOpJump,
+    sbOpJumpIfZero,
+    sbOpJumpIfNotZero,
+    sbOpEnterFrame,
+    sbOpCall,
+    sbOpReturn,
+    sbOpReturnValue,
+    sbOpCallNative,
+    sbOpSpawn,
+    sbOpKillThread,
+    sbOpDup,
+    sbOpDrop,
+    sbOpLoadGlobal,
+    sbOpLoadLocal,
+    sbOpEnd,
+    sbOpYield,
+    sbOpWaitFrames,
+    sbOpSend,
+    sbOpReceive,
+    sbOpIncGlobal,
+    sbOpIncLocal,
+    sbOpDecGlobal,
+    sbOpDecLocal,
+    sbOpSwitch,
+    sbPushConst0,
+    func_00A9EE78,
+    sbPushConst1,
+    sbPushConst2,
+    sbPushConst3,
+    sbPushConst4,
+    sbPushConst5,
+    sbPushConst6,
+};

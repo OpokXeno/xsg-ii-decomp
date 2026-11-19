@@ -274,3 +274,26 @@ void MSeSetMode1Hook(MSeHook hook) {
 void MSeSetMode2Hook(MSeHook hook) {
     MSeMode2Hook = hook;
 }
+/* Data of this unit's section .sdata: the MSe pool state and hooks, the trace format, the word of
+ * saveReadImage and saveWriteImage (D_0069DC7C) and the trace string. */
+unsigned short MSeObjReady = 0;
+int MSeObjCount = 0;
+MSeObj *MSeObjPool = 0;
+MSeHook MSeMode1Hook = 0;
+MSeHook MSeMode2Hook = 0;
+int D_0069DC7C = 0;
+const char tracePrintFormat[8] = "%s";
+
+/* Data of this unit's section .data: the save blocks and tables that saveReadImage and saveWriteImage copy
+ * (zero until the first save or load), and the two large zero areas. */
+/* The camera snapshot of MSeObjProc mode 0 (include/main/tu197.h). */
+MEfCameraParams MEfCamParams = { 0 };
+int D_0061B380[0x420] = { 0 };
+int D_0061C400[0x100] = { 0 };
+
+short D_0061C800[0x100] = { 0 };
+short D_0061CA00[0x100] = { 0 };
+short D_0061CC00[0x100] = { 0 };
+short D_0061CE00[0x100] = { 0 };
+int D_0061D000[0xC00] = { 0 };
+unsigned char D_00620000[0x11140] = { 0 };

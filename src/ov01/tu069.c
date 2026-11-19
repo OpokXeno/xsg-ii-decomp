@@ -7,8 +7,9 @@
 
 void *memset(void *dst, int value, unsigned int size);
 void func_00138D78(int index);
-extern HandleSlot handleSlots[HANDLE_SLOT_COUNT];
-extern unsigned int handleBumpCursor;
+/* The handle table (tu070.c reads the state word of each record through D_00AE0F20) and its bump cursor. */
+static HandleSlot handleSlots[HANDLE_SLOT_COUNT];
+static unsigned int handleBumpCursor;
 
 /* Clears the handle table, runs func_00138D78 for slot 0 and for each of the six handles, and resets the bump cursor. */
 void handleTableInit(void)

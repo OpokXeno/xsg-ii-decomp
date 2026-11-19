@@ -17,7 +17,13 @@
 #include "ov01/tu044.h"
 #include "ov01/tu046.h"
 
-extern int dataModelKeyTbl[];
+/* Model key of each unit index (dataModelKeyGet). */
+static int dataModelKeyTbl[26] = {
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00010008,
+    0x0001002B, 0x0001002A, 0x00000000, 0x00010032, 0x00010032, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00014007, 0x00014006, 0x00000000, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000
+};
 
 int dataModelKeyGet(int index) {
     return dataModelKeyTbl[index];
@@ -514,8 +520,8 @@ char *tableStringGet(int index, int mode)
 
 /* Message globals: msgPages is the text page list {text, 0} that msgPutObject passes to textEntryAlloc; msgBusy
  * is the busy flag (1 while a message is outstanding). */
-extern unsigned char *msgPages[2];
-extern int msgBusy;
+static unsigned char *msgPages[2];
+static int msgBusy;
 
 /* Clears the message request block and the busy flag. */
 void msgReset(void) {

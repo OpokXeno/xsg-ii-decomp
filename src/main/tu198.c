@@ -192,3 +192,11 @@ void fadeApplyColor(float red, float green, float blue, float alpha)
         xglRenderGlobalFadeSet(red / 255.0f, green / 255.0f, blue / 255.0f, alpha / 255.0f);
     }
 }
+
+/* Fade record (.data), zero until the first fade starts. */
+FadeState fadeState = { 0 };
+
+/* Fade strings (.sdata): tu199 data (its .word table) refers to them. */
+int D_0069DC88 = 0;
+char D_0069DC90[8] = "Fadeout";
+char D_0069DC98[8] = "Fadein";

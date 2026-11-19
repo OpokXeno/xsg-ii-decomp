@@ -59,12 +59,15 @@ segments:
       - [0x1000, c, ov02/tu000]
       - [0x1798, c, ov02/tu001]
       - [0x2C78, c, ov02/tu002]
-      - [0x3848, data, ov02/unsplit]
+      - [0x3848, data, ov02/tu000]
+      - [0x39A8, data, ov02/tu001]
+      - [0x40A0, data, ov02/tu002]
       - [0x4178, rodata, ov02/tu000]
       - [0x4450, rodata, ov02/tu001]
       - [0x4530, rodata, ov02/tu002]
       - [0x4C48]
-      - { type: bss, vram: 0x00A83C48, name: ov02/unsplit }
+      - { type: bss, vram: 0x00A83C48, name: ov02/tu001 }
+      - { type: bss, vram: 0x00A83E20, name: ov02/tu002 }
   - [0x4C48, pad, ov02_bss_file_image]
   - [0x4E28, bin, elf_shstrtab]
   - [0x4E48, bin, elf_section_headers]

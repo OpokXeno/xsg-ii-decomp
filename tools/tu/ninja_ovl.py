@@ -277,6 +277,38 @@ def scaffold_aliases(unit_dir, ctus, orig, registry=None, unit=None, linker_scri
                 # As above, these retained scaffold aliases refer to exact
                 # original storage addresses in both ROM and ELF link scripts.
                 out.append(f'PROVIDE("{alias}" = 0x{address:08X});')
+    # As main's c_aliases.ld (tools/tu/ninja_main.py): every scaffold label inside a C-owned carve run names its
+    # original address, so a field or element view another object reaches by its own label (unitTbl+0xC,
+    # handleSlots+8, a string a pointer table names) resolves to the C storage. PROVIDE never overrides a
+    # definition; the whole-file gate proves the addresses (data pass 7, 2026-11-19).
+    if registry is not None and unit is not None:
+        stems = data_carve.ovl_tu_names(ROOT, unit)
+        provided = []
+        for tu_id, sections in sorted(registry.get("tus", {}).items()):
+            stem = stems.get(tu_id)
+            if not tu_id.startswith(unit + "/") or stem is None:
+                continue
+            for section, runs in sections.items():
+                piece = data_carve.ovl_piece(unit_dir, unit, stem, section)
+                if not piece:
+                    continue
+                spans = [(int(run["range"][0], 16), int(run["range"][1], 16)) for run in runs]
+                current = None
+                for line in (unit_dir / piece["file"]).read_text().splitlines():
+                    label = re.match(r"\s*(?:dlabel|jlabel|alabel)\s+(\S+?)(?:,.*)?$", line)
+                    if label:
+                        current = label[1]
+                        continue
+                    where = re.match(r"\s*/\*\s*(?:[0-9A-F]+\s+)?([0-9A-F]{8})(?:\s|\*/)", line)
+                    if current and where:
+                        address = int(where[1], 16)
+                        if current not in seen and any(lo <= address < hi for lo, hi in spans):
+                            seen.add(current)
+                            provided.append(f'PROVIDE("{current}" = 0x{address:08X});')
+                        current = None
+        if provided:
+            out.append("/* scaffold labels of C-owned carve runs, at their original addresses */")
+            out.extend(provided)
     # The recovered source name of a splat placeholder (config/symbols/<unit>.renames.json,
     # docs/naming.md) is the same address.  Data still owned by the scaffold keeps its label,
     # so C reaches it through this name; PROVIDE never overrides a C definition of the name.
@@ -326,6 +358,31 @@ def bss_allocations(unit, unit_dir, unit_text, ctus, record_path=None):
             raise SystemExit(f"overlay BSS record maps {raw} to conflicting allocated objects")
         by_raw[raw] = allocated
     return by_raw
+
+
+# Raw objects whose `.bss` C runs are allocated by a plain `ld -r -d` (rule alloccommon), as main does
+# (tools/tu/ninja_main.py): a uniform-common or static `.bss` needs no evidence record, because the
+# carve's derive proves every owner's original address and the whole-file gate proves the bytes
+# (data pass 7, 2026-11-19).
+PLAIN_ALLOCATIONS = set()
+
+
+def plain_bss_allocations(unit, unit_text, ctus, registry, recorded):
+    """Raw linker object -> allocated object for every C TU with a `.bss`/`.sbss` carve run and no record."""
+    out = {}
+    for tu_id, sections in registry.get("tus", {}).items():
+        if not tu_id.startswith(unit + "/") or not any(sec in (".bss", ".sbss") for sec in sections):
+            continue
+        name = next((n for n, t in ctus.items() if tu_id in (t["id"], t["id"].split("_")[0])), None)
+        if name is None:
+            raise SystemExit(f"overlay .bss carve run names a non-C TU: {tu_id}")
+        match = re.search(r"(build/(?:scaffold/)?src/" + re.escape(unit) + "/" +
+                          re.escape(name) + r"\.o)\(\.text\);", unit_text)
+        if not match or match.group(1) in recorded:
+            continue
+        out[match.group(1)] = f"build/c/{unit}/{name}.allocated.o"
+        PLAIN_ALLOCATIONS.add(out[match.group(1)])
+    return out
 
 
 def restore_bss_inputs(unit, text, ctus, record_path):
@@ -532,6 +589,8 @@ def main():
     # placed from its object. An earlier carve is undone first; nothing declared
     # leaves splat's script unchanged.
     allocated_inputs = bss_allocations(unit, unit_dir, text, ctus)
+    allocated_inputs.update(plain_bss_allocations(unit, text, ctus, json.loads(CARVE_REGISTRY.read_text()),
+                                                  allocated_inputs))
     carved, carve_report = data_carve.apply_overlay(
         ROOT, unit_dir, unit, text, registry=json.loads(CARVE_REGISTRY.read_text()),
         c_object_overrides=allocated_inputs)
@@ -644,6 +703,9 @@ def main():
         f"  command = {TIMEOUT} $py {OVERLAY_LINK} allocate --root {ROOT} --record {BSS_RECORD} "
         "--tu $tu --raw $in --out $alloc_out --report $report",
         "  description = LD -r -d $out",
+        "rule alloccommon",
+        "  command = $ld -r -d $gflag -EL -m elf32lr5900 -o $out $in && cp $rawstem.s $out.s && cp $rawstem.i $out.i",
+        "  description = LD-ALLOC $out",
         "rule scaffold_aliases",
         f"  command = {TIMEOUT} $py {HERE}/ninja_ovl.py {unit_dir} {unit} --root {ROOT} "
         f"--manifest {a.manifest.resolve()} --carve-registry {CARVE_REGISTRY} --emit-scaffold-aliases",
@@ -715,7 +777,11 @@ def main():
         elif allocated_obj:
             name = Path(raw_obj).stem
             emit_cc(raw_obj, name)
-            if allocated_obj != obj:
+            if allocated_obj in PLAIN_ALLOCATIONS:
+                # -G as the TU's contract: under -G0 the original link put every common in .bss, never .scommon.
+                lines += [f"build {allocated_obj}: alloccommon {raw_obj}", f"  rawstem = {raw_obj[:-2]}",
+                          f"  gflag = {ctus[name]['flags'][1]}"]
+            elif allocated_obj != obj:
                 lines += [f"build {allocated_obj} | {allocated_obj}.report.json: allocate_bss {raw_obj} | {OVERLAY_LINK} {BSS_RECORD}",
                           f"  alloc_out = {allocated_obj}",
                           f"  report = {allocated_obj}.report.json",
@@ -727,7 +793,7 @@ def main():
                                for r in carve_report if r['tu'] == split['tu']]
                 lines += [f"build {obj}: carvesplit {compiled_obj} | {' '.join(split_deps)}",
                           f"  tu = {split['tu']}"]
-            elif allocated_obj == obj:
+            elif allocated_obj == obj and allocated_obj not in PLAIN_ALLOCATIONS:
                 lines += [f"build {allocated_obj} | {allocated_obj}.report.json: allocate_bss {raw_obj} | {OVERLAY_LINK} {BSS_RECORD}",
                           f"  alloc_out = {allocated_obj}",
                           f"  report = {allocated_obj}.report.json",

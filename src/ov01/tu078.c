@@ -91,7 +91,13 @@ typedef struct MEfSwayObject {
     MEfSwayBlock block;                      /* +0x20 */
 } MEfSwayObject;
 
-extern Vector4 mefSwayEdgePoints[];
+/* The two edge points of the sway, then four words (0x30, 0x50, 0x60, 0xa0) of unknown meaning. */
+typedef struct MEfSwayEdgeTable {
+    Vector4 points[2];
+    unsigned int words[4];
+} MEfSwayEdgeTable;
+
+extern const MEfSwayEdgeTable mefSwayEdgePoints;
 
 int ov01LastValueGet(void);
 extern float MMathMakeRandomSigned(void);
@@ -244,10 +250,20 @@ void pxySubmitModel(s32 value);
 void svGetPrmFromName(void *table, s32 slot, s32 *params);
 void nmlModelSetTransparency(f32 transparency);
 extern s64 mefStencilAlphaA;
-extern unsigned char mefStencilModelNameA[];
+extern const unsigned char mefStencilModelNameA[];
 
 int func_002A7510(double a, double b);
-extern Vector4 mefSwayArmAngles;
+extern const Vector4 mefSwayArmAngles;
+
+/* Stencil A and sway data of the rodata: the model name table, the sway edge table, the arm angles. */
+const unsigned char mefStencilModelNameA[16] = "missile.pxy";
+
+const MEfSwayEdgeTable mefSwayEdgePoints = {
+    { { -0.018f, 0.0f, 0.0f, 1.0f }, { 0.018f, 0.0f, 0.0f, 1.0f } },
+    { 0x30, 0x50, 0x60, 0xa0 },
+};
+
+const Vector4 mefSwayArmAngles = { 1.5707964f, 1.5707964f, 1.5707964f, 1.0f };
 /* Five passes of the stencil draw (the loop counter runs from 4 down to -1). The
  * parameter record (8 ints) is looked up by slot; params[4] and params[5] feed the
  * two calls after the model setup. */
@@ -370,8 +386,8 @@ void MEfDrawSwayStrands(MEfSwayObject *object)
                 :
                 : "r" (sample), "r" (strandMatrix), "r" (sample), "r" (strandMatrix)
                 : "memory");
-            MMathApplyMatrix(&leftEdge, &strandMatrix, &mefSwayEdgePoints[0]);
-            MMathApplyMatrix(&rightEdge, &strandMatrix, &mefSwayEdgePoints[1]);
+            MMathApplyMatrix(&leftEdge, &strandMatrix, &mefSwayEdgePoints.points[0]);
+            MMathApplyMatrix(&rightEdge, &strandMatrix, &mefSwayEdgePoints.points[1]);
             if (MMathRotTransPersClip(&topVertex.vector, camera, cameraView, &leftEdge) != 0) {
                 skipSteps = 2;
             } else if (skipSteps != 0) {
@@ -463,3 +479,5 @@ void MEfAdvanceSway(MEfSwayObject *object)
         MSeObjRequestFree(object);
     }
 }
+
+s64 mefStencilAlphaA = 0x44;

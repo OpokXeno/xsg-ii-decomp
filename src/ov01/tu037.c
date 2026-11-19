@@ -42,8 +42,11 @@ void handleTableInit(void);
 /* main xgl_2 (no header prototype: nml_model_set passes its own light block type). */
 void xglLightSetDefault(XglLightSet *lightSet);
 
+/* Cleared when the scene loop starts; no code of the overlay reads it. */
+static int D_00AC4190;
+
 /* Frames run by the scene loop (counted by ov01SceneLoop). */
-extern int ov01SceneFrames;
+static int ov01SceneFrames;
 
 /* Scene init: runs the reset chain of the battle systems, makes the light block the default light set of xgl and
  * tu156, resets the menus and text systems, clears the frame counter ov01SceneFrames and sets the draw hook
@@ -84,9 +87,6 @@ void ov01SceneEnter(void) {
     ov01SceneInit();
     ov01StepChainStart();
 }
-
-/* Cleared when the scene loop starts; no code of the overlay reads it. */
-extern int D_00AC4190;
 
 int ov01SoftResetPressed(void);
 int func_00A9A138(void);
@@ -297,3 +297,6 @@ void battleStartBonusApply(void)
         sefStartEffectDefault(&request);
     }
 }
+
+/* Scene done flag, set by ov01StepFinish and read by the scene steps of tu038 and tu039. */
+int ov01SceneDone;

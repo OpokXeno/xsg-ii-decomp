@@ -391,3 +391,6 @@ void gridDrawCells(GsQueueContext *record, XglPacket *packet) {
         gsQueueFlush(packet);
     }
 }
+
+int orbitRingPhase = 0;
+float orbitDegToRad = 0.017453289f;

@@ -72,26 +72,40 @@ struct SlotRecord {
 };
 
 
+/* One 0x1F0-byte unit record, copied as doublewords. */
+struct Ov01Snapshot {
+    unsigned long long words[62];
+};
+
+/*
+ * Uninitialized storage of this file, in address order (only this file names these labels).
+ * boostGaugeParty is the party gauge (maxStock, stock, progress at +0, +1, +2); the rest gauge is at +4.
+ */
+static StatOwner battleContextTable[2];
+static StatBlock battleStateTable[2];
+static StatBlock battleEntryPoolA[BATTLE_ENTRY_POOL_A_COUNT];
+static StatBlock battleEntryPoolB[BATTLE_ENTRY_POOL_B_COUNT];
+static struct ActStock actStock;
+static signed char boostGaugeParty[8];
+static StatOwner *tgtTbl[8];
+static int tgtIdx;
+static int tgtNum;
+static struct ActStepCounter actStepCounter;
+static struct BattleResult battleResult;
+static struct Ov01Snapshot partySnapshots[3];
+static StatOwner *partySnapshotPtrs[4];
+static unsigned char actEntryFlags[24];
+static unsigned char D_00AC2AC8[8];
+
 extern StatBlock battleSlotTable[];
-extern StatBlock battleEntryPoolA[BATTLE_ENTRY_POOL_A_COUNT];
-extern StatBlock battleEntryPoolB[BATTLE_ENTRY_POOL_B_COUNT];
 extern unsigned char D_0069DC7C;
-extern unsigned char boostGaugeParty[8];
-extern unsigned char boostGaugeRest[];
-extern unsigned char D_00AC2AC8[];
 /*
  * tgtFindFirst's candidate table: tgtNum entries of tgtTbl are filled in target-search
  * order, tgtIdx walks them out one at a time. The gap between tgtTbl and tgtIdx
  * (0x00a57e68..0x00a57e88, 0x20 bytes) is this array's only size evidence.
  */
-extern StatOwner *tgtTbl[8];
-extern int tgtIdx;
-extern int tgtNum;
-extern unsigned char actEntryFlags[];
 extern int battleMaskWordTable[];
 extern unsigned char slotRecordTable[];
-extern struct ActStepCounter actStepCounter;
-extern struct ActStock actStock;
 void *memset(void *destination, int value, unsigned int count);
 int rnd(int limit);
 float atan2f(float y, float x);
@@ -512,8 +526,6 @@ void battleEntryActivate(StatOwner *owner, int key)
     unitStatsRefresh(owner);
 }
 
-extern StatBlock battleStateTable[];
-extern StatOwner battleContextTable[];
 
 /*
  * Binds slot `key` to the battle block of the unit selected by contextIndex
@@ -885,7 +897,16 @@ int unitCurrentAdd(StatOwner *unit, int amount)
 
 /* ---- old ov01/tu026 ---- */
 extern unsigned char calcStatDefTurnTable[];
-extern unsigned char calcStatInflictPenaltyTable[];
+/*
+ * The penalty table and the entry masks are one object: calcEntryMasks follows calcStatInflictPenaltyTable
+ * at 0x00ac5a14, 4 bytes past an 8-aligned array start, so an array of its own cannot sit there.
+ */
+struct CalcTables {
+    unsigned char inflictPenalty[44];       /* rows of 16 status bits, read by calcStatInflictPenaltyGet */
+    int entryMasks[11];                     /* entry masks, read by calcEntryMaskTest (index 1 to 10) */
+};
+
+extern struct CalcTables calcTables;
 
 /* calcHpAdjust: HP at +0x5C moves by delta, clamped to [0, max] (max is the unaligned int at +0x2); returns 1 while HP stays above 0. calcHpDmg calls it. */
 int calcHpAdjust(StatOwner *unit, int delta)
@@ -2358,7 +2379,7 @@ signed char calcStatInflictPenaltyGet(int row, int statBit)
         return 0;
     }
     bitIdx = calcStatBit2Idx(statBit);
-    return (signed char)calcStatInflictPenaltyTable[(row * 16) + bitIdx];
+    return (signed char)calcTables.inflictPenalty[(row * 16) + bitIdx];
 }
 
 int calcStatInflictRate(struct AttackCommand *command, StatOwner **targetSlot, int row, int statBit)
@@ -2855,16 +2876,15 @@ int slotMarkClear(StatOwner *owner, int bit)
 }
 
 /* ---- old ov01/tu028 ---- */
-extern struct BattleResult battleResult[];
 
 /* Clears the battle result block. */
 void battleResultReset(void) {
-    memset(battleResult, 0, 0x50);
+    memset(&battleResult, 0, 0x50);
 }
 
 /* Returns the battle result block. */
 struct BattleResult *battleResultGet(void) {
-    return battleResult;
+    return &battleResult;
 }
 
 /*
@@ -2921,14 +2941,6 @@ void battleResultAdd(StatOwner *unit) {
  * party unit (unitTblGet side 0) into a 0x1F0-byte slot of partySnapshots and
  * stores that slot's address in partySnapshotPtrs.
  */
-/* One 0x1F0-byte unit record, copied as doublewords. */
-struct Ov01Snapshot {
-    unsigned long long words[62];
-};
-
-extern signed char partyBoostStock;
-extern unsigned char partySnapshots[];
-extern StatOwner *partySnapshotPtrs[];
 
 void partySnapshotBuild(void) {
     StatOwner **units;
@@ -2937,7 +2949,7 @@ void partySnapshotBuild(void) {
     int i;
 
     battleFlushActiveEntries();
-    D_6A2DF0[-5213] = partyBoostStock;
+    D_6A2DF0[-5213] = boostGaugeParty[1];
     snapshots = (struct Ov01Snapshot *)partySnapshots;
     memset(snapshots, 0, sizeof(struct Ov01Snapshot) * 3);
     memset(partySnapshotPtrs, 0, 12);
@@ -3746,14 +3758,13 @@ int tgtRecordCanTarget(StatOwner *target, int id)
     return tgtCollectUnits(target, tecFlags, 0) != 0;
 }
 
-extern int calcEntryMasks[];
 
 int calcEntryMaskTest(int index, int mask)
 {
     if (index == 0 || index >= 11) {
         return 0;
     }
-    return (calcEntryMasks[index] & mask) != 0;
+    return (calcTables.entryMasks[index] & mask) != 0;
 }
 
 /*
@@ -4087,7 +4098,7 @@ struct BoostGauge *boostGaugeGet(StatOwner *unit)
     if (unit->stats->key < BATTLE_SLOT_KEY_LIMIT) {
         return (struct BoostGauge *)boostGaugeParty;
     }
-    return (struct BoostGauge *)boostGaugeRest;
+    return (struct BoostGauge *)&boostGaugeParty[4];
 }
 
 /* Returns the entry at 0x00ac2434 when flag is nonzero, else the entry at 0x00ac2430. */
@@ -4096,7 +4107,7 @@ struct BoostGauge *boostGaugeSelect(int flag)
     if (flag == 0) {
         return (struct BoostGauge *)boostGaugeParty;
     }
-    return (struct BoostGauge *)boostGaugeRest;
+    return (struct BoostGauge *)&boostGaugeParty[4];
 }
 
 /* Returns 1 when the stock slot at index 4 or index 5 of the actStockGet table is set, else 0. */
@@ -4545,3 +4556,28 @@ void actStockClearBoost1(void)
 /* Names the overlay .data tables reach (the tables are not split per file yet). */
 const char D_00ABA420[] = "kosmos_udeR";
 const char D_00ABA430[] = "jin_saya_tuka";
+
+/* Initialized overlay data of this file (the mask and turn tables and the entry masks), in address order. */
+int battleMaskWordTable[12] = {
+    1, 2, 3, 4, 5, 6, 7, 11,
+    12, 13, 0, 0
+};
+
+unsigned char calcStatDefTurnTable[64] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x00, 0x00, 0x00, 0x05, 0x00,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x03, 0x00, 0xFF, 0x00,
+    0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00
+};
+
+struct CalcTables calcTables = {
+    {
+    0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x00, 0x00,
+    0x0F, 0x0A, 0x05, 0x05, 0x05, 0x0A, 0x05, 0x05, 0x0F, 0x0A, 0x0A, 0x00, 0x00, 0x00, 0x0A, 0x00,
+    0x19, 0x14, 0x0F, 0x0F, 0x0F, 0x14, 0x0F, 0x0F, 0x19, 0x14, 0x14, 0x14
+    },
+    {
+    0x00140014, 0x00008000, 0x00004000, 0x00002000, 0x00001000, 0x00000800,
+    0x00000400, 0x00000200, 0x00000000, 0x00000000, 0x00000000
+    }
+};

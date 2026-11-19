@@ -16,7 +16,7 @@
 /* Entries in the two-entry dataObjTable. */
 #define DATA_OBJ_SLOT_COUNT 2
 
-extern struct DataObject dataObjTable[DATA_OBJ_SLOT_COUNT];
+static struct DataObject dataObjTable[DATA_OBJ_SLOT_COUNT];
 
 /* Releases one unit side slot (unitRemove calls it; tu003 unitSideTable). */
 void unitRelease(void) {

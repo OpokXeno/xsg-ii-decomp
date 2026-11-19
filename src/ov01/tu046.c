@@ -147,7 +147,7 @@ void func_00A9F2E0(SbThread *thread, int pc)
 INCLUDE_ASM("asm/nonmatchings/ov01/tu046", func_00A9F2E8);
 
 /* Entry chosen by posDataSet; posDataGet returns it. */
-extern int posDataEntry;
+static int posDataEntry;
 
 int posDataSet(SbThread *thread)
 {
@@ -170,7 +170,7 @@ struct EffectPosRecord *posDataGet(void)
 
 /* The monster table entry monsTblSet selected (the enemy list, an array of spawn records); monsTblGet returns it.
  * While monsTblSet works it is its cursor over the candidate list, entries {table, value}. */
-extern int *monsTblEntry;
+static int *monsTblEntry;
 
 /* At most this many candidates in a monster table list (the list ends at an entry whose table word is 0). */
 #define MONS_TBL_CANDIDATES_MAX 1000
@@ -223,7 +223,7 @@ void monsSetNoGet(void)
 }
 
 /* First argument of the last cameraSet call, stored as given. */
-extern int D_00AE0C28;
+static int D_00AE0C28;
 
 int cameraSet(SbThread *thread)
 {

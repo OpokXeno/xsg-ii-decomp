@@ -382,3 +382,12 @@ void menuIconEntryDraw(void *packet, int x, int y, int kind, int colourIndex, in
     menuStatSprite2RGB(packet, x - half, y - half, dx + 24, dx + 18, srcLeft, 36, srcRight, 54,
                        &menuIconColors[colourIndex]);
 }
+
+/* The icon list panel, a common global. */
+IconListPanel *menuIconListPanel;
+
+/* Plain and marked colour of an icon (r, g, b, a). */
+MenuRGBA menuIconColors[2] = {
+    { 0x80, 0x80, 0x80, 0x80 },
+    { 0xff, 0x60, 0x60, 0x80 }
+};

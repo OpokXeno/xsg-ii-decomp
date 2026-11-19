@@ -53,16 +53,22 @@ typedef struct UnitSpawnRecord {
     int spawnArgD;
 } UnitSpawnRecord;
 
-extern int ov01LoadDone;
-extern struct DataSlot *ov01LoadOwner;
-extern int ov01PartyIndex;
-extern int ov01EnemyIndex;
-extern UnitSpawnRecord *ov01PartyList;
-extern UnitSpawnRecord *ov01EnemyList;
-void ExitDeleteThread(void);
+/* Handles of the battle setup: the stream buffer and the sound/monster slot handle (ov01StepOpenHandles). */
+static int ov01StreamBuffer[1] = { 0 };
+static int D_00AB5CD4 = 0;
 /* The unit being spawned and its data slot (dataUnitLoad), kept between the spawn, load and await steps. */
-extern struct DataSlot *ov01CurSlot;
-extern Ov01Object *ov01CurUnit;
+static struct DataSlot *ov01CurSlot = 0;
+static Ov01Object *ov01CurUnit = 0;
+/* Party and enemy spawn cursors and their record lists (ov01PartyListGet, monsTblGet). */
+static int ov01PartyIndex = 0;
+static int ov01EnemyIndex = 0;
+static UnitSpawnRecord *ov01EnemyList = 0;
+static UnitSpawnRecord *ov01PartyList = 0;
+/* Load thread stack (ov01LoadBlockStart, ov01LoadRequest), load-done flag and owner of the pending load. */
+static unsigned char D_00AC41A0[0x1000];
+static int ov01LoadDone;
+static struct DataSlot *ov01LoadOwner;
+void ExitDeleteThread(void);
 void dataCdArenaOpen(void);
 void ov01StepSetNext(void *item, void (*next_step)(int context));
 void ov01LoadBlockStart(void);
@@ -116,7 +122,6 @@ typedef struct ThreadParam {
 #define OV01_LOAD_THREAD_STACK_SIZE 0x1000
 #define OV01_LOAD_THREAD_PRIORITY 8
 
-extern unsigned char D_00AC41A0[];
 extern unsigned char D_6A2DF0[];
 int CreateThread(ThreadParam *param);
 int StartThread(int thread, void *arg);
@@ -245,13 +250,11 @@ void ov01StepAwaitBlockLoad(int context) {
 
 /* Opens two handles (D_00AB5CD4, ov01StreamBuffer) and continues to ov01StepBindAndShow. */
 void ov01StepOpenHandles(int context) {
-    extern int ov01StreamBuffer[];
-    extern int D_00AB5CD4[];
     UnitScriptEvent event;
 
     menuTexFlushTaskStart();
     seVoiceStartTagged(2, 4);
-    D_00AB5CD4[0] = monsSlotCreate();
+    D_00AB5CD4 = monsSlotCreate();
     ov01StreamBuffer[0] = dataStreamOpen(monsTblValueGet(), 0);
     event.unit = 0;
     unitScriptEventSend(6, &event);
@@ -261,10 +264,7 @@ void ov01StepOpenHandles(int context) {
 
 /* Binds the two handles, then continues to ov01StepLoadPartyIds. */
 void ov01StepBindAndShow(int context) {
-    extern int ov01StreamBuffer;
-    extern int D_00AB5CD4;
-
-    monsSlotCopyParams(D_00AB5CD4, ov01StreamBuffer);
+    monsSlotCopyParams(D_00AB5CD4, ov01StreamBuffer[0]);
     monsSlotShow(D_00AB5CD4);
     nmlModelEnableSubWindow0();
     ov01StepSetNext(context, ov01StepLoadPartyIds);

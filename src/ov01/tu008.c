@@ -578,9 +578,15 @@ struct DataStreamEntry {
     struct DataMapFiles maps[1];
 };
 
-extern struct DataSlot dataSlotPool[DATA_SLOT_COUNT];
-extern struct DataStreamEntry dataStreamPool[DATA_STREAM_COUNT];
-extern struct DataEntry dataEntryBlock;
+static struct DataSlot dataSlotPool[DATA_SLOT_COUNT];
+static struct DataStreamEntry dataStreamPool[DATA_STREAM_COUNT];
+static struct DataEntry dataEntryBlock;
+static struct DataFileRecord dataStatRecord;
+static struct DataFileRecord dataFaceRecord;
+static struct DataFileRecordPair dataBattleSeRecords;
+static struct DataFileRecord D_00AC0E28;
+static char dataPathBuf[256];
+static char dataEntryPathBuf[256];
 
 void dataFileInit(void) {
     memset(dataSlotPool, 0, sizeof(dataSlotPool));
@@ -649,11 +655,9 @@ void dataBatDatLoad(void) {
 }
 
 int sprintf(char *, const char *, ...);
-extern char dataPathBuf[];
 extern char *dataThinkPath;
 extern char *dataThinkJpPath;
 
-extern struct DataFileRecord D_00AC0E28;
 
 void dataThinkScriptLoad(int index)
 {
@@ -673,14 +677,12 @@ void dataThinkScriptLoad(int index)
 }
 
 extern char *dataStatPath;
-extern struct DataFileRecord dataStatRecord;
 
 void dataStatFileLoad(void) {
     dataFileBufLoad(&dataStatRecord, dataStatPath, DATA_STAT_BUF_SIZE);
 }
 
 extern char *dataFacePath;
-extern struct DataFileRecord dataFaceRecord;
 
 void dataFaceFileLoad(void) {
     int face_handle;
@@ -699,7 +701,6 @@ extern char *dataBattleSeName;
 extern char *dataVoiceDirPath;
 extern char *dataVsfExt;
 extern char *dataPrjExt;
-extern struct DataFileRecordPair dataBattleSeRecords;
 
 void dataBattleSeLoad(void)
 {
@@ -1002,7 +1003,6 @@ struct DataSlot *dataUnitLoad(int id)
 }
 
 char *xglCdBuildFileName(char *buffer, unsigned int file_id);
-extern char dataEntryPathBuf[];
 
 /* Table offsets are plain ints here (the original computed base + offset for every record), so the slot is added to
  * them as a byte pointer: the typed slot is the parameter, `table` its byte view (typed spellings fold the constants). */
@@ -1757,3 +1757,509 @@ int battleCodeMatches(int kind, int code)
         return 0;
     }
 }
+
+/* Initialized overlay data of this file (the scaffold pieces of .data, address order). */
+char *dataBatDatPath = (char *) D_00AB8CA0;
+
+char *dataStatPath = (char *) D_00AB8CB8;
+
+char *dataFacePath = (char *) D_00AB8CD0;
+
+char *dataBattleSeName = (char *) D_00AB8CE8;
+
+char *dataThinkPath = (char *) D_00AB8CF0;
+
+char *dataThinkJpPath = (char *) D_00AB8D08;
+
+char *dataModelDirPath = (char *) D_00AB8D20;
+
+char *dataPxyExt = (char *) D_00AB8D28;
+
+char *dataTxyExt = (char *) D_00AB8D30;
+
+char *dataXhrExt = (char *) D_00AB8D38;
+
+char *dataEpfExt = (char *) D_00AB8D40;
+
+char *dataMotDirPath = (char *) D_00AB8D48;
+
+char *dataXapExt = (char *) D_00AB8D58;
+
+char *dataBattleDirPath = (char *) D_00AB8D60;
+
+char *dataVoiceDirPath = (char *) D_00AB8D68;
+
+char *dataVsfExt = (char *) D_00AB8D80;
+
+char *dataPrjExt = (char *) D_00AB8D88;
+
+char *dataMapDirPath = (char *) D_00AB8D90;
+
+unsigned char *dataModelNameTbl[26] = {
+    0, (unsigned char *) D_00AB8EA0,
+    (unsigned char *) D_00AB8E88, (unsigned char *) D_00AB8E70,
+    0, (unsigned char *) D_00AB8E58,
+    0, (unsigned char *) D_00AB8E40,
+    (unsigned char *) D_00AB8E28, (unsigned char *) D_00AB8E10,
+    (unsigned char *) D_00AB8E00, (unsigned char *) D_00AB8DE8,
+    (unsigned char *) D_00AB8DE8, 0,
+    0, 0,
+    0, 0,
+    0, (unsigned char *) D_00AB8DD0,
+    (unsigned char *) D_00AB8DB8, (unsigned char *) D_00AB8DA0,
+    0, 0,
+    0, 0,
+};
+
+unsigned char *dataMotNameTbl[218] = {
+    0, (unsigned char *) D_00AB9530,
+    (unsigned char *) D_00AB9528, (unsigned char *) D_00AB9520,
+    (unsigned char *) D_00AB9518, (unsigned char *) D_00AB9510,
+    (unsigned char *) D_00AB9508, (unsigned char *) D_00AB9500,
+    0, 0,
+    0, (unsigned char *) D_00AB94F8,
+    (unsigned char *) D_00AB94F0, (unsigned char *) D_00AB94E8,
+    0, 0,
+    (unsigned char *) D_00AB94E0, (unsigned char *) D_00AB94D8,
+    (unsigned char *) D_00AB94D0, (unsigned char *) D_00AB94C8,
+    (unsigned char *) D_00AB94C0, (unsigned char *) D_00AB94B8,
+    (unsigned char *) D_00AB94B0, (unsigned char *) D_00AB94A8,
+    (unsigned char *) D_00AB94A0, (unsigned char *) D_00AB9498,
+    (unsigned char *) D_00AB9490, (unsigned char *) D_00AB9488,
+    (unsigned char *) D_00AB9480, (unsigned char *) D_00AB9478,
+    (unsigned char *) D_00AB9470, (unsigned char *) D_00AB9468,
+    (unsigned char *) D_00AB9460, (unsigned char *) D_00AB9458,
+    (unsigned char *) D_00AB9450, (unsigned char *) D_00AB9448,
+    (unsigned char *) D_00AB9440, (unsigned char *) D_00AB9438,
+    (unsigned char *) D_00AB9430, (unsigned char *) D_00AB9428,
+    (unsigned char *) D_00AB9420, (unsigned char *) D_00AB9418,
+    (unsigned char *) D_00AB9410, (unsigned char *) D_00AB9408,
+    (unsigned char *) D_00AB9400, (unsigned char *) D_00AB93F8,
+    (unsigned char *) D_00AB93F0, (unsigned char *) D_00AB93E8,
+    (unsigned char *) D_00AB93E0, (unsigned char *) D_00AB93D8,
+    (unsigned char *) D_00AB93D0, (unsigned char *) D_00AB93C8,
+    (unsigned char *) D_00AB93C0, (unsigned char *) D_00AB93B8,
+    (unsigned char *) D_00AB93B0, (unsigned char *) D_00AB93A8,
+    (unsigned char *) D_00AB93A0, (unsigned char *) D_00AB9398,
+    (unsigned char *) D_00AB9390, (unsigned char *) D_00AB9388,
+    (unsigned char *) D_00AB9380, (unsigned char *) D_00AB9378,
+    (unsigned char *) D_00AB9370, (unsigned char *) D_00AB9368,
+    (unsigned char *) D_00AB9360, (unsigned char *) D_00AB9358,
+    (unsigned char *) D_00AB9350, (unsigned char *) D_00AB9348,
+    (unsigned char *) D_00AB9340, (unsigned char *) D_00AB9338,
+    (unsigned char *) D_00AB9330, (unsigned char *) D_00AB9328,
+    (unsigned char *) D_00AB9320, (unsigned char *) D_00AB9318,
+    (unsigned char *) D_00AB9310, (unsigned char *) D_00AB9308,
+    (unsigned char *) D_00AB9300, (unsigned char *) D_00AB92F8,
+    (unsigned char *) D_00AB92F0, (unsigned char *) D_00AB92E8,
+    (unsigned char *) D_00AB92E0, (unsigned char *) D_00AB92D8,
+    (unsigned char *) D_00AB92D0, (unsigned char *) D_00AB92C8,
+    (unsigned char *) D_00AB92C0, (unsigned char *) D_00AB92B8,
+    (unsigned char *) D_00AB92B0, (unsigned char *) D_00AB92A8,
+    (unsigned char *) D_00AB92A0, (unsigned char *) D_00AB9298,
+    (unsigned char *) D_00AB9290, (unsigned char *) D_00AB9288,
+    (unsigned char *) D_00AB9280, (unsigned char *) D_00AB9278,
+    (unsigned char *) D_00AB9270, (unsigned char *) D_00AB9268,
+    (unsigned char *) D_00AB92D8, (unsigned char *) D_00AB92D0,
+    (unsigned char *) D_00AB93B0, (unsigned char *) D_00AB9428,
+    (unsigned char *) D_00AB9398, (unsigned char *) D_00AB92B8,
+    (unsigned char *) D_00AB92B0, (unsigned char *) D_00AB92A8,
+    (unsigned char *) D_00AB9390, (unsigned char *) D_00AB9360,
+    (unsigned char *) D_00AB9260, (unsigned char *) D_00AB9258,
+    (unsigned char *) D_00AB9250, (unsigned char *) D_00AB9248,
+    (unsigned char *) D_00AB9240, (unsigned char *) D_00AB9238,
+    (unsigned char *) D_00AB9230, (unsigned char *) D_00AB9228,
+    (unsigned char *) D_00AB9220, (unsigned char *) D_00AB9218,
+    (unsigned char *) D_00AB9210, (unsigned char *) D_00AB9208,
+    (unsigned char *) D_00AB9200, (unsigned char *) D_00AB91F8,
+    (unsigned char *) D_00AB91F0, (unsigned char *) D_00AB91E8,
+    (unsigned char *) D_00AB91E0, (unsigned char *) D_00AB91D8,
+    (unsigned char *) D_00AB91D0, (unsigned char *) D_00AB91C8,
+    (unsigned char *) D_00AB91C0, (unsigned char *) D_00AB91B8,
+    (unsigned char *) D_00AB91B0, (unsigned char *) D_00AB91A8,
+    (unsigned char *) D_00AB91A0, (unsigned char *) D_00AB9198,
+    (unsigned char *) D_00AB9190, (unsigned char *) D_00AB9188,
+    (unsigned char *) D_00AB9180, (unsigned char *) D_00AB9178,
+    (unsigned char *) D_00AB9170, (unsigned char *) D_00AB9168,
+    (unsigned char *) D_00AB9160, (unsigned char *) D_00AB9158,
+    (unsigned char *) D_00AB9150, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    (unsigned char *) D_00AB9140, (unsigned char *) D_00AB9130,
+    (unsigned char *) D_00AB9120, (unsigned char *) D_00AB9118,
+    (unsigned char *) D_00AB9108, (unsigned char *) D_00AB90F8,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    (unsigned char *) D_00AB90E8, (unsigned char *) D_00AB90D8,
+    (unsigned char *) D_00AB90C8, (unsigned char *) D_00AB90B8,
+    0, 0,
+    0, 0,
+    0, 0,
+    (unsigned char *) D_00AB90A8, (unsigned char *) D_00AB9098,
+    (unsigned char *) D_00AB9088, (unsigned char *) D_00AB9078,
+    (unsigned char *) D_00AB9068, (unsigned char *) D_00AB9058,
+    (unsigned char *) D_00AB9048, (unsigned char *) D_00AB9038,
+    (unsigned char *) D_00AB9028, (unsigned char *) D_00AB9018,
+    (unsigned char *) D_00AB9008, (unsigned char *) D_00AB8FF8,
+    (unsigned char *) D_00AB8FE8, (unsigned char *) D_00AB8FD8,
+    (unsigned char *) D_00AB8FC8, (unsigned char *) D_00AB8FB8,
+    (unsigned char *) D_00AB8FA8, (unsigned char *) D_00AB8F98,
+    (unsigned char *) D_00AB8F88, (unsigned char *) D_00AB8F78,
+    (unsigned char *) D_00AB8F68, (unsigned char *) D_00AB8F60,
+    (unsigned char *) D_00AB8F58, (unsigned char *) D_00AB8F50,
+    (unsigned char *) D_00AB8F48, (unsigned char *) D_00AB8F40,
+    (unsigned char *) D_00AB8F38, (unsigned char *) D_00AB8F30,
+    (unsigned char *) D_00AB8F28, (unsigned char *) D_00AB8F20,
+    (unsigned char *) D_00AB8F18, (unsigned char *) D_00AB8F10,
+    (unsigned char *) D_00AB8F08, (unsigned char *) D_00AB8F00,
+    (unsigned char *) D_00AB8EF8, (unsigned char *) D_00AB8EF0,
+    (unsigned char *) D_00AB8EE8, (unsigned char *) D_00AB8ED8,
+    (unsigned char *) D_00AB8EC8, (unsigned char *) D_00AB8EB8,
+};
+
+unsigned char *dataMapNameTbl[68] = {
+    0, (unsigned char *) D_00AB97F0,
+    (unsigned char *) D_00AB97E8, (unsigned char *) D_00AB97E0,
+    (unsigned char *) D_00AB97D8, (unsigned char *) D_00AB97D0,
+    (unsigned char *) D_00AB97C8, (unsigned char *) D_00AB97C0,
+    (unsigned char *) D_00AB97B0, (unsigned char *) D_00AB97A0,
+    (unsigned char *) D_00AB9790, (unsigned char *) D_00AB9780,
+    (unsigned char *) D_00AB9770, (unsigned char *) D_00AB9760,
+    (unsigned char *) D_00AB9758, (unsigned char *) D_00AB9750,
+    (unsigned char *) D_00AB9748, (unsigned char *) D_00AB9740,
+    (unsigned char *) D_00AB9738, (unsigned char *) D_00AB9730,
+    (unsigned char *) D_00AB9728, (unsigned char *) D_00AB9720,
+    (unsigned char *) D_00AB9718, (unsigned char *) D_00AB9710,
+    (unsigned char *) D_00AB9708, (unsigned char *) D_00AB9700,
+    (unsigned char *) D_00AB96F8, (unsigned char *) D_00AB96F0,
+    (unsigned char *) D_00AB96E8, (unsigned char *) D_00AB96E0,
+    (unsigned char *) D_00AB96D8, (unsigned char *) D_00AB96D0,
+    (unsigned char *) D_00AB96C8, (unsigned char *) D_00AB96C0,
+    (unsigned char *) D_00AB96B8, (unsigned char *) D_00AB96B0,
+    (unsigned char *) D_00AB96A8, (unsigned char *) D_00AB96A0,
+    (unsigned char *) D_00AB9698, (unsigned char *) D_00AB9690,
+    (unsigned char *) D_00AB9688, (unsigned char *) D_00AB9680,
+    (unsigned char *) D_00AB9670, (unsigned char *) D_00AB9660,
+    (unsigned char *) D_00AB9650, (unsigned char *) D_00AB9640,
+    (unsigned char *) D_00AB9630, (unsigned char *) D_00AB9620,
+    (unsigned char *) D_00AB9610, (unsigned char *) D_00AB9600,
+    (unsigned char *) D_00AB95F0, (unsigned char *) D_00AB95E0,
+    (unsigned char *) D_00AB95D0, (unsigned char *) D_00AB95C8,
+    (unsigned char *) D_00AB95C0, (unsigned char *) D_00AB95B0,
+    (unsigned char *) D_00AB95A8, (unsigned char *) D_00AB9598,
+    (unsigned char *) D_00AB9590, (unsigned char *) D_00AB9588,
+    (unsigned char *) D_00AB9580, (unsigned char *) D_00AB9578,
+    (unsigned char *) D_00AB9570, (unsigned char *) D_00AB9568,
+    (unsigned char *) D_00AB9558, (unsigned char *) D_00AB9550,
+    (unsigned char *) D_00AB9540, (unsigned char *) D_00AB9538,
+};
+
+char *dataVoiceNameTbl[142] = {
+    0, (char *) D_00AB9828,
+    (char *) D_00AB9820, (char *) D_00AB9818,
+    (char *) D_00AB9810, (char *) D_00AB9808,
+    (char *) D_00AB9800, (char *) D_00AB97F8,
+    0, 0,
+    0, (char *) D_00AB94F8,
+    (char *) D_00AB94F0, (char *) D_00AB94E8,
+    0, 0,
+    (char *) D_00AB94E0, (char *) D_00AB94D8,
+    (char *) D_00AB94D0, (char *) D_00AB94C8,
+    (char *) D_00AB94C0, (char *) D_00AB94B8,
+    (char *) D_00AB94B0, (char *) D_00AB94A8,
+    (char *) D_00AB94A0, (char *) D_00AB9498,
+    (char *) D_00AB9490, (char *) D_00AB9488,
+    (char *) D_00AB9480, (char *) D_00AB9478,
+    (char *) D_00AB9470, (char *) D_00AB9468,
+    (char *) D_00AB9460, (char *) D_00AB9458,
+    (char *) D_00AB9450, (char *) D_00AB9448,
+    (char *) D_00AB9440, (char *) D_00AB9438,
+    (char *) D_00AB9430, (char *) D_00AB9428,
+    (char *) D_00AB9420, (char *) D_00AB9418,
+    (char *) D_00AB9410, (char *) D_00AB9408,
+    (char *) D_00AB9400, (char *) D_00AB93F8,
+    (char *) D_00AB93F0, (char *) D_00AB93E8,
+    (char *) D_00AB93E0, (char *) D_00AB93D8,
+    (char *) D_00AB93D0, (char *) D_00AB93C8,
+    (char *) D_00AB93C0, (char *) D_00AB93B8,
+    (char *) D_00AB93B0, (char *) D_00AB93A8,
+    (char *) D_00AB93A0, (char *) D_00AB9398,
+    (char *) D_00AB9390, (char *) D_00AB9388,
+    (char *) D_00AB9380, (char *) D_00AB9378,
+    (char *) D_00AB9370, (char *) D_00AB9368,
+    (char *) D_00AB9360, (char *) D_00AB9358,
+    (char *) D_00AB9350, (char *) D_00AB9348,
+    (char *) D_00AB9340, (char *) D_00AB9338,
+    (char *) D_00AB9330, (char *) D_00AB9328,
+    (char *) D_00AB9320, (char *) D_00AB9318,
+    (char *) D_00AB9310, (char *) D_00AB9308,
+    (char *) D_00AB9300, (char *) D_00AB92F8,
+    (char *) D_00AB92F0, (char *) D_00AB92E8,
+    (char *) D_00AB92E0, (char *) D_00AB92D8,
+    (char *) D_00AB92D0, (char *) D_00AB92C8,
+    (char *) D_00AB92C0, (char *) D_00AB92B8,
+    (char *) D_00AB92B0, (char *) D_00AB92A8,
+    (char *) D_00AB92A0, (char *) D_00AB9298,
+    (char *) D_00AB9290, (char *) D_00AB9288,
+    (char *) D_00AB9280, (char *) D_00AB9278,
+    (char *) D_00AB9270, (char *) D_00AB9268,
+    (char *) D_00AB92D8, (char *) D_00AB92D0,
+    (char *) D_00AB93B0, (char *) D_00AB9428,
+    (char *) D_00AB9398, (char *) D_00AB92B8,
+    (char *) D_00AB92B0, (char *) D_00AB92A8,
+    (char *) D_00AB9390, (char *) D_00AB9360,
+    (char *) D_00AB9260, (char *) D_00AB9258,
+    (char *) D_00AB9250, (char *) D_00AB9248,
+    (char *) D_00AB9240, (char *) D_00AB9238,
+    (char *) D_00AB9230, (char *) D_00AB9228,
+    (char *) D_00AB9220, (char *) D_00AB9218,
+    (char *) D_00AB9210, (char *) D_00AB9208,
+    (char *) D_00AB9200, (char *) D_00AB91F8,
+    (char *) D_00AB91F0, (char *) D_00AB91E8,
+    (char *) D_00AB91E0, (char *) D_00AB91D8,
+    (char *) D_00AB91D0, (char *) D_00AB91C8,
+    (char *) D_00AB91C0, (char *) D_00AB91B8,
+    (char *) D_00AB91B0, (char *) D_00AB91A8,
+    (char *) D_00AB91A0, (char *) D_00AB9198,
+    (char *) D_00AB9190, (char *) D_00AB9188,
+    (char *) D_00AB9180, (char *) D_00AB9178,
+    (char *) D_00AB9170, (char *) D_00AB9168,
+    (char *) D_00AB9160, (char *) D_00AB9158,
+    (char *) D_00AB9150, 0,
+};
+
+char *D_00AB4C60[198] = {
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, (char *) D_00AB9D10,
+    (char *) D_00AB9D00, (char *) D_00AB9CF0,
+    (char *) D_00AB9CE0, 0,
+    0, 0,
+    0, 0,
+    0, (char *) D_00AB8F60,
+    (char *) D_00AB8F58, (char *) D_00AB8F50,
+    (char *) D_00AB8F48, (char *) D_00AB8F40,
+    (char *) D_00AB8F38, (char *) D_00AB8F30,
+    (char *) D_00AB8F28, (char *) D_00AB8F20,
+    (char *) D_00AB8F18, (char *) D_00AB8F10,
+    (char *) D_00AB8F08, (char *) D_00AB8F00,
+    (char *) D_00AB8EF8, (char *) D_00AB8EF0,
+    (char *) D_00AB8EE8, (char *) D_00AB9CD8,
+    (char *) D_00AB9CD0, (char *) D_00AB9CC8,
+    (char *) D_00AB9CC0, (char *) D_00AB9CB8,
+    (char *) D_00AB9CB0, (char *) D_00AB9CA8,
+    (char *) D_00AB9CA0, (char *) D_00AB9C98,
+    (char *) D_00AB9C90, (char *) D_00AB9C88,
+    (char *) D_00AB9C80, (char *) D_00AB9C78,
+    (char *) D_00AB9C70, (char *) D_00AB9C68,
+    (char *) D_00AB9C60, (char *) D_00AB9C58,
+    (char *) D_00AB9C50, (char *) D_00AB9C48,
+    (char *) D_00AB9C40, (char *) D_00AB9C38,
+    (char *) D_00AB9C30, (char *) D_00AB9C28,
+    (char *) D_00AB9C20, (char *) D_00AB9C18,
+    (char *) D_00AB9C10, (char *) D_00AB9C08,
+    (char *) D_00AB9C00, (char *) D_00AB9BF8,
+    (char *) D_00AB9BF0, (char *) D_00AB9BE8,
+    (char *) D_00AB9BE0, (char *) D_00AB9BD8,
+    (char *) D_00AB9BD0, (char *) D_00AB9BC8,
+    (char *) D_00AB9BC0, (char *) D_00AB9BB8,
+    (char *) D_00AB9BB0, (char *) D_00AB9BA8,
+    (char *) D_00AB9BA0, (char *) D_00AB9B98,
+    (char *) D_00AB9B90, (char *) D_00AB9B88,
+    (char *) D_00AB9B80, (char *) D_00AB9B78,
+    (char *) D_00AB9B70, (char *) D_00AB9B68,
+    (char *) D_00AB9B60, (char *) D_00AB9B58,
+    (char *) D_00AB9B50, (char *) D_00AB9B48,
+    (char *) D_00AB9B40, (char *) D_00AB9B38,
+    (char *) D_00AB9B30, (char *) D_00AB9B28,
+    (char *) D_00AB9B20, (char *) D_00AB9B18,
+    (char *) D_00AB9B10, (char *) D_00AB9B08,
+    (char *) D_00AB9B00, (char *) D_00AB9AF8,
+    (char *) D_00AB9AF0, (char *) D_00AB9AE8,
+    (char *) D_00AB9AE0, (char *) D_00AB9AD8,
+    (char *) D_00AB9AD0, (char *) D_00AB9AC8,
+    (char *) D_00AB9AC0, (char *) D_00AB9AB8,
+    (char *) D_00AB9AB0, (char *) D_00AB9AA8,
+    (char *) D_00AB9AA0, (char *) D_00AB9A98,
+    (char *) D_00AB9A90, (char *) D_00AB9A88,
+    (char *) D_00AB9A80, (char *) D_00AB9A78,
+    (char *) D_00AB9A70, (char *) D_00AB9A68,
+    (char *) D_00AB9A60, (char *) D_00AB9A58,
+    (char *) D_00AB9A50, (char *) D_00AB9A48,
+    (char *) D_00AB9A40, (char *) D_00AB9A38,
+    (char *) D_00AB9A30, (char *) D_00AB9A28,
+    (char *) D_00AB9A20, (char *) D_00AB9A18,
+    (char *) D_00AB9A10, (char *) D_00AB9A08,
+    (char *) D_00AB9A00, (char *) D_00AB99F8,
+    (char *) D_00AB99F0, (char *) D_00AB99E8,
+    (char *) D_00AB99E0, (char *) D_00AB99D8,
+    (char *) D_00AB99D0, (char *) D_00AB99C8,
+    (char *) D_00AB99C0, (char *) D_00AB99B8,
+    (char *) D_00AB99B0, (char *) D_00AB99A8,
+    (char *) D_00AB99A0, (char *) D_00AB9998,
+    (char *) D_00AB9990, (char *) D_00AB9988,
+    (char *) D_00AB9980, (char *) D_00AB9978,
+    (char *) D_00AB9970, (char *) D_00AB9968,
+    (char *) D_00AB9960, (char *) D_00AB9958,
+    (char *) D_00AB9950, (char *) D_00AB9948,
+    (char *) D_00AB9940, (char *) D_00AB9938,
+    (char *) D_00AB9930, (char *) D_00AB9928,
+    (char *) D_00AB9920, (char *) D_00AB9918,
+    (char *) D_00AB9910, (char *) D_00AB9908,
+    (char *) D_00AB9900, (char *) D_00AB98F8,
+    (char *) D_00AB98F0, (char *) D_00AB98E8,
+    (char *) D_00AB98E0, (char *) D_00AB98D8,
+    (char *) D_00AB98D0, (char *) D_00AB98C8,
+    (char *) D_00AB98C0, (char *) D_00AB98B8,
+    (char *) D_00AB98B0, (char *) D_00AB98A8,
+    (char *) D_00AB98A0, (char *) D_00AB9898,
+    (char *) D_00AB9890, (char *) D_00AB9888,
+    (char *) D_00AB9880, (char *) D_00AB9878,
+    (char *) D_00AB9870, (char *) D_00AB9868,
+    (char *) D_00AB9860, (char *) D_00AB9858,
+    (char *) D_00AB9850, (char *) D_00AB9848,
+    (char *) D_00AB9840, (char *) D_00AB9838,
+    (char *) D_00AB9830, 0,
+};
+
+char *D_00AB4F78[140] = {
+    (char *) D_00AB9F30, 0,
+    (char *) D_00AB9F20, (char *) D_00AB9F10,
+    (char *) D_00AB9F00, 0,
+    0, 0,
+    0, (char *) D_00AB9EF0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, (char *) D_00AB9EE0,
+    0, 0,
+    0, (char *) D_00AB9ED0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    (char *) D_00AB9EC0, 0,
+    0, 0,
+    0, (char *) D_00AB9EB0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, (char *) D_00AB9EA0,
+    0, 0,
+    0, (char *) D_00AB9E90,
+    0, (char *) D_00AB9E80,
+    (char *) D_00AB9E70, (char *) D_00AB9E60,
+    0, 0,
+    0, 0,
+    (char *) D_00AB9E50, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    (char *) D_00AB9E40, 0,
+    0, 0,
+    (char *) D_00AB9E30, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, (char *) D_00AB9E20,
+    0, 0,
+    (char *) D_00AB9E10, 0,
+    (char *) D_00AB9E00, (char *) D_00AB9DF0,
+    (char *) D_00AB9DE0, 0,
+    0, 0,
+    0, 0,
+    0, (char *) D_00AB9DD0,
+    0, 0,
+    (char *) D_00AB9DC0, 0,
+    (char *) D_00AB9DB0, (char *) D_00AB9DA0,
+    (char *) D_00AB9D90, 0,
+    0, 0,
+    0, (char *) D_00AB9D80,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, (char *) D_00AB9D70,
+    0, 0,
+    0, (char *) D_00AB9D60,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    0, 0,
+    (char *) D_00AB9D50, 0,
+    0, (char *) D_00AB9D40,
+    0, (char *) D_00AB9D30,
+    0, 0,
+    0, 0,
+};
+
+char *dataBattleActionNameTbl[64] = {
+    0, 0,
+    0, (char *) D_00AB9D20,
+    0, 0,
+    0, 0,
+    (char *) D_00ABA140, (char *) D_00ABA130,
+    (char *) D_00ABA120, (char *) D_00ABA118,
+    (char *) D_00ABA108, (char *) D_00ABA100,
+    0, 0,
+    (char *) D_00ABA0F0, (char *) D_00ABA0E0,
+    (char *) D_00ABA0D0, (char *) D_00ABA0C8,
+    (char *) D_00ABA0B8, (char *) D_00ABA0B0,
+    0, 0,
+    (char *) D_00ABA0A0, (char *) D_00ABA090,
+    (char *) D_00ABA080, (char *) D_00ABA078,
+    (char *) D_00ABA068, (char *) D_00ABA060,
+    0, 0,
+    (char *) D_00ABA050, (char *) D_00ABA040,
+    (char *) D_00ABA030, (char *) D_00ABA028,
+    (char *) D_00ABA018, (char *) D_00ABA010,
+    0, 0,
+    (char *) D_00ABA000, (char *) D_00AB9FF0,
+    (char *) D_00AB9FE0, (char *) D_00AB9FD8,
+    (char *) D_00AB9FC8, (char *) D_00AB9FC0,
+    0, 0,
+    (char *) D_00AB9FB0, (char *) D_00AB9FA0,
+    (char *) D_00AB9F90, (char *) D_00AB9F88,
+    (char *) D_00AB9F78, (char *) D_00AB9F70,
+    0, 0,
+    (char *) D_00AB9F68, (char *) D_00AB9F60,
+    (char *) D_00AB9F58, (char *) D_00AB9F50,
+    (char *) D_00AB9F48, (char *) D_00AB9F40,
+    0, 0,
+};
+
+struct BattleNameSet dataBattleBstSets[7] = {
+    { (char *) D_00ABA180, { 1, 1, 1, 1, 6, 0, 0, 0, 0, 0, 0 } },
+    { (char *) D_00ABA178, { 1, 5, 16, 6, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char *) D_00ABA170, { 1, 1, 1, 1, 2, 3, 3, 3, 7, 8, 15 } },
+    { (char *) D_00ABA168, { 1, 1, 1, 6, 7, 8, 9, 10, 0, 0, 0 } },
+    { (char *) D_00ABA160, { 1, 1, 1, 7, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char *) D_00ABA158, { 1, 1, 1, 7, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char *) D_00ABA150, { 1, 1, 4, 7, 11, 10, 0, 0, 0, 0, 0 } }
+};
+
+struct BattleNameSet dataBattleBedSets[7] = {
+    { (char *) D_00ABA1B8, { 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char *) D_00ABA1B0, { 1, 17, 18, 19, 17, 17, 12, 0, 0, 0, 0 } },
+    { (char *) D_00ABA1A8, { 1, 1, 1, 12, 13, 0, 0, 0, 0, 0, 0 } },
+    { (char *) D_00ABA1A0, { 1, 1, 1, 1, 14, 0, 0, 0, 0, 0, 0 } },
+    { (char *) D_00ABA198, { 1, 1, 12, 1, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char *) D_00ABA190, { 1, 1, 1, 12, 0, 0, 0, 0, 0, 0, 0 } },
+    { (char *) D_00ABA188, { 1, 1, 1, 1, 12, 0, 0, 0, 0, 0, 0 } }
+};

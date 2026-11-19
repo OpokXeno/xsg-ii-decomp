@@ -9,6 +9,10 @@
 void MMathRandomSeed(int seed);
 int sefResetWorkTables(void);
 
+/* ov01 .bss of this file: the tick counter and the reset flag word. */
+static int ov01TickCount;
+static int D_00AED084;
+
 /* Scene state reset, called by ov01SceneInit:
  * zeroes ov01LastValue and ov01TickCount, then runs the two init calls. */
 void ov01SceneStateReset(void) {
@@ -118,8 +122,8 @@ typedef int (*MSeFireCallback)(MSeObject *object);
 
 extern int MSeFireSpawnCount[];
 extern MSeFireCallback MSeFireCallbacks[];
-extern char MSeFireBufferFullText[];
-extern char MSeFireCreateFailText[];
+extern const char MSeFireBufferFullText[];
+extern const char MSeFireCreateFailText[];
 MSeObject *MSeObjAlloc(void);
 
 void MSeFire(MSeFireEntry *entry) {
@@ -143,3 +147,41 @@ void MSeFire(MSeFireEntry *entry) {
         }
     }
 }
+
+/* Effect constructors that MSeFireCallbacks names (defined in the other ov01 effect files). */
+int MEfCreateWait();
+int MEfCreateHermitePath();
+int MEfCreateCounter();
+int MEfCreatePathEffect25();
+int MEfCreatePathEffect31();
+int MEfCreatePathEffect29();
+int MEfCreateFlagWindowEffect30();
+int MEfCreateWaveEffect();
+int MEfCreateSpray();
+int MEfCreatePathStep();
+int MEfCreateSway();
+int MEfCreateStencilB();
+int MEfCreateActorPath();
+int MEfCreateActorHistory();
+
+s16 ov01LastValue = 0;
+
+MSeFireCallback MSeFireCallbacks[14] = {
+    MEfCreateWait, MEfCreateHermitePath, MEfCreateCounter, MEfCreatePathEffect25, MEfCreatePathEffect31,
+    MEfCreatePathEffect29, MEfCreateFlagWindowEffect30, MEfCreateWaveEffect, MEfCreateSpray, MEfCreatePathStep,
+    MEfCreateSway, MEfCreateStencilB, MEfCreateActorPath, MEfCreateActorHistory,
+};
+
+int MSeFireSpawnCount[16] = {
+    1, 8, 1, 1, 1, 1, 1, 1, 1, 8, 1, 1, 1, 1, 0, 0,
+};
+
+const char MSeFireBufferFullText[24] = "MSeFire: ObjBuffer full";
+const char MSeFireCreateFailText[56] = "MSeFire: Failed to create an effect (ID:%d)";
+
+const Quadword McEfSTQtbl[4] = {
+    0x000000003f8000000000000000000000,
+    0x000000003f8000003f80000000000000,
+    0x000000003f800000000000003f800000,
+    0x000000003f8000003f8000003f800000,
+};

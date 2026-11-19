@@ -6,12 +6,12 @@
 #include "main/xenoActor.h"
 
 /* Source file name passed with the allocation and free calls. */
-extern char oLibSourceFile[];
+static const char oLibSourceFile[16] = "../oLib.euc.c";
 extern int oLibHandle;
 int InstanceOfRgHeapById(int count);
-int RgHeapAllocById(int count, int flags, char *file, int line);
+int RgHeapAllocById(int count, int flags, const char *file, int line);
 void resResetSlotTable(void);
-void RgHeapFree(int handle, char *file, int line);
+void RgHeapFree(int handle, const char *file, int line);
 
 /* Object library setup: the handle for the oLib file goes into oLibHandle. */
 void oLibInit(void)
@@ -41,8 +41,6 @@ typedef struct OLibActorKindView {
     void *kind;
 } OLibActorKindView;
 
-/* The assert expression of oLibLoadObject: "GameResLoadID(Id, &SrcData, NULL, NULL) ". */
-extern char oLibLoadObjectAssertExpression[];
 int GameResLoadID(int id, void **buffer, unsigned int *size,
                   void (*callback)(int index, void *buffer, unsigned int size, int value));
 void XenoActorAllocMatrices(struct XenoActor *actor);
@@ -57,7 +55,7 @@ void oLibLoadObject(struct XenoActor **object, int Id)
 
     SrcData = 0;
     if (GameResLoadID(Id, &SrcData, 0, 0) == -1) {
-        assertFailed(oLibLoadObjectAssertExpression, oLibSourceFile, 157);
+        assertFailed("GameResLoadID(Id, &SrcData, NULL, NULL) != -1", oLibSourceFile, 157);
     }
     values = SrcData;
     actor = XenoActorAlloc();
@@ -146,7 +144,7 @@ int xglPointDistanceInt(Vector4 *from, Vector4 *to)
 }
 
 extern int xglCosDegTableReady;
-extern float xglCosDegTable[];
+static float xglCosDegTable[38];
 void xglCosDegTableInit(void);
 
 /* Cosine of an angle in degrees from the 10-degree table (built on first use); the table is
@@ -163,12 +161,11 @@ float xglCosDeg(int degrees)
     return xglCosDegTable[(degrees % 360) / 10];
 }
 
-extern float xglCosDegToRad;
 extern float cosf(float angle);
 
 void xglCosDegTableInit(void)
 {
-    float degToRad = xglCosDegToRad;
+    float degToRad = 0.017453289f;
     int i;
 
     for (i = 0; i < 37; i++) {
@@ -177,7 +174,7 @@ void xglCosDegTableInit(void)
 }
 
 extern int xglSinDegTableReady;
-extern float xglSinDegTable[];
+static float xglSinDegTable[38];
 void xglSinDegTableInit(void);
 
 /* Sine of |degrees| from the 10-degree table (built on first use): a negative angle returns the
@@ -193,15 +190,21 @@ float xglSinDeg(int degrees)
     return xglSinDegTable[(degrees % 360) / 10];
 }
 
-extern float xglSinDegToRad;
 extern float sinf(float angle);
 
 void xglSinDegTableInit(void)
 {
-    float degToRad = xglSinDegToRad;
+    float degToRad = 0.017453289f;
     int i;
 
     for (i = 0; i < 37; i++) {
         xglSinDegTable[i] = sinf((float) (i * 10) * degToRad);
     }
 }
+
+/* Small .sdata flags and handles, in address order: the table-ready flags of xglCosDeg/xglSinDeg, the oLib handle,
+ * then recordUpdatePaused (used by other TUs, so it stays a global). */
+int xglCosDegTableReady = 0;
+int xglSinDegTableReady = 0;
+int oLibHandle = 0;
+int recordUpdatePaused = 0;

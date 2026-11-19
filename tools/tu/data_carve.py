@@ -140,7 +140,7 @@ SCHEMA = 'tu-data-carves/1'
 # overlays carve .rodata and initialized .data).
 # .data includes function-local initialized arrays such as dispatch tables.
 SECTIONS = ('.rodata', '.lit4', '.lit8', '.sdata', '.data', '.sbss', '.bss')
-OVERLAY_SECTIONS = ('.rodata', '.data')
+OVERLAY_SECTIONS = ('.rodata', '.data', '.bss')  # .bss: per-TU overlay families since data pass 7 (2026-11-19)
 MAIN_ONLY_SECTIONS = ('.sdata',)
 CARVE_DIR = 'carve'
 # Input section of run k > 0 in a split object, and the object a split TU links.
@@ -2826,13 +2826,12 @@ def tu_context(root, unit, unit_dir, tu_id):
 
         def path_of(p, sec):
             return Path(unit_dir) / p['file']
-    extents = {}
-    if unit == 'main':
-        extents = load_object_extents(root, tu_id)
-        for sec, spans in (_OBJECT_EXTENT_OVERRIDE.get((unit, tu_id)) or {}).items():
-            extents[sec] = sorted(set(extents.get(sec, [])) | set(spans))
+    # Object extents and unlabeled object starts apply to every unit (the overlays since data pass 7).
+    extents = load_object_extents(root, tu_id)
+    for sec, spans in (_OBJECT_EXTENT_OVERRIDE.get((unit, tu_id)) or {}).items():
+        extents[sec] = sorted(set(extents.get(sec, [])) | set(spans))
     marks = {}
-    if unit == 'main':
+    if True:
         marks = load_object_labels(root, tu_id)
         for sec, addresses in (_OBJECT_LABEL_OVERRIDE.get((unit, tu_id)) or {}).items():
             marks[sec] = sorted(set(marks.get(sec, [])) | set(addresses))
@@ -3684,7 +3683,10 @@ def plan_split(elf, csec, specs, want, check_items=False):
     them. The build (`split_plans`) plans the declared runs without it."""
     size = csec.size
     data = elf.section_bytes(csec)
-    refs = section_references(elf, csec)
+    # A static array indexed by `key - constant` gets a section-base address below the section (GCC folds the
+    # constant into it; ov01 tu041 `largeUnitFileIds[key - 11]`, data pass 7, 2026-11-19): such a reference
+    # anchors no run, and the split keeps the native addend (see section_references).
+    refs = [r for r in section_references(elf, csec, allow_negative_base=True) if r['target'] >= 0]
     own = [s for s in elf.symbols if s.shndx == csec.index and s.type not in (3, 4)]
     anchors = {r['target'] for r in refs} | {s.value for s in own}
     relocated = set()
@@ -6121,8 +6123,8 @@ def nobits_layout_runs(root, unit, ctx, tu_id, source, obj, elf, sec, requested)
     never position), merging neighbours contiguous in both spaces.
     Returns (runs, proof); raises CarveError naming the first failed check.
     """
-    if unit != 'main':
-        raise CarveError(f'{sec}: the NOBITS layout proof is MAIN-only')
+    if unit != 'main' and sec != '.bss':
+        raise CarveError(f'{sec}: the NOBITS layout proof covers MAIN and overlay .bss only')
     asm_path = next((p for p in (Path(str(obj) + '.s'), Path(obj).with_suffix('.s')) if p.is_file()), None)
     if asm_path is None:
         raise CarveError(f'{sec}: the NOBITS layout proof needs the cc1 assembly')
@@ -6511,8 +6513,10 @@ def _derive_current(root, unit, unit_dir, tu_id, source, obj, *, _declared=None,
     per_func = {n: identifiers([files[n]]) for n in c_funcs}
     asm_refs = identifiers(scaffold_files)
     elf = Elf(Path(obj).read_bytes())
-    if unit == 'main':
-        # The candidate's own objects say which scaffold labels are one object (see load_object_extents).
+    if True:
+        # The candidate's own objects say which scaffold labels are one object (see load_object_extents); the
+        # overlays too since data pass 7 (ov01 tu063's 16-byte menuStatusIconsTexRecord holds the label
+        # D_00AB6AB4 that tu071 reaches as bgmTrackHandles - 4, 2026-11-19).
         _OBJECT_LABEL_OVERRIDE[(unit, tu_id)] = candidate_object_labels(ctx, elf)
         _OBJECT_EXTENT_OVERRIDE[(unit, tu_id)] = candidate_object_extents(
             dict(ctx, object_extents={}, object_labels=_OBJECT_LABEL_OVERRIDE[(unit, tu_id)]), elf)
@@ -6770,7 +6774,7 @@ def _derive_current(root, unit, unit_dir, tu_id, source, obj, *, _declared=None,
     for sec in SECTIONS:
         if sec in explicit_sections:
             continue
-        if unit != 'main' and sec in ('.sbss', '.bss'):
+        if unit != 'main' and sec == '.sbss':
             continue
         c_name = raw_section_name(unit, sec)
         csec = next((s for s in elf.sections if s.name == c_name and s.size), None)
@@ -6943,6 +6947,11 @@ def _derive_current(root, unit, unit_dir, tu_id, source, obj, *, _declared=None,
                 syms = [s for s in elf.symbols if s.shndx == csec.index]
                 owned = [(i, s) for i in gen for s in syms
                          if s.name in set(items[i]['labels']) and s.type == 1 and s.bind == 1]
+                # One GLOBAL object narrows the span to itself only when no other item of the group
+                # is named in the section (a static before a common keeps the whole group, data pass 7).
+                if len(owned) == 1 and any(s is not owned[0][1] and s.name in set(items[i]['labels'])
+                                           for i in gen for s in syms):
+                    owned = []
                 if len(owned) == 1:
                     i, sym = owned[0]
                     lo = items[i]['start']
@@ -7369,8 +7378,8 @@ def _derive_current(root, unit, unit_dir, tu_id, source, obj, *, _declared=None,
     # offsets against the original addresses (requested runs, else derived
     # ones); when that proof holds, its runs replace the refusal, which stays
     # reported as `superseded_problems` (datacarve-tools-20261010, proposal 4).
-    if unit == 'main':
-        for sec in ('.bss', '.sbss'):
+    if True:  # MAIN, and overlay .bss since its per-TU families (data pass 7, 2026-11-19)
+        for sec in (('.bss', '.sbss') if unit == 'main' else ('.bss',)):
             refused = [p for p in out['problems'] if p.startswith(f'{sec}: ')]
             if not refused:
                 continue
@@ -7758,7 +7767,7 @@ def main(argv=None):
         got['consistent'] = normalize_runs(declared) == normalize_runs(got['runs']) and not got['problems']
     if a.cmd == 'derive' and a.write and not got['problems']:
         got['written'] = write_registry(a.root, a.tu, got['runs'], basis=basis)
-        if a.unit == 'main':
+        if True:                       # every unit (the overlays since data pass 7)
             got['object_extents_written'] = write_object_extents(
                 a.root, a.tu, _OBJECT_EXTENT_OVERRIDE.get((a.unit, a.tu)) or {},
                 _OBJECT_LABEL_OVERRIDE.get((a.unit, a.tu)) or {})

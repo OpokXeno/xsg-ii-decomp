@@ -14,8 +14,14 @@
 #include "ov01/tu060.h"
 #include "ov01/tu061.h"
 
-extern int padMode;
-extern short padData;
+/* Uninitialized storage of this file, in address order (only this file names these labels). */
+static int dataKeyRegistry[8];
+static int dataKeyCount;
+static int menuWepSpPanelCursor;
+static int menuWepSpPanelRowCount;
+static int menuTargetListCursor;
+static int padMode;
+static short padData;
 
 #define VIRTUAL_PAD_BIT_COUNT 14
 
@@ -25,7 +31,7 @@ enum DataFlag {
     DATA_FLAG_HIDDEN = 0x2
 };
 
-extern unsigned short padConvTbl[VIRTUAL_PAD_BIT_COUNT];
+extern unsigned short padConvTbl[];
 
 
 /* Global block dataState: the cursor fields (0xA4-0xAC) and the mode word (0xB4)
@@ -45,7 +51,6 @@ struct DataState {
 
 extern struct DataState dataState;
 extern struct DataObject *dataObject;
-extern int D_00AB596C;
 void *dataObjCreate(f32 x, f32 y, f32 z);
 void dataObjDrawSprite(struct DataObject *obj, u32 *packet);
 void menuTexFlush(void);
@@ -73,8 +78,6 @@ typedef union DataFlagsView {
 } DataFlagsView;
 
 struct DataKeyEntry;
-extern int dataKeyCount;
-extern int dataKeyRegistry[8];
 int dataKeyRegister(StatOwner *unit, unsigned short key);
 int dataKeyFind(StatOwner *unit, struct DataKeyEntry **found);
 int dataKeyValueGet(StatOwner *unit, int key);
@@ -332,8 +335,6 @@ unsigned short dataPadRead(int port)
     return value;
 }
 
-extern int menuWepSpPanelCursor;
-extern int menuWepSpPanelRowCount;
 
 /* Clears the pair menuWepSpPanelCursor / menuWepSpPanelRowCount. Their meaning is still open. */
 void menuWepSpPanelReset(void) {
@@ -489,7 +490,6 @@ int menuWepSpPanelRowCountGet(void) {
     return menuWepSpPanelRowCount;
 }
 
-extern int menuTargetListCursor;
 
 void menuTargetListCursorReset(void) {
     menuTargetListCursor = 0;
@@ -820,7 +820,7 @@ void dataStateSetMode(u32 value, int flags)
 }
 
 int func_00A8A150(void) {
-    return D_00AB596C;
+    return dataState.mode;
 }
 
 /* Pad test for dataTargetListInit: the first argument is the dataObject pointer the caller passes, unused here.
@@ -1105,3 +1105,100 @@ void *dataSelectedGet(unsigned char *target)
 void dataDummySet(void)
 {
 }
+
+/* Initialized overlay data of this file (the key lists, the key table, the pad and slot tables, dataState), in address order. */
+unsigned short D_00AB55F0[] = { 0x0080, 0x0010, 0x0020, 0x0000 };
+
+unsigned short D_00AB55F8[] = { 0x0080, 0x0010, 0x0000, 0x0000 };
+
+unsigned short D_00AB5600[] = { 0x0001, 0x0080, 0x0000, 0x0000 };
+
+unsigned short D_00AB5608[] = { 0x0001, 0x0010, 0x0000, 0x0000 };
+
+unsigned short D_00AB5610[] = { 0x0002, 0x0080, 0x0080, 0x0000 };
+
+unsigned short D_00AB5618[] = { 0x0002, 0x0080, 0x0010, 0x0000 };
+
+unsigned short D_00AB5620[] = { 0x0002, 0x0010, 0x0010, 0x0000 };
+
+unsigned short D_00AB5628[] = { 0x0002, 0x0010, 0x0080, 0x0000 };
+
+unsigned short D_00AB5630[] = { 0x0001, 0x0020, 0x0000, 0x0000 };
+
+unsigned short D_00AB5638[] = { 0x0002, 0x0020, 0x0020, 0x0000 };
+
+unsigned short D_00AB5640[] = { 0x0003, 0x0020, 0x0020, 0x0020 };
+
+unsigned short D_00AB5648[] = { 0x0004, 0x0020, 0x0020, 0x0020, 0x0020, 0x0000, 0x0000, 0x0000 };
+
+unsigned short D_00AB5658[] = { 0x0003, 0x0080, 0x0080, 0x0020 };
+
+unsigned short D_00AB5660[] = { 0x0004, 0x0080, 0x0080, 0x0020, 0x0020, 0x0000, 0x0000, 0x0000 };
+
+unsigned short D_00AB5670[] = { 0x0005, 0x0080, 0x0080, 0x0020, 0x0020, 0x0020, 0x0000, 0x0000 };
+
+unsigned short D_00AB5680[] = { 0x0003, 0x0080, 0x0010, 0x0020 };
+
+unsigned short D_00AB5688[] = { 0x0004, 0x0080, 0x0010, 0x0020, 0x0020, 0x0000, 0x0000, 0x0000 };
+
+unsigned short D_00AB5698[] = { 0x0005, 0x0080, 0x0010, 0x0020, 0x0020, 0x0020, 0x0000, 0x0000 };
+
+unsigned short D_00AB56A8[] = { 0x0003, 0x0010, 0x0010, 0x0020 };
+
+unsigned short D_00AB56B0[] = { 0x0004, 0x0010, 0x0010, 0x0020, 0x0020, 0x0000, 0x0000, 0x0000 };
+
+unsigned short D_00AB56C0[] = { 0x0005, 0x0010, 0x0010, 0x0020, 0x0020, 0x0020, 0x0000, 0x0000 };
+
+unsigned short D_00AB56D0[] = { 0x0003, 0x0010, 0x0080, 0x0020 };
+
+unsigned short D_00AB56D8[] = { 0x0004, 0x0010, 0x0080, 0x0020, 0x0020, 0x0000, 0x0000, 0x0000 };
+
+unsigned short D_00AB56E8[] = { 0x0005, 0x0010, 0x0080, 0x0020, 0x0020, 0x0020, 0x0000, 0x0000 };
+
+struct DataKeyEntry dataKeyTable[23] = {
+    { D_00AB56E8, 1, 10 },
+    { D_00AB56D8, 1, 9 },
+    { D_00AB56D0, 1, 8 },
+    { D_00AB56C0, 1, 10 },
+    { D_00AB56B0, 1, 9 },
+    { D_00AB56A8, 1, 8 },
+    { D_00AB5698, 1, 10 },
+    { D_00AB5688, 1, 9 },
+    { D_00AB5680, 1, 8 },
+    { D_00AB5670, 1, 10 },
+    { D_00AB5660, 1, 9 },
+    { D_00AB5658, 1, 8 },
+    { D_00AB5648, 1, 10 },
+    { D_00AB5640, 1, 9 },
+    { D_00AB5638, 1, 8 },
+    { D_00AB5610, 0, 3 },
+    { D_00AB5618, 0, 4 },
+    { D_00AB5620, 0, 5 },
+    { D_00AB5628, 0, 6 },
+    { D_00AB5630, 0, 7 },
+    { D_00AB5600, 0, 1 },
+    { D_00AB5608, 0, 2 },
+    { 0, 0, 0 }
+};
+
+struct DataKeyEntry D_00AB5810[3] = {
+    { D_00AB5600, 0, 1 },
+    { D_00AB5608, 0, 2 },
+    { 0, 0, 0 }
+};
+
+unsigned short padConvTbl[] = { 0x1000, 0x4000, 0x8000, 0x2000, 0x0010, 0x0040, 0x0080, 0x0020, 0x0004, 0x0001, 0x0008, 0x0002, 0x0800, 0x0100, 0x0000, 0x0000 };
+
+struct DataSlotRow dataSlotRowsA[2] = {
+    { 5, { 0xB, 0xC, 0xD, 0xE, 0xF } },
+    { 3, { 0x10, 0x12, 0x13, 0x0, 0x0 } }
+};
+
+struct DataSlotRow dataSlotRowsB[2] = {
+    { 4, { 0xB, 0xC, 0x11, 0xF, 0x0 } },
+    { 2, { 0x10, 0x12, 0x0, 0x0, 0x0 } }
+};
+
+struct DataState dataState = { 0 };
+
+struct DataObject *dataObject = 0;

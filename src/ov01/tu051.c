@@ -75,7 +75,7 @@ typedef struct ColourPair {
     unsigned char bytes[8];
 } ColourPair;
 
-extern ColourPair D_00ABACC8;
+extern const ColourPair D_00ABACC8;
 
 extern void func_00AA84D0(GrPacket *packet);
 extern void menuKeyDraw(GrPacket *packet, int x, int y, short value, int);
@@ -165,3 +165,65 @@ void menuCursorTargetDraw(MenuCursor *cursor) {
                   actor->stats->key, 1);
     grPacketSend(&packet);
 }
+
+/* The menu cursor object, a common global: tu052 and tu066 name it too. */
+MenuCursor *menuCursor;
+
+/* Screen offset of each of the three party slots. */
+MenuUnitSlotOffset menuUnitSlotOffsets[3] = { { -28, 0 }, { 0, 0 }, { 28, 0 } };
+
+/* Frame colour of each party slot; the fourth row is never drawn. */
+unsigned char menuUnitSlotColours[4][4] = {
+    { 0xff, 0x60, 0xff, 0x80 },
+    { 0x60, 0xff, 0x60, 0x80 },
+    { 0xff, 0x60, 0x60, 0x80 },
+    { 0, 0, 0, 0 }
+};
+
+/* Icon lists of the rows in D_00AB63C0 below: each one is a list of icon ids ended by 4 (MENU_ICON_END of
+ * ov01/tu052); the trailing words are kept as they are. */
+static int D_00AB6300[4] = { 1, 1, 4, 0 };
+static int D_00AB6310[4] = { 1, 2, 4, 0 };
+static int D_00AB6320[4] = { 2, 2, 4, 0 };
+static int D_00AB6330[4] = { 2, 1, 4, 0 };
+static int D_00AB6340[4] = { 129, 1, 4, 0 };
+static int D_00AB6350[4] = { 129, 2, 4, 0 };
+static int D_00AB6360[4] = { 130, 2, 4, 0 };
+static int D_00AB6370[4] = { 130, 1, 4, 0 };
+static int D_00AB6380[2] = { 0, 4 };
+static int D_00AB6388[2] = { 3, 4 };
+static int D_00AB6390[2] = { 0, 4 };
+static int D_00AB6398[4] = { 128, 0, 4, 0 };
+static int D_00AB63A8[4] = { 128, 128, 0, 4 };
+static int D_00AB63B8[2] = { 1, 4 };
+
+/* One row of a command icon table (the same type as ov01/tu052): its icon list, ended by 4, and its kind;
+ * a zero kind ends a table. */
+typedef struct MenuIconRow {
+    int *icons;
+    int kind;
+} MenuIconRow;
+
+/* The rows of the command icon tables (menuIconTablesKeyed and menuIconTablesOther of ov01/tu052) in one array;
+ * the first entry has no reader. */
+MenuIconRow D_00AB63C0[32] = {
+    { (int *) 2, 4 }, { D_00AB6300, 3 },
+    { D_00AB6310, 4 }, { D_00AB6330, 6 },
+    { D_00AB6320, 5 }, { D_00AB6380, 7 },
+    { D_00AB6388, 22 }, { 0, 0 },
+    { D_00AB6340, 3 }, { D_00AB6350, 4 },
+    { D_00AB6388, 20 }, { 0, 0 },
+    { D_00AB6370, 6 }, { D_00AB6360, 5 },
+    { D_00AB6388, 20 }, { 0, 0 },
+    { D_00AB6380, 7 }, { D_00AB6388, 20 },
+    { 0, 0 }, { D_00AB6390, 8 },
+    { D_00AB6388, 20 }, { 0, 0 },
+    { D_00AB6398, 9 }, { D_00AB6388, 20 },
+    { 0, 0 }, { D_00AB63A8, 10 },
+    { D_00AB6388, 20 }, { 0, 0 },
+    { D_00AB63B8, 1 }, { (int *) D_00AB63C0, 2 },
+    { D_00AB6388, 22 }, { 0, 0 }
+};
+
+/* Constant colours: the two 4-byte colours of menuCursorTargetDraw. */
+const ColourPair D_00ABACC8 = { { 0x80, 0x80, 0x10, 0x80, 0xa0, 0x10, 0x10, 0x80 } };

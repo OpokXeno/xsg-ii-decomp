@@ -174,3 +174,6 @@ void menuValuePanelDraw(struct MenuValuePanel *panel)
     menuNumDraw(&packet, numberX, y + 0xC, shownValue, 1, 0);
     grPacketSend(&packet);
 }
+
+/* The value panel object, a common global: tu066 names it too (as unsigned int *). */
+void *menuValuePanelObj;

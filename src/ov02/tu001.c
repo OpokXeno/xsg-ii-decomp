@@ -111,7 +111,8 @@ typedef struct TitleTableState {
     TitleTableRecord *record;
     short frame;
     short frame_end;
-    float lights[15][4];         /* 0x10: rows 0-6 from the rotated titleLightDirection, 7-14 copied from titleLightVectors */
+    float lights[24][4];         /* 0x10: rows 0-6 from the rotated titleLightDirection, 7-14 copied from titleLightVectors;
+                                  * rows 15-23 are unused room up to the end of the block (0x190 bytes) */
 } TitleTableState;
 /* titleTable.table_ready: where the title scene is in its table. */
 enum {
@@ -127,7 +128,6 @@ enum {
 /* Records the table must hold before the scene starts; bytes read before the offsets are checked. */
 #define TITLE_TABLE_MIN_RECORDS 13
 #define TITLE_TABLE_MIN_READ 2048
-extern TitleTableState titleTable;
 extern TitleVec3Slot titleLightVectors[];
 
 /* The title state block at titleState: the fade level halfword sits at +0x10. */
@@ -145,21 +145,24 @@ typedef struct TitleState {
     unsigned char unmodeled_24[0x0c];
     Vector4 pan;                 /* 0x30: the camera pan the title scrolls by */
 } TitleState;
-extern TitleState titleState;
+/* Title state storage: the static block of this TU (titleState, titleTable and the two gaps around them). */
+static unsigned char D_00A83C48[8];
+static TitleState titleState;
+static TitleTableState titleTable;
 
-/*
- * The fade packet buffer at titleFadePacket: a doubleword GS tag at +0x30 and
- * three words at +0x40, +0x44 and +0x48 that titleFadeTransition fills.
- */
-typedef struct TitleFadePacket {
-    unsigned char unmodeled_00[0x30];
-    u64 gs_tag;
-    unsigned char unmodeled_38[0x8];
-    int fade_value[3];
-} TitleFadePacket;
-extern TitleFadePacket titleFadePacket;
+
+/* titleFadePacket: u64 words (gs_tag = word 6); the three fade ints sit at byte 0x40 (word 8). */
+extern u64 titleFadePacket[];
 extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 extern void xglSleep(void);
+
+/* Read-only data of this TU, in address order (before the functions whose switch tables follow it). */
+const char titleMusicPath[16] = "yajima\\M-01.adx";
+const char titleMusicKeyFormat[16] = "%08x.%08x";
+const char D_00A83470[24] = "yajima\\titleobj.xtx";
+const char D_00A83488[24] = "yajima\\title.bin";
+const char D_00A834A0[24] = "yajima\\title2.bin";
+const char titleBg2Path[24] = "yajima\\titlebg2.bin";
 
 int func_00A80798(void) {
     return 0;
@@ -280,7 +283,6 @@ typedef struct TitleLayoutRecord {
     float rotation[3];
 } TitleLayoutRecord;
 extern TitleLayoutRecord titleActorPlacements[];
-extern TitleLayoutRecord D_00A829B4[];
 
 /* The camera angle pairs (x, y) of the seven light rounds. */
 extern float titleLightAngles[][2];
@@ -492,14 +494,8 @@ extern u64 D_00A82D10[];
 extern u32 D_00A82D70[];
 extern u8 D_00A82E20[];
 extern u32 titleSlotPacket[];
-extern u32 D_00A82F1C[];
-typedef struct TitleGsPacket {
-    u8 unmodeled_00[0x30];
-    u64 gs_tag;
-    u8 unmodeled_38[0x08];
-    u64 fade_tag;
-} TitleGsPacket;
-extern TitleGsPacket titleFadeOverlayPacket;
+/* titleFadeOverlayPacket: u64 words (gs_tag = word 6, fade_tag = word 8). */
+extern u64 titleFadeOverlayPacket[];
 
 /* Title per-frame draw callback: the fade overlay, the title sprites and the menu slot sprites. */
 void titleDrawFrame(XglPacket **packetp)
@@ -549,7 +545,7 @@ void titleDrawFrame(XglPacket **packetp)
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddDataN(packet, D_00A82D70, 0x2C);
     xglPacketTextureTrans(titleState.texture_offset);
-    D_00A82F1C[0] = titleState.field_14;
+    titleSlotPacket[35] = titleState.field_14;
     slot_ptr = titleState.group_slot;
     do {
         if (*slot_ptr != -1) {
@@ -593,8 +589,8 @@ void titleDrawFrame(XglPacket **packetp)
         }
     }
     if (titleState.fade_level > 0) {
-        titleFadeOverlayPacket.fade_tag = ((u64) titleState.fade_level << 32) | tag_bits;
-        titleFadeOverlayPacket.gs_tag = 0x24120000 | (sRender.flip_base << 5) | ((u64) 0xC800 << 19);
+        titleFadeOverlayPacket[8] = ((u64) titleState.fade_level << 32) | tag_bits;
+        titleFadeOverlayPacket[6] = 0x24120000 | (sRender.flip_base << 5) | ((u64) 0xC800 << 19);
         sceVif1PkAddDataN(packet, &titleFadeOverlayPacket, 0x28);
     }
     return xglFontReloadTexture(packetp, 0);
@@ -618,23 +614,23 @@ void titleFadeTransition(int mode)
         if (titleState.fade_level < 0) {
             titleState.fade_level = 0;
         }
-        titleFadePacket.gs_tag = 0x24120000 | (sRender.flip_base << 5) | ((u64) 0xC800 << 19);
+        titleFadePacket[6] = 0x24120000 | (sRender.flip_base << 5) | ((u64) 0xC800 << 19);
         if (mode == 0) {
-            titleFadePacket.fade_value[2] = titleState.fade_level;
-            titleFadePacket.fade_value[1] = titleState.fade_level;
-            titleFadePacket.fade_value[0] = titleState.fade_level;
+            ((int *) titleFadePacket)[18] = titleState.fade_level;
+            ((int *) titleFadePacket)[17] = titleState.fade_level;
+            ((int *) titleFadePacket)[16] = titleState.fade_level;
         } else {
             int progress = full_level - titleState.fade_level;
             int scaled = progress * 3;
 
-            titleFadePacket.fade_value[2] = titleState.fade_level;
-            titleFadePacket.fade_value[0] = full_level - progress * 2;
-            if (titleFadePacket.fade_value[0] < 0) {
-                titleFadePacket.fade_value[0] = 0;
+            ((int *) titleFadePacket)[18] = titleState.fade_level;
+            ((int *) titleFadePacket)[16] = full_level - progress * 2;
+            if (((int *) titleFadePacket)[16] < 0) {
+                ((int *) titleFadePacket)[16] = 0;
             }
-            titleFadePacket.fade_value[1] = full_level - scaled / 2;
-            if (titleFadePacket.fade_value[1] < 0) {
-                titleFadePacket.fade_value[1] = 0;
+            ((int *) titleFadePacket)[17] = full_level - scaled / 2;
+            if (((int *) titleFadePacket)[17] < 0) {
+                ((int *) titleFadePacket)[17] = 0;
             }
         }
         sceVif1PkCnt(packet, 0);
@@ -917,3 +913,153 @@ void titleResetState(void) {
     yg2PathResetAll();
     msgBalanceReset();
 }
+
+/* Initialized data of this TU, in address order. */
+TitleLayoutRecord titleActorPlacements[10] = {
+    { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+    { { 0.3310075f, 0.0f, 3.6509488f }, { 0.0f, 0.0f, 0.0f } },
+    { { 8.446873f, 0.0f, 3.655942f }, { 0.0f, 0.0f, 0.0f } },
+    { { -8.376025f, 0.0f, 3.6576529f }, { 0.0f, 0.0f, 0.0f } },
+    { { -0.25603572f, 0.0f, 3.7308059f }, { 0.0f, 0.0f, 0.0f } },
+    { { 0.03792591f, 0.7523239f, -4.097623f }, { 2.792527f, 0.0f, 3.1415927f } },
+    { { -9.9662895f, 0.0f, 3.6576529f }, { 0.0f, 0.0f, 0.0f } },
+    { { 1.3410023f, 0.0f, 3.7308059f }, { 0.0f, 0.0f, 0.0f } },
+    { { 22.52556f, 0.0f, 17.207914f }, { 0.0f, -1.5707964f, 0.0f } },
+    { { 1.7654405f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } }
+};
+u8 D_00A82A98[24] = {
+    0x08, 0x0D, 0x02, 0x05, 0xFF, 0x02, 0x00, 0x05, 0x00, 0x02, 0x01, 0x05,
+    0x02, 0x02, 0x03, 0x05, 0x04, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+u8 D_00A82AB0[24] = {
+    0x1C, 0x29, 0xFA, 0x0D, 0x10, 0x13, 0x16, 0x19, 0xFF, 0xFA, 0x00, 0x0D,
+    0x00, 0x10, 0x00, 0x13, 0x00, 0x16, 0x00, 0x19, 0x00, 0xFF, 0x00, 0x00
+};
+u8 D_00A82AC8[24] = {
+    0x29, 0x36, 0xFA, 0x0D, 0x10, 0x13, 0x16, 0x19, 0xFF, 0xFA, 0x00, 0x0D,
+    0x00, 0x10, 0x00, 0x13, 0x00, 0x16, 0x00, 0x19, 0x00, 0xFF, 0x00, 0x00
+};
+u8 D_00A82AE0[32] = {
+    0x39, 0x48, 0xFA, 0x36, 0x0D, 0x10, 0x13, 0x16, 0x19, 0xFF, 0xFA, 0x00,
+    0x36, 0x00, 0x0D, 0x00, 0x10, 0x00, 0x13, 0x00, 0x16, 0x00, 0x19, 0x00,
+    0x36, 0x05, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+u8 D_00A82B00[24] = {
+    0x48, 0x53, 0x0D, 0x10, 0x13, 0x16, 0x19, 0xFF, 0x0D, 0x00, 0x10, 0x00,
+    0x13, 0x00, 0x16, 0x00, 0x19, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+u8 D_00A82B18[24] = {
+    0x53, 0x5E, 0x0D, 0x10, 0x13, 0x16, 0x19, 0xFF, 0x0D, 0x00, 0x10, 0x00,
+    0x13, 0x00, 0x16, 0x00, 0x19, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+u8 D_00A82B30[24] = {
+    0x5E, 0x69, 0x0D, 0x10, 0x13, 0x16, 0x19, 0xFF, 0x0D, 0x00, 0x10, 0x00,
+    0x13, 0x00, 0x16, 0x00, 0x19, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+u8 D_00A82B48[24] = {
+    0x69, 0x70, 0x02, 0x05, 0x0D, 0xFF, 0x0D, 0x00, 0x02, 0x00, 0x05, 0x00,
+    0x02, 0x01, 0x05, 0x02, 0x02, 0x06, 0x05, 0x07, 0xFF, 0x00, 0x00, 0x00
+};
+u8 D_00A82B60[24] = {
+    0x73, 0x7E, 0x0D, 0x10, 0x13, 0x16, 0x70, 0xFF, 0x0D, 0x00, 0x10, 0x00,
+    0x13, 0x00, 0x16, 0x00, 0x70, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+u8 D_00A82B78[24] = {
+    0x7E, 0x8B, 0x05, 0x0D, 0x10, 0x13, 0x16, 0x70, 0xFF, 0x0D, 0x00, 0x10,
+    0x00, 0x13, 0x00, 0x16, 0x00, 0x70, 0x00, 0x05, 0x00, 0x05, 0x08, 0xFF
+};
+u8 D_00A82B90[32] = {
+    0x8E, 0x9D, 0x36, 0x0D, 0x10, 0x13, 0x16, 0x8B, 0x70, 0xFF, 0x36, 0x00,
+    0x0D, 0x00, 0x10, 0x00, 0x13, 0x00, 0x16, 0x00, 0x8B, 0x00, 0x70, 0x00,
+    0x36, 0x09, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+u8 D_00A82BB0[32] = {
+    0x9D, 0xAC, 0x36, 0x0D, 0x10, 0x13, 0x16, 0x8B, 0x70, 0xFF, 0x36, 0x00,
+    0x0D, 0x00, 0x10, 0x00, 0x13, 0x00, 0x16, 0x00, 0x8B, 0x00, 0x70, 0x00,
+    0x36, 0x09, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+u8 D_00A82BD0[32] = {
+    0xAF, 0xBE, 0xFA, 0x0D, 0x10, 0x13, 0x16, 0x8B, 0xAC, 0xFF, 0xFA, 0x00,
+    0x0D, 0x00, 0x10, 0x00, 0x13, 0x00, 0x16, 0x00, 0x8B, 0x00, 0xAC, 0x00,
+    0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+u8 *titleTableLists[14] = { D_00A82A98, D_00A82AB0, D_00A82AC8, D_00A82AE0, D_00A82B00, D_00A82B18, D_00A82B30, D_00A82B48, D_00A82B60, D_00A82B78, D_00A82B90, D_00A82BB0, D_00A82BD0, 0 };
+float titleLightAngles[7][2] = {
+    { -0.261956f, 0.531208f },
+    { 2.356194f, 1.273357f },
+    { 0.349066f, 3.786631f },
+    { 0.0f, 0.0f },
+    { 0.0f, 0.0f },
+    { 0.0f, 0.0f },
+    { 1.570796f, 0.0f }
+};
+TitleVec3Slot titleLightVectors[8] = {
+    { 0.8f, 0.8f, 0.8f },
+    { 0.5f, 0.5f, 0.5f },
+    { 0.5f, 0.5f, 0.5f },
+    { 0.0f, 0.0f, 0.0f },
+    { 0.0f, 0.0f, 0.0f },
+    { 0.0f, 0.0f, 0.0f },
+    { 0.25f, 0.25f, 0.25f },
+    { 0.25f, 0.25f, 0.25f }
+};
+Vector4 titleLightDirection = { 0.0f, 0.0f, 1.0f, 1.0f };
+Vector4 titleFogColor = { 178.5f, 186.15001f, 255.0f, 0.0f };
+float titleFogDistances[4] = { 0.0f, 3e+01f, 0.3f, 0.39f };
+u64 D_00A82D10[12] = {
+    0x5023400000008001ULL, 0x00000000000551EEULL, 0x0000000000030000ULL,
+    0x0000000000000047ULL, 0x0000000000000000ULL, 0x0000000000000042ULL,
+    0x000000FF000000FFULL, 0x00000080000000FFULL, 0x000071F700006FF8ULL,
+    0x0000000000000000ULL, 0x00008DF700008FF8ULL, 0x0000000000000000ULL
+};
+u32 D_00A82D70[44] = {
+    0x00000000, 0x00000000, 0x00000000, 0x5000000A, 0x00008001, 0x90AB4000,
+    0x3531E6EE, 0x00000005, 0x00000000, 0x00000000, 0x0000003F, 0x00000000,
+    0x00030000, 0x00000000, 0x00000047, 0x00000000, 0x64023800, 0x00000006,
+    0x00000006, 0x00000000, 0x00000044, 0x00000080, 0x00000042, 0x00000000,
+    0x00000080, 0x00000080, 0x00000080, 0x00000080, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00006FF8, 0x000071F7, 0x00000000, 0x00000000,
+    0x00002000, 0x00000E00, 0x00000000, 0x00000000, 0x00008FF8, 0x00008DF7,
+    0x00000000, 0x00000000
+};
+u8 D_00A82E20[112] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x06, 0x00, 0x00, 0x51, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10,
+    0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x38, 0x08, 0x00, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x51, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0xE0, 0x00, 0x00, 0x00,
+    0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00
+};
+u32 titleSlotPacket[52] = {
+    0x00000000, 0x00000000, 0x00000000, 0x5000000C, 0x00008001, 0xB0AB4000,
+    0x31EEEEEE, 0x00000535, 0x00000000, 0x00000000, 0x0000003F, 0x00000000,
+    0x00000005, 0x00000000, 0x00000008, 0x00000000, 0x00000060, 0x00000000,
+    0x00000014, 0x00000000, 0x00030000, 0x00000000, 0x00000047, 0x00000000,
+    0x64023800, 0x00000006, 0x00000006, 0x00000000, 0x00000044, 0x00000080,
+    0x00000042, 0x00000000, 0x00000080, 0x00000080, 0x00000080, 0x00000080,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00006FF8, 0x000081F7,
+    0x00000000, 0x00000000, 0x00000780, 0x00000480, 0x00000000, 0x00000000,
+    0x00007778, 0x00007677, 0x00000000, 0x00000000
+};
+u64 titleFadeOverlayPacket[20] = {
+    0x0000000000000000ULL, 0x5000000900000000ULL, 0x80AB400000008001ULL,
+    0x0000000053531E6EULL, 0x0000000000030000ULL, 0x0000000000000047ULL,
+    0x0000000000000000ULL, 0x0000000000000006ULL, 0x0000000000000000ULL,
+    0x0000000000000042ULL, 0x0000008000000080ULL, 0x0000008000000080ULL,
+    0x0000000000000000ULL, 0x0000000000000000ULL, 0x000071F700006FF8ULL,
+    0x0000000000000000ULL, 0x00001C0000002000ULL, 0x0000000000000000ULL,
+    0x00008DF700008FF8ULL, 0x0000000000000000ULL
+};
+u64 titleFadePacket[18] = {
+    0x0000000000000000ULL, 0x5000000800000000ULL, 0x708B400000008001ULL,
+    0x000000000535316EULL, 0x0000000000030000ULL, 0x0000000000000047ULL,
+    0x0000000000000000ULL, 0x0000000000000006ULL, 0x0000008000000080ULL,
+    0x0000008000000080ULL, 0x0000000000000000ULL, 0x0000000000000000ULL,
+    0x000071F700006FF8ULL, 0x0000000000000000ULL, 0x00001C0000002000ULL,
+    0x0000000000000000ULL, 0x00008DF700008FF8ULL, 0x0000000000000000ULL
+};
+const char *D_00A83090 = D_00A83470;

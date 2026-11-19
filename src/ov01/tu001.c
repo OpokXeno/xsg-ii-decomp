@@ -22,7 +22,7 @@ typedef struct TaskRecord {
     unsigned char unmodeled_0C[0x1C - 0x0C];
 } TaskRecord;
 
-extern TaskRecord ov01TaskTable[OV01_TASK_COUNT];
+static TaskRecord ov01TaskTable[OV01_TASK_COUNT];
 
 /* Clears all 32 task records (ov01TaskClearAll), called by ov01ClearTables. */
 void ov01TaskClearAll(void)

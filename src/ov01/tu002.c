@@ -8,7 +8,7 @@
 /* Entries in the two-entry monsSlotTable. */
 #define MONS_SLOT_COUNT 2
 
-extern MonsSlot monsSlotTable[MONS_SLOT_COUNT];
+static MonsSlot monsSlotTable[MONS_SLOT_COUNT];
 
 /* Clears both slots of monsSlotTable (ov01ClearTables calls it). */
 void monsSlotClearAll(void)

@@ -46,6 +46,14 @@
 #include "ov01/tu071.h"
 
 extern char cmdList[];   /* cmdList: 0x20-byte entries, unit then command body */
+/* The command fifo ring (the same layout as ov01/tu005.c's private definition). */
+struct FifoRing {
+    int base;
+    int maxIndex;
+    int readIndex;
+    int writeIndex;
+    int count;
+};
 extern struct FifoRing cmdFifo;   /* the fifo over the cmdList entries */
 
 /* Command list entries (0x20 bytes each); the fifo ring runs over them. */
@@ -735,7 +743,9 @@ void eventQueueAdd(int kind, EventQueueArgs *args)
 #define EVENT_KIND_COUNT 0x15
 
 /* Handlers by record kind: nonzero when the record is done. */
-extern int (*eventQueueHandlers[EVENT_KIND_COUNT])(EventQueueEntry *entry);
+/* The table has three more (empty) slots than kinds. */
+#define EVENT_HANDLER_SLOTS 24
+extern int (*eventQueueHandlers[EVENT_HANDLER_SLOTS])();
 
 /* eventQueueRun: calls the handler of each queued record's kind. A record whose
  * handler is not done yet stops the drain (eventRetryCount counts the retries); a done
@@ -1540,7 +1550,7 @@ typedef struct ItemPickGroup {
 extern ItemPickGroup itemPickGroups[ITEM_PICK_GROUPS];
 /* The 0x80-byte message line itemRandomPick builds, and the text "!" appended after the item name. */
 extern char itemPickText[];
-extern char itemPickTextEnd[];
+const char itemPickTextEnd[] = "!";
 
 void dataBoxIncCategory1(int item);
 char *strcpy(char *destination, const char *source);
@@ -2026,6 +2036,9 @@ void unitStatusAuraUpdate(Ov01Object *object)
         sefApplyRecordMode(object->unit, AURA_KEY(3), 1);
     }
 }
+
+const char D_00ABA568[] = "ck_sc3m01";
+const char D_00ABA578[] = "ck_sc3m02";
 
 INCLUDE_ASM("asm/nonmatchings/ov01/tu033", func_00A95810);
 
@@ -2814,3 +2827,53 @@ int eventPairEnd(EventQueueEntry *entry)
     }
     return 0;
 }
+
+/* Data of this TU, in address order. */
+extern const char D_00ABA420[];
+extern const char D_00ABA430[];
+int func_00A97110(void);
+int eventActStockBoostClear();
+int eventWaitCountdown();
+
+const char *ov01UnitSlotPart = D_00ABA420;
+const char *ov01Slot1Part = D_00ABA430;
+int D_00AB5A48[3] = { 1, 5, 11 };
+int D_00AB5A58[2] = { 12, 13 };
+int D_00AB5A60[3] = { 21, 2, 6 };
+int D_00AB5A70[4] = { 8, 15, 25, 26 };
+ItemPickGroup itemPickGroups[ITEM_PICK_GROUPS] = {
+    { 3, 4, D_00AB5A70 },
+    { 12, 3, D_00AB5A60 },
+    { 50, 2, D_00AB5A58 },
+    { 100, 3, D_00AB5A48 },
+};
+DoublewordAlignedVector4 pairEventPos[3] = {
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+    { 0.0f, 0.0f, 0.0f, 1.0f },
+};
+int (*eventQueueHandlers[EVENT_HANDLER_SLOTS])() = {
+    func_00A93708, eventUnitCommand, (int (*)()) eventWaitUnitQueue, eventAttackRun, func_00A95CE0, func_00A95CE8,
+    actionResourcesLoad, ov01LoadsIdle, unitAttachRequest, unitSpawnFromRequest, unitBindRequest,
+    unitsRemoveDefeated, battleResolveStatus, battleStatusQueueWait, ov01StreamOpen, ov01StreamBind,
+    eventPairBegin, eventPairEnd, func_00A97110, eventActStockBoostClear, eventWaitCountdown,
+};
+DoublewordAlignedVector4 pairSavedPos[3] = { 0 };
+float pairSavedAngle[3] = { 0 };
+
+char cmdList[1024];
+struct FifoRing cmdFifo;
+EventQueueEntry eventQueueTable[EVENT_QUEUE_COUNT];
+int eventQueueCount;
+int eventQueueCursor;
+int eventRetryCount;
+int eventStepStarted;
+int attackFillWait;
+int D_00AC3AFC;
+Ov01Object *ov01LastUnit;
+struct MonsSlot *ov01StreamSlot;
+struct DataEntry *ov01ModelEntry;
+int attackLastActions;
+int attackLastHits;
+int attackStep;
+char itemPickText[128];

@@ -21,8 +21,10 @@ typedef struct ObjPathPoint {
 /* The last path object is the extra one objPathSendLast sends to point 0. */
 #define OBJ_PATH_MOVING 4
 
-extern ObjPathPoint objPathPoints[OBJ_PATH_COUNT];
-extern PathObject *objPathTable[OBJ_PATH_COUNT];
+ObjPathPoint objPathPoints[OBJ_PATH_COUNT] = {
+    { 376, 390 }, { 404, 390 }, { 432, 390 }, { 460, 390 }, { 288, 390 },
+};
+PathObject *objPathTable[OBJ_PATH_COUNT];
 
 /* ActStock.pickSource value that shows the moving path object instead of point 0. */
 #define PATH_STOCK_SOURCE_MOVING 2

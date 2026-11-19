@@ -104,7 +104,7 @@ struct MenuTexFlushTask {
 void *objSlotAlloc(void);
 void menuTexFlush(void);
 void menuTexFlushDraw(void);
-extern struct MenuTexFlushTask *menuTexFlushTask;
+static struct MenuTexFlushTask *menuTexFlushTask;
 
 /* Starts the texture-flush task: the object's draw is menuTexFlushDraw, and the
  * object is kept in menuTexFlushTask (nothing else in the overlay reads it). */
@@ -127,7 +127,7 @@ void menuTexFlushDraw(void)
 }
 
 /* The stat records menuStatRecordsCreate made, one per slot of the unit table (0 for an empty slot). */
-extern MenuObject *menuStatRecords[];
+MenuObject *menuStatRecords[4];
 
 void menuStatGaugeStep(MenuObject *record);
 void menuStatRecordSubmit(MenuObject *record);

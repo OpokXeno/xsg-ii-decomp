@@ -711,3 +711,49 @@ int unitCmdUnbind(Ov01Object *object, int unusedArg) {
     }
     return unitCmdRefreshPhase(object, unusedArg);
 }
+
+/* Handlers of entries 10 to 39 are defined by the overlay files tu013 to tu016. */
+int unitCmdModeDispatch();
+int func_00A85EA0();
+int func_00A85F30();
+int func_00A85FC0();
+int unitCmdCodeWait();
+int func_00A862D8();
+int unitCmdMoveCha();
+int unitCmdMovePos();
+int unitCmdPhase0EWait();
+int unitCmdPhase12Wait();
+int unitCmdPoseArrive();
+int unitCmdPoseArriveWait();
+int unitCmdMoveChaRun();
+int unitCmdMovePosJump();
+int unitCmdMoveChaJump();
+int unitCmdMoveChaHover();
+int unitCmdMovePosHover();
+int unitCmdModeRamp();
+int unitCmdMoveRatio();
+int unitCmdMoveRamp();
+int unitCmdFinish();
+int unitCmdPhase2CWait();
+int unitCmdClearActive();
+int unitCmdPhase2BWait();
+int func_00A86CB0();
+int unitCmdTurnAim();
+int unitCmdStreamPlay();
+int unitCmdRemove();
+int unitCmdFinishRefresh();
+int unitCmdModeStart();
+
+/* unitCommandTable: the 40 handlers the command queue dispatches through, in index order. */
+int (*unitCommandTable[UNIT_COMMAND_COUNT])(Ov01Object *, Ov01Command *) = {
+    unitCmdNoop, unitCmdSetPhase, unitCmdStatEffect, unitCmdAction,
+    unitCmdPlayVoice, unitCmdRelease, unitCmdLoadSnapshot, unitCmdSetBattleTransition,
+    unitCmdRefreshPhase, unitCmdUnbind, unitCmdModeDispatch, func_00A85EA0,
+    func_00A85F30, func_00A85FC0, unitCmdCodeWait, func_00A862D8,
+    unitCmdMoveCha, unitCmdMovePos, unitCmdPhase0EWait, unitCmdPhase12Wait,
+    unitCmdPoseArrive, unitCmdPoseArriveWait, unitCmdMoveChaRun, unitCmdMovePosJump,
+    unitCmdMoveChaJump, unitCmdMoveChaHover, unitCmdMovePosHover, unitCmdModeRamp,
+    unitCmdMoveRatio, unitCmdMoveRamp, unitCmdFinish, unitCmdPhase2CWait,
+    unitCmdClearActive, unitCmdPhase2BWait, func_00A86CB0, unitCmdTurnAim,
+    unitCmdStreamPlay, unitCmdRemove, unitCmdFinishRefresh, unitCmdModeStart
+};

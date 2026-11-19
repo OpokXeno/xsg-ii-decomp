@@ -42,6 +42,16 @@ typedef long long s64;
 
 
 
+/* Stencil B data: edge offsets and the drift of the arms, the model name table, the alpha value. */
+const Vector4 mefStencilEdgeOffsets[2] = {
+    { -0.018f, 0.0f, 0.0f, 1.0f },
+    { 0.018f, 0.0f, 0.0f, 1.0f },
+};
+
+const unsigned char mefStencilModelNameB[32] = "missile.pxy\0\0\0\0\0\x30\0\0\0\x50\0\0\0\x60\0\0\0\xa0\0\0\0";
+
+const Vector4 mefStencilDrift = { 0.0f, 0.0f, 0.8f, 1.0f };
+
 /* The sub-record of an effect object at +0x20: the stencil trail state (translation,
  * base and block matrices, scales, edge points and transparency). Only the fields
  * this file reads or writes are modelled. */
@@ -77,9 +87,9 @@ typedef struct MEfEffectObject {
 } MEfEffectObject;
 
 extern s64 mefStencilAlphaB;
-extern unsigned char mefStencilModelNameB[];
-extern Vector4 mefStencilEdgeOffsets[];
-extern Vector4 mefStencilDrift;
+extern const unsigned char mefStencilModelNameB[];
+extern const Vector4 mefStencilEdgeOffsets[];
+extern const Vector4 mefStencilDrift;
 
 s16 ov01LastValueGet(void);
 double fptodp(float value);
@@ -364,3 +374,5 @@ void MEfAdvanceStencilB(MEfEffectObject *object)
         MSeObjRequestFree(object);
     }
 }
+
+s64 mefStencilAlphaB = 0x44;

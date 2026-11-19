@@ -17,7 +17,6 @@ int scriptLoadByNumber(int *slot, int number) {
 int malloc(int size);
 char *strcat(char *destination, const char *source);
 int sbLinkImage(int buffer);
-extern const char D_0068D5C8[];
 char *strcpy(char *, const char *);
 
 /* Allocates a buffer in *slot, waits for it, then loads fileName from host0:.../cf/. */
@@ -26,7 +25,7 @@ int scriptReadFile(int *slot, char *fileName) {
     const char *hostPath;
     int status;
 
-    hostPath = D_0068D5C8;
+    hostPath = "host0:/home/xeno/vcd/x2/cf/";
     *slot = malloc(100);
     while (*slot == 0) {
     }

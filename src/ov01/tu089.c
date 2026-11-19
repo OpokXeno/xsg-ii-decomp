@@ -297,7 +297,6 @@ void MEfUpdatePathStatus(EffectObject *object) {
     }
 }
 
-extern MEfGsQword mefRingColors[2];
 
 /* Writes the GIF tag that opens the packet's next primitive and returns the first data quadword after it. */
 static inline MEfGsQword *OpenTag(MGsPacket *packet, int pre, int prim, int regCount, u64 registers)
@@ -336,6 +335,8 @@ static inline void CloseTag(MGsPacket *packet, int nloop)
  */
 void MEfDrawHistoryRings(EffectObject *object)
 {
+    /* The two ring vertex colours, defined (const) at the end of this file. */
+    extern MEfGsQword mefRingColors[2];
     Matrix4 sampleMatrix;
     Vector4 transformed;
     HistoryQword firstVertex;
@@ -458,3 +459,9 @@ void MEfAdvanceHistoryStep(EffectObject *object)
         MSeObjRequestFree(object);
     }
 }
+
+/* RGBAQ colours of the outer and inner ring vertices. */
+const MEfGsQword mefRingColors[2] = {
+    { 0x00000060000000200000005800000080 },
+    { 0x00000020000000000000001000000030 },
+};
