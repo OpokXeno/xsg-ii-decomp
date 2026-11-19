@@ -573,10 +573,77 @@ void unitScriptEventSend(int kind, UnitScriptEvent *event)
     }
 }
 
-/* thinkDispatch: queues the command `command` (CMD_KIND_*) for the unit; natives thinkSet and thinkSet2. Still asm:
- * in the C, case 1 keeps unit and command in each other's registers and stores the command word after the code
- * (five instruction pairs). */
-INCLUDE_ASM("asm/nonmatchings/ov01/tu042", thinkDispatch);
+/* The wait flag thinkDispatch stores for CMD_KIND_CODE_WAIT: unitCmdCodeWait then also waits for unitIsDone. */
+#define THINK_CODE_WAIT_UNTIL_DONE 1
+
+/* thinkDispatch: queues the command `command` (CMD_KIND_*) for the unit; natives thinkSet and thinkSet2. A technique
+ * takes entry `arg` of the unit's key row (entry 0 when that one is 0); a lookup command is queued only when
+ * calcEntryUsable allows battle lookup record `arg`, else a CMD_KIND_NONE record. */
+void thinkDispatch(Ov01Object *unit, int command, int arg, Ov01Object *target)
+{
+    /* Block-scope redeclaration (codegen): calls through the declaration of tableKeyRowGet, which is defined earlier
+     * in this file, are marked as not throwing; calls through this one are not, so the delay-slot filler keeps $a0
+     * live past the second call and annuls the case 1 branch slot (bnel) like the original. */
+    extern void *tableKeyRowGet(int key);
+    CmdListBody body;
+    short code;
+
+    switch (command) {
+    case CMD_KIND_TECHNIQUE:
+        body.command = command;
+        /* `*&` (codegen): key shares an anonymous union in StatBlock; the plain access gets alias set 0, waits for the
+         * body.command store and swaps the unit and command registers. */
+        code = ((TableKeyRow *)tableKeyRowGet(*&unit->stats->key))->entries[arg];
+        if (code == 0) {
+            code = ((TableKeyRow *)tableKeyRowGet(unit->stats->key))->entries[0];
+        }
+        body.code = code;
+        body.arg.target = (int)target;
+        cmdListSet(unit, &body);
+        break;
+    case CMD_KIND_LOOKUP:
+        code = battleLookupGet(arg)->tecIndex;
+        if (calcEntryUsable(unit, arg) != 0) {
+            body.command = command;
+            body.code = code;
+            body.arg.target = (int)target;
+            body.pairIndex = arg;
+        } else {
+            body.command = CMD_KIND_NONE;
+        }
+        cmdListSet(unit, &body);
+        break;
+    case CMD_KIND_SNAPSHOT:
+        body.command = command;
+        body.code = arg;
+        cmdListSet(unit, &body);
+        break;
+    /* Cases 0, 2 and 7 as three bodies (codegen): jump2 merges them again; one shared case body gives other code
+     * (22 instructions off). */
+    case CMD_KIND_NONE:
+        body.command = command;
+        cmdListSet(unit, &body);
+        break;
+    case CMD_KIND_WAIT:
+        body.command = command;
+        cmdListSet(unit, &body);
+        break;
+    case CMD_KIND_LEAVE:
+        body.command = command;
+        cmdListSet(unit, &body);
+        break;
+    case CMD_KIND_CODE_WAIT:
+        body.command = command;
+        body.code = arg;
+        body.arg.target = THINK_CODE_WAIT_UNTIL_DONE;
+        cmdListSet(unit, &body);
+        break;
+    case CMD_KIND_REMOVE:
+        body.command = command;
+        cmdListSet(unit, &body);
+        break;
+    }
+}
 
 /* thinkSendEnd: queues the think-end record for the unit (cmdListSet), then ends the
  * target selection mode (tgtSelectModeEnd); used by thinkSet and thinkSetEnd. */

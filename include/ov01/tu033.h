@@ -35,7 +35,10 @@ enum {
     CMD_KIND_SNAPSHOT = 6,              /* unitCmdLoadSnapshot: the unit fades over to snapshot `code` */
     CMD_KIND_LEAVE = 7,                 /* unitCmdSetBattleTransition: every unit of the side fades out of the battle */
     CMD_KIND_REFRESH = 8,               /* unitCmdRefreshPhase */
-    CMD_KIND_THINK_END = 9              /* unitCmdUnbind: the end of a unit's think step (thinkSendEnd) */
+    CMD_KIND_THINK_END = 9,             /* unitCmdUnbind: the end of a unit's think step (thinkSendEnd) */
+    CMD_KIND_CODE_WAIT = 14,            /* unitCmdCodeWait: sets phase `code`, then waits for unitIsDone when the
+                                         * wait flag (arg.target) is set */
+    CMD_KIND_REMOVE = 37                /* unitCmdRemove: unitRemove */
 };
 
 void cmdListPtrGet(void **fifo_out, void **list_out);

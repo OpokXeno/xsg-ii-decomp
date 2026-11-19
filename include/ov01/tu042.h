@@ -300,6 +300,12 @@ enum {
 int unitParaFieldGet(struct Ov01Object *unit, int field);
 void unitParaFieldSet(struct Ov01Object *unit, int field, int value);
 
+/* A row of the key table (tableKeyRowGet): 20 bytes of halfword entries. thinkDispatch reads entry `arg` of the
+ * unit's row and entry 0 when that one is 0. */
+typedef struct TableKeyRow {
+    short entries[10];
+} TableKeyRow;
+
 /* Table getters: each returns record index of its bat.dat table, 0 for an index outside the table. */
 TecRecord *tecRecordGet(int index);
 void *tableKeyRowGet(int key);
