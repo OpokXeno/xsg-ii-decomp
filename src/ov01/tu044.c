@@ -6,6 +6,7 @@
  * name table. A thread is one 0x40-byte SbThread record of sbThreadTable.
  */
 #include "common.h"
+#include "unaligned.h"
 #include "shared.h"
 #include "ov01/tu044.h"
 #include "ov01/tu046.h"
@@ -629,7 +630,18 @@ u16 sbCodeU16(SbThread *thread, int index) {
     return ((u16 *) ((unsigned char *) layout + layout->code_offset))[index];
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/tu044", sbCodeS32);
+/*
+ * The 32-bit code word at halfword `index` of the code stream. It sits at a halfword position, so it is copied
+ * bytewise (UnalignedWordCopy, see unaligned.h).
+ */
+int sbCodeS32(SbThread *thread, int index) {
+    struct SbImageHeader *layout;
+    int value;
+
+    layout = thread->image;
+    UnalignedWordCopy(&value, (u16 *) ((unsigned char *) layout + layout->code_offset) + index);
+    return value;
+}
 
 int sbGlobalGet(SbThread *thread, int index) {
     struct SbImageHeader *layout;

@@ -2,6 +2,7 @@
  * OV01 original TU 46: 0x00a9f0a8..0x00a9ff80 (35 functions)
  */
 #include "common.h"
+#include "unaligned.h"
 #include "main/sef.h"
 #include "ov01/tu020.h"
 #include "ov01/tu022.h"
@@ -144,7 +145,14 @@ void func_00A9F2E0(SbThread *thread, int pc)
 {
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/tu046", func_00A9F2E8);
+/*
+ * Copies the 32-bit word at source to destination; either may sit at a halfword position of the code stream
+ * (UnalignedWordCopy, see unaligned.h).
+ */
+void func_00A9F2E8(void *destination, void *source)
+{
+    UnalignedWordCopy(destination, source);
+}
 
 /* Entry chosen by posDataSet; posDataGet returns it. */
 static int posDataEntry;
