@@ -1633,6 +1633,8 @@ JOINED_CUTS = [
      'and sdvExecSpecial and sdvScheduleAlter match only when func_00267048 is compiled earlier in the same file '
      '(no EH region on the call, so reorg keeps beq)'),
     (0x00267BB8, 'sdv_181.c: old sdv_183 joins (upstream 725299e3, same evidence as 0x2674A0)'),
+    (0x0026BC28, 'sdv_181.c: old tu185 joins (PR #28): the rodata cut fell inside sefAlphaBlendValues, which '
+     'sdvDrawAlter indexes and sefBuildModelPacket reads; X1 sdv.c holds the same table as its static alphaTbl'),
     (0x00274070, 'oLib: tu202 joins (it lies between oLib and the old tu203, see 0x274100)'),
     (0x00274100, 'oLib: tu203 joins. Its .sdata flags xglCosDegTableReady/xglSinDegTableReady (read only by '
      'xglCosDeg/xglSinDeg) precede oLibHandle (read only by oLibInit/oLibExit) at 0x69DDC4-0x69DDD0, so the '
