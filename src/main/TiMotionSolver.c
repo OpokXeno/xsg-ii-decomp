@@ -18,7 +18,7 @@
 /* TiHrc* node flags: undo the parent's scale. */
 #define TI_NODE_FLAG_INV_PARENT_SCALE 2
 /* TiMRPackage.flags: some node has a non-unit scale. */
-#define TI_PACKAGE_FLAG_SCALED 0x20
+#define TI_MR_STATE_FLAG_SCALED 0x20
 /* Every hierarchy starts with two locators, then the joints. */
 #define TI_LOCATOR_COUNT 2
 /* TiHrcSkip.limitFlags: a minimum or maximum clamp on each rotation value (X, Y, Z = values[3..5]). */
@@ -95,8 +95,8 @@ void tiMotionAimTarget(Matrix4 destination, Matrix4 *placeMat, TiMRState *target
             if (0.4f < target->aimRotateX) {
                 target->aimRotateX = 0.4f;
             }
-            target->aimAngle = (target->aimAngle - target->aimBounds[1]) * 0.15f + target->aimBounds[1];
-            value = (target->aimRotateX - target->aimBounds[0]) * 0.15f + target->aimBounds[0];
+            target->aimAngle = (target->aimAngle - target->aimPrevious[1]) * 0.15f + target->aimPrevious[1];
+            value = (target->aimRotateX - target->aimPrevious[0]) * 0.15f + target->aimPrevious[0];
             target->aimRotateX = value;
         } else {
             target->aimRotateZ = xglAtan2Angle(local.x, local.y);
@@ -120,8 +120,8 @@ void tiMotionAimTarget(Matrix4 destination, Matrix4 *placeMat, TiMRState *target
             if (0.9f < target->aimAngle) {
                 target->aimAngle = 0.9f;
             }
-            target->aimAngle = (target->aimAngle - target->aimBounds[1]) * 0.15f + target->aimBounds[1];
-            target->aimRotateZ = (target->aimRotateZ - target->aimBounds[2]) * 0.15f + target->aimBounds[2];
+            target->aimAngle = (target->aimAngle - target->aimPrevious[1]) * 0.15f + target->aimPrevious[1];
+            target->aimRotateZ = (target->aimRotateZ - target->aimPrevious[2]) * 0.15f + target->aimPrevious[2];
         }
     } else {
         value = target->aimRotateX + target->aimAngle + target->aimRotateZ;
@@ -271,7 +271,7 @@ inline void tiMotionTransformToMatrix(Matrix4 matrix, TiMotionTransform *transfo
 /* Scale values[6..8]: a non-unit scale marks the package (0x20) and is applied; the node keeps it. */
 #define TI_MUL_SCALE(pMRPack, values, node)                                               \
     if ((values)[6] != 1.0f || (values)[7] != 1.0f || (values)[8] != 1.0f) {              \
-        tiWordSetBits(&(pMRPack)->state_a.flags, TI_PACKAGE_FLAG_SCALED);                                           \
+        tiWordSetBits(&(pMRPack)->state_a.flags, TI_MR_STATE_FLAG_SCALED);                                           \
         xglCurMulScaleXYZ(&(values)[6]);                                                  \
     }                                                                                     \
     (node)->scale[0] = (values)[6];                                                       \
@@ -585,6 +585,99 @@ void tiMotionSolveSkipNodesOld(TiMRPackage *pMRPack)
 
     nodeIndex = pMRPack->hrcData->jointCount + pMRPack->hrcData->joint2Count + pMRPack->hrcData->joint3Count;
     if (anim != 0) {
+        cursor = (unsigned char *) anim + anim->tables.second.oldSkipOffset;
+    } else {
+        cursor = 0;
+    }
+    if (pMRPack->hrcData->skipOffset != 0) {
+        {
+        for (i = 0; i < pMRPack->hrcData->skipCount; i++, nodeIndex++) {
+            ppCursor = &cursor;
+            if (cursor != 0 && i >= anim->tables.second.skipCount) {
+                cursor = 0;
+            }
+            /* Address by byte offset (nodeIndex << 6): the indexed form changes the code. */
+            matrixOffset = nodeIndex << 6;
+            matrix = (Matrix4 *) (matrixOffset + (unsigned int) pMRPack->localMat);
+            xacEvalTransFace(values, &skips[i], ppCursor, pMRPack->state_b.position);
+            tiVu0LoadIdentityMatrix();
+            node = &skips[i];
+            if (node->translationDefault[0] != 0.0f || node->translationDefault[1] != 0.0f || node->translationDefault[2] != 0.0f) {
+                xglCurMulTranslate(values);
+            }
+            TI_MUL_PARENT_INV_SCALE(pMRPack, node);
+            TI_MUL_ROTATE(node->orient);
+            TI_MUL_ROTATE(&values[3]);
+            if (node->limitFlags & TI_SKIP_LIMIT_ROT_X_MIN) {
+                if (values[3] < node->limit[0]) {
+                    values[3] = node->limit[0];
+                }
+            }
+            if (node->limitFlags & TI_SKIP_LIMIT_ROT_X_MAX) {
+                if (node->limit[1] < values[3]) {
+                    values[3] = node->limit[1];
+                }
+            }
+            if (node->limitFlags & TI_SKIP_LIMIT_ROT_Y_MIN) {
+                if (values[4] < node->limit[2]) {
+                    values[4] = node->limit[2];
+                }
+            }
+            if (node->limitFlags & TI_SKIP_LIMIT_ROT_Y_MAX) {
+                if (node->limit[3] < values[4]) {
+                    values[4] = node->limit[3];
+                }
+            }
+            if (node->limitFlags & TI_SKIP_LIMIT_ROT_Z_MIN) {
+                if (values[5] < node->limit[4]) {
+                    values[5] = node->limit[4];
+                }
+            }
+            if (node->limitFlags & TI_SKIP_LIMIT_ROT_Z_MAX) {
+                if (node->limit[5] < values[5]) {
+                    values[5] = node->limit[5];
+                }
+            }
+            if (node->scaleDefault[0] != 1.0f || node->scaleDefault[1] != 1.0f
+                || node->scaleDefault[2] != 1.0f) {
+                tiWordSetBits(&pMRPack->state_b.flags, TI_MR_STATE_FLAG_SCALED);
+                xglCurMulScaleXYZ(&values[6]);
+            }
+            node->scale[0] = values[6];
+            node->scale[1] = values[7];
+            node->scale[2] = values[8];
+            xglCurMatrixGet(*matrix);
+        }
+    }
+    }
+}
+
+void tiMotionSolveSkipNodes(TiMRPackage *pMRPack)
+{
+    TiHrcData *hrc;
+    TiOffsetEntry *anim;
+    TiHrcSkip *skips;
+    TiHrcSkip *node;
+    unsigned char *cursor = 0;
+    unsigned char **ppCursor;
+    unsigned int nodeIndex;
+    unsigned int i;
+    float values[9];
+    Matrix4 *matrix;
+    unsigned int matrixOffset;
+
+    hrc = pMRPack->hrcData;
+    anim = pMRPack->entryB;
+    skips = (TiHrcSkip *) ((unsigned char *) hrc + hrc->skipOffset);
+    if (pMRPack->localMat == 0) {
+        assertFailed(tiMotionAssertPLocalMat, tiMotionSourceFile, 686);
+    }
+    if (pMRPack->hrcData == 0) {
+        assertFailed(tiMotionAssertPHrcData, tiMotionSourceFile, 687);
+    }
+
+    nodeIndex = pMRPack->hrcData->jointCount + pMRPack->hrcData->joint2Count + pMRPack->hrcData->joint3Count;
+    if (anim != 0) {
         cursor = (unsigned char *) anim + anim->tables.second.skipOffset;
     } else {
         cursor = 0;
@@ -640,100 +733,7 @@ void tiMotionSolveSkipNodesOld(TiMRPackage *pMRPack)
             }
             if (node->scaleDefault[0] != 1.0f || node->scaleDefault[1] != 1.0f
                 || node->scaleDefault[2] != 1.0f) {
-                tiWordSetBits(&pMRPack->state_b.flags, TI_PACKAGE_FLAG_SCALED);
-                xglCurMulScaleXYZ(&values[6]);
-            }
-            node->scale[0] = values[6];
-            node->scale[1] = values[7];
-            node->scale[2] = values[8];
-            xglCurMatrixGet(*matrix);
-        }
-    }
-    }
-}
-
-void tiMotionSolveSkipNodes(TiMRPackage *pMRPack)
-{
-    TiHrcData *hrc;
-    TiOffsetEntry *anim;
-    TiHrcSkip *skips;
-    TiHrcSkip *node;
-    unsigned char *cursor = 0;
-    unsigned char **ppCursor;
-    unsigned int nodeIndex;
-    unsigned int i;
-    float values[9];
-    Matrix4 *matrix;
-    unsigned int matrixOffset;
-
-    hrc = pMRPack->hrcData;
-    anim = pMRPack->entryB;
-    skips = (TiHrcSkip *) ((unsigned char *) hrc + hrc->skipOffset);
-    if (pMRPack->localMat == 0) {
-        assertFailed(tiMotionAssertPLocalMat, tiMotionSourceFile, 686);
-    }
-    if (pMRPack->hrcData == 0) {
-        assertFailed(tiMotionAssertPHrcData, tiMotionSourceFile, 687);
-    }
-
-    nodeIndex = pMRPack->hrcData->jointCount + pMRPack->hrcData->joint2Count + pMRPack->hrcData->joint3Count;
-    if (anim != 0) {
-        cursor = (unsigned char *) anim + anim->tables.second.unmodeled_38;
-    } else {
-        cursor = 0;
-    }
-    if (pMRPack->hrcData->skipOffset != 0) {
-        {
-        for (i = 0; i < pMRPack->hrcData->skipCount; i++, nodeIndex++) {
-            ppCursor = &cursor;
-            if (cursor != 0 && i >= anim->tables.second.skipCount) {
-                cursor = 0;
-            }
-            /* Address by byte offset (nodeIndex << 6): the indexed form changes the code. */
-            matrixOffset = nodeIndex << 6;
-            matrix = (Matrix4 *) (matrixOffset + (unsigned int) pMRPack->localMat);
-            xacEvalTransFace(values, &skips[i], ppCursor, pMRPack->state_b.position);
-            tiVu0LoadIdentityMatrix();
-            node = &skips[i];
-            if (node->translationDefault[0] != 0.0f || node->translationDefault[1] != 0.0f || node->translationDefault[2] != 0.0f) {
-                xglCurMulTranslate(values);
-            }
-            TI_MUL_PARENT_INV_SCALE(pMRPack, node);
-            TI_MUL_ROTATE(node->orient);
-            TI_MUL_ROTATE(&values[3]);
-            if (node->limitFlags & TI_SKIP_LIMIT_ROT_X_MIN) {
-                if (values[3] < node->limit[0]) {
-                    values[3] = node->limit[0];
-                }
-            }
-            if (node->limitFlags & TI_SKIP_LIMIT_ROT_X_MAX) {
-                if (node->limit[1] < values[3]) {
-                    values[3] = node->limit[1];
-                }
-            }
-            if (node->limitFlags & TI_SKIP_LIMIT_ROT_Y_MIN) {
-                if (values[4] < node->limit[2]) {
-                    values[4] = node->limit[2];
-                }
-            }
-            if (node->limitFlags & TI_SKIP_LIMIT_ROT_Y_MAX) {
-                if (node->limit[3] < values[4]) {
-                    values[4] = node->limit[3];
-                }
-            }
-            if (node->limitFlags & TI_SKIP_LIMIT_ROT_Z_MIN) {
-                if (values[5] < node->limit[4]) {
-                    values[5] = node->limit[4];
-                }
-            }
-            if (node->limitFlags & TI_SKIP_LIMIT_ROT_Z_MAX) {
-                if (node->limit[5] < values[5]) {
-                    values[5] = node->limit[5];
-                }
-            }
-            if (node->scaleDefault[0] != 1.0f || node->scaleDefault[1] != 1.0f
-                || node->scaleDefault[2] != 1.0f) {
-                tiWordSetBits(&pMRPack->state_b.flags, TI_PACKAGE_FLAG_SCALED);
+                tiWordSetBits(&pMRPack->state_b.flags, TI_MR_STATE_FLAG_SCALED);
                 xglCurMulScaleXYZ(&values[6]);
             }
             node->scale[0] = values[6];
@@ -866,7 +866,7 @@ void tiMotionUpdateVisibility(TiMRPackage *pMRPack, unsigned char *pVisible)
 {
     TiOffsetEntry *anim;
     XacCurveKeyTable *table;
-    int hidden;
+    int shown;
     int curveIndex;
 
     if (pMRPack == 0) {
@@ -884,8 +884,8 @@ void tiMotionUpdateVisibility(TiMRPackage *pMRPack, unsigned char *pVisible)
     if (anim->tables.second.visibilityCount != 0) {
         do {
             /* The next table follows the keys of this one. */
-            table = (XacCurveKeyTable *) xacFindVisibilityKey(&hidden, table, pMRPack->state_a.position);
-            if (hidden != 0) {
+            table = (XacCurveKeyTable *) xacFindVisibilityKey(&shown, table, pMRPack->state_a.position);
+            if (shown != 0) {
                 /* Word access through the byte pointer: an int array index changes the code. */
                 *(int *) (pVisible + ((curveIndex >> 5) << 2)) &= ~(1 << (curveIndex & 0x1F));
             } else {
@@ -988,7 +988,7 @@ void tiMotionSolveFace(Matrix4 matrix, TiMRPackage *pMRPack, TiHrcSkip *face, un
         }
     }
     if (face->scaleDefault[0] != 1.0f || face->scaleDefault[1] != 1.0f || face->scaleDefault[2] != 1.0f) {
-        tiWordSetBits(&pMRPack->state_b.flags, TI_PACKAGE_FLAG_SCALED);
+        tiWordSetBits(&pMRPack->state_b.flags, TI_MR_STATE_FLAG_SCALED);
         xglCurMulScaleXYZ(&values[6]);
     }
     face->scale[0] = values[6];

@@ -38,7 +38,8 @@
 #define LOGO_CREDIT_FILE_BASE 0x01000000
 #define LOGO_CREDIT_BAND_BASE 0x01100000
 #define LOGO_CREDIT_BAND_STRIDE 0x100000
-#define LOGO_CREDIT_BAND_ROWS 128
+/* Brightness of a fully shown picture: the black cover over it has alpha LOGO_FADE_LEVELS - brightness. */
+#define LOGO_FADE_LEVELS 128
 #define LOGO_CREDIT_HALF_QWC 0x7000
 /* sceVif1PkRef offset argument for each credit half (value of the original build). */
 #define LOGO_CREDIT_HALF_VIF_OFFSET 0x51007000
@@ -84,10 +85,10 @@ typedef union McSlotState {
 void mc_check(void)
 {
     McSlotState screen_state[4];
-    int slot_status[2];
+    int free_kb[2];
     McRequestParam directory_request;
     McRequestParam *request;
-    int free_space[2];
+    int save_count[2];
     McSlotState wait_state[4];
     const char *warning;
     const char *capacity_warning;
@@ -98,20 +99,20 @@ void mc_check(void)
         screen_state[0].value = device_check_sync();
     }
 
-    slot_status[0] = 0;
-    slot_status[1] = 0;
+    free_kb[0] = 0;
+    free_kb[1] = 0;
     warning = 0;
-    free_space[0] = 0;
-    free_space[1] = 0;
+    save_count[0] = 0;
+    save_count[1] = 0;
     request = &directory_request;
 
     for (;;) {
-        xglMcRequest(0, LOGO_MC_REQUEST_FREE_SPACE, 0, &slot_status[0]);
-        xglMcRequest(1, LOGO_MC_REQUEST_FREE_SPACE, 0, &slot_status[1]);
+        xglMcRequest(0, LOGO_MC_REQUEST_FREE_SPACE, 0, &free_kb[0]);
+        xglMcRequest(1, LOGO_MC_REQUEST_FREE_SPACE, 0, &free_kb[1]);
         directory_request.file = -1;
         directory_request.data = WorkEnd;
-        xglMcRequest(0, LOGO_MC_REQUEST_DIRECTORY, request, &free_space[0]);
-        xglMcRequest(1, LOGO_MC_REQUEST_DIRECTORY, request, &free_space[1]);
+        xglMcRequest(0, LOGO_MC_REQUEST_DIRECTORY, request, &save_count[0]);
+        xglMcRequest(1, LOGO_MC_REQUEST_DIRECTORY, request, &save_count[1]);
 
         do {
             screen_state[0].value = device_check_sync();
@@ -133,14 +134,14 @@ void mc_check(void)
                     break;
                 }
                 if (screen_state[0].slot.slot0 == LOGO_MC_STATUS_READY) {
-                    if (free_space[0] <= 0 && slot_status[0] < LOGO_SAVE_MIN_FREE_KB) {
+                    if (save_count[0] <= 0 && free_kb[0] < LOGO_SAVE_MIN_FREE_KB) {
                         warning_mask = 1;
                     } else {
                         break;
                     }
                 }
                 if (screen_state[0].slot.slot1 == LOGO_MC_STATUS_READY) {
-                    if (free_space[1] <= 0 && slot_status[1] < LOGO_SAVE_MIN_FREE_KB) {
+                    if (save_count[1] <= 0 && free_kb[1] < LOGO_SAVE_MIN_FREE_KB) {
                         warning_mask = warning_mask | 2;
                     } else {
                         warning_mask = 0;
@@ -206,9 +207,7 @@ void mc_check(void)
 }
 
 extern const char logoFontModeText[];
-/* Credit roll: loads credit.bin and draws it in 0x80-row bands. */
-
-/* Logo screen entry: clears the frame, runs the card check, then the credit roll. */
+/* Logo screen entry: clears the frame, runs the card check, then shows the credit.bin pictures. */
 void LogoFirst(void)
 {
     xglRenderClearFrame();
@@ -218,17 +217,20 @@ void LogoFirst(void)
         mc_check();
     }
     xglFontPrintDirectOT(-1, logoFontModeText);
-    logoShowCredits();
+    logoShowSlides();
 }
 
 extern u16 sRenderDisplayBase;
 extern u64 logoCreditHeaderPacket[];
 extern u64 logoCreditHalfPacket[];
 extern u64 logoCreditTrailerPacket[];
+/* Indices 0 to 27 are the blank-row packet; the words after them (up to 41) belong to the launcher table that
+ * follows the packet in the data and are not part of it. */
 extern u32 logoCreditBlankRowsPacket[];
 
-/* Draws one credit band: its two 0x7000-QWC halves, then the blank rows left below rowsDrawn. */
-void logoDrawCreditBand(u8 *creditBand, int rowsDrawn)
+/* Draws one picture: its two 0x7000-QWC halves, then, below full brightness, a full-screen black sprite whose
+ * alpha is LOGO_FADE_LEVELS - brightness. */
+void logoDrawFadedPicture(u8 *creditBand, int brightness)
 {
     XglPacket *packet;
 
@@ -243,8 +245,8 @@ void logoDrawCreditBand(u8 *creditBand, int rowsDrawn)
         sceVif1PkRef(packet, creditBand + LOGO_CREDIT_HALF_SIZE, LOGO_CREDIT_HALF_QWC, 0, LOGO_CREDIT_HALF_VIF_OFFSET, 0);
         sceVif1PkRef(packet, logoCreditTrailerPacket, 3, 0, 0, 0);
     }
-    if (rowsDrawn < LOGO_CREDIT_BAND_ROWS) {
-        logoCreditBlankRowsPacket[19] = LOGO_CREDIT_BAND_ROWS - rowsDrawn;
+    if (brightness < LOGO_FADE_LEVELS) {
+        logoCreditBlankRowsPacket[19] = LOGO_FADE_LEVELS - brightness;
         sceVif1PkCnt(packet, 0);
         sceVif1PkAddDataN(packet, logoCreditBlankRowsPacket, 0x1C);
     }
@@ -253,8 +255,9 @@ void logoDrawCreditBand(u8 *creditBand, int rowsDrawn)
 extern const char logoCreditPath[];
 
 /* The decode request (JpegDecodeControl, main/xgl_jpeg.h): only source and destination are set here; the rest is zeroed by memset. */
-/* Credit roll: loads credit.bin and draws it in 0x80-row bands. */
-void logoShowCredits(void)
+/* Loads credit.bin, decodes its pictures (whole 512 by 448 frames) and shows each one with a fade in, a hold and a
+ * fade out. */
+void logoShowSlides(void)
 {
     u32 *credit_table;
     u32 file_size;
@@ -266,7 +269,7 @@ void logoShowCredits(void)
     void *band;
     int phase;
     int row;
-    int drawn;
+    int brightness;
     int align_mask;
 
     credit_table = (u32 *)LOGO_CREDIT_FILE_BASE;
@@ -304,28 +307,28 @@ void logoShowCredits(void)
                 phase = 1;
                 /* fall through */
             case 1:
-                drawn = row;
+                brightness = row;
                 row += 16;
-                logoDrawCreditBand(band, drawn);
-                if (row < LOGO_CREDIT_BAND_ROWS) {
+                logoDrawFadedPicture(band, brightness);
+                if (row < LOGO_FADE_LEVELS) {
                     break;
                 }
                 row = 30;
                 phase = 2;
                 /* fall through */
             case 2:
-                logoDrawCreditBand(band, LOGO_CREDIT_BAND_ROWS);
+                logoDrawFadedPicture(band, LOGO_FADE_LEVELS);
                 if (row > 0) {
                     row -= 1;
                     break;
                 }
-                row = LOGO_CREDIT_BAND_ROWS;
+                row = LOGO_FADE_LEVELS;
                 phase = 3;
                 /* fall through */
             case 3:
-                drawn = row;
+                brightness = row;
                 row -= 16;
-                logoDrawCreditBand(band, drawn);
+                logoDrawFadedPicture(band, brightness);
                 if (row <= 0) {
                     phase = 4;
                 }
@@ -336,9 +339,9 @@ void logoShowCredits(void)
         band_index++;
         } while (band_index < band_count);
     }
-    logoDrawCreditBand(0, 0);
+    logoDrawFadedPicture(0, 0);
     xglSleep();
-    logoDrawCreditBand(0, 0);
+    logoDrawFadedPicture(0, 0);
     xglSleep();
 }
 

@@ -22,17 +22,18 @@ typedef struct AnalyzePanel {
 } AnalyzePanel;
 
 /* The ANALYZE panel block; the 52-byte struct is followed by padding up to the pointer table. */
-static AnalyzePanel textBlock;
+static AnalyzePanel analyzePanel;
 /* Page-marker positions recorded by textMarkerScan (16 entries). */
 static unsigned char *textMarkerPtrs[16];
 
 #define PAGE_MARKER_LEAD 0xA1
 #define PAGE_MARKER_TRAIL 0xFC
 #define PAGE_MARKER_FILLER 7
-#define FONT_COLOR_DEFAULT 0xFFFFF0
+/* Order key (ot) of the ANALYZE text, not a colour. */
+#define FONT_ORDER_DEFAULT 0xFFFFF0
 #define BOX_OPEN_STEPS 4 /* opening box: tick 0..4 scales the size */
 #define CHOICE_VALUE_UNIT 0x10 /* ChoiceMenu.flags: values carry a unit mark */
-#define CHOICE_ITEM_HIGHLIGHT 2 /* ChoiceMenu.itemFlags: highlighted item */
+#define CHOICE_ITEM_DIMMED 2 /* ChoiceMenu.itemFlags bit 1: dims the item (textDrawSegment flag 2 halves its alpha) */
 #define TEXT_ENTRY_POOL_SIZE 4 /* textEntryPool holds four entries */
 #define CHOICE_MENU_SLOTS 2 /* choiceMenuSlots holds two menus */
 #define TEXT_PAGE_WAIT_TICKS 20 /* a page without markers stays up this many ticks */
@@ -139,7 +140,7 @@ typedef struct ChoiceMenu {
     int height;
     unsigned char **items;
     short *values;         /* +0x14 number printed after each item, NULL for none */
-    unsigned char *itemFlags; /* +0x18 bit 1 highlights the item */
+    unsigned char *itemFlags; /* +0x18 bit 1 dims the item */
     unsigned int flags;    /* +0x1C bit 4: values carry a unit mark */
     int unmodeled_20[2];
     int rowOffset;         /* +0x28 scroll offset of the first row */
@@ -464,7 +465,7 @@ void textDrawAll(void)
 
     needSeparator = 0;
     xglFontFlush();
-    if (xglCdArenaGetSize()) {
+    if (xglCdArenaGetStart()) {
         fontObjResetState();
         menuDrawCell(0x2BE, 0x200, 0x1C0, 0x10000);
     }
@@ -559,7 +560,7 @@ void textDrawAll(void)
                         /* bit 0: the cursor row; bit 1: a highlighted item */
                         style = i == menu->selected;
                         if (menu->itemFlags) {
-                            style = (menu->itemFlags[i] & CHOICE_ITEM_HIGHLIGHT) | (i == menu->selected);
+                            style = (menu->itemFlags[i] & CHOICE_ITEM_DIMMED) | (i == menu->selected);
                         }
                         if (menu->items[i]) {
                             textDrawSegment(x, y, menu->items[i], style);
@@ -591,7 +592,7 @@ void textDrawAll(void)
         grResetScissor();
     }
 
-    panel = &textBlock;
+    panel = &analyzePanel;
     if (panel->state == TEXT_STATE_FREE) {
         return;
     }
@@ -631,12 +632,12 @@ void textDrawAll(void)
     } else {
         textDrawSegment(x + 80, y + 16, analyzeUnknownText, 0);
     }
-    xglFontPrintDirectOT(FONT_COLOR_DEFAULT, analyzeSeparatorText);
+    xglFontPrintDirectOT(FONT_ORDER_DEFAULT, analyzeSeparatorText);
     if (panel->stats.maxHp >= 0) {
         sprintf(buffer, analyzeNumberFormat, panel->stats.maxHp);
-        xglFontPrintDirectOT(FONT_COLOR_DEFAULT, buffer);
+        xglFontPrintDirectOT(FONT_ORDER_DEFAULT, buffer);
     } else {
-        xglFontPrintDirectOT(FONT_COLOR_DEFAULT, analyzeUnknownText);
+        xglFontPrintDirectOT(FONT_ORDER_DEFAULT, analyzeUnknownText);
     }
 
     if (panel->stats.attackType != 0) {
@@ -646,10 +647,10 @@ void textDrawAll(void)
     for (i = 0; i < 8; i++) {
         if ((panel->stats.attributes >> i) & 1) {
             if (needSeparator == 1) {
-                xglFontPrintDirectOT(FONT_COLOR_DEFAULT, analyzeSeparatorText);
+                xglFontPrintDirectOT(FONT_ORDER_DEFAULT, analyzeSeparatorText);
             }
             needSeparator = 1;
-            xglFontPrintDirectOT(FONT_COLOR_DEFAULT, menuMainTxdEntry(i + 0xF0));
+            xglFontPrintDirectOT(FONT_ORDER_DEFAULT, menuMainTxdEntry(i + 0xF0));
         }
     }
 
@@ -688,8 +689,8 @@ void textDrawAll(void)
 
 /* Clears the tick (+8) and the state byte (+9) of the text block. */
 void analyzePanelClear(void) {
-    textBlock.state = TEXT_STATE_FREE;
-    textBlock.tick = 0;
+    analyzePanel.state = TEXT_STATE_FREE;
+    analyzePanel.tick = 0;
 }
 
 /* Starts the text block at (x, y): copies the analysis stats and opens it. */
@@ -698,44 +699,44 @@ void analyzePanelStart(int x, int y, const AnalyzeStats *stats)
     if (stats == 0) {
         return;
     }
-    textBlock.x = x;
-    textBlock.y = y;
-    __builtin_memcpy(&textBlock.stats, stats, sizeof(AnalyzeStats));
-    textBlock.state = TEXT_STATE_OPENING;
-    textBlock.tick = 0;
+    analyzePanel.x = x;
+    analyzePanel.y = y;
+    __builtin_memcpy(&analyzePanel.stats, stats, sizeof(AnalyzeStats));
+    analyzePanel.state = TEXT_STATE_OPENING;
+    analyzePanel.tick = 0;
 }
 
 /* Nonzero while the ANALYZE block is open or opening: states 0 and 3 are inactive. */
 int analyzePanelIsActive(void)
 {
-    if (textBlock.state == TEXT_STATE_FREE || textBlock.state == TEXT_STATE_CLOSING) {
+    if (analyzePanel.state == TEXT_STATE_FREE || analyzePanel.state == TEXT_STATE_CLOSING) {
         return 0;
     }
     return 1;
 }
 
-/* Steps textBlock.state: 2 counts tick up to 4 and then becomes 1; 1 waits until PadData[0].pressed bits 0x60 are set,
+/* Steps analyzePanel.state: 2 counts tick up to 4 and then becomes 1; 1 waits until PadData[0].pressed bits 0x60 are set,
  * then becomes 3 with tick 4; 3 counts tick down to 0 and then becomes 0. */
 void analyzePanelUpdate(void)
 {
-    switch (textBlock.state) {
+    switch (analyzePanel.state) {
     case TEXT_STATE_OPENING:
-        textBlock.tick++;
-        if (textBlock.tick >= BOX_OPEN_STEPS) {
-            textBlock.tick = 0;
-            textBlock.state = TEXT_STATE_OPEN;
+        analyzePanel.tick++;
+        if (analyzePanel.tick >= BOX_OPEN_STEPS) {
+            analyzePanel.tick = 0;
+            analyzePanel.state = TEXT_STATE_OPEN;
         }
         break;
     case TEXT_STATE_CLOSING:
-        textBlock.tick--;
-        if (textBlock.tick == 0) {
-            textBlock.state = TEXT_STATE_FREE;
+        analyzePanel.tick--;
+        if (analyzePanel.tick == 0) {
+            analyzePanel.state = TEXT_STATE_FREE;
         }
         break;
     case TEXT_STATE_OPEN:
         if ((PadData[0].pressed & 0x60) != 0) {
-            textBlock.state = TEXT_STATE_CLOSING;
-            textBlock.tick = BOX_OPEN_STEPS;
+            analyzePanel.state = TEXT_STATE_CLOSING;
+            analyzePanel.tick = BOX_OPEN_STEPS;
         }
         break;
     }

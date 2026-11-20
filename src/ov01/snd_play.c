@@ -1,6 +1,6 @@
 #include "common.h"
 #include "main/sound_driver.h"
-#include "main/tya_display_setting.h"
+#include "main/yajima_test.h"
 #include "ov01/data_file_load.h"
 #include "ov01/unit_cmd.h"
 #include "ov01/handle_state.h"
@@ -72,7 +72,7 @@ void unitPlayActionSound(BattleUnit *object, int code)
     int i;
 
     record = tecRecordGet(code);
-    switch (record->gateFlag) {
+    switch (record->techClass) {
     case 0:
     case 6:
     case 7:

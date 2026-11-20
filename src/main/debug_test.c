@@ -220,7 +220,7 @@ void YosikawaTest(void) {
             textWindowShow(32, 400, 0, testUiKanaSample, 60);
         }
         if (textEntry != 0) {
-            if (textEntryPlayVoice(textEntry)) {
+            if (textEntryConfirmPoll(textEntry)) {
                 textEntryRemove(textEntry);
                 textEntry = 0;
             }

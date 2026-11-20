@@ -70,7 +70,7 @@ extern signed char xglRenderVSyncInterval;
 extern int LoopCount;
 extern int ScanLineInterpolate;
 /* Glyph digit strokes of the pxy debug draw (.data after the hooks). */
-extern unsigned char pxyGlyphDigitTable[252];
+extern unsigned char pxyDigitStrokeTable[252];
 
 /* Hook words of the data that follows sRender in xgl_render.c (arrays of one: a scalar would move into .sdata): the pxy hooks run per entry group and per frame copy, the
  * message frame hooks per frame, the effect hook by the frame effect and the pause hook while the pause screen draws. */

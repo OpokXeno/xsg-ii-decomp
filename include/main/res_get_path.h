@@ -3,11 +3,11 @@
 
 /* Functions of src/main/res_get_path.c that other files call. */
 
-/* A completion callback stored in CdSlot.tag (as a void * word): block index, buffer, size (xglCdSlotEvent
- * passes the state word it stored on event 1) and the CdSlot.value word. */
+/* A completion callback stored in GameResBlock.tag (as a void * word): block index, buffer, size (gameResReadEvent
+ * passes the state word it stored on event 1) and the GameResBlock.value word. */
 typedef void (*GameResCallback)(int index, void *buffer, unsigned int size, void *value);
 
-/* One 0x14-byte entry of the block table xglCdSlotTable, indexed by slot. The table
+/* One 0x14-byte entry of the block table gameResBlockTable, indexed by slot. The table
  * describes memory blocks in address order; CD reads and other allocations (e.g. the pool
  * cfeNodePoolInit takes through GameResBufferAlloc) share it:
  *   buffer: block start; 0 ends the table (every search stops there).
@@ -18,20 +18,20 @@ typedef void (*GameResCallback)(int index, void *buffer, unsigned int size, void
  *           index the best-fit search GameResBlockFindBestFit starts at.
  *   tag:    completion callback of a read into the block, 0 when idle.
  *   value:  word handed back to that callback (copied from xglCdSlotValue). */
-typedef struct CdSlot {
+typedef struct GameResBlock {
     void *buffer;
     unsigned int size;
     int owner;
     void *tag;
     void *value;
-} CdSlot;
+} GameResBlock;
 
-/* Entries of xglCdSlotTable; every search walks indexes 1 .. GAME_RES_BLOCK_COUNT - 1. */
+/* Entries of gameResBlockTable; every search walks indexes 1 .. GAME_RES_BLOCK_COUNT - 1. */
 #define GAME_RES_BLOCK_COUNT 0x80
 
-extern CdSlot xglCdSlotTable[];
+extern GameResBlock gameResBlockTable[];
 
-/* Starts the resource manager over the memory range [base, base + size): entry 0 of xglCdSlotTable records the
+/* Starts the resource manager over the memory range [base, base + size): entry 0 of gameResBlockTable records the
  * range, then the slot selection, the descriptor tables and the sound record table are reset. */
 void GameResourceInit(void *base, unsigned int size);
 void GameResourceReset(void);

@@ -8,6 +8,7 @@
 #include "vu0_macro.h"
 #include "main/m_se_obj.h"
 
+/* Fire type 12: a swirl projectile that follows the actor path. */
 /* Trail matrices are built while the step is below this count (the trail grows over 13 steps). */
 #define MEF_PATH_GROW_STEPS 13
 /* MEfAdvancePathStep ends the effect once the step count reaches this value. */

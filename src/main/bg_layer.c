@@ -88,7 +88,8 @@ void bgLayerInit(void) {
     bgLayerCamera = 0;
 }
 
-extern int bgLayerPaths[];
+/* File names of the background layers: [0] the pxy data and [1] the txy data of BG_BACK, read by xglCdSectorAlloc. */
+extern int bgLayerFilePaths[];
 extern char bgBackPxyPath[];
 extern char bgBackTxyPath[];
 extern char bgMiddlePxyPath[];
@@ -113,8 +114,8 @@ void bgLayerLoad(int index) {
     switch (index) {
     case BG_BACK:
         if (bgLayerState0[BG_BACK] == 0) {
-            bgLayerPxyData[BG_BACK] = xglCdSectorAlloc(bgLayerPaths[0]);
-            bgLayerTxyData[BG_BACK] = xglCdSectorAlloc(bgLayerPaths[1]);
+            bgLayerPxyData[BG_BACK] = xglCdSectorAlloc(bgLayerFilePaths[0]);
+            bgLayerTxyData[BG_BACK] = xglCdSectorAlloc(bgLayerFilePaths[1]);
             if (bgLayerPxyData[BG_BACK] != 0) {
                 xglCdReadFileAsync(bgBackPxyPath, bgLayerPxyData[BG_BACK], 2, 0);
             }
@@ -126,8 +127,8 @@ void bgLayerLoad(int index) {
         break;
     case BG_MIDDLE:
         if (bgLayerState0[BG_MIDDLE] == 0) {
-            bgLayerPxyData[BG_MIDDLE] = xglCdSectorAlloc(bgLayerPaths[2]);
-            bgLayerTxyData[BG_MIDDLE] = xglCdSectorAlloc(bgLayerPaths[3]);
+            bgLayerPxyData[BG_MIDDLE] = xglCdSectorAlloc(bgLayerFilePaths[2]);
+            bgLayerTxyData[BG_MIDDLE] = xglCdSectorAlloc(bgLayerFilePaths[3]);
             if (bgLayerPxyData[BG_MIDDLE] != 0) {
                 xglCdReadFileAsync(bgMiddlePxyPath, bgLayerPxyData[BG_MIDDLE], 2, 2);
             }
@@ -139,8 +140,8 @@ void bgLayerLoad(int index) {
         break;
     case BG_FRONT:
         if (bgLayerState0[BG_FRONT] == 0) {
-            bgLayerPxyData[BG_FRONT] = xglCdSectorAlloc(bgLayerPaths[4]);
-            bgLayerTxyData[BG_FRONT] = xglCdSectorAlloc(bgLayerPaths[5]);
+            bgLayerPxyData[BG_FRONT] = xglCdSectorAlloc(bgLayerFilePaths[4]);
+            bgLayerTxyData[BG_FRONT] = xglCdSectorAlloc(bgLayerFilePaths[5]);
             if (bgLayerPxyData[BG_FRONT] != 0) {
                 xglCdReadFileAsync(bgFrontPxyPath, bgLayerPxyData[BG_FRONT], 2, 4);
             }
@@ -182,8 +183,8 @@ void bgLayerLoadAll(void) {
    XenoActorAlloc/XenoActorRelease over struct XenoActor *, so this file does not include it. */
 extern BgLayer *XenoActorAlloc(void);
 extern void XenoActorAllocMatrices(BgLayer *actor);
-extern void XenoActorSetChannelValue(BgLayer *actor, float value);
-extern void XenoActorEnableChannel(BgLayer *actor);
+extern void XenoActorSetBlendFrames(BgLayer *actor, float value);
+extern void XenoActorSetBlendLocal(BgLayer *actor);
 extern void XenoActorSetMode(BgLayer *actor, int mode);
 
 const char bgMiddleHierarchyPath[32] = "yosikawa\\model\\midle.xhr";
@@ -248,10 +249,10 @@ void bgLayerAdvance(int index) {
                 layer->slotTable = bgLayerReadBuffer;
                 bgLayerObjects[BG_MIDDLE] = layer;
                 XenoActorAllocMatrices(layer);
-                XenoActorSetChannelValue(bgLayerObjects[BG_MIDDLE], 0.0f);
+                XenoActorSetBlendFrames(bgLayerObjects[BG_MIDDLE], 0.0f);
                 /* A do-while(0) block, likely an original macro: its loop notes order the reloads. */
                 do {
-                    XenoActorEnableChannel(bgLayerObjects[BG_MIDDLE]);
+                    XenoActorSetBlendLocal(bgLayerObjects[BG_MIDDLE]);
                     XenoActorSetMode(bgLayerObjects[BG_MIDDLE], 1);
                     bgLayerObjects[BG_MIDDLE]->position.vector.x = 0.0f;
                     bgLayerObjects[BG_MIDDLE]->position.vector.y = 0.0f;
@@ -278,9 +279,9 @@ void bgLayerAdvance(int index) {
                     layer->slotTable = bgLayerReadBuffer;
                     bgLayerObjects[BG_FRONT] = layer;
                     XenoActorAllocMatrices(layer);
-                    XenoActorSetChannelValue(bgLayerObjects[BG_FRONT], 0.0f);
+                    XenoActorSetBlendFrames(bgLayerObjects[BG_FRONT], 0.0f);
                     do {
-                        XenoActorEnableChannel(bgLayerObjects[BG_FRONT]);
+                        XenoActorSetBlendLocal(bgLayerObjects[BG_FRONT]);
                         XenoActorSetMode(bgLayerObjects[BG_FRONT], 0);
                         bgLayerObjects[BG_FRONT]->position.vector.x = 0.0f;
                         bgLayerObjects[BG_FRONT]->position.vector.y = 0.0f;
@@ -389,4 +390,4 @@ char bgMiddleTxyPath[32] = "yosikawa\\model\\midle.txy";
 char bgFrontPxyPath[32] = "yosikawa\\model\\front.pxy";
 char bgFrontTxyPath[32] = "yosikawa\\model\\front.txy";
 
-int bgLayerPaths[8] = { 22528, 92160, 86016, 26624, 51200, 10240, 0, 0 };
+int bgLayerFilePaths[8] = { 22528, 92160, 86016, 26624, 51200, 10240, 0, 0 };

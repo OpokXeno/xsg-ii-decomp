@@ -1,30 +1,30 @@
 #include "common.h"
 #include "main/talk_script.h"
-#include "main/debt_box.h"
+#include "main/msg_text_draw.h"
 #include "main/timecode_window.h"
 #include "main/game_data.h"
 #include "main/game_camera.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/msg_slot_center.h"
 
 #include "shared.h"
 
-/* Initialises the slot (state 3), selects digit 1 (selected and previous), places the cursor and sets the idle colour. */
+/* Initialises the slot (slot type 3), selects digit 1 (selected and previous), places the cursor and sets the idle colour. */
 void timecodeInit(MsgSlot *slot)
 {
     MsgSlotTimecode *stepper = &slot->u.timecode;
 
-    msgSlotInit(slot, MSG_SLOT_STATE_TIMECODE);
+    msgSlotInit(slot, MSG_SLOT_TYPE_TIMECODE);
     stepper->selected = 1;
     stepper->previous = 1;
     stepper->cursor_x = timecodeCursorX(slot);
     stepper->idle_color = TIMECODE_COLOR_INIT;
 }
 
-/* Runs msgSlotSetGeometry with the four values while the object is active (state 3). */
+/* Runs msgSlotSetGeometry with the four values while the object is active (slot type 3). */
 void timecodeSetGeometry(MsgSlot *slot, int first_value, int second_value, int third_value, int fourth_value)
 {
-    if (slot->state == MSG_SLOT_STATE_TIMECODE) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TIMECODE) {
         msgSlotSetGeometry(slot, first_value, second_value, third_value, fourth_value);
     }
 }
@@ -32,7 +32,7 @@ void timecodeSetGeometry(MsgSlot *slot, int first_value, int second_value, int t
 /* While active: flags = (flags & ~closing) | opening (TIMECODE_FLAG_*). */
 void timecodeStartOpening(MsgSlot *slot)
 {
-    if (slot->state == MSG_SLOT_STATE_TIMECODE) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TIMECODE) {
         slot->flags = (slot->flags & ~(u32) MSG_SLOT_CLOSING) | MSG_SLOT_OPENING;
     }
 }
@@ -44,7 +44,7 @@ void timecodeStartOpening(MsgSlot *slot)
  */
 int timecodeUpdate(MsgSlot *slot)
 {
-    if (slot->state == MSG_SLOT_STATE_TIMECODE && !(gameWork.control & CONTROL_PAUSED)) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TIMECODE && !(gameWork.control & CONTROL_PAUSED)) {
         if (slot->flags & MSG_SLOT_OPENING) {
             slot->open_counter += 1;
             if (slot->open_counter >= TIMECODE_OPEN_FRAMES) {
@@ -53,7 +53,7 @@ int timecodeUpdate(MsgSlot *slot)
                 case 1:
                     break;
                 case 2:
-                    slot->flags |= TIMECODE_FLAG_PHASE;
+                    slot->flags |= TIMECODE_FLAG_SELECT;
                     break;
                 }
             }
@@ -76,20 +76,20 @@ int timecodeUpdate(MsgSlot *slot)
                 slot->u.timecode.elapsed_frames = slot->u.timecode.limit;
             }
         }
-        if (slot->flags & TIMECODE_FLAG_PHASE) {
+        if (slot->flags & TIMECODE_FLAG_SELECT) {
             timecodeUpdateSelection(slot);
         }
-        if (slot->flags & TIMECODE_FLAG_RAMP) {
+        if (slot->flags & TIMECODE_FLAG_DIGIT_ROLL) {
             if (timecodeStepRollAngle(slot)) {
-                slot->flags &= ~(u32) TIMECODE_FLAG_RAMP;
+                slot->flags &= ~(u32) TIMECODE_FLAG_DIGIT_ROLL;
             }
         }
-        if (slot->flags & TIMECODE_FLAG_LEVEL) {
+        if (slot->flags & TIMECODE_FLAG_CURSOR_MOVE) {
             if (timecodeStepCursorAngle(slot)) {
-                slot->flags &= ~(u32) TIMECODE_FLAG_LEVEL;
+                slot->flags &= ~(u32) TIMECODE_FLAG_CURSOR_MOVE;
             }
         }
-        if (slot->flags & TIMECODE_FLAG_COUNTER) {
+        if (slot->flags & TIMECODE_FLAG_BLINK) {
             timecodeStepCounter(slot);
         }
     }
@@ -110,7 +110,7 @@ void timecodeUpdateSelection(MsgSlot *slot)
 /* Advances the roll angle of the rolling digit by roll_angle_step, clamped at 180; returns 1 at the clamp or when the roll flag is clear. */
 int timecodeStepRollAngle(MsgSlot *slot)
 {
-    if (!(slot->flags & TIMECODE_FLAG_RAMP)) {
+    if (!(slot->flags & TIMECODE_FLAG_DIGIT_ROLL)) {
         return 1;
     }
     slot->u.timecode.roll_angle += slot->u.timecode.roll_angle_step;
@@ -233,7 +233,7 @@ void timecodeCursorEnds(MsgSlot *slot, int *low, int *high)
  */
 int timecodeSlotDraw(MsgSlot *slot)
 {
-    if (slot->state == MSG_SLOT_STATE_TIMECODE) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TIMECODE) {
         if (slot->flags & MSG_SLOT_OPENING) {
             if (slot->u.timecode.mode == TIMECODE_MODE_NUMBER) { talkDrawFramesWithBox(slot); } else { talkDrawFrameRects(slot); }
         }
@@ -242,7 +242,7 @@ int timecodeSlotDraw(MsgSlot *slot)
         }
         if (slot->flags & MSG_SLOT_OPEN) {
             if (slot->u.timecode.mode == TIMECODE_MODE_NUMBER) { talkDrawFramesWithBox(slot); } else { talkDrawFrameRects(slot); }
-            talkBoxDrawContents(slot);
+            timecodeDrawContents(slot);
         }
     }
 }
@@ -250,12 +250,12 @@ int timecodeSlotDraw(MsgSlot *slot)
 /* While active: clears flag bits 0x4, 0x8, 0x40, 0x80 and 0x800, then sets 0x2. */
 void timecodeBeginClose(MsgSlot *slot)
 {
-    if (slot->state == MSG_SLOT_STATE_TIMECODE) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TIMECODE) {
         slot->flags &= ~MSG_SLOT_OPENING;
         slot->flags &= ~MSG_SLOT_OPEN;
-        slot->flags &= ~TIMECODE_FLAG_PHASE;
+        slot->flags &= ~TIMECODE_FLAG_SELECT;
         slot->flags &= ~TIMECODE_FLAG_ADVANCE;
-        slot->flags &= ~TIMECODE_FLAG_COUNTER;
+        slot->flags &= ~TIMECODE_FLAG_BLINK;
         slot->flags |= MSG_SLOT_CLOSING;
     }
 }
@@ -263,7 +263,7 @@ void timecodeBeginClose(MsgSlot *slot)
 /* While active: stores value in editable. */
 void timecodeSetEditable(MsgSlot *slot, int value)
 {
-    if (slot->state == MSG_SLOT_STATE_TIMECODE) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TIMECODE) {
         slot->u.timecode.editable = value;
     }
 }
@@ -274,7 +274,7 @@ void timecodeSetEditable(MsgSlot *slot, int value)
  */
 void timecodeSetMode(MsgSlot *slot, int mode)
 {
-    if (slot->state == MSG_SLOT_STATE_TIMECODE) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TIMECODE) {
         slot->u.timecode.mode = mode;
         timecodeFitBoxWidth(slot);
         timecodeValidateSelection(slot);
@@ -285,7 +285,7 @@ void timecodeSetMode(MsgSlot *slot, int mode)
 /* While active and digits in 1 to 9: stores the digit count, recomputes as timecodeSetMode does and stores cursor_x. */
 void timecodeSetDigits(MsgSlot *slot, int digits)
 {
-    if (slot->state == MSG_SLOT_STATE_TIMECODE && (unsigned)(digits - 1) < TIMECODE_INDEX_MAX) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TIMECODE && (unsigned)(digits - 1) < TIMECODE_INDEX_MAX) {
         slot->u.timecode.digits = digits;
         timecodeFitBoxWidth(slot);
         timecodeCenterSlot(slot);
@@ -325,8 +325,8 @@ void timecodeCenterSlot(MsgSlot *slot)
 /* While active: flags |= 0x40. The opposite of timecodeDisableSelection in timecode_frames.c. */
 void timecodeEnableSelection(MsgSlot *slot)
 {
-    if (slot->state == MSG_SLOT_STATE_TIMECODE) {
-        slot->flags |= TIMECODE_FLAG_PHASE;
+    if (slot->slot_type == MSG_SLOT_TYPE_TIMECODE) {
+        slot->flags |= TIMECODE_FLAG_SELECT;
     }
 }
 

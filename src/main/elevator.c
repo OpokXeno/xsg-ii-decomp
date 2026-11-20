@@ -1,7 +1,6 @@
 #include "common.h"
 #include "debug_break.h"
 #include "main/elevator.h"
-#include "main/tya_display_setting.h"
 #include "main/game_data.h"
 #include "main/game_camera.h"
 #include "main/ytachi_test.h"
@@ -53,10 +52,12 @@ extern const char elvKeepOffNoRangeAssertText[];
         DEBUG_BREAK();                                              \
     }
 
+/* Returns the unit voice cue id 0x50; not an elevator value. */
 int unitPlayVoiceCueId(void) {
     return 0x50;
 }
 
+/* Returns the unit voice cue id 0x73; not an elevator value. */
 int unitActionVoiceCueId(void) {
     return 0x73;
 }
@@ -375,6 +376,11 @@ const char elvKeepOffNoRangeAssertText[40] = "(no > 0) && (no < UNDUFLAGKEEPOFF_
 const char elvNativeNameSlopeSet[16] = "slopeSet";
 const char elvNativeNameElvNoOut[16] = "elvNoOut";
 const char elvNativeNameElvActive[16] = "elvActive";
+/* The short names of elvNativeTable (.sdata 0x69D1A0-0x69D1C0, address order). */
+const char elevatorNativeNamePreload[8] = "preload";
+const char elevatorNativeNamePreren[8] = "preren";
+const char elevatorNativeNameKeepOff[8] = "keepoff";
+const char elevatorNativeNameElvMove[8] = "elvMove";
 SbNativeMethod elvNativeTable[9] = {
     { elvNativeNameElvActive, elvSetActive },
     { elevatorNativeNameElvMove, elvMove },

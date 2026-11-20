@@ -5,7 +5,7 @@
 #include "main/sv_get_image_item.h"
 #include "ov01/m_gs.h"
 #include "main/xenoActor.h"
-#include "ov01/m_ef_path_debug.h"
+#include "ov01/m_ef_path.h"
 #include "main/nml_model_set.h"
 
 /* A packed RGBAQ colour quadword of a GS packet, by channel. */

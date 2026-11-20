@@ -6,8 +6,8 @@
 #include "main/assert_fail.h"
 
 #include "main/xgl_2.h"
-/* Scale floor of tiGlobalCollClampScale and the share of the scale it takes from the accumulator. */
-#define TI_GLOBAL_COLL_MIN_SCALE 0.03f
+/* Height floor of tiGlobalCollClampHeight and the share of the height it takes from the velocity. */
+#define TI_GLOBAL_COLL_MIN_HEIGHT 0.03f
 #define TI_GLOBAL_COLL_SCALE_LOSS_FRACTION 0.2f
 /* Level from which tiGlobalCollEvalSubobject takes the second sub-object routine. */
 #define TI_GLOBAL_COLL_LEVEL_LIMIT 1.5f
@@ -20,15 +20,15 @@ typedef struct TiGlobalCollObject {
     unsigned char subobject; /* 0x50: its address is taken in tiGlobalCollEvalSubobject */
 } TiGlobalCollObject;
 
-/* Floors the height (y) of the body at TI_GLOBAL_COLL_MIN_SCALE; a body below it loses the old value times
- * TI_GLOBAL_COLL_SCALE_LOSS_FRACTION from its accumulator. */
-void tiGlobalCollClampScale(TiSolverState *state) {
-    f32 previousScale;
+/* Floors the height (y) of the body at TI_GLOBAL_COLL_MIN_HEIGHT; a body below it loses the old value times
+ * TI_GLOBAL_COLL_SCALE_LOSS_FRACTION from its velocity. */
+void tiGlobalCollClampHeight(TiSolverState *state) {
+    f32 previousHeight;
 
-    previousScale = state->position.vector.y;
-    if (previousScale < TI_GLOBAL_COLL_MIN_SCALE) {
-        state->position.vector.y = TI_GLOBAL_COLL_MIN_SCALE;
-        state->accumulator.vector.y -= previousScale * TI_GLOBAL_COLL_SCALE_LOSS_FRACTION;
+    previousHeight = state->position.vector.y;
+    if (previousHeight < TI_GLOBAL_COLL_MIN_HEIGHT) {
+        state->position.vector.y = TI_GLOBAL_COLL_MIN_HEIGHT;
+        state->velocity.vector.y -= previousHeight * TI_GLOBAL_COLL_SCALE_LOSS_FRACTION;
     }
 }
 
@@ -89,9 +89,9 @@ void tiGlobalCollPushOutSpheres(TiGlobalCollSet *set, TiHrcDynamics *pNode, TiSo
                             offset.x = offset.x * distance;
                             offset.y = offset.y * distance;
                             offset.z = offset.z * distance;
-                            body->accumulator.vector.x = body->accumulator.vector.x + offset.x * sphere->radius * depth;
-                            body->accumulator.vector.y = body->accumulator.vector.y + offset.y * sphere->radius * depth;
-                            body->accumulator.vector.z = body->accumulator.vector.z + offset.z * sphere->radius * depth;
+                            body->velocity.vector.x = body->velocity.vector.x + offset.x * sphere->radius * depth;
+                            body->velocity.vector.y = body->velocity.vector.y + offset.y * sphere->radius * depth;
+                            body->velocity.vector.z = body->velocity.vector.z + offset.z * sphere->radius * depth;
                             body->position.vector.x = offset.x * sphere->radius + sphere->centre.x;
                             body->position.vector.y = offset.y * sphere->radius + sphere->centre.y;
                             body->position.vector.z = offset.z * sphere->radius + sphere->centre.z;

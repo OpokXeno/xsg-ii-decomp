@@ -30,7 +30,7 @@ int menuListPageCount(ListCursor *cursor)
 
 
 typedef struct TextBoxStack {
-    int state;
+    int visible_lines;
     int shownFlags;
     FontTextBlock entries[TEXT_STACK_SLOTS];
     int top;
@@ -46,14 +46,14 @@ void *fontObjSetSize(struct FontObject *obj, int x, int y);
 void *fontObjSubStartOpen(FontTextBlock *block);
 
 /*
- * Initialises a TextBoxStack header: state 3, pending scroll and top -1, and the block and track of each of its four slots.
+ * Initialises a TextBoxStack header: visible_lines 3, pending scroll and top -1, and the block and track of each of its four slots.
  */
 void textBoxStackInit(TextBoxStack *stack)
 {
     int i;
 
     if (stack != 0) {
-        stack->state = 3;
+        stack->visible_lines = 3;
         stack->top = -1;
         stack->pendingScroll = -1;
         i = 0;
@@ -77,7 +77,7 @@ typedef struct CursorBufferFlags {
 } CursorBufferFlags;
 
 typedef struct TextBox {
-    int state;
+    int selected_line;
     int lineCount;
     char *text;
     TextBoxStack stack;
@@ -192,13 +192,13 @@ void textBoxPop(TextBoxStack *stack) {
 extern const char textBoxMarkText[];
 
 /*
- * Prints the top entry of an unflagged stack at its track position, one 0x18 step per state count above it.
+ * Prints the top entry of an unflagged stack at its track position, one 0x18 step per visible line above it.
  */
 void textBoxDrawMark(TextBoxStack *stack)
 {
     if (!(stack->shownFlags & 2)) {
         xglFontPrint(stack->entries[stack->top].sub_object.tracks[0].current_pair.x + 0x1C8,
-                     stack->entries[stack->top].sub_object.tracks[0].current_pair.y + stack->state * TEXT_LINE_HEIGHT - 8,
+                     stack->entries[stack->top].sub_object.tracks[0].current_pair.y + stack->visible_lines * TEXT_LINE_HEIGHT - 8,
                      stack->entries[stack->top].sub_object.draw_bits + 1,
                      textBoxMarkText);
     }
@@ -212,7 +212,7 @@ void textBoxSetPendingScroll(TextBoxStack *stack, int pendingScroll) {
     stack->pendingScroll = pendingScroll;
 }
 
-/* Passes the top entry to fontObjSubStartClose (the open transition of its track). */
+/* Passes the top entry to fontObjSubStartClose (the close transition of its track). */
 void textBoxCloseTop(TextBoxStack *stack) {
     fontObjSubStartClose(&stack->entries[stack->top]);
 }
@@ -229,9 +229,9 @@ void textBoxUpdate(TextBoxStack *stack)
         return;
     }
     for (i = 0; i <= stack->top; i++) {
-        if ((unsigned int)stack->entries[i].cursor.aux_value >= (unsigned int)(stack->state - 1)) {
+        if ((unsigned int)stack->entries[i].cursor.aux_value >= (unsigned int)(stack->visible_lines - 1)) {
             if (i == stack->top && stack->pendingScroll == -1) {
-                stack->entries[i].origin.target_pair.y = -(TEXT_LINE_HEIGHT * (stack->entries[i].cursor.aux_value - stack->state) + TEXT_LINE_HEIGHT);
+                stack->entries[i].origin.target_pair.y = -(TEXT_LINE_HEIGHT * (stack->entries[i].cursor.aux_value - stack->visible_lines) + TEXT_LINE_HEIGHT);
             }
         }
         fontObjDrawText(&stack->entries[i]);
@@ -328,11 +328,11 @@ void cursorBufferPush(unsigned char *text)
 
 
 /*
- * Resets one TextBox: clears its state word and the head word of its first entry (the text pointer
+ * Resets one TextBox: clears its selected_line word and the head word of its first entry (the text pointer
  * word at +0x08 of the box), then reinitialises the stack that starts at +0x0C.
  */
 void textBoxReset(TextBox *box) {
-    box->state = 0;
+    box->selected_line = 0;
     box->text = 0;
     textBoxStackInit(&box->stack);
     textBoxSetPendingScroll(&box->stack, 0);
@@ -489,7 +489,7 @@ int textBoxShowPending(void)
         {
             int shown = textBoxPending;
             textBoxPending = -1;
-            textBoxPool[shown].state = 0;
+            textBoxPool[shown].selected_line = 0;
             textBoxPool[shown].stack.shownFlags |= 1;
         }
         return 1;
@@ -498,7 +498,7 @@ int textBoxShowPending(void)
 }
 
 /*
- * Starts the window of text box index when it is valid and its stack is not empty, passing the box's stack to
+ * Starts closing the window of text box index when it is valid and its stack is not empty, passing the box's stack to
  * textBoxCloseTop. Returns no value of its own.
  */
 int textBoxCloseWindow(int index)
@@ -527,8 +527,8 @@ void textBoxUpdateAll(void)
         if (textBoxPool[i].stack.top >= 0) {
             position = fontObjGetOriginTrack(&textBoxPool[i].stack.entries[0].sub_object);
             size = fontObjGetSizeTrack(&textBoxPool[i].stack.entries[0].sub_object);
-            fontObjDrawQuad(position->current_pair.x, position->current_pair.y + textBoxPool[i].state * TEXT_LINE_HEIGHT, position->current_pair.x + size->current_pair.x,
-                            position->current_pair.y + textBoxPool[i].state * TEXT_LINE_HEIGHT + TEXT_LINE_HEIGHT, (textHighlightAlpha << 24) | 0x80, 0xFFFFFF);
+            fontObjDrawQuad(position->current_pair.x, position->current_pair.y + textBoxPool[i].selected_line * TEXT_LINE_HEIGHT, position->current_pair.x + size->current_pair.x,
+                            position->current_pair.y + textBoxPool[i].selected_line * TEXT_LINE_HEIGHT + TEXT_LINE_HEIGHT, (textHighlightAlpha << 24) | 0x80, 0xFFFFFF);
         }
     }
 }
@@ -548,15 +548,15 @@ void textBoxUpdateInput(void)
         if (textBoxPool[i].stack.top >= 0) {
             if (textBoxPool[i].stack.entries[0].sub_object.move_phase == FONT_PHASE_IDLE) {
                 if (PadData[0].repeated & PAD_UP) {
-                    textBoxPool[i].state = textBoxPool[i].state - 1;
-                    if (textBoxPool[i].state < 0) {
-                        textBoxPool[i].state = textBoxPool[i].lineCount - 1;
+                    textBoxPool[i].selected_line = textBoxPool[i].selected_line - 1;
+                    if (textBoxPool[i].selected_line < 0) {
+                        textBoxPool[i].selected_line = textBoxPool[i].lineCount - 1;
                     }
                 }
                 if (PadData[0].repeated & PAD_DOWN) {
-                    textBoxPool[i].state = textBoxPool[i].state + 1;
-                    if (textBoxPool[i].state >= textBoxPool[i].lineCount) {
-                        textBoxPool[i].state = 0;
+                    textBoxPool[i].selected_line = textBoxPool[i].selected_line + 1;
+                    if (textBoxPool[i].selected_line >= textBoxPool[i].lineCount) {
+                        textBoxPool[i].selected_line = 0;
                     }
                 }
             }
@@ -585,7 +585,7 @@ int textBoxConfirmSelection(int index)
             if (cursorBufferCount > 0) {
                 cursorBufferStartClose(&cursorBufferPool[cursorBufferIndex].record);
             }
-            return textBoxPool[index].state;
+            return textBoxPool[index].selected_line;
         }
         return -1;
     }
@@ -597,7 +597,7 @@ extern TextBox textBoxPoolAlias[];
 u32 textBoxHasSelection(int index) {
     u32 inverted;
 
-    inverted = ~textBoxPoolAlias[index].state;
+    inverted = ~textBoxPoolAlias[index].selected_line;
     return inverted >> 0x1F;
 }
 

@@ -19,6 +19,10 @@
 #include "main/yajima_test.h"
 #include "main/game_movie.h"
 #include "main/xgl_packet.h"
+#include "main/elevator.h"
+#include "main/tya_draw_gauge.h"
+#include "main/xgl_menu.h"
+#include "main/tya_display_setting.h"
 
 /* One port of the pad record PadData (pad.h's PadRecord), the full 0x80 bytes: the raw pad buffer, the
  * decoded buttons and sticks and the actuator settings. This file keeps a union-free view of the record
@@ -46,7 +50,9 @@ typedef struct McTestPadPort {
     short horizontalPressure;
     short verticalPressure; /* +0x3C/+0x3E as pad.h */
     unsigned char pressures[8];
-    unsigned char unmodeled_48[0x50 - 0x48];
+    unsigned char unmodeled_48[0x4E - 0x48];
+    unsigned char horizontalDeadZone; /* +0x4E, as pad.h */
+    unsigned char verticalDeadZone;   /* +0x4F */
     unsigned char actuators[2];
     unsigned char unmodeled_52[0x56 - 0x52];
     unsigned char actuatorMode;
@@ -140,13 +146,13 @@ extern const char menuUpArrowText[];
 extern char menuCursorText[];
 /* "v" marks text below the last line shown. */
 
-/* Scrolls the view by the pad (UP/DOWN move the selection, RIGHT/LEFT move
- * twenty lines), then draws the lines from view->top. Returns whether CIRCLE is
- * pressed: MovieListTest plays the selected movie then. */
 const char menuUpArrowText[8] = "^";
 
 char menuCursorText[8] = ">";
 
+/* Scrolls the view by the pad (UP/DOWN move the selection, RIGHT/LEFT move
+ * twenty lines), then draws the lines from view->top. Returns whether CIRCLE is
+ * pressed: MovieListTest plays the selected movie then. */
 int DebugTextViewUpdate(DebugTextView *view) {
     char line[0x40];
     char *top;
@@ -353,7 +359,7 @@ void FontTest(int selection) {
 /* A sound project file (.prj) read into the debug buffer at 0x01010000. */
 typedef struct SoundProjectEntry {
     unsigned char unk00[0xD];
-    char hidden;         /* 0x0D */
+    char mode;           /* 0x0D: 2 in effect banks, 1 in song banks */
     unsigned char unk0E[0x20 - 0xE];
     char name[0x10];     /* 0x20 */
 } SoundProjectEntry;
@@ -363,7 +369,7 @@ typedef struct SoundProject {
     int count;           /* 0x08 */
     unsigned char unk0C[4];
     char name[0x10];     /* 0x10 */
-    char text[0x10];     /* 0x20 */
+    char keyp_header[0x10]; /* 0x20: the KEYp chunk header of the file; the test writes its display lines here */
     SoundProjectEntry entries[1]; /* 0x30 */
 } SoundProject;
 
@@ -534,7 +540,7 @@ void SoundTest(int selection)
                     *dst++ = *name++;
                 }
                 *dst = 0;
-                dst = project->text;
+                dst = project->keyp_header;
                 for (i = 0, name = project->entries[0].name; i < count; i++) {
                     char *text = name;
 
@@ -582,7 +588,7 @@ void SoundTest(int selection)
                     *dst++ = *name++;
                 }
                 *dst = 0;
-                dst = ((SoundProject *) 0x01010000)->text;
+                dst = ((SoundProject *) 0x01010000)->keyp_header;
                 name = ((SoundProject *) 0x01010000)->entries[0].name;
                 for (i = 0; i < count; i++) {
                     char *text = name;
@@ -599,7 +605,7 @@ void SoundTest(int selection)
                     }
                 }
                 *dst = 0;
-                DebugTextViewInit(&voices, ((SoundProject *) 0x01010000)->text);
+                DebugTextViewInit(&voices, ((SoundProject *) 0x01010000)->keyp_header);
                 state = SOUNDTEST_SE_VOICE;
             }
             break;
@@ -1098,8 +1104,7 @@ extern unsigned char saveEventFlags[];
 extern SaveThumbnail saveGameThumbnail;
 extern const char yajimaHexDigitFormat[];
 extern const char memcardFoundBytesFormat[];
-/* HDD menu row -> state: MCTEST_STATE_HDD_LOAD_LIST, MCTEST_STATE_HDD_SAVE_INIT
- * (X1 names this static tbl_49). */
+/* HDD menu row -> state: MCTEST_STATE_HDD_LOAD_LIST, MCTEST_STATE_HDD_SAVE_INIT. */
 extern unsigned char tbl_49[4];
 int sceMcSync(int mode, int *command, int *result);
 void FlushCache(int mode);
@@ -1643,7 +1648,7 @@ void MemcardTest(int selection) {
             break;
 
         case MCTEST_STATE_HDD_LOAD_LIST:
-            hdd_list_request.card = -1;
+            hdd_list_request.saveNumber = -1;
             hdd_list_request.found = found;
             if (xglHddMcExist(&hdd_list_request) < 0) {
                 state = MCTEST_STATE_HDD_LOAD_NO_FILE;
@@ -1679,7 +1684,7 @@ void MemcardTest(int selection) {
             }
             if (PadData.ports[0].pressed & PAD_CIRCLE) {
                 if (found[work.file] != 0) {
-                    hdd_load_request.card = work.file;
+                    hdd_load_request.saveNumber = work.file;
                     hdd_load_request.data = &SaveData;
                     hdd_load_request.size = SAVE_DATA_SIZE;
                     printf("xglHddMcLoad():%d\n", xglHddMcLoad(&hdd_load_request));
@@ -1708,7 +1713,7 @@ void MemcardTest(int selection) {
             if (PadData.ports[0].pressed & PAD_CIRCLE) {
                 int exist;
 
-                hdd_check_request.card = work.file;
+                hdd_check_request.saveNumber = work.file;
                 state = MCTEST_STATE_HDD_SAVE_CREATE_CONFIRM;
                 exist = xglHddMcExist(&hdd_check_request);
                 printf("xglHddMcExist():%d\n", exist);
@@ -1725,7 +1730,7 @@ void MemcardTest(int selection) {
             xglFontDebugPrintf(0, 32, MC_TEXT_HDD_SAVE_FREE, work.result);
             xglFontDebugPrintf(16, 48, MC_TEXT_CREATE_CONFIRM);
             if (PadData.ports[0].pressed & PAD_CIRCLE) {
-                hdd_create_request.status = work.file;
+                hdd_create_request.saveNumber = work.file;
                 hdd_create_request.transfer.files = files;
                 hdd_create_request.dataSize = SAVE_DATA_SIZE;
                 printf("xglHddMcCreate():%d\n", xglHddMcCreate(&hdd_create_request));
@@ -1748,7 +1753,7 @@ void MemcardTest(int selection) {
             break;
 
         case MCTEST_STATE_HDD_SAVE_WRITE:
-            hdd_save_request.card = work.file;
+            hdd_save_request.saveNumber = work.file;
             hdd_save_request.data = &SaveData;
             hdd_save_request.size = SAVE_DATA_SIZE;
             printf("xglHddMcSave():%d\n", xglHddMcSave(&hdd_save_request));
@@ -1777,10 +1782,10 @@ extern const char cdSlotBoundaryText[];
 extern const char cdSlotBufferSizeFormat[];
 extern const char cdSlotNameFormat[];
 
-/* CD slot view: UP and DOWN move the cursor over the slots of xglCdSlotTable, the
+/* CD slot view: UP and DOWN move the cursor over the slots of gameResBlockTable, the
  * buttons below load or free paths, and the table is listed from row 0x40. */
 void CdSlotTableView(void) {
-    CdSlot *entry;
+    GameResBlock *entry;
     int index;
     int owner;
     int y;
@@ -1794,10 +1799,10 @@ void CdSlotTableView(void) {
     }
     if (PadData.ports[0].repeated & PAD_DOWN) {
         CdSlotCursor++;
-        if (xglCdSlotTable[CdSlotCursor].owner == -1) {
+        if (gameResBlockTable[CdSlotCursor].owner == -1) {
             do {
                 CdSlotCursor--;
-            } while (xglCdSlotTable[CdSlotCursor].owner == -1);
+            } while (gameResBlockTable[CdSlotCursor].owner == -1);
         }
     }
     pad = &PadData.ports[0];
@@ -1817,12 +1822,12 @@ void CdSlotTableView(void) {
         resPlayerSlotsReset();
     }
     if (pad->pressed & PAD_CROSS) {
-        GameResBlockFreeByOwner(xglCdSlotTable[CdSlotCursor].owner);
+        GameResBlockFreeByOwner(gameResBlockTable[CdSlotCursor].owner);
     }
 
     y = 0x40;
     index = 1;
-    entry = xglCdSlotTable + index;
+    entry = gameResBlockTable + index;
     owner = entry->owner;
     if (owner != -1) {
         do {
@@ -1835,7 +1840,7 @@ void CdSlotTableView(void) {
             } else {
                 name = xglCdFindFileName(owner & 0xFFFFFF);
             }
-            if (index == xglCdSlotTable[0].owner) {
+            if (index == gameResBlockTable[0].owner) {
                 xglFontDebugPrintf(0xC, y, cdSlotBoundaryText);
                 y += 8;
             }
@@ -1847,7 +1852,7 @@ void CdSlotTableView(void) {
             y += 8;
             index++;
             if (index < GAME_RES_BLOCK_COUNT) {
-                entry = xglCdSlotTable + index;
+                entry = gameResBlockTable + index;
                 if (entry->owner != -1) {
                     owner = entry->owner;
                     continue;
@@ -1858,20 +1863,20 @@ void CdSlotTableView(void) {
     }
 }
 
-/* [0]: the slot stepped by the pad, passed to resLoadCfFile/resApplyCfFile; [1]: name or owner
+/* [0]: the cf file number stepped by the pad, passed to resLoadCfFile/resApplyCfFile; [1]: name or owner
  * column, toggled by LEFT/RIGHT. */
 extern unsigned char cdSlotCfFileIndex;
 extern unsigned char cdSlotOwnerColumnFlag;
 extern const char yajimaHexWordFormat[];
 extern const char cdSlotTableCountFormat[];
 
-/* Pad 0 steps the byte flag cdSlotCfFileIndex (the slot shown by the load and
+/* Pad 0 steps the byte flag cdSlotCfFileIndex (the cf file number shown by the load and
  * apply buttons) and toggles cdSlotOwnerColumnFlag (name or owner column), then the
  * CD slot table is listed from row 0x40 and the two count-prefixed entry
  * tables from resGetEntryTables follow in two columns. */
 void CdSlotEntryTablesView(void) {
     McTestPadPort *pad = &PadData.ports[0];
-    CdSlot *entry;
+    GameResBlock *entry;
     const char *name;
     int owner;
     int index;
@@ -1903,7 +1908,7 @@ void CdSlotEntryTablesView(void) {
 
     y = 0x40;
     index = 1;
-    entry = xglCdSlotTable + index;
+    entry = gameResBlockTable + index;
     owner = entry->owner;
     if (owner != -1) {
         do {
@@ -1923,7 +1928,7 @@ void CdSlotEntryTablesView(void) {
             index++;
             y += 8;
             if (index < GAME_RES_BLOCK_COUNT) {
-                entry = xglCdSlotTable + index;
+                entry = gameResBlockTable + index;
                 if (entry->owner != -1) {
                     owner = entry->owner;
                     continue;
@@ -1954,7 +1959,7 @@ void CdSlotEntryTablesView(void) {
 /* The spinner character "*". */
 /* Frame counter of the spinner. */
 extern unsigned char cdSlotTestBlinkCount;
-/* CD slot view: UP and DOWN move the cursor over the slots of xglCdSlotTable, the * buttons below load or free paths, and the table is listed from row 0x40. */
+/* CD slot view: UP and DOWN move the cursor over the slots of gameResBlockTable, the * buttons below load or free paths, and the table is listed from row 0x40. */
 void CdSlotTableView(void);
 /* Pad 0 steps the byte flag cdSlotCfFileIndex (the slot shown by the load and * apply buttons) and toggles cdSlotOwnerColumnFlag (name or owner column), then the * CD slot table is listed from row 0x40 and the two count-prefixed entry * tables from resGetEntryTables follow in two columns. */
 void CdSlotEntryTablesView(void);
@@ -2348,12 +2353,12 @@ int EdgeTestOrientationSign(PointXZ *origin, PointXZ *point1, PointXZ *point2, P
 /* "(%3d,%3d)-(%3d,%3d)", " %3d,%3d", "%8x" and "%f". */
 extern const char edgeSegmentFormat[];
 
+const char edgeSegmentFormat[24] = "(%3d,%3d)-(%3d,%3d)";
+
 /* Segment intersection test: the left and right sticks of pad 2 move the
  * ends of the first segment, those of pad 1 the second; circle squares them
  * up. A crossing is marked with a red cross (state 2 when it lies outside
  * the first segment). */
-const char edgeSegmentFormat[24] = "(%3d,%3d)-(%3d,%3d)";
-
 void EdgeTest(int selection) {
     PointXZ start1;
     PointXZ end1;
@@ -2490,3 +2495,122 @@ DebugLinePacket edgeTestLinePacket = {
     36864, 36352,
     { 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00 }
 };
+#define NULL ((void *) 0)
+
+
+/* Calls tyaDrawGauge with a null gauge, resets the elevator records (elvReset),
+ * then runs tyaDisplaySetting, the display adjustment screen, into the
+ * framebuffer at 0x01000000. */
+void tyaRunDisplaySetting(void) {
+    /* passes a null gauge: tyaDrawGauge reads its arguments from address 0
+     * (no test in tyaDrawGauge.s) */
+    tyaDrawGauge(NULL);
+    elvReset();
+    tyaDisplaySetting((u8 *)0x01000000);
+}
+
+
+extern void (*yajimaTestActions[10])(int selection);
+extern XglMenuRow yajimaTestRows[];
+extern XglMenuNode yajimaTestMenuNode;
+extern XglMenuParams yajimaTestMenu;
+extern const char selectText[];
+extern const char clockDateTimeFormat[];
+
+
+/* Debug menu loop ("SELECT" title, clock line); the selected row runs its
+ * entry of yajimaTestActions with the 1-based selection still in $a0. */
+void YajimaTest(void) {
+    int selection;
+    XglClock clock;
+
+    PadData.ports[0].horizontalDeadZone = 0x40;
+    PadData.ports[0].verticalDeadZone = 0x40;
+    xglRenderClearFrame();
+    xglRenderClearColor(0x80004000);
+
+    for (;;) {
+        xglMenuInitial();
+        selection = 0;
+        while (yajimaTestRows[selection].text != 0) {
+            selection++;
+        }
+        yajimaTestMenuNode.item_count = selection;
+        selection = 0;
+        yajimaTestMenu.result_out = &selection;
+        xglMenuOpen(XGL_MENU_SLOT_ANY, &yajimaTestMenu);
+        while (selection == 0) {
+            xglFontDebugPrintf(0, 0, selectText);
+            xglMenuDraw();
+            xglClockRead(&clock);
+            xglFontDebugPrintf(0x80, 0x10, clockDateTimeFormat, clock.year, clock.month,
+                               clock.day, clock.hour, clock.minute, clock.second);
+            /* Draws a random number each frame and drops it: only the
+             * generator's state advances. */
+            xglFRand();
+            xglSleep();
+        }
+        if (selection == -1) {
+            break;
+        }
+        yajimaTestActions[selection - 1](selection);
+        xglSleep();
+    }
+    xglRenderClearDepth();
+}
+
+
+/* Sets the level of ADX slot index to 0x5A at once. Byte-identical to actionSoundSlotLevelSet. */
+void bgmSlotLevelSet(int index) {
+    soundSlotSetVolume(index, 0x5A, 0);
+}
+
+/* Sets the level of ADX slot index to 0x5A at once; same body as bgmSlotLevelSet. */
+void actionSoundSlotLevelSet(int index) {
+    soundSlotSetVolume(index, 0x5A, 0);
+}
+
+/* Sets the level of ADX slot index to 0x7A at once; same body as streamSetLevel. */
+void streamKeySlotLevelSet(int index) {
+    soundSlotSetVolume(index, 0x7A, 0);
+}
+
+/* Sets the level of ADX slot index to 0x7A at once (stream play). Byte-identical to streamKeySlotLevelSet. */
+int streamSetLevel(int index) {
+    return soundSlotSetVolume(index, 0x7A, 0);
+}
+
+void (*yajimaTestActions[10])(int selection) = {
+    FontTest,
+    PadTest,
+    HddTest,
+    MemcardTest,
+    CdSlotTest,
+    IpuMovieTest,
+    SoundTest,
+    MovieListTest,
+    KanjiCheckTest,
+    EdgeTest
+};
+
+XglMenuRow yajimaTestRows[11] = {
+    { fontLabel, { .result = 1 } },
+    { padLabel, { .result = 2 } },
+    { hddLabel, { .result = 3 } },
+    { memcardLabel, { .result = 4 } },
+    { resourceLabel, { .result = 5 } },
+    { ipuLabel, { .result = 6 } },
+    { soundLabel, { .result = 7 } },
+    { captionLabel, { .result = 8 } },
+    { nisuiLabel, { .result = 9 } },
+    { edgeLabel, { .result = 10 } },
+    { 0, { .result = -1 } }
+};
+
+const char clockDateTimeFormat[24] = "%4d.%2d.%2d\n%2d.%2d.%2d";
+
+XglMenuNode yajimaTestMenuNode = { 0, { -1, 1, 8 }, 0, { 0, 0, 0 }, 0, 0, { 0 }, yajimaTestRows };
+
+XglMenuParams yajimaTestMenu = { 1, 0, { 0, 0 }, 8, 16, 0, { 0, 0 }, -1, &yajimaTestMenuNode, 0 };
+
+const char selectText[8] = "SELECT";

@@ -3,10 +3,10 @@
 #include "main/timecode_hms.h"
 #include "main/timecode_window.h"
 #include "main/timecode_frames.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/msg_slot_center.h"
 
-/* Timecode helpers of timecode_frames.c and timecode_counter.c. */
+/* Timecode helpers of timecode_frames.c and msg_slot_core.c. */
 
 /* Time units, as in timecode_frames.c. */
 
@@ -16,7 +16,7 @@
 #define TIMECODE_BOX_WIDTH 0x96
 #define TIMECODE_BOX_HEIGHT 0x23
 
-/* Starts the timeline at hours/minutes/seconds (30 frames per second); returns 0 while the in-use bit (MSG_SLOT_ACTIVE) is set. */
+/* Sets up the editable hours/minutes/seconds timecode panel at its box position, counting from hours/minutes/seconds (30 frames per second); returns 0 while the in-use bit (MSG_SLOT_ACTIVE) is set. */
 int timecodeStartAtHms(MsgSlot *state, int hours, int minutes, int seconds) {
     long long frames = (long long)hours * FRAMES_PER_HOUR + (long long)minutes * FRAMES_PER_MINUTE + (long long)seconds * FRAMES_PER_SECOND;
 
@@ -47,7 +47,7 @@ void timecodeSetModeForward(MsgSlot *timecode, int mode) {
     timecodeSetMode(timecode, mode);
 }
 
-/* Stores two frame counts: the first from hours/minutes/seconds at 30 frames per second, the second from a 60 per second count. */
+/* Stores two frame counts: the first from hours/minutes/seconds at 30 frames per second, the second from hours60/minutes60/seconds60 as plain seconds (the per-frame increment). */
 void timecodeSetFramePairFromHms(MsgSlot *state, int hours, int minutes, int seconds, int hours60, int minutes60, int seconds60) {
     timecodeSetFramePair(state, (long long)hours * FRAMES_PER_HOUR + (long long)minutes * FRAMES_PER_MINUTE + (long long)seconds * FRAMES_PER_SECOND, seconds60 + (long long)hours60 * SECONDS_PER_HOUR + (long long)minutes60 * SECONDS_PER_MINUTE);
 }

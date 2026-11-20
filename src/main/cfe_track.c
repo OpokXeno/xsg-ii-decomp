@@ -47,7 +47,7 @@ void cfeEntryResetDirs(CfeTrackNode *entry)
 }
 
 /* Sets the directions of every key of the track from its neighbours (an integer track, CFE_TRACK_INTEGER, has none):
- * both directions point along the time and angle step to the next key (first key), from the previous key
+ * both directions point along the time and value step to the next key (first key), from the previous key
  * (last key) or from the previous to the next key. CFE_TRACK_LINEAR gives a middle key a first direction from the
  * previous key only, and makes it the previous key's second direction (also on the last key). A track of one
  * key gets (1, 0). The reset flags of the three keys are applied after each step. */
@@ -151,7 +151,7 @@ void cfeChainUnwrapAngles(CfeTrackNode *node)
     } while ((next = after) != 0);
 }
 
-/* The angle at `time` between the keys `from` and `to`, interpolated linearly. */
+/* The value at `time` between the keys `from` and `to`, interpolated linearly. */
 float cfeTrackLerp(CfeTrackNode *from, CfeTrackNode *to, float time)
 {
     float t = (time - (float) from->startTime) / (float) (to->startTime - from->startTime);
@@ -176,7 +176,7 @@ f32 cfeEntryEvalCubic(f32 time, CfeTrackNode *entry, f32 *coefficients)
 /* Fits the cubic through the Bezier points (x[i], y[i]) into coefficients[0..3] (xac_eval.c). */
 extern f32 cfeBezierTimeScale;
 
-/* The angle at `time` on the Bezier curve between the keys `from` and `to`: from leaves along its second
+/* The value at `time` on the Bezier curve between the keys `from` and `to`: from leaves along its second
  * direction, to arrives along its first one (both normalized; a zero length counts as 1e-7). */
 float cfeTrackBezier(CfeTrackNode *from, CfeTrackNode *to, float time)
 {
@@ -462,7 +462,7 @@ int cfeTrackCountInRange(CfeTrackNode *node, int lower, int upper)
     return count;
 }
 
-/* Number of runs of equal angles along the track (1 for a track whose keys all share it, 0 for none). */
+/* Number of runs of equal values along the track (1 for a track whose keys all share it, 0 for none). */
 int cfeTrackCountValueRuns(CfeTrackNode *node)
 {
     int count = 0;
@@ -481,7 +481,7 @@ int cfeTrackCountValueRuns(CfeTrackNode *node)
     return count;
 }
 
-/* Number of runs of equal angles among the keys with lower <= startTime <= upper (0 for none). */
+/* Number of runs of equal values among the keys with lower <= startTime <= upper (0 for none). */
 int cfeTrackCountValueRunsInRange(CfeTrackNode *node, int lower, int upper)
 {
     int count;
@@ -558,7 +558,7 @@ void cfeTrackShiftTimesBack(CfeTrackNode *track, int time, int delta)
     cfeTrackUpdateDirections(track);
 }
 
-/* 1 when every key of the track has the same angle; 0 for an empty track. */
+/* 1 when every key of the track has the same value; 0 for an empty track. */
 int cfeTrackAllValuesEqual(CfeTrackNode *node)
 {
     int *first;
@@ -567,7 +567,7 @@ int cfeTrackAllValuesEqual(CfeTrackNode *node)
     if (node == 0) {
         return 0;
     }
-    /* Read through a pointer: the loop's first compare loads the angle again, as in the original. */
+    /* Read through a pointer: the loop's first compare loads the value again, as in the original. */
     first = &node->value;
     value = *first;
     for (; node != 0; node = node->next) {

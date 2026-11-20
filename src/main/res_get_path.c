@@ -8,7 +8,7 @@
 #include "main/game_movie.h"
 #include "main/xgl_font.h"
 #include "main/game_disk_change.h"
-#include "main/game_over_059.h"
+#include "main/game_over.h"
 #include "main/TiMRPackage.h"
 #include "main/undulate.h"
 #include "main/sef.h"
@@ -509,7 +509,8 @@ int footMaterialKeys[16] = {
     0x006F6E73, 0x00616E73, 0x00000000, 0x00000000,
 };
 
-/* Words read by res_get_path (the size argument of seBankLoad per kind; the last one is zero). Guessed type. */
+/* Start addresses in sound memory of the banks, one per slot (passed to seBankLoad as its bank address; the
+ * last one is zero). Guessed type. */
 int seBankAddressTable[22] = {
     0x00019000, 0x00005000, 0x0007D000, 0x000BE000, 0x000BE000, 0x00000000,
     0x00000000, 0x00154000, 0x00176000, 0x0017A400, 0x0017E800, 0x00182C00,
@@ -619,13 +620,13 @@ int GameResBlockFindBestFit(unsigned int size)
 
     best_waste = -1;
     best = 0;
-    for (index = xglCdSlotTable[0].owner; index < GAME_RES_BLOCK_COUNT && xglCdSlotTable[index].buffer != 0; index++) {
-        if (xglCdSlotTable[index].owner == 0) {
-            if (xglCdSlotTable[index].size == size) {
+    for (index = gameResBlockTable[0].owner; index < GAME_RES_BLOCK_COUNT && gameResBlockTable[index].buffer != 0; index++) {
+        if (gameResBlockTable[index].owner == 0) {
+            if (gameResBlockTable[index].size == size) {
                 return index;
             }
-            if (size < xglCdSlotTable[index].size && xglCdSlotTable[index].size - size < best_waste) {
-                best_waste = xglCdSlotTable[index].size - size;
+            if (size < gameResBlockTable[index].size && gameResBlockTable[index].size - size < best_waste) {
+                best_waste = gameResBlockTable[index].size - size;
                 best = index;
             }
         }
@@ -641,10 +642,10 @@ int GameResBlockFindByOwner(int owner)
     if (owner == 0) {
         return 0;
     }
-    for (index = 1; index < GAME_RES_BLOCK_COUNT && xglCdSlotTable[index].buffer != 0; index++) {
-        if ((xglCdSlotTable[index].buffer < gameResArenaStart
-             || gameResArenaEnd < xglCdSlotTable[index].buffer)
-            && xglCdSlotTable[index].owner == owner) {
+    for (index = 1; index < GAME_RES_BLOCK_COUNT && gameResBlockTable[index].buffer != 0; index++) {
+        if ((gameResBlockTable[index].buffer < gameResArenaStart
+             || gameResArenaEnd < gameResBlockTable[index].buffer)
+            && gameResBlockTable[index].owner == owner) {
             return index;
         }
     }
@@ -659,8 +660,8 @@ int GameResBlockFindByBuffer(void *buffer)
     if (buffer == 0) {
         return 0;
     }
-    for (index = 1; index < GAME_RES_BLOCK_COUNT && xglCdSlotTable[index].buffer != 0; index++) {
-        if (xglCdSlotTable[index].buffer == buffer) {
+    for (index = 1; index < GAME_RES_BLOCK_COUNT && gameResBlockTable[index].buffer != 0; index++) {
+        if (gameResBlockTable[index].buffer == buffer) {
             return index;
         }
     }
@@ -679,12 +680,12 @@ int GameResBlockFindByName(const char *name)
     int index;
 
     key = gameResNameKey(name);
-    for (index = 1; index < GAME_RES_BLOCK_COUNT && xglCdSlotTable[index].buffer != 0; index++) {
-        if ((xglCdSlotTable[index].buffer < gameResArenaStart
-             || gameResArenaEnd < xglCdSlotTable[index].buffer)
-            && (xglCdSlotTable[index].owner & GAME_RES_OWNER_MASK) == GAME_RES_OWNER) {
+    for (index = 1; index < GAME_RES_BLOCK_COUNT && gameResBlockTable[index].buffer != 0; index++) {
+        if ((gameResBlockTable[index].buffer < gameResArenaStart
+             || gameResArenaEnd < gameResBlockTable[index].buffer)
+            && (gameResBlockTable[index].owner & GAME_RES_OWNER_MASK) == GAME_RES_OWNER) {
             wanted = key;
-            stored = xglCdSlotTable[index].buffer;
+            stored = gameResBlockTable[index].buffer;
             while (*wanted == *stored) {
                 if (*wanted == 0) {
                     return index;
@@ -700,17 +701,17 @@ int GameResBlockFindByName(const char *name)
 /* Gives block index to owner, first splitting off the bytes beyond size as a new free block. */
 void *GameResBlockAssign(int index, int owner, unsigned int size)
 {
-    CdSlot *entry;
+    GameResBlock *entry;
     int i;
 
-    entry = &xglCdSlotTable[index];
+    entry = &gameResBlockTable[index];
     if (entry->size != size) {
         for (i = GAME_RES_BLOCK_COUNT - 2; index < i; i--) {
-            xglCdSlotTable[i + 1].buffer = xglCdSlotTable[i].buffer;
-            xglCdSlotTable[i + 1].size = xglCdSlotTable[i].size;
-            xglCdSlotTable[i + 1].owner = xglCdSlotTable[i].owner;
-            xglCdSlotTable[i + 1].tag = xglCdSlotTable[i].tag;
-            xglCdSlotTable[i + 1].value = xglCdSlotTable[i].value;
+            gameResBlockTable[i + 1].buffer = gameResBlockTable[i].buffer;
+            gameResBlockTable[i + 1].size = gameResBlockTable[i].size;
+            gameResBlockTable[i + 1].owner = gameResBlockTable[i].owner;
+            gameResBlockTable[i + 1].tag = gameResBlockTable[i].tag;
+            gameResBlockTable[i + 1].value = gameResBlockTable[i].value;
         }
         entry[1].size = entry->size - size;
         entry->size = size;
@@ -725,11 +726,11 @@ void *GameResBlockAssign(int index, int owner, unsigned int size)
  * before it (index 2 and up). The entries past the merged block move down to close the gap. */
 void GameResBlockFree(int index)
 {
-    CdSlot *block;
+    GameResBlock *block;
     int dest;
     int srcIndex;
 
-    block = &xglCdSlotTable[index];
+    block = &gameResBlockTable[index];
     block->owner = 0;
     dest = -1;
     srcIndex = -1;
@@ -748,11 +749,11 @@ void GameResBlockFree(int index)
     if (srcIndex > 0) {
         if (srcIndex < GAME_RES_BLOCK_COUNT) {
             do {
-                xglCdSlotTable[dest].buffer = xglCdSlotTable[srcIndex].buffer;
-                xglCdSlotTable[dest].size = xglCdSlotTable[srcIndex].size;
-                xglCdSlotTable[dest].tag = xglCdSlotTable[srcIndex].tag;
-                xglCdSlotTable[dest].owner = xglCdSlotTable[srcIndex].owner;
-                xglCdSlotTable[dest].value = xglCdSlotTable[srcIndex].value;
+                gameResBlockTable[dest].buffer = gameResBlockTable[srcIndex].buffer;
+                gameResBlockTable[dest].size = gameResBlockTable[srcIndex].size;
+                gameResBlockTable[dest].tag = gameResBlockTable[srcIndex].tag;
+                gameResBlockTable[dest].owner = gameResBlockTable[srcIndex].owner;
+                gameResBlockTable[dest].value = gameResBlockTable[srcIndex].value;
                 srcIndex++;
                 dest++;
             } while (srcIndex < GAME_RES_BLOCK_COUNT);
@@ -764,13 +765,13 @@ void GameResBlockFree(int index)
 
 static int xglCdEventState;
 
-/* Completion handler passed to xglCdReadFile (proposed xglCdSlotEvent): event 1 stores value as the
+/* Completion handler passed to xglCdReadFile (proposed gameResReadEvent): event 1 stores value as the
  * state word xglCdEventState (xglCdEventState); event 4 calls the slot's callback with that state word. */
-void xglCdSlotEvent(int event, int value, int slot) {
-    CdSlot *entry;
+void gameResReadEvent(int event, int value, int slot) {
+    GameResBlock *entry;
     GameResCallback callback;
 
-    entry = &xglCdSlotTable[slot];
+    entry = &gameResBlockTable[slot];
     callback = (GameResCallback) entry->tag;
     if (callback != 0) {
         if (event == 1) {
@@ -782,7 +783,7 @@ void xglCdSlotEvent(int event, int value, int slot) {
 }
 
 extern int strcmp(const char *a, const char *b);
-/* Frees block index: it is marked free and absorbs the free block after it, then the free block * before it (index 2 and up). The entries past the merged block move down to close the gap. */ void GameResBlockFree(int index);
+void GameResBlockFree(int index);
 
 /* Returns the group whose id range holds file_id, or 0 when none does. */
 CdFileGroup *xglCdFindFileGroup(unsigned int file_id)
@@ -887,7 +888,7 @@ int GameResBlockAlloc(int owner, int size)
         return 0;
     }
     if (owner == 0) {
-        owner = GAME_RES_OWNER + (((unsigned int) xglCdSlotTable[index].buffer >> 8) & 0xFFFF);
+        owner = GAME_RES_OWNER + (((unsigned int) gameResBlockTable[index].buffer >> 8) & 0xFFFF);
     }
     GameResBlockAssign(index, owner, size);
     return index;
@@ -901,9 +902,9 @@ void *GameResBufferAlloc(int size)
 
     index = GameResBlockAlloc(0, size);
     if (index != 0) {
-        xglCdSlotTable[index].tag = 0;
-        xglCdSlotTable[index].value = 0;
-        return xglCdSlotTable[index].buffer;
+        gameResBlockTable[index].tag = 0;
+        gameResBlockTable[index].value = 0;
+        return gameResBlockTable[index].buffer;
     }
     return 0;
 }
@@ -917,9 +918,9 @@ int GameResBlockFindLargestFree(void)
 
     best_size = 0;
     best = 0;
-    for (index = 1; index < GAME_RES_BLOCK_COUNT && xglCdSlotTable[index].buffer != 0; index++) {
-        if (xglCdSlotTable[index].owner == 0 && best_size < xglCdSlotTable[index].size) {
-            best_size = xglCdSlotTable[index].size;
+    for (index = 1; index < GAME_RES_BLOCK_COUNT && gameResBlockTable[index].buffer != 0; index++) {
+        if (gameResBlockTable[index].owner == 0 && best_size < gameResBlockTable[index].size) {
+            best_size = gameResBlockTable[index].size;
             best = index;
         }
     }
@@ -933,9 +934,9 @@ void *GameResourceGetFreeAddr(unsigned int *size)
 
     index = GameResBlockFindLargestFree();
     if (size != 0) {
-        *size = xglCdSlotTable[index].size;
+        *size = gameResBlockTable[index].size;
     }
-    return xglCdSlotTable[index].buffer;
+    return gameResBlockTable[index].buffer;
 }
 
 /* Allocates a block of size bytes for owner, clears its tag and value words and returns
@@ -946,9 +947,9 @@ void *GameResBufferAllocOwned(int owner, int size)
 
     index = GameResBlockAlloc(owner, size);
     if (index != 0) {
-        xglCdSlotTable[index].tag = 0;
-        xglCdSlotTable[index].value = 0;
-        return xglCdSlotTable[index].buffer;
+        gameResBlockTable[index].tag = 0;
+        gameResBlockTable[index].value = 0;
+        return gameResBlockTable[index].buffer;
     }
     return 0;
 }
@@ -958,7 +959,7 @@ void *GameResBufferAllocOwned(int owner, int size)
 static void *xglCdSlotValue;
 
 /* Sets the value that xglCdReadFileTagged and xglCdReadFileSlot copy into the slot (xglCdSlotValue). */
-void xglCdSetSlotValue(void *value)
+void gameResSetReadValue(void *value)
 {
     xglCdSlotValue = value;
 }
@@ -969,10 +970,10 @@ int xglCdReadFileTagged(const char *name, void *buffer, int unused_arg2, GameRes
     status = xglCdGetFileSize(name);
     if (status > 0) {
         if (buffer != 0) {
-            xglCdSlotTable[0].tag = tag;
-            xglCdSlotTable[0].value = xglCdSlotValue;
+            gameResBlockTable[0].tag = tag;
+            gameResBlockTable[0].value = xglCdSlotValue;
             xglCdSetReadTag(0);
-            xglCdReadFile(name, buffer, 1, xglCdSlotEvent);
+            xglCdReadFile(name, buffer, 1, gameResReadEvent);
         }
     }
     return status;
@@ -986,25 +987,25 @@ unsigned int xglCdSlotGetBuffer(unsigned int index)
     result = index;
     if (result != 0) {
         if (result < 0x80U) {
-            result = (unsigned int) xglCdSlotTable[result].buffer;
+            result = (unsigned int) gameResBlockTable[result].buffer;
         }
     }
     return result;
 }
 
-static u8 xglCdLoadSync;
+static u8 gameResQueuedLoad;
 
 /* Starts a read into a slot (proposed xglCdReadFileSlot). tag 0 reads without a slot;
  * otherwise the slot (index 0 when slot >= 0x80) takes tag and xglCdSlotValue before xglCdReadFile. */
 void xglCdReadFileSlot(const char *name, void *buffer, GameResCallback tag, u32 slot) {
-    CdSlot *entry;
+    GameResBlock *entry;
     u32 index;
     int in_table;
     void *value;
 
     in_table = slot < 0x80U;
     if (tag == 0) {
-        if (xglCdLoadSync != 0) {
+        if (gameResQueuedLoad != 0) {
             xglCdReadFile(name, buffer, 1, CD_NOTIFY_CURRENT);
             return;
         }
@@ -1012,20 +1013,20 @@ void xglCdReadFileSlot(const char *name, void *buffer, GameResCallback tag, u32 
         return;
     }
     index = 0;
-    entry = &xglCdSlotTable[0];
+    entry = &gameResBlockTable[0];
     if (in_table != 0) {
         index = slot;
-        entry = &xglCdSlotTable[index];
+        entry = &gameResBlockTable[index];
     }
     value = xglCdSlotValue;
     entry->tag = tag;
     entry->value = value;
     xglCdSetReadTag(index);
-    if (xglCdLoadSync != 0) {
-        xglCdReadFile(name, buffer, 1, xglCdSlotEvent);
+    if (gameResQueuedLoad != 0) {
+        xglCdReadFile(name, buffer, 1, gameResReadEvent);
         return;
     }
-    xglCdReadFile(name, buffer, 0, xglCdSlotEvent);
+    xglCdReadFile(name, buffer, 0, gameResReadEvent);
 }
 
 /* Writes the extension ".xap" with its NUL at extension, the end of path, then probes path
@@ -1079,7 +1080,7 @@ enum ResKind {
     RES_KIND_SOUND = 0x90000,
     RES_KIND_EVENT = 0xF10000
 };
-/* Event numbers of a RES_KIND_EVENT entry (bits 8-15): ";save" and ";disk". */
+/* Event numbers of a RES_KIND_EVENT entry (bits 8-15): the "save" and "disk" commands. */
 enum ResEvent {
     RES_EVENT_SAVE = 0x100,
     RES_EVENT_DISK = 0x200
@@ -1095,12 +1096,13 @@ enum ResEvent {
 /* In a record's flags word: bit 31 = started with volume and pan, bits 0-30 = voice id. */
 #define SE_RECORD_HAS_PARAMS 0x80000000
 #define SE_VOICE_ID_MASK 0x7FFFFFFF
-/* High bit of a resource id: load now, without waiting for the CD service (xglCdLoadSync). */
-#define RES_ID_SYNC_LOAD 0x80000000
+/* High bit of a resource id: the read is queued in the background (xglCdReadFile mode 1) and xglCdLoadByKind does not
+   wait for the CD library to go idle. Without it the reads block until the data is in. */
+#define RES_ID_QUEUED_LOAD 0x80000000
 /* Owner flag of a block that resPreloadStep loaded for the next scene; resApplyCfFile compacts them. */
 #define RES_OWNER_PRELOADED 0x40000000
-/* Each path slot is one block of this size followed by a RES_PATH_PAD_SIZE pad block. */
-#define RES_PATH_BUFFER_SIZE 0xC5FC0
+/* Each player model slot is one block of this size followed by a RES_PATH_PAD_SIZE pad block. */
+#define PLAYER_MODEL_BUFFER_SIZE 0xC5FC0
 #define RES_PATH_PAD_SIZE 0x40
 /* Read-completion event of xglCdReadFile; "#scn" is the script header magic. */
 #define CD_EVENT_READ_DONE 4
@@ -1110,14 +1112,15 @@ enum ResEvent {
 #define RES_JUMP_NAMED 0x7F
 /* Map block key class of a jump-point polygon; its low byte is the jump kind. */
 #define RES_MAP_KEY_JUMP 0x100
-/* cf file state kind: set while the file is being read. */
+/* cf file preload state: set while the file is being read. */
 #define RES_CF_LOADING 0xFF
-/* SB bytecode (OV01 VM) opcodes the jump scan reads, and the VM stack base in the scratchpad. */
+/* SB bytecode (OV01 VM) opcodes the jump scan reads, and the scratchpad address (0x70000000) the scan uses
+ * as its private simulation stack, not the VM stack. */
 #define SB_OP_END 0x1C
 #define SB_OP_JUMP 0x0E
-#define SB_OP_LOOKUPSWITCH 0x25
-#define SB_OP_CALL_INDIRECT 0x15
-#define SB_STACK_BASE 0x70000000
+#define SB_OP_SWITCH 0x25
+#define SB_OP_CALL_NATIVE 0x15
+#define RES_SCAN_STACK_BASE 0x70000000
 
 /* Appends the string src at dst and leaves dst on the copied NUL, so the next append continues
  * the string. Its do/while(0) block boundary keeps the dst-- ahead of the next call's argument
@@ -1125,7 +1128,9 @@ enum ResEvent {
 #define STRING_APPEND(dst, src) do { while ((*(dst)++ = *(src)++) != 0) {} (dst)--; } while (0)
 
 /* Header of a file-set block (xglCdLoadFileSet): the data address of each file of the set,
- * 0 for a file that is missing. It takes the first 0x14 of GAME_RES_NAME_HEADER_SIZE bytes. */
+ * 0 for a file that is missing. It takes the first 0x14 of GAME_RES_NAME_HEADER_SIZE bytes.
+ * A map set (xglCdLoadBinFileSet) uses epf for its .id file, xap for the .bin script image and
+ * xapBytes for that image's size. */
 typedef struct CdFileSetHeader {
     char *pxy;
     char *txy;
@@ -1308,7 +1313,7 @@ int xglCdLoadBinFileSet(unsigned int file_id, unsigned int slot, GameResCallback
     size = xglCdGetFileSize(name);
     if (size > 0) {
         if (slot != 0 && gameWork.resBuffer != 0) {
-            if (xglCdLoadSync != 0) {
+            if (gameResQueuedLoad != 0) {
                 binData = buffer;
             } else {
                 binData = (char *) gameWork.resBuffer;
@@ -1351,7 +1356,7 @@ int xglCdLoadBinFileSet(unsigned int file_id, unsigned int slot, GameResCallback
         if (sblSize > 0) {
             if (slot != 0 && sblBuffer != 0) {
                 sblBuffer = buffer;
-                if (xglCdLoadSync == 0) {
+                if (gameResQueuedLoad == 0) {
                     char *sblTop;
 
                     sblTop = (char *) ((u32) gameWork.resBuffer + info->xapBytes);
@@ -1459,11 +1464,11 @@ int xglCdLoadEneFile(unsigned int file_id, unsigned int slot, GameResCallback ta
     return buffer - start;
 }
 
-/* slot is the index of a block of xglCdSlotTable or, from GAME_RES_BLOCK_COUNT up, the address to load to (0 only measures the set). */
-int xglCdLoadByKind(int id, unsigned int slot, int *size, GameResCallback tag);
+/* target is the index of a block of gameResBlockTable or, from GAME_RES_BLOCK_COUNT up, the address to load to (0 only measures the set). */
+int xglCdLoadByKind(int id, unsigned int target, int *size, GameResCallback tag);
 /* Loads the .bin, language-specific .sbl, .id, .txy and .pxy files of file_id into slot's * block (with slot 0 it only measures them) and returns the bytes the set takes. */ int xglCdLoadBinFileSet(unsigned int file_id, unsigned int slot, GameResCallback tag);
 
-int xglCdLoadByKind(int resourceId, unsigned int slot, int *outSize, GameResCallback tag)
+int xglCdLoadByKind(int resourceId, unsigned int target, int *outSize, GameResCallback tag)
 {
     unsigned int fileId;
     unsigned int type;
@@ -1471,29 +1476,29 @@ int xglCdLoadByKind(int resourceId, unsigned int slot, int *outSize, GameResCall
 
     fileId = resourceId & GAME_RES_ID_MASK;
     if (resourceId < 0) {
-        xglCdLoadSync = 1;
+        gameResQueuedLoad = 1;
     } else {
-        xglCdLoadSync = 0;
+        gameResQueuedLoad = 0;
     }
     bytes = 0;
-    if (xglCdLoadSync == 1 || xglCdServiceIfPending() == 0) {
+    if (gameResQueuedLoad == 1 || xglCdServiceIfPending() == 0) {
         if (xglCdFindFileGroup(fileId) != 0) {
             type = fileId & CD_FILE_TYPE_MASK;
             switch (type) {
             case RES_KIND_ACT:
             case RES_KIND_MOBJ:
-                bytes = xglCdLoadFileSet(fileId, slot, tag);
+                bytes = xglCdLoadFileSet(fileId, target, tag);
                 break;
             case RES_KIND_MAP:
-                bytes = xglCdLoadBinFileSet(fileId, slot, tag);
+                bytes = xglCdLoadBinFileSet(fileId, target, tag);
                 break;
             case RES_KIND_MOT:
-                bytes = xglCdLoadXapFile(fileId, slot, tag);
+                bytes = xglCdLoadXapFile(fileId, target, tag);
                 break;
             case RES_KIND_EFFECT:
                 break;
             case RES_KIND_ENE:
-                bytes = xglCdLoadEneFile(fileId, slot, tag);
+                bytes = xglCdLoadEneFile(fileId, target, tag);
                 break;
             }
         }
@@ -1517,18 +1522,18 @@ int GameResLoadName(const char *name, void **data, unsigned int *size, GameResCa
 
     index = GameResBlockFindByName(name);
     if (index > 0) {
-        buffer = xglCdSlotTable[index].buffer;
+        buffer = gameResBlockTable[index].buffer;
         buffer += GAME_RES_NAME_HEADER_SIZE;
         if (data != 0) {
             *data = buffer;
         }
         if (size != 0) {
-            *size = xglCdSlotTable[index].size;
+            *size = gameResBlockTable[index].size;
         }
         if (callback != 0) {
-            callback(index, xglCdSlotTable[index].buffer, xglCdSlotTable[index].size, xglCdSlotValue);
+            callback(index, gameResBlockTable[index].buffer, gameResBlockTable[index].size, xglCdSlotValue);
         }
-        return xglCdSlotTable[index].owner;
+        return gameResBlockTable[index].owner;
     }
     bytes = xglCdGetFileSize(name);
     if (bytes < 0) {
@@ -1540,13 +1545,13 @@ int GameResLoadName(const char *name, void **data, unsigned int *size, GameResCa
     if (index == 0) {
         return -1;
     }
-    buffer = xglCdSlotTable[index].buffer;
+    buffer = gameResBlockTable[index].buffer;
     source = gameResNameKey(name);
     header = buffer;
     while ((*header++ = *source++) != 0) {
     }
-    xglCdSlotTable[index].tag = callback;
-    xglCdSlotTable[index].value = xglCdSlotValue;
+    gameResBlockTable[index].tag = callback;
+    gameResBlockTable[index].value = xglCdSlotValue;
     buffer += GAME_RES_NAME_HEADER_SIZE;
     if (data != 0) {
         *data = buffer;
@@ -1555,8 +1560,8 @@ int GameResLoadName(const char *name, void **data, unsigned int *size, GameResCa
         *size = bytes;
     }
     xglCdSetReadTag(index);
-    xglCdReadFile(name, buffer, 1, xglCdSlotEvent);
-    return xglCdSlotTable[index].owner;
+    xglCdReadFile(name, buffer, 1, gameResReadEvent);
+    return gameResBlockTable[index].owner;
 }
 
 /* Returns the owner tag of the block holding resource id, loading it first when no block
@@ -1572,15 +1577,15 @@ int GameResLoadID(int id, void **buffer, unsigned int *size, GameResCallback cal
     index = GameResBlockFindByOwner(file_id);
     if (index != 0) {
         if (buffer != 0) {
-            *buffer = xglCdSlotTable[index].buffer;
+            *buffer = gameResBlockTable[index].buffer;
         }
         if (size != 0) {
-            *size = xglCdSlotTable[index].size;
+            *size = gameResBlockTable[index].size;
         }
         if (callback != 0) {
-            callback(index, xglCdSlotTable[index].buffer, xglCdSlotTable[index].size, xglCdSlotValue);
+            callback(index, gameResBlockTable[index].buffer, gameResBlockTable[index].size, xglCdSlotValue);
         }
-        return xglCdSlotTable[index].owner;
+        return gameResBlockTable[index].owner;
     }
     total = xglCdLoadByKind(id, 0, 0, 0);
     if (total == 0) {
@@ -1592,9 +1597,9 @@ int GameResLoadID(int id, void **buffer, unsigned int *size, GameResCallback cal
     }
     xglCdLoadByKind(id, index, size, callback);
     if (buffer != 0) {
-        *buffer = xglCdSlotTable[index].buffer;
+        *buffer = gameResBlockTable[index].buffer;
     }
-    return xglCdSlotTable[index].owner;
+    return gameResBlockTable[index].owner;
 }
 
 /* The data (past the GAME_RES_NAME_HEADER_SIZE header) of the block loaded by name, and its size; 0 when absent. */
@@ -1605,10 +1610,10 @@ void *GameResFindName(char *name, unsigned int *size)
 
     index = GameResBlockFindByName(name);
     if (index > 0) {
-        data = xglCdSlotTable[index].buffer;
+        data = gameResBlockTable[index].buffer;
         data += GAME_RES_NAME_HEADER_SIZE;
         if (size != 0) {
-            *size = xglCdSlotTable[index].size;
+            *size = gameResBlockTable[index].size;
         }
         return data;
     }
@@ -1620,7 +1625,7 @@ void *GameResFindName(char *name, unsigned int *size)
 
 int GameResBlockFindByOwner(int owner);
 
-/* Entry 0 of xglCdSlotTable (CdSlot above) is the header: GameResourceInit stores the
+/* Entry 0 of gameResBlockTable (GameResBlock above) is the header: GameResourceInit stores the
    managed range start in its buffer and length in its size, and its owner holds the matched index. */
 
 void *GameResFindID(int resourceId, int *outSize)
@@ -1632,20 +1637,20 @@ void *GameResFindID(int resourceId, int *outSize)
         return 0;
     }
     if (outSize != 0) {
-        *outSize = xglCdSlotTable[block].size;
+        *outSize = gameResBlockTable[block].size;
     }
-    return xglCdSlotTable[block].buffer;
+    return gameResBlockTable[block].buffer;
 }
 
 int GameResBlockFindLargestFree(void);
 
-/* Stores the path slot index in xglCdSlotTable[0].owner: the slot found by the search (GameResBlockFindLargestFree) when search is
-   nonzero, otherwise slot 1. Callers pass 1 to search and 0 for the default (proposed resSelectSlot). */
+/* Stores the base block index of the block searches in gameResBlockTable[0].owner (GameResourceReset starts from it too):
+   the largest free block (GameResBlockFindLargestFree) when search is nonzero, otherwise block 1. */
 void resSelectSlot(int search) {
     if (search != 0) {
-        xglCdSlotTable[0].owner = GameResBlockFindLargestFree();
+        gameResBlockTable[0].owner = GameResBlockFindLargestFree();
     } else {
-        xglCdSlotTable[0].owner = 1;
+        gameResBlockTable[0].owner = 1;
     }
 }
 
@@ -1672,7 +1677,8 @@ void resResetDescriptorTables(void) {
     }
 }
 
-/* One 16-byte record of resRecordTable; tag is word 0, whose top byte is the record type that resReleaseRecordsOfType compares. */
+/* Another view of the 16-byte voice record of resRecordTable (see ResRecord and SeVoiceEntry); tag is word 0,
+ * whose top byte (bits 24..30) is the bank slot that resReleaseRecordsOfType compares. */
 typedef struct {
     u32 kindWord;
     u8 unmodeled_04[0xC];
@@ -2028,7 +2034,7 @@ void seVoiceRecordsUpdatePan(void)
     int j;
     u32 loudest;
 
-    if (gameWork.control & CONTROL_TOP_EXIT) {
+    if (gameWork.control & CONTROL_MAP_LOADED) {
         return;
     }
     for (i = 0; i < SE_RECORD_COUNT; i++) {
@@ -2115,37 +2121,37 @@ void *GameResourceWorkAlloc(unsigned int bytesWanted)
 
     first = GameResBlockFindLargestFree();
     last = first;
-    total = xglCdSlotTable[first].size;
+    total = gameResBlockTable[first].size;
     if (total < bytesWanted) {
         while (total < bytesWanted) {
-            if (xglCdSlotTable[last + 1].buffer == 0 && xglCdSlotTable[0].owner < first) {
+            if (gameResBlockTable[last + 1].buffer == 0 && gameResBlockTable[0].owner < first) {
                 first--;
-                total += xglCdSlotTable[first].size;
+                total += gameResBlockTable[first].size;
             } else {
                 last++;
-                total += xglCdSlotTable[last].size;
+                total += gameResBlockTable[last].size;
             }
         }
     }
     if (gameResArenaEnd == 0) {
-        gameResArenaStart = xglCdSlotTable[first].buffer;
-        gameResArenaEnd = xglCdSlotTable[last].buffer;
+        gameResArenaStart = gameResBlockTable[first].buffer;
+        gameResArenaEnd = gameResBlockTable[last].buffer;
     } else {
-        gameResWorkStart = xglCdSlotTable[first].buffer;
-        gameResWorkEnd = xglCdSlotTable[last].buffer;
+        gameResWorkStart = gameResBlockTable[first].buffer;
+        gameResWorkEnd = gameResBlockTable[last].buffer;
     }
-    return xglCdSlotTable[first].buffer;
+    return gameResBlockTable[first].buffer;
 }
 
 void GameResourceWorkReload(void)
 {
     int i;
-    CdSlot *entry;
-    CdSlot *first;
-    CdSlot *table;
+    GameResBlock *entry;
+    GameResBlock *first;
+    GameResBlock *table;
     void *blockStart;
 
-    table = xglCdSlotTable;
+    table = gameResBlockTable;
     first = &table[1];
     i = 1;
     if (first->buffer != 0) {
@@ -2154,7 +2160,7 @@ void GameResourceWorkReload(void)
             if (entry->owner != 0) {
                 blockStart = entry->buffer;
                 if ((blockStart < gameResWorkStart || blockStart > gameResWorkEnd) && blockStart >= gameResArenaStart && blockStart <= gameResArenaEnd) {
-                    xglCdLoadByKind(entry->owner | RES_ID_SYNC_LOAD, (unsigned int) blockStart, 0, 0);
+                    xglCdLoadByKind(entry->owner | RES_ID_QUEUED_LOAD, (unsigned int) blockStart, 0, 0);
                 }
             }
             i++;
@@ -2166,9 +2172,9 @@ void GameResourceWorkReload(void)
 void GameResArenaRelease(void)
 {
     int i;
-    CdSlot *entry;
-    CdSlot *first;
-    CdSlot *table;
+    GameResBlock *entry;
+    GameResBlock *first;
+    GameResBlock *table;
     void *blockStart;
     void *lower;
     void *upper;
@@ -2180,7 +2186,7 @@ void GameResArenaRelease(void)
         lower = gameResWorkStart;
         upper = gameResWorkEnd;
     }
-    table = xglCdSlotTable;
+    table = gameResBlockTable;
     first = &table[1];
     i = 1;
     if (first->buffer != 0) {
@@ -2205,27 +2211,27 @@ void GameResArenaRelease(void)
 void cdSlotTestOnStart(void) {
 }
 
-/* One of the four path slots: the start of its buffer block and the resource id loaded into it last
+/* One of the four player model slots: the start of its buffer block and the resource id loaded into it last
  * (resPlayerSlotsLoadModels' model ids; 0 for none). */
-typedef struct PathSlot {
+typedef struct PlayerModelSlot {
     u8 *base;
     int resource_id;
-} PathSlot;
+} PlayerModelSlot;
 
-static PathSlot resPathSlots[4];
+static PlayerModelSlot resPlayerModelSlots[4];
 
 void GameResourceReset(void) {
-    int i = xglCdSlotTable[0].owner;
+    int i = gameResBlockTable[0].owner;
 
     if (i == 1) {
-        xglCdSlotTable[1].buffer = xglCdSlotTable[0].buffer;
+        gameResBlockTable[1].buffer = gameResBlockTable[0].buffer;
     }
-    xglCdSlotTable[i].size = xglCdSlotTable[0].size - (xglCdSlotTable[i].buffer - xglCdSlotTable[0].buffer);
-    xglCdSlotTable[i].owner = 0;
+    gameResBlockTable[i].size = gameResBlockTable[0].size - (gameResBlockTable[i].buffer - gameResBlockTable[0].buffer);
+    gameResBlockTable[i].owner = 0;
     for (i++; i < 128; i++) {
-        xglCdSlotTable[i].buffer = 0;
-        xglCdSlotTable[i].size = 0;
-        xglCdSlotTable[i].owner = -1;
+        gameResBlockTable[i].buffer = 0;
+        gameResBlockTable[i].size = 0;
+        gameResBlockTable[i].owner = -1;
     }
     gameResArenaStart = 0;
     gameResArenaEnd = 0;
@@ -2236,8 +2242,8 @@ void GameResourceReset(void) {
 
 /* Stores the managed range in the header entry, then resets the path state (proposed GameResourceInit). */
 void GameResourceInit(void *base, unsigned int size) {
-    xglCdSlotTable[0].buffer = base;
-    xglCdSlotTable[0].size = size;
+    gameResBlockTable[0].buffer = base;
+    gameResBlockTable[0].size = size;
     resSelectSlot(0);
     GameResourceReset();
     resResetDescriptorTables();
@@ -2645,10 +2651,11 @@ extern ResCommand resCommandTable[];      /* script command table */
 static u32 resOwnerTable[64];   /* owner list, [0] = count incl. header */
 typedef struct ResCfFile {
     s16 id;
-    u8 kind;
+    u8 preloadState;
 } ResCfFile;
 
-/* Current CF file id and kind; kind also serves as the preload step index (resPreloadStep). */
+/* Current CF file id and its preload state: 0 when idle or done, RES_CF_LOADING while the file is read, otherwise
+   the index of the next preload entry (resPreloadStep). */
 static ResCfFile resCfCurrent;
 
 void resScriptRun(int event, int value, int tag)
@@ -2722,11 +2729,11 @@ void resScriptRun(int event, int value, int tag)
         }
     }
 
-    /* Collect the xglCdSlotTable indexes that resEntryTable does not hold. */
+    /* Collect the gameResBlockTable indexes that resEntryTable does not hold. */
     n = 1;
     i = 1;
-    next = xglCdSlotTable[i].owner;
-    if (xglCdSlotTable[i].buffer != 0) {
+    next = gameResBlockTable[i].owner;
+    if (gameResBlockTable[i].buffer != 0) {
         /* The original enters past a dead `m = 0` store; the jump into the
          * loop keeps loop.c from optimizing it (flow later drops the store). */
         goto scan;
@@ -2747,11 +2754,11 @@ void resScriptRun(int event, int value, int tag)
                         }
                     } while (++m < resEntryTable[0]);
                 }
-                if (i >= (u32)xglCdSlotTable[0].owner && m >= resEntryTable[0]) {
-                    resOwnerTable[n++] = xglCdSlotTable[i].owner;
+                if (i >= (u32)gameResBlockTable[0].owner && m >= resEntryTable[0]) {
+                    resOwnerTable[n++] = gameResBlockTable[i].owner;
                 }
             }
-        } while (++i < GAME_RES_BLOCK_COUNT && (next = xglCdSlotTable[i].owner, xglCdSlotTable[i].buffer != 0));
+        } while (++i < GAME_RES_BLOCK_COUNT && (next = gameResBlockTable[i].owner, gameResBlockTable[i].buffer != 0));
     }
     resOwnerTable[0] = n;
 
@@ -2778,7 +2785,7 @@ void resScriptRun(int event, int value, int tag)
             }
         } while (swapped);
     }
-    resCfCurrent.kind = 1;
+    resCfCurrent.preloadState = 1;
 }
 
 
@@ -2793,10 +2800,10 @@ void resPreloadStep(int flag)
         }
     }
     {
-        u32 address = (u32)&resCfCurrent.kind;
+        u32 address = (u32)&resCfCurrent.preloadState;
         u8 *preloadIndex = (u8 *)(address + ((address & 0xFF) >> 8));
-        if (GameResLoadID(resEntryTable[*preloadIndex] + RES_ID_SYNC_LOAD, &block, 0, 0) > 0) {
-            xglCdSlotTable[GameResBlockFindByBuffer(block)].owner |= RES_OWNER_PRELOADED;
+        if (GameResLoadID(resEntryTable[*preloadIndex] + RES_ID_QUEUED_LOAD, &block, 0, 0) > 0) {
+            gameResBlockTable[GameResBlockFindByBuffer(block)].owner |= RES_OWNER_PRELOADED;
         }
         *preloadIndex = *preloadIndex + 1;
         if (*preloadIndex >= resEntryTable[0]) {
@@ -2815,7 +2822,7 @@ void resLoadCfFile(int id) {
     char *src;
 
     if (resCfCurrent.id == (u16)id) {
-        if (resCfCurrent.kind != 0 && resCfCurrent.kind != RES_CF_LOADING) {
+        if (resCfCurrent.preloadState != 0 && resCfCurrent.preloadState != RES_CF_LOADING) {
             resPreloadStep(id & 0xFFFF0000);
         }
         return;
@@ -2838,7 +2845,7 @@ void resLoadCfFile(int id) {
     dst[9] = 't';
     dst[10] = 0;
     if (xglCdGetFileSize(name) > 0) {
-        resCfCurrent.kind = RES_CF_LOADING;
+        resCfCurrent.preloadState = RES_CF_LOADING;
         xglCdReadFile(name, resScriptBuffer.bytes, 1, resScriptRun);
     }
 }
@@ -2863,11 +2870,14 @@ typedef union { f32 f; int w; } JumpFloat;
 
 typedef struct JumpRecord {
     u8 kind;
-    signed char flag;
-    s16 stackWord;
+    /* Number of triangle centers averaged into positionRadius by resJumpPointsBuild. */
+    signed char triangleCount;
+    /* Scene number: the cf file the record loads (resLoadCfFile) when the player enters its radius. */
+    s16 cfId;
     u8 unmodeled_04[0x0C];
     union {
-        JumpFloat unsetValue[4];
+        /* positionRadius[0..2] is the position, [3] the radius (then the minimum distance to another record). */
+        JumpFloat positionRadius[4];
         Vector4 position;
         ResJumpPoint point;
     };
@@ -2886,7 +2896,7 @@ typedef struct JumpTableHeader {
 
 typedef struct JumpNameEntry {
     int nameOffset;
-    int length;
+    int value;
 } JumpNameEntry;
 
 extern JumpTableHeader mapSceneScriptBuffer;
@@ -2917,7 +2927,7 @@ void resParseJumpTarget(void)
     entry = (JumpNameEntry *) names;
     for (nameIndex = 0; nameIndex < header->nameCount; nameIndex++) {
         if (strcmp(names + entry->nameOffset, "mapjump") == 0) {
-            cursor += entry->length;
+            cursor += entry->value;
             break;
         }
         entry++;
@@ -2940,7 +2950,7 @@ void resParseJumpTarget(void)
                     return;
                 }
                 value = resReadHalfPairWord(cursor + 1);
-                if (op == SB_OP_LOOKUPSWITCH) {
+                if (op == SB_OP_SWITCH) {
                     break;
                 }
                 cursor += sbOpLength(op, value);
@@ -2958,12 +2968,12 @@ void resParseJumpTarget(void)
     }
     table = cursor;
     for (index = 0; index < recordCount; index++) {
-        stack = (int *) SB_STACK_BASE;
+        stack = (int *) RES_SCAN_STACK_BASE;
         resJumpRecords[index].kind = resReadHalfPairWord(table) - 1;
-        resJumpRecords[index].flag = 0;
-        resJumpRecords[index].stackWord = 0;
-        resJumpRecords[index].unsetValue[0].f = resJumpRecords[index].unsetValue[1].f = resJumpRecords[index].unsetValue[2].f = -1000.0f;
-        resJumpRecords[index].unsetValue[3].w = 0;
+        resJumpRecords[index].triangleCount = 0;
+        resJumpRecords[index].cfId = 0;
+        resJumpRecords[index].positionRadius[0].f = resJumpRecords[index].positionRadius[1].f = resJumpRecords[index].positionRadius[2].f = -1000.0f;
+        resJumpRecords[index].positionRadius[3].w = 0;
         cursor = start + resReadHalfPairWord(table + 2);
         table += 4;
         for (;;) {
@@ -2972,16 +2982,16 @@ void resParseJumpTarget(void)
                 break;
             }
             value = resReadHalfPairWord(cursor + 1);
-            if (op == SB_OP_CALL_INDIRECT && value == matchKey) {
-                resJumpRecords[index].stackWord = (u16) stack[-*stack];
+            if (op == SB_OP_CALL_NATIVE && value == matchKey) {
+                resJumpRecords[index].cfId = (u16) stack[-*stack];
                 break;
             }
             if (op == SB_OP_JUMP) {
                 break;
             }
             switch (op) {
-            case SB_OP_CALL_INDIRECT:
-                stack = (int *) SB_STACK_BASE;
+            case SB_OP_CALL_NATIVE:
+                stack = (int *) RES_SCAN_STACK_BASE;
                 break;
             case 0x03:
             case 0x04:
@@ -3017,7 +3027,8 @@ u8 *footGroupMaterialNames[10] = {
 };
 
 
-/* Guessed type: a table of 4-byte words (pairs of 16-bit values, -1 separators); its reader is in other TUs. */
+/* Guessed type: a table of 4-byte unit keys in groups, each group ended by -1; seFootBanksLoad finds the group
+ * that holds the current foot key and takes its material name. */
 int footGroupKeyTable[40] = {
     0x10002, 0x10005, 0x10006, 0x10004, -1, 0x1000A, 0x1000B, -1,
     0x10010, 0x10011, 0x10012, 0x10013, -1, 0x10016, 0x10017, 0x10018,
@@ -3040,7 +3051,7 @@ unsigned char footMaterialIndexTable[56] = {
     0, 13, 0, 0, 0, 0, 0, 0
 };
 
-CdSlot xglCdSlotTable[GAME_RES_BLOCK_COUNT] = { { 0 } };
+GameResBlock gameResBlockTable[GAME_RES_BLOCK_COUNT] = { { 0 } };
 
 
 /* Averages the triangle centers of the RES_MAP_KEY_JUMP groups per jump record: a group record (MapRecord of undulate.h) names its key
@@ -3084,15 +3095,15 @@ void resJumpPointsBuild(void) {
                             center[0] = (vertexA[0].f + vertexB[0].f + vertexC[0].f) / 3.0f;
                             center[1] = (vertexA[1].f + vertexB[1].f + vertexC[1].f) / 3.0f;
                             center[2] = (vertexA[2].f + vertexB[2].f + vertexC[2].f) / 3.0f;
-                            count = I2F((u8) record->flag);
+                            count = I2F((u8) record->triangleCount);
                             denom = count + 1.0f;
-                            center[0] = center[0] + record->unsetValue[0].f * count;
-                            center[1] = center[1] + record->unsetValue[1].f * count;
-                            center[2] = center[2] + record->unsetValue[2].f * count;
-                            record->flag = (signed char) ((u8) record->flag + 1);
-                            record->unsetValue[0].f = center[0] / denom;
-                            record->unsetValue[1].f = center[1] / denom;
-                            record->unsetValue[2].f = center[2] / denom;
+                            center[0] = center[0] + record->positionRadius[0].f * count;
+                            center[1] = center[1] + record->positionRadius[1].f * count;
+                            center[2] = center[2] + record->positionRadius[2].f * count;
+                            record->triangleCount = (signed char) ((u8) record->triangleCount + 1);
+                            record->positionRadius[0].f = center[0] / denom;
+                            record->positionRadius[1].f = center[1] / denom;
+                            record->positionRadius[2].f = center[2] / denom;
                             break;
                         }
                     }
@@ -3106,14 +3117,14 @@ void resJumpPointsBuild(void) {
     for (i = 0; resJumpRecords[i].kind != RES_JUMP_END; i++) {
         minDistance = 100000.0f;
         for (j = 0; resJumpRecords[j].kind != RES_JUMP_END; j++) {
-            if (i != j && resJumpRecords[i].stackWord != resJumpRecords[j].stackWord) {
+            if (i != j && resJumpRecords[i].cfId != resJumpRecords[j].cfId) {
                 distance = xglPointLength(&resJumpRecords[i].position, &resJumpRecords[j].position) * 0.5f;
                 if (distance < minDistance) {
                     minDistance = distance;
                 }
             }
         }
-        resJumpRecords[i].unsetValue[3].f = minDistance;
+        resJumpRecords[i].positionRadius[3].f = minDistance;
     }
 }
 
@@ -3127,14 +3138,14 @@ void resJumpRecordSet(int index, int cfId, ResJumpPoint *point) {
         resJumpRecords[index + 1].kind = RES_JUMP_END;
     }
     resJumpRecords[index].kind = RES_JUMP_NAMED;
-    resJumpRecords[index].flag = 0;
-    resJumpRecords[index].stackWord = cfId;
+    resJumpRecords[index].triangleCount = 0;
+    resJumpRecords[index].cfId = cfId;
     resJumpRecords[index].point = *point;
 }
 
 
 /* Loads the cf file of the first jump point whose radius reaches the current map object. A jump
-   record holds its point in unsetValue[0..2], the radius in unsetValue[3] and the cf file in stackWord;
+   record holds its point in positionRadius[0..2], the radius in positionRadius[3] and the cf file in cfId;
    gameWork.mapId is the map id. */
 void resJumpPointsUpdate(void)
 {
@@ -3155,9 +3166,9 @@ void resJumpPointsUpdate(void)
     }
     position = &uwamonoRecords[uwamonoCurrentIndex].body.actor->position;
     for (i = 0; resJumpRecords[i].kind != RES_JUMP_END; i++) {
-        if (xglPointLength(position, &resJumpRecords[i].position) < resJumpRecords[i].unsetValue[3].f) {
-            if (resJumpRecords[i].stackWord > 0) {
-                resLoadCfFile(resJumpRecords[i].stackWord);
+        if (xglPointLength(position, &resJumpRecords[i].position) < resJumpRecords[i].positionRadius[3].f) {
+            if (resJumpRecords[i].cfId > 0) {
+                resLoadCfFile(resJumpRecords[i].cfId);
                 return;
             }
         }
@@ -3177,10 +3188,10 @@ typedef struct {
 
 void resResetNameTables(void)
 {
-    CdSlot *head;
-    CdSlot *walk;
-    CdSlot *entry;
-    CdSlot *end;
+    GameResBlock *head;
+    GameResBlock *walk;
+    GameResBlock *entry;
+    GameResBlock *end;
     int found;
     int index;
     u32 flags;
@@ -3189,12 +3200,12 @@ void resResetNameTables(void)
     resEntryTable[0] = 1;
     resOwnerTable[0] = 1;
     resNameCursor = resNamePool;
-    head = xglCdSlotTable;
+    head = gameResBlockTable;
     do {
         found = 0;
         index = head[0].owner;
         if (index < 128 && head[index].buffer != 0) {
-            walk = xglCdSlotTable;
+            walk = gameResBlockTable;
             entry = &walk[index];
             keepFlag = 0x40000000;
             end = &walk[128];
@@ -3210,7 +3221,7 @@ void resResetNameTables(void)
         }
     } while (found != 0);
     resCfCurrent.id = -1;
-    resCfCurrent.kind = 0;
+    resCfCurrent.preloadState = 0;
 }
 
 void resResetNameTables(void);
@@ -3276,9 +3287,9 @@ void resApplyCfFile(int id)
     char *name;
     int code;
     int *oldRecord;
-    CdSlot *slot;
+    GameResBlock *slot;
 
-    while (resCfCurrent.id != id || resCfCurrent.kind != 0) {
+    while (resCfCurrent.id != id || resCfCurrent.preloadState != 0) {
         resLoadCfFile(0x10000 | id);
         xglCdServiceIfPending();
     }
@@ -3310,18 +3321,18 @@ void resApplyCfFile(int id)
 
     do {
         changed = 0;
-        slot = xglCdSlotTable;
+        slot = gameResBlockTable;
         i = slot[0].owner;
-        for (; i < GAME_RES_BLOCK_COUNT && xglCdSlotTable[i].buffer != 0; i++) {
-            flags = xglCdSlotTable[i].owner;
+        for (; i < GAME_RES_BLOCK_COUNT && gameResBlockTable[i].buffer != 0; i++) {
+            flags = gameResBlockTable[i].owner;
             if (flags & RES_OWNER_PRELOADED) {
-                size = xglCdSlotTable[i].size;
+                size = gameResBlockTable[i].size;
                 found = 0;
-                idx = xglCdSlotTable[0].owner;
-                if (idx < i && xglCdSlotTable[idx].buffer != 0) {
-                    while (idx < i && xglCdSlotTable[idx].buffer != 0) {
-                        if (xglCdSlotTable[idx].owner == 0
-                            && ((int) xglCdSlotTable[idx].size >= size || idx + 1 == i)) {
+                idx = gameResBlockTable[0].owner;
+                if (idx < i && gameResBlockTable[idx].buffer != 0) {
+                    while (idx < i && gameResBlockTable[idx].buffer != 0) {
+                        if (gameResBlockTable[idx].owner == 0
+                            && ((int) gameResBlockTable[idx].size >= size || idx + 1 == i)) {
                             found = idx;
                             break;
                         }
@@ -3329,14 +3340,14 @@ void resApplyCfFile(int id)
                     }
                 }
                 if (found == 0) {
-                    xglCdSlotTable[i].owner &= 0xBFFFFFFF;
+                    gameResBlockTable[i].owner &= 0xBFFFFFFF;
                 } else {
-                    oldRecord = xglCdSlotTable[i].buffer;
+                    oldRecord = gameResBlockTable[i].buffer;
                     GameResBlockFreeByOwner(flags);
                     GameResBlockAssign(found, flags & 0xBFFFFFFF, size);
                     resRelocateRecord(0, flags, oldRecord);
-                    xglMemCopy16(xglCdSlotTable[found].buffer, oldRecord, size / 16);
-                    resRelocateRecord(1, flags, xglCdSlotTable[found].buffer);
+                    xglMemCopy16(gameResBlockTable[found].buffer, oldRecord, size / 16);
+                    resRelocateRecord(1, flags, gameResBlockTable[found].buffer);
                     changed = 1;
                     break;
                 }
@@ -3454,22 +3465,22 @@ void resPlayerSlotsInit(void)
 
     GameResLoadID(0x30041, 0, 0, 0);
     for (i = 0; i < 3; i++) {
-        buffer = GameResBufferAlloc(RES_PATH_BUFFER_SIZE);
-        resPathSlots[i].resource_id = 0;
-        resPathSlots[i].base = buffer;
+        buffer = GameResBufferAlloc(PLAYER_MODEL_BUFFER_SIZE);
+        resPlayerModelSlots[i].resource_id = 0;
+        resPlayerModelSlots[i].base = buffer;
         sprintf(buffer, playerSlotPathFormat, i);
         buffer = GameResBufferAlloc(RES_PATH_PAD_SIZE);
         *(ResPadText *) buffer = pathPadText;
     }
-    resPathSlots[3].base = GameResourceGetFreeAddr(0);
+    resPlayerModelSlots[3].base = GameResourceGetFreeAddr(0);
 }
 
 int resPlayerSlotFindByOwner(int owner) {
     int i;
 
     for (i = 0; i < 3; i++) {
-        int index = GameResBlockFindByBuffer(resPathSlots[i].base);
-        if (index > 0 && xglCdSlotTable[index].owner == owner) {
+        int index = GameResBlockFindByBuffer(resPlayerModelSlots[i].base);
+        if (index > 0 && gameResBlockTable[index].owner == owner) {
             return i;
         }
     }
@@ -3521,15 +3532,15 @@ void resPlayerSlotSet(int slot, u8 *base, u8 *limit, void *value)
             u8 *blockStart;
             int owner;
 
-            if (xglCdSlotTable[i].buffer == 0) {
+            if (gameResBlockTable[i].buffer == 0) {
                 i = GAME_RES_BLOCK_COUNT;
                 break;
             }
-            blockStart = xglCdSlotTable[i].buffer;
+            blockStart = gameResBlockTable[i].buffer;
             if (blockStart < base || blockStart >= limit) {
                 continue;
             }
-            owner = xglCdSlotTable[i].owner;
+            owner = gameResBlockTable[i].owner;
             if (owner == 0) {
                 continue;
             }
@@ -3546,16 +3557,16 @@ void resPlayerSlotSet(int slot, u8 *base, u8 *limit, void *value)
             printf("block lost\n");
             DEBUG_BREAK();
         }
-        GameResBlockAssign(i, GAME_RES_OWNER, RES_PATH_BUFFER_SIZE);
+        GameResBlockAssign(i, GAME_RES_OWNER, PLAYER_MODEL_BUFFER_SIZE);
         *(PlayerName *)base = *(PlayerName *)playerSlotDefaultName;
     }
     for (i = 1; i < GAME_RES_BLOCK_COUNT; i++) {
-        if (xglCdSlotTable[i].buffer == value) {
-            xglCdSlotTable[0].owner = i;
+        if (gameResBlockTable[i].buffer == value) {
+            gameResBlockTable[0].owner = i;
             break;
         }
     }
-    resPathSlots[slot].resource_id = 0;
+    resPlayerModelSlots[slot].resource_id = 0;
 }
 
 const char playerSlotDefaultName[16] = "(Player)";
@@ -3566,28 +3577,28 @@ void resPlayerSlotUpdate(int slot)
     u8 *base;
 
     if (slot < 0) {
-        base = resPathSlots[2].base;
+        base = resPlayerModelSlots[2].base;
         resPlayerSlotSet(2, base, base + 0xC6000, base);
         if (slot < -1) {
-            base = resPathSlots[1].base;
+            base = resPlayerModelSlots[1].base;
             resPlayerSlotSet(1, base, base + 0xC6000, base);
         }
         if (slot < -2) {
-            base = resPathSlots[0].base;
+            base = resPlayerModelSlots[0].base;
             resPlayerSlotSet(0, base, base + 0xC6000, base);
         }
         return;
     }
-    base = resPathSlots[slot].base;
-    resPlayerSlotSet(slot, base, base + 0xC5FC0, xglCdSlotTable[xglCdSlotTable[0].owner].buffer);
+    base = resPlayerModelSlots[slot].base;
+    resPlayerSlotSet(slot, base, base + 0xC5FC0, gameResBlockTable[gameResBlockTable[0].owner].buffer);
 }
 
 static inline void resRecordSlotBlock(int slot, int mask, void **out, u8 *block) {
     if (out != 0) {
         *out = block;
     }
-    if (block == resPathSlots[slot].base) {
-        resPathSlots[slot].resource_id = mask;
+    if (block == resPlayerModelSlots[slot].base) {
+        resPlayerModelSlots[slot].resource_id = mask;
     }
 }
 
@@ -3603,23 +3614,23 @@ void resPlayerSlotLoadID(int slot, int value, void **out) {
     void *loaded;
 
     resourceId = value & GAME_RES_ID_MASK;
-    savedSelected = xglCdSlotTable[xglCdSlotTable[0].owner].buffer;
+    savedSelected = gameResBlockTable[gameResBlockTable[0].owner].buffer;
     slotBase = GameResFindID(resourceId, 0);
     if (slotBase != 0) {
         if (out != 0) {
             *out = slotBase;
         }
-        if (slotBase == resPathSlots[slot].base) {
-            resPathSlots[slot].resource_id = resourceId;
+        if (slotBase == resPlayerModelSlots[slot].base) {
+            resPlayerModelSlots[slot].resource_id = resourceId;
         }
         return;
     }
-    slotBase = resPathSlots[slot].base;
-    limit = slotBase + RES_PATH_BUFFER_SIZE;
-    for (index = 1; index < GAME_RES_BLOCK_COUNT && xglCdSlotTable[index].buffer != 0; index++) {
-        blockStart = xglCdSlotTable[index].buffer;
+    slotBase = resPlayerModelSlots[slot].base;
+    limit = slotBase + PLAYER_MODEL_BUFFER_SIZE;
+    for (index = 1; index < GAME_RES_BLOCK_COUNT && gameResBlockTable[index].buffer != 0; index++) {
+        blockStart = gameResBlockTable[index].buffer;
         if (blockStart >= slotBase && blockStart < limit) {
-            owner = xglCdSlotTable[index].owner;
+            owner = gameResBlockTable[index].owner;
             if ((owner & GAME_RES_OWNER_MASK) == GAME_RES_OWNER || owner == 0) {
                 size = xglCdLoadByKind(value, 0, 0, 0);
                 if (size != 0) {
@@ -3628,8 +3639,8 @@ void resPlayerSlotLoadID(int slot, int value, void **out) {
                     if (out != 0) {
                         *out = loaded;
                     }
-                    if (loaded == resPathSlots[slot].base) {
-                        resPathSlots[slot].resource_id = resourceId;
+                    if (loaded == resPlayerModelSlots[slot].base) {
+                        resPlayerModelSlots[slot].resource_id = resourceId;
                     }
                 }
                 break;
@@ -3637,28 +3648,28 @@ void resPlayerSlotLoadID(int slot, int value, void **out) {
         }
     }
     for (index = 1; index < GAME_RES_BLOCK_COUNT; index++) {
-        if (xglCdSlotTable[index].buffer == savedSelected) {
-            xglCdSlotTable[0].owner = index;
+        if (gameResBlockTable[index].buffer == savedSelected) {
+            gameResBlockTable[0].owner = index;
             break;
         }
     }
 }
 
-/* A path slot: the buffer block, directly followed by the pad block holding the pad text. */
+/* A player model slot: the buffer block, directly followed by the pad block holding the pad text. */
 typedef struct {
-    unsigned char data[RES_PATH_BUFFER_SIZE];
+    unsigned char data[PLAYER_MODEL_BUFFER_SIZE];
     ResPadText pad;
-} ResPathSlotBuffer;
+} PlayerModelSlotBuffer;
 
 void resPlayerSlotBlockReset(void *buffer) {
     int block;
 
     block = GameResBlockFindByBuffer(buffer);
-    if (block != 0 && xglCdSlotTable[block].owner == 0) {
-        GameResBlockAssign(block, GAME_RES_OWNER, RES_PATH_BUFFER_SIZE);
+    if (block != 0 && gameResBlockTable[block].owner == 0) {
+        GameResBlockAssign(block, GAME_RES_OWNER, PLAYER_MODEL_BUFFER_SIZE);
         *(PlayerName *) buffer = *(PlayerName *) playerSlotDefaultName;
         GameResBlockAssign(block + 1, GAME_RES_OWNER, RES_PATH_PAD_SIZE);
-        ((ResPathSlotBuffer *) buffer)->pad = pathPadText;
+        ((PlayerModelSlotBuffer *) buffer)->pad = pathPadText;
     }
 }
 
@@ -3667,16 +3678,16 @@ void resPlayerSlotBlockReset(void *buffer);
 void resPlayerSlotsReset(void) {
     int i;
 
-    resPlayerSlotBlockReset(resPathSlots[0].base);
-    resPlayerSlotBlockReset(resPathSlots[1].base);
-    resPlayerSlotBlockReset(resPathSlots[2].base);
+    resPlayerSlotBlockReset(resPlayerModelSlots[0].base);
+    resPlayerSlotBlockReset(resPlayerModelSlots[1].base);
+    resPlayerSlotBlockReset(resPlayerModelSlots[2].base);
     for (i = 1; i < 0x80; i++) {
-        if (xglCdSlotTable[i].buffer == resPathSlots[3].base) {
-            xglCdSlotTable[0].owner = i;
+        if (gameResBlockTable[i].buffer == resPlayerModelSlots[3].base) {
+            gameResBlockTable[0].owner = i;
             break;
         }
     }
-    resPlayerSlotsLoadModels(resPathSlots[0].resource_id, resPathSlots[1].resource_id, resPathSlots[2].resource_id);
+    resPlayerSlotsLoadModels(resPlayerModelSlots[0].resource_id, resPlayerModelSlots[1].resource_id, resPlayerModelSlots[2].resource_id);
 }
 
 int seBankSetName(int kind, char *text);

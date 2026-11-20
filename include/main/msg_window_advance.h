@@ -1,7 +1,7 @@
 #ifndef INCLUDE_MAIN_MSG_WINDOW_ADVANCE_H
 #define INCLUDE_MAIN_MSG_WINDOW_ADVANCE_H
 
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
 /* Functions of src/main/msg_window_advance.c that other files call. */
 

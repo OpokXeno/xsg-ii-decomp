@@ -23,12 +23,12 @@ float uwamonoGetEntryPose(int key, float *out);
 void uwamonoSetPairMode(int index, int mode);
 void uwamonoStartPairMove(int index, int mode, int duration);
 int uwamonoFindTalkTarget(struct XenoActor *subject, float range);
-void uwamonoStartPickupMove(int index);
+void uwamonoStartItemFlight(int index);
 void uwamonoUpdateItemPickups(void);
 void uwamonoTriggerRecord(int index);
 void uwamonoResetPoints(void);
 void uwamonoAddPoint(Vector4 *position, int key, float value);
 void uwamonoUpdatePoints(void);
-int uwamonoGetNearbySearchType(void);
+int uwamonoGetNearbyUnitType(void);
 
 #endif /* INCLUDE_MAIN_UWAMONO_RECORD_H */

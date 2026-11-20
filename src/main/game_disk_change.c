@@ -9,7 +9,7 @@
 #include "main/pad.h"
 #include "gs.h"
 #include "main/game_data.h"
-#include "main/game_over_059.h"
+#include "main/game_over.h"
 #include "main/xgl_jpeg.h"
 #include "main/game_disk_change.h"
 #include "main/fade_ctrl.h"
@@ -31,8 +31,9 @@
 #define IMAGE_LOAD_OFFSET 0x100000
 /* The first map of a new game: Title's New Game writes it to gameWork.nextMap. */
 #define MAP_ID_NEW_GAME 0x1B59
-/* The state Title's Load Game writes after menuRequestLoad. */
-#define GAME_STATE_LOAD_SAVE 10
+/* Map number 10 that the unreachable cursor-4 arm of Title() writes to nextMap; GameDiskChange and
+ * GameSynopsisCrossfadeWait skip it. */
+#define MAP_ID_DEBUG_START 10
 /* Sound effects of the prompts. */
 #define SE_DECIDE 0x1000002
 #define SE_SYNOPSIS_OPEN 0x1000006
@@ -187,7 +188,7 @@ void GameSynopsis(void)
     u32 *end;
     u32 *entry;
 
-    if (gameWork.nextMap == GAME_STATE_LOAD_SAVE) {
+    if (gameWork.nextMap == MAP_ID_DEBUG_START) {
         return;
     }
     if (xglFlagsGet8(STORY_PROGRESS_FLAG) < 0x4C) {
@@ -279,13 +280,13 @@ void GameSynopsis(void)
 /* Cross-fades the synopsis panels (the outgoing panel fades out while the
  * incoming one fades in) and waits for decide. Returns 1 when the soft-reset
  * button combination was pressed (and sets CONTROL_SOFT_RESET for it), else
- * 0; does nothing for GAME_STATE_LOAD_SAVE and MAP_ID_NEW_GAME. */
+ * 0; does nothing for MAP_ID_DEBUG_START and MAP_ID_NEW_GAME. */
 int GameSynopsisCrossfadeWait(void)
 {
     int alpha;
 
     alpha = 0;
-    if (gameWork.nextMap == GAME_STATE_LOAD_SAVE) {
+    if (gameWork.nextMap == MAP_ID_DEBUG_START) {
         return 0;
     }
     if (gameWork.nextMap == MAP_ID_NEW_GAME) {

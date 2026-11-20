@@ -6,7 +6,7 @@
 #include "main/talk_scan.h"
 #include "main/effect_request.h"
 #include "main/msg_window_update.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
 extern void *memset(void *destination, int value, unsigned int count);
 
@@ -42,7 +42,7 @@ void msgWindowSeekToWindowEnd(MsgWindow *window) {
 void msgWindowRewindLastTextSlot(MsgWindow *window) {
     int index;
 
-    if (msgWindowFindSlotByState(&index, window, MSG_SLOT_STATE_TEXT) != 0) {
+    if (msgWindowFindSlotByState(&index, window, MSG_SLOT_TYPE_TEXT) != 0) {
         interpRewind(&window->slots[index]);
     }
 }
@@ -71,7 +71,7 @@ void msgWindowMoveSelection(MsgWindow *window, int value) {
 void msgWindowCloseLastListSlot(MsgWindow *window) {
     int index;
 
-    if (msgWindowFindSlotByState(&index, window, MSG_SLOT_STATE_WINDOW) != 0) {
+    if (msgWindowFindSlotByState(&index, window, MSG_SLOT_TYPE_WINDOW) != 0) {
         msgWindowClose(&window->slots[index]);
     }
 }
@@ -116,15 +116,15 @@ int msgWindowCurrentStatus(MsgWindow *window) {
     if (current < 0) { return MSG_STATUS_NONE; }
     entry = &window->slots[current];
     if ((entry->flags & MSG_SLOT_ACTIVE) == 0) { return MSG_STATUS_NONE; }
-    switch (entry->state) {
-    case MSG_SLOT_STATE_WINDOW: return MSG_STATUS_WINDOW;
-    case MSG_SLOT_STATE_TEXT: return MSG_STATUS_TEXT;
-    case MSG_SLOT_STATE_TIMECODE:
+    switch (entry->slot_type) {
+    case MSG_SLOT_TYPE_WINDOW: return MSG_STATUS_WINDOW;
+    case MSG_SLOT_TYPE_TEXT: return MSG_STATUS_TEXT;
+    case MSG_SLOT_TYPE_TIMECODE:
         if (entry->u.timecode.mode == 0) { return MSG_STATUS_TIMECODE_IDLE; }
         if (entry->u.timecode.mode < 0) { break; } /* negative mode: no status, falls to return 0 */
         if (entry->u.timecode.mode < MSG_TIMECODE_SUB_RUNNING_END) { return MSG_STATUS_TIMECODE_RUNNING; }
         break;
-    case MSG_SLOT_STATE_ITEM: return MSG_STATUS_ITEM;
+    case MSG_SLOT_TYPE_ITEM: return MSG_STATUS_ITEM;
     }
     return MSG_STATUS_NONE;
 }
@@ -147,7 +147,7 @@ void msgEntrySeekToLimit(MsgSlot *entry) {
 
 void msgEntryClear(MsgSlot *entry) {
     memset(entry, 0, sizeof(MsgSlot));
-    talkStartScriptLoad();
+    talkStartTextureLoad();
 }
 
 /* Queues a slot (msg_state.c passes the slot pointer); forwards it to msgQueueSlot (effect_request.h). */
@@ -157,5 +157,5 @@ void msgQueueEntry(MsgSlot *slot) {
 
 void msgEntryClearEndScript(MsgSlot *entry) {
     memset(entry, 0, sizeof(MsgSlot));
-    talkEndScript();
+    talkEndTexture();
 }

@@ -123,9 +123,9 @@ typedef struct TitleState {
     int selected_group;
     int hdd_stage;               /* 0x0C: the HDD mount stage from xglHddMount (-1 none) */
     s16 fade_level;
-    s16 sprite_fade;
+    s16 scene_cover;             /* alpha of the black cover over the 3D scene (titleSpriteFadePacket) */
     s16 field_14;
-    unsigned char timer;
+    unsigned char viewer_timer;  /* timer of the hidden viewer mode */
     unsigned char unmodeled_17[0x09];
     signed char group_slot[4];
     unsigned char unmodeled_24[0x0c];
@@ -163,8 +163,8 @@ void copyframe(void)
     scratch[1] = 0x51000009;
     scratch[2] = ((u64)0x10000000 << 32) | 0x8008;
     scratch[3] = GIF_AD;
-    scratch[4] = (0x80000 | (sRender.vram.width << 5)) |
-                 ((u64)sRender.vram.height << 37) | ((u64)0x8000 << 36);
+    scratch[4] = (0x80000 | (sRender.vram.display_page << 5)) |
+                 ((u64)sRender.vram.draw_page << 37) | ((u64)0x8000 << 36);
     scratch[5] = GS_BITBLTBUF;
     scratch[6] = 0;
     scratch[7] = GS_TRXPOS;
@@ -174,8 +174,8 @@ void copyframe(void)
     scratch[11] = GS_TRXDIR;
     scratch[12] = 0;
     scratch[13] = GS_TEXFLUSH;
-    scratch[14] = (0x80000 | (sRender.vram.width << 5)) |
-                  ((u64)sRender.vram.flip_base << 37) | ((u64)0x8000 << 36);
+    scratch[14] = (0x80000 | (sRender.vram.display_page << 5)) |
+                  ((u64)sRender.vram.work_buffer_base << 37) | ((u64)0x8000 << 36);
     scratch[15] = GS_BITBLTBUF;
     scratch[16] = 2;
     scratch[17] = GS_TRXDIR;
@@ -360,7 +360,7 @@ void titleRunScene(void)
             ((TitleActorAxesView *) actor)->rotation.component[2] = titleActorPlacements[key].rotation[2];
             cur++;
             if (titleTable.list_index == 7 && ((key + 250) & 0xFF) < 2) {
-                actor->drawMode = 1;
+                actor->shadowType = 1;
                 actor->drawParam = 0.8f;
             }
             XenoActorAllocMatrices(actor);
@@ -384,10 +384,10 @@ void titleRunScene(void)
         titleState.pan.x = titleState.pan.y = titleState.pan.z = titleState.pan.w = 0.0f;
         titleTable.table_ready = titleTable.table_ready + 1;
     case TITLE_TABLE_PLAYING:
-        if (titleState.sprite_fade > 0) {
-            titleState.sprite_fade -= 4;
-            if (titleState.sprite_fade < 0) {
-                titleState.sprite_fade = 0;
+        if (titleState.scene_cover > 0) {
+            titleState.scene_cover -= 4;
+            if (titleState.scene_cover < 0) {
+                titleState.scene_cover = 0;
             }
         }
         pxySetDefaultLight(&titleTable.lights.set);
@@ -420,29 +420,29 @@ void titleRunScene(void)
 
     if (titleState.field_14 == 0) {
         if (PadData[0].held & PAD_R3) {
-            titleState.timer = 64;
+            titleState.viewer_timer = 64;
         }
-        if (titleState.timer != 0) {
-            titleState.timer = titleState.timer - 1;
+        if (titleState.viewer_timer != 0) {
+            titleState.viewer_timer = titleState.viewer_timer - 1;
         }
-        if (titleState.timer == 0) {
+        if (titleState.viewer_timer == 0) {
             padDebugCount = 0;
             titleState.field_14 = 2;
         }
     } else if (titleState.field_14 == 128) {
         prev_count = padDebugCount;
-        new_count = padDebugPrintDirection(12);
+        new_count = padRightStickRotate(12);
         if (prev_count != new_count) {
-            titleState.timer = 30;
+            titleState.viewer_timer = 30;
         }
-        if (titleState.timer != 0) {
-            titleState.timer = titleState.timer - 1;
+        if (titleState.viewer_timer != 0) {
+            titleState.viewer_timer = titleState.viewer_timer - 1;
             if (padDebugCount >= 3) {
                 titleState.field_14 = 0;
-                titleState.timer = 64;
+                titleState.viewer_timer = 64;
             }
         }
-        if (titleState.timer == 0) {
+        if (titleState.viewer_timer == 0) {
             padDebugCount = 0;
         }
     } else {
@@ -469,10 +469,10 @@ void titleDrawFrame(FontDrawCursor *cursor, void *argument)
     u32 *direct_state;
     int visible;
     int group;
-    int column;
-    int top;
-    int span;
-    int inset;
+    int pos_y;
+    int pos_x;
+    int width;
+    int height;
     int slot;
     int i;
     int group_index;
@@ -481,8 +481,8 @@ void titleDrawFrame(FontDrawCursor *cursor, void *argument)
 
     tag_bits = 0x64;
     packet = cursor->packet;
-    if (titleState.sprite_fade > 0) {
-        titleSpriteFadePacket[4] = ((u64) titleState.sprite_fade << 32) | tag_bits;
+    if (titleState.scene_cover > 0) {
+        titleSpriteFadePacket[4] = ((u64) titleState.scene_cover << 32) | tag_bits;
         sceVif1PkAddDirectDataN(packet, titleSpriteFadePacket, 6);
     }
     if (packet->directCode != 0) {
@@ -520,19 +520,19 @@ void titleDrawFrame(FontDrawCursor *cursor, void *argument)
         group_index--;
     } while (group_index >= 0);
     for (group_index = 0; group_index < 5; group_index++) {
-        top = 0xC4;
+        pos_x = 0xC4;
         if (visible < 5 && group_index < 4) {
-            column = (0x48 / (visible + 1)) + (group_index * (0x48 / visible)) + 0x120;
+            pos_y = (0x48 / (visible + 1)) + (group_index * (0x48 / visible)) + 0x120;
         } else {
-            column = group_index * 0x12 + 0x120;
+            pos_y = group_index * 0x12 + 0x120;
         }
-        span = 0x78;
-        inset = 0x12;
+        width = 0x78;
+        height = 0x12;
         if (titleState.selected_group != group_index) {
-            top = 0xD8;
-            span = 0x50;
-            column += 3;
-            inset = 0xC;
+            pos_x = 0xD8;
+            width = 0x50;
+            pos_y += 3;
+            height = 0xC;
         }
         if (group_index == 4) {
             break;
@@ -540,22 +540,22 @@ void titleDrawFrame(FontDrawCursor *cursor, void *argument)
         slot = titleState.group_slot[group_index];
         if (slot != -1) {
             int slot_offset = slot * 0x120;
-            int top_pos = top * 16 + 0x6FF8;
-            int column_pos = column * 16 + 0x71F7;
+            int x_pos = pos_x * 16 + 0x6FF8;
+            int y_pos = pos_y * 16 + 0x71F7;
 
-            titleSlotPacket[48] = top_pos + span * 16;
+            titleSlotPacket[48] = x_pos + width * 16;
             titleSlotPacket[45] = slot_offset + 0x120;
-            titleSlotPacket[49] = column_pos + inset * 16;
+            titleSlotPacket[49] = y_pos + height * 16;
             titleSlotPacket[37] = slot_offset;
-            titleSlotPacket[40] = top_pos;
-            titleSlotPacket[41] = column_pos;
+            titleSlotPacket[40] = x_pos;
+            titleSlotPacket[41] = y_pos;
             sceVif1PkCnt(packet, 0);
             sceVif1PkAddDataN(packet, titleSlotPacket, 0x34);
         }
     }
     if (titleState.fade_level > 0) {
         titleFadeOverlayPacket[8] = ((u64) titleState.fade_level << 32) | tag_bits;
-        titleFadeOverlayPacket[6] = 0x24120000 | (sRender.vram.flip_base << 5) | ((u64) 0xC800 << 19);
+        titleFadeOverlayPacket[6] = 0x24120000 | (sRender.vram.work_buffer_base << 5) | ((u64) 0xC800 << 19);
         sceVif1PkAddDataN(packet, &titleFadeOverlayPacket, 0x28);
     }
     return xglFontReloadTexture(cursor, 0);
@@ -579,7 +579,7 @@ void titleFadeTransition(int mode)
         if (titleState.fade_level < 0) {
             titleState.fade_level = 0;
         }
-        titleFadePacket[6] = 0x24120000 | (sRender.vram.flip_base << 5) | ((u64) 0xC800 << 19);
+        titleFadePacket[6] = 0x24120000 | (sRender.vram.work_buffer_base << 5) | ((u64) 0xC800 << 19);
         if (mode == 0) {
             ((int *) titleFadePacket)[18] = titleState.fade_level;
             ((int *) titleFadePacket)[17] = titleState.fade_level;
@@ -630,7 +630,8 @@ extern const char titleBg2Path[];
 extern const char titleDisc1Path[];
 extern const char titleDisc2Path[];
 
-/* The title screen: loads the title assets, then runs the menu until it returns the next scene id. */
+/* The title screen: loads the title assets, then runs the menu until it returns the next overlay number plus entry
+ * address (ONE_OVERLAY + Game, TWO_OVERLAY + logoShowSlides, ...). */
 unsigned int Title(void)
 {
     int save_found[3];
@@ -657,7 +658,7 @@ unsigned int Title(void)
     mc_request.data = WorkEnd;
     xglMcRequest(0, 2, &mc_request, &save_found[0]);
     xglMcRequest(1, 2, &mc_request, &save_found[1]);
-    hdd_request.card = -1;
+    hdd_request.saveNumber = -1;
     hdd_request.found = WorkEnd;
     save_found[2] = xglHddMcExist(&hdd_request);
     xglFontLoad(1, CD_NOTIFY_DUMMY);
@@ -736,9 +737,9 @@ unsigned int Title(void)
     xglRenderVSyncInterval = 3;
     copyframe();
     titleState.fade_level = TITLE_FADE_MAX;
-    titleState.sprite_fade = 128;
+    titleState.scene_cover = 128;
     titleState.field_14 = 128;
-    titleState.timer = 0;
+    titleState.viewer_timer = 0;
     padDebugCount = 0;
 
     for (;;) {
@@ -806,7 +807,7 @@ unsigned int Title(void)
     case -2:
         return titleGroupMinus2Dummy();
     case -1:
-        return TWO_OVERLAY + (int) logoShowCredits;
+        return TWO_OVERLAY + (int) logoShowSlides;
     case 0:
     case 1:
     case 2:

@@ -47,11 +47,11 @@ void tiMRPackageInit(TiMRPackage *pMRPackage) {
     tiWordZero(&pStateB->flags);
     tiMRStateSetPosition(pStateA, 0.0f);
     tiMRStateSetPosition(pStateB, 0.0f);
-    tiMRStateSetValue(pStateA, 0.0f);
-    tiMRStateSetValue(pStateB, 0.0f);
+    tiMRStateSetBlendFrames(pStateA, 0.0f);
+    tiMRStateSetBlendFrames(pStateB, 0.0f);
     tiMRStateSetSpeed(pStateA, 1.0f);
     tiMRStateSetSpeed(pStateB, 1.0f);
-    tiMRPackageSetFirstWord(pMRPackage, 1);
+    tiMRPackageSetSolverPasses(pMRPackage, 1);
     tiMRPackageSetVector(pMRPackage, 1.0f, 1.0f, 1.0f);
     tiMRPackageSetHrcData(pMRPackage, 0);
     tiMRPackageSetAnimData(pMRPackage, 0);
@@ -207,19 +207,19 @@ void tiMRStateSetPosition(TiMRState *pState, float value) {
     pState->position = value;
 }
 
-void tiMRStateSetValue(TiMRState *pState, float value) {
+void tiMRStateSetBlendFrames(TiMRState *pState, float frames) {
     if (pState == 0) {
         assertFailed(tiMRPackageStateAssertExpr, tiMRPackageSourceFile, 251);
     }
-    pState->value = value;
+    pState->blendFrames = frames;
 }
 
 /* Stores the first word of the package (set to 1 by the initializer and by the per-frame update). */
-void tiMRPackageSetFirstWord(TiMRPackage *pMRPackage, int value) {
+void tiMRPackageSetSolverPasses(TiMRPackage *pMRPackage, int value) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackagePackAssertExpr, tiMRPackageSourceFile, 261);
     }
-    pMRPackage->first_word = value;
+    pMRPackage->solverPasses = value;
 }
 
 /* Sets the package scale vector to one value. */
@@ -386,7 +386,7 @@ extern const char tiMRPackageFaceVersionAssertExpr[];
  * Per-frame update of the package. Checks the matrices (pLocalMat +0xDC,
  * pGlobalMat +0xE0), clears flag 0x20 on both states, checks the version
  * floats of pHrcData (+0xD0, xhr), pAnimData (+0xC0, xac) and pFaceAnimData
- * (+0xC8, fac), runs the animation updates and ends by setting first_word to 1.
+ * (+0xC8, fac), runs the animation updates and ends by setting solverPasses to 1.
  */
 void tiMRPackageUpdate(TiMRPackage *pMRPackage) {
     TiHrcData *block;
@@ -444,11 +444,11 @@ void tiMRPackageUpdate(TiMRPackage *pMRPackage) {
         tiMotionSolveSkipNodes(pMRPackage);
     }
 
-    for (i = 0; i < pMRPackage->first_word; i++) {
+    for (i = 0; i < pMRPackage->solverPasses; i++) {
         tiMtnBlendUpdateLocal(pMRPackage);
         tiMotionUpdateGlobal(pMRPackage);
     }
-    tiMRPackageSetFirstWord(pMRPackage, 1);
+    tiMRPackageSetSolverPasses(pMRPackage, 1);
 }
 
 /* Binds entry `index` of table A to state A and sets flag 0x40 of state A. */

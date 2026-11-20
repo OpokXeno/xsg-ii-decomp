@@ -144,7 +144,7 @@ void tiMtnBlendUpdateGlobal(TiMRPackage *ctx) {
             tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_RUNNING);
         } else if ((*(long long *)&ctx->state_a.flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == TI_MTN_BLEND_RUNNING) {
             remaining = ctx->state_a.position - (float)ctx->state_a.rangeMin;
-            if (ctx->state_a.value == 0.0f || ctx->state_a.value <= remaining || remaining < 0.0f) {
+            if (ctx->state_a.blendFrames == 0.0f || ctx->state_a.blendFrames <= remaining || remaining < 0.0f) {
                 tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_RUNNING);
                 tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_REQUEST);
                 return;
@@ -155,7 +155,7 @@ void tiMtnBlendUpdateGlobal(TiMRPackage *ctx) {
             if (ctx->globalMat == 0) {
                 assertFailed(tiMtnBlendPackGlobalMatAssertExpr, tiMtnBlendSourceFile, 146);
             }
-            progress = remaining / ctx->state_a.value;
+            progress = remaining / ctx->state_a.blendFrames;
             matrixIndex = 0;
             if (progress < 0.0f) {
                 progress = 0.0f;
@@ -187,7 +187,7 @@ void tiMtnBlendUpdateGlobal(TiMRPackage *ctx) {
             tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_RUNNING);
         } else if ((*(long long *)&ctx->state_b.flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == TI_MTN_BLEND_RUNNING) {
             remaining = ctx->state_b.position - (float)ctx->state_b.rangeMin;
-            if (ctx->state_b.value == 0.0f || ctx->state_b.value <= remaining || remaining < 0.0f) {
+            if (ctx->state_b.blendFrames == 0.0f || ctx->state_b.blendFrames <= remaining || remaining < 0.0f) {
                 tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_RUNNING);
                 tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_REQUEST);
                 return;
@@ -198,7 +198,7 @@ void tiMtnBlendUpdateGlobal(TiMRPackage *ctx) {
             if (ctx->globalMat == 0) {
                 assertFailed(tiMtnBlendPackGlobalMatAssertExpr, tiMtnBlendSourceFile, 192);
             }
-            progress = remaining / ctx->state_b.value;
+            progress = remaining / ctx->state_b.blendFrames;
             matrixIndex = ctx->hrcData->jointCount + ctx->hrcData->joint2Count + ctx->hrcData->joint3Count;
             if (progress < 0.0f) {
                 progress = 0.0f;
@@ -229,7 +229,7 @@ void tiMtnBlendUpdateLocal(TiMRPackage *ctx) {
             tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_RUNNING);
         } else if ((*(long long *)&ctx->state_a.flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) {
             remaining = ctx->state_a.position - (float)ctx->state_a.rangeMin;
-            if (ctx->state_a.value == 0.0f || ctx->state_a.value <= remaining || remaining < 0.0f) {
+            if (ctx->state_a.blendFrames == 0.0f || ctx->state_a.blendFrames <= remaining || remaining < 0.0f) {
                 tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_RUNNING);
                 tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_REQUEST);
                 return;
@@ -240,7 +240,7 @@ void tiMtnBlendUpdateLocal(TiMRPackage *ctx) {
             if (ctx->localMat == 0) {
                 assertFailed(tiMtnBlendPackLocalMatAssertExpr, tiMtnBlendSourceFile, 242);
             }
-            progress = remaining / ctx->state_a.value;
+            progress = remaining / ctx->state_a.blendFrames;
             matrixIndex = 0;
             if (progress < 0.0f) {
                 progress = 0.0f;
@@ -272,7 +272,7 @@ void tiMtnBlendUpdateLocal(TiMRPackage *ctx) {
             tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_RUNNING);
         } else if ((*(long long *)&ctx->state_b.flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) {
             remaining = ctx->state_b.position - (float)ctx->state_b.rangeMin;
-            if (ctx->state_b.value == 0.0f || ctx->state_b.value <= remaining || remaining < 0.0f) {
+            if (ctx->state_b.blendFrames == 0.0f || ctx->state_b.blendFrames <= remaining || remaining < 0.0f) {
                 tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_RUNNING);
                 tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_REQUEST);
                 return;
@@ -283,7 +283,7 @@ void tiMtnBlendUpdateLocal(TiMRPackage *ctx) {
             if (ctx->localMat == 0) {
                 assertFailed(tiMtnBlendPackLocalMatAssertExpr, tiMtnBlendSourceFile, 288);
             }
-            progress = remaining / ctx->state_b.value;
+            progress = remaining / ctx->state_b.blendFrames;
             matrixIndex = ctx->hrcData->jointCount + ctx->hrcData->joint2Count + ctx->hrcData->joint3Count;
             if (progress < 0.0f) {
                 progress = 0.0f;

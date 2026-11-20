@@ -3,7 +3,7 @@
 
 /* Functions of src/ov01/debug_entry.c (the BATTLE CONFIG debug menu) that other files call. */
 
-/* Nonzero while the TEXT_OPTION_SELECT bit of PadData[0].pressed is set. */
+/* Nonzero while the PAD_CIRCLE bit of PadData[0].pressed is set. */
 int configStart(void);
 
 /* Nonzero while bit 0x40 (PAD_CROSS) of PadData[0].pressed is set: the back button of the debug menus. */

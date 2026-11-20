@@ -1,13 +1,14 @@
 #include "common.h"
 #include "shared.h"
 #include "main/game_camera.h"
+#include "main/get_ladder.h"
 #include "main/runtime_camera.h"
 #include "ov01/sb_vm.h"
 #include "ov01/sb_natives.h"
-#include "main/ladder_table.h"
 #include "main/game_data.h"
 
 #include "main/xgl_2.h"
+
 /* gameWork.camera.flags bits that the camera commands set. */
 enum CameraFlagBits {
     CAMERA_FLAG_POS_RESET = 0x20,
@@ -31,13 +32,6 @@ enum CameraShakeChannel {
 enum {
     CAMERA_ANCHOR_NONE = -1
 };
-
-extern SbNativeMethod ladderNatives[];
-extern char ladderModuleName[];
-
-void ladderRegisterNatives(void) {
-    sbNativeOwnerAdd(ladderModuleName, ladderNatives);
-}
 
 extern const f32 cameraCentiScale;
 
@@ -141,7 +135,7 @@ struct CameraStopBlock {
 struct CameraSlotRecord {
     unsigned char modeA;               /* +0x00: copy of gameWork.camera.cameraType */
     unsigned char unmodeled_01;
-    unsigned char slotIndex;           /* +0x02: copy of gameWork.camera.mode */
+    unsigned char slotIndex;           /* +0x02: copy of gameWork.camera.surfaceGroup */
     unsigned char unmodeled_03[0xD];
     struct CameraStopBlock stopBlock;  /* +0x10: copy of gameWork.camera.slot[0] */
     struct CameraRefBlock refBlock;        /* +0x20: copy of gameWork.camera.range from anchorIndex */
@@ -161,7 +155,7 @@ int cameraCfSet(SbThread *scriptHandle) {
     recordIndex = vmArgGet(scriptHandle, 1);
     slot = &cameraCfSlots[recordIndex];
     slot->modeA = gameWork.camera.cameraType;
-    slot->slotIndex = gameWork.camera.mode;
+    slot->slotIndex = gameWork.camera.surfaceGroup;
     *(struct CameraStopBlock *)&slot->stopBlock = *(struct CameraStopBlock *)&gameWork.camera.slot[0];
     *(struct CameraRefBlock *)&slot->refBlock = *(struct CameraRefBlock *)&gameWork.camera.range.anchorIndex;
     return 1;
@@ -178,7 +172,7 @@ int cameraCfChange(SbThread *scriptHandle) {
     recordIndex = vmArgGet(scriptHandle, 1);
     slot = &cameraCfSlots[recordIndex];
     slot->modeA = gameWork.camera.cameraType;
-    slot->slotIndex = gameWork.camera.mode;
+    slot->slotIndex = gameWork.camera.surfaceGroup;
     *(struct CameraRefBlock *)&slot->refBlock = *(struct CameraRefBlock *)&gameWork.camera.range.anchorIndex;
     return 1;
 }
@@ -385,8 +379,8 @@ int cameraSetRefActR(SbThread *act)
 {
     Vector4 transformed;
     Vector4 input;
-    int frame_a;
-    int frame_b;
+    int anchor_index;
+    int anchor_sub_index;
     int raw_x;
     int raw_y;
     int raw_z;
@@ -396,8 +390,8 @@ int cameraSetRefActR(SbThread *act)
     ok = cameraCheckArgCount(act);
     if (ok != 0)
     {
-        frame_a = vmArgGet(act, 1);
-        frame_b = vmArgGet(act, 2);
+        anchor_index = vmArgGet(act, 1);
+        anchor_sub_index = vmArgGet(act, 2);
         raw_x = vmArgGet(act, 3);
         input.x = cameraCentiToFloat(raw_x);
         raw_y = vmArgGet(act, 4);
@@ -405,7 +399,7 @@ int cameraSetRefActR(SbThread *act)
         raw_z = vmArgGet(act, 5);
         input.z = cameraCentiToFloat(raw_z);
         input.w = 1.0f;
-        cameraApplyAnchorOffset(&transformed, frame_a, frame_b, &input);
+        cameraApplyAnchorOffset(&transformed, anchor_index, anchor_sub_index, &input);
         if (cameraRefMoveFlag == 0)
         {
             float transformed_x = transformed.x;
@@ -416,7 +410,7 @@ int cameraSetRefActR(SbThread *act)
             float input_z = input.z;
             float input_w = input.w;
 
-            gameWork.camera.range.anchorSubIndex = frame_b;
+            gameWork.camera.range.anchorSubIndex = anchor_sub_index;
             gameWork.camera.range.offset.w = input_w;
             gameWork.camera.range.lookAt.x = transformed_x;
             gameWork.camera.range.lookAt.y = transformed_y;
@@ -424,7 +418,7 @@ int cameraSetRefActR(SbThread *act)
             gameWork.camera.range.offset.x = input_x;
             gameWork.camera.range.offset.y = input_y;
             gameWork.camera.range.offset.z = input_z;
-            gameWork.camera.range.anchorIndex = frame_a;
+            gameWork.camera.range.anchorIndex = anchor_index;
         }
         else
         {
@@ -452,9 +446,9 @@ int cameraSetRefAng(SbThread *scriptHandle) {
     }
     rotX = cameraCentiDegToRad(vmArgGet(scriptHandle, 1));
     rotY = cameraCentiDegToRad(vmArgGet(scriptHandle, 2));
-    offset.x = gameWork.camera.range.lockPosition.x;
-    offset.y = gameWork.camera.range.lockPosition.y;
-    offset.z = gameWork.camera.range.lockPosition.z;
+    offset.x = gameWork.camera.range.cameraPosition.x;
+    offset.y = gameWork.camera.range.cameraPosition.y;
+    offset.z = gameWork.camera.range.cameraPosition.z;
     offset.w = 1.0f;
     xglMatrixStackUnit();
     xglMatrixStackTrans(&offset);
@@ -535,9 +529,9 @@ int cameraSetRefCamActR(SbThread *scriptHandle) {
     }
     cameraRefMoveFlag = 0;
     if (cameraCamMoveFlag == 0) {
-        gameWork.camera.range.lockPosition.x = orbitPos.x;
-        gameWork.camera.range.lockPosition.y = orbitPos.y;
-        gameWork.camera.range.lockPosition.z = orbitPos.z;
+        gameWork.camera.range.cameraPosition.x = orbitPos.x;
+        gameWork.camera.range.cameraPosition.y = orbitPos.y;
+        gameWork.camera.range.cameraPosition.z = orbitPos.z;
         gameWork.camera.range.angles.x = orbitAngles.x;
         gameWork.camera.range.angles.y = orbitAngles.y;
         gameWork.camera.range.angles.w = orbitAngles.w;
@@ -620,9 +614,9 @@ int cameraSetRefCamAct3R(SbThread *scriptHandle)
     }
     cameraRefMoveFlag = 0;
     if (cameraCamMoveFlag == 0) {
-        gameWork.camera.range.lockPosition.x = orbitPos.x;
-        gameWork.camera.range.lockPosition.y = orbitPos.y;
-        gameWork.camera.range.lockPosition.z = orbitPos.z;
+        gameWork.camera.range.cameraPosition.x = orbitPos.x;
+        gameWork.camera.range.cameraPosition.y = orbitPos.y;
+        gameWork.camera.range.cameraPosition.z = orbitPos.z;
         gameWork.camera.range.angles.x = orbitAngles.x;
         gameWork.camera.range.angles.y = orbitAngles.y;
         gameWork.camera.range.angles.w = orbitAngles.w;
@@ -654,9 +648,9 @@ int cameraSetCamPos(SbThread *scriptHandle)
     posZ = cameraCentiToFloat(vmArgGet(scriptHandle, 3));
     if (cameraCamMoveFlag == 0)
     {
-        gameWork.camera.range.lockPosition.x = posX;
-        gameWork.camera.range.lockPosition.y = posY;
-        gameWork.camera.range.lockPosition.z = posZ;
+        gameWork.camera.range.cameraPosition.x = posX;
+        gameWork.camera.range.cameraPosition.y = posY;
+        gameWork.camera.range.cameraPosition.z = posZ;
     }
     else
     {
@@ -692,7 +686,7 @@ int cameraSetCamAng(SbThread *act)
             gameWork.camera.range.angles.w = input.w;
             gameWork.camera.range.angles.x = input.x;
             gameWork.camera.range.angles.y = input.y;
-            GetCameraPos(&gameWork.camera.range.lockPosition, &gameWork.camera.range.lookAt, &input);
+            GetCameraPos(&gameWork.camera.range.cameraPosition, &gameWork.camera.range.lookAt, &input);
         }
         else
         {
@@ -711,8 +705,8 @@ int cameraSetCamAct(SbThread *act)
 {
     Vector4 transformed;
     Vector4 input;
-    int frame_a;
-    int frame_b;
+    int anchor_index;
+    int anchor_sub_index;
     int raw_x;
     int raw_y;
     int raw_z;
@@ -722,8 +716,8 @@ int cameraSetCamAct(SbThread *act)
     ok = cameraCheckArgCount(act);
     if (ok != 0)
     {
-        frame_a = vmArgGet(act, 1);
-        frame_b = vmArgGet(act, 2);
+        anchor_index = vmArgGet(act, 1);
+        anchor_sub_index = vmArgGet(act, 2);
         raw_x = vmArgGet(act, 3);
         input.x = cameraCentiToFloat(raw_x);
         raw_y = vmArgGet(act, 4);
@@ -731,12 +725,12 @@ int cameraSetCamAct(SbThread *act)
         raw_z = vmArgGet(act, 5);
         input.z = cameraCentiToFloat(raw_z);
         input.w = 0.0f;
-        cameraApplyAnchorOffset(&transformed, frame_a, frame_b, &input);
+        cameraApplyAnchorOffset(&transformed, anchor_index, anchor_sub_index, &input);
         if (cameraCamMoveFlag == 0)
         {
-            gameWork.camera.range.lockPosition.x = transformed.x;
-            gameWork.camera.range.lockPosition.y = transformed.y;
-            gameWork.camera.range.lockPosition.z = transformed.z;
+            gameWork.camera.range.cameraPosition.x = transformed.x;
+            gameWork.camera.range.cameraPosition.y = transformed.y;
+            gameWork.camera.range.cameraPosition.z = transformed.z;
         }
         else
         {
@@ -754,8 +748,8 @@ int cameraSetCamActR(SbThread *act)
 {
     Vector4 transformed;
     Vector4 input;
-    int frame_a;
-    int frame_b;
+    int anchor_index;
+    int anchor_sub_index;
     int raw_x;
     int raw_y;
     int raw_z;
@@ -765,8 +759,8 @@ int cameraSetCamActR(SbThread *act)
     ok = cameraCheckArgCount(act);
     if (ok != 0)
     {
-        frame_a = vmArgGet(act, 1);
-        frame_b = vmArgGet(act, 2);
+        anchor_index = vmArgGet(act, 1);
+        anchor_sub_index = vmArgGet(act, 2);
         raw_x = vmArgGet(act, 3);
         input.x = cameraCentiToFloat(raw_x);
         raw_y = vmArgGet(act, 4);
@@ -774,12 +768,12 @@ int cameraSetCamActR(SbThread *act)
         raw_z = vmArgGet(act, 5);
         input.z = cameraCentiToFloat(raw_z);
         input.w = 1.0f;
-        cameraApplyAnchorOffset(&transformed, frame_a, frame_b, &input);
+        cameraApplyAnchorOffset(&transformed, anchor_index, anchor_sub_index, &input);
         if (cameraCamMoveFlag == 0)
         {
-            gameWork.camera.range.lockPosition.x = transformed.x;
-            gameWork.camera.range.lockPosition.y = transformed.y;
-            gameWork.camera.range.lockPosition.z = transformed.z;
+            gameWork.camera.range.cameraPosition.x = transformed.x;
+            gameWork.camera.range.cameraPosition.y = transformed.y;
+            gameWork.camera.range.cameraPosition.z = transformed.z;
         }
         else
         {
@@ -816,9 +810,9 @@ int cameraSetCamAct2(SbThread *scriptHandle)
     GetCameraPos(&orbitPos, &anchorPos, &angles);
     if (cameraCamMoveFlag == 0)
     {
-        gameWork.camera.range.lockPosition.x = orbitPos.x;
-        gameWork.camera.range.lockPosition.y = orbitPos.y;
-        gameWork.camera.range.lockPosition.z = orbitPos.z;
+        gameWork.camera.range.cameraPosition.x = orbitPos.x;
+        gameWork.camera.range.cameraPosition.y = orbitPos.y;
+        gameWork.camera.range.cameraPosition.z = orbitPos.z;
         gameWork.camera.range.angles.x = angles.x;
         gameWork.camera.range.angles.y = angles.y;
         gameWork.camera.range.angles.w = angles.w;
@@ -842,8 +836,8 @@ int cameraSetCamAct2R(SbThread *act)
     Vector4 input;
     Vector4 transformed;
     struct XenoActor *offset_record;
-    int frame_a;
-    int frame_b;
+    int anchor_index;
+    int anchor_sub_index;
     int raw_x;
     int raw_y;
     int raw_w;
@@ -853,8 +847,8 @@ int cameraSetCamAct2R(SbThread *act)
     ok = cameraCheckArgCount(act);
     if (ok != 0)
     {
-        frame_a = vmArgGet(act, 1);
-        frame_b = vmArgGet(act, 2);
+        anchor_index = vmArgGet(act, 1);
+        anchor_sub_index = vmArgGet(act, 2);
         raw_x = vmArgGet(act, 3);
         input.x = cameraCentiDegToRad(raw_x);
         raw_y = vmArgGet(act, 4);
@@ -862,7 +856,7 @@ int cameraSetCamAct2R(SbThread *act)
         input.z = 0.0f;
         raw_w = vmArgGet(act, 5);
         input.w = cameraCentiToFloat(raw_w);
-        offset_record = cameraAnchorGet(&scratch, frame_a, frame_b);
+        offset_record = cameraAnchorGet(&scratch, anchor_index, anchor_sub_index);
         input.x += offset_record->rotation.x;
         input.y += offset_record->rotation.y;
         GetCameraPos(&transformed, &scratch, &input);
@@ -876,11 +870,11 @@ int cameraSetCamAct2R(SbThread *act)
             float input_w = input.w;
 
             gameWork.camera.range.angles.w = input_w;
-            gameWork.camera.range.lockPosition.y = transformed_y;
-            gameWork.camera.range.lockPosition.z = transformed_z;
+            gameWork.camera.range.cameraPosition.y = transformed_y;
+            gameWork.camera.range.cameraPosition.z = transformed_z;
             gameWork.camera.range.angles.x = input_x;
             gameWork.camera.range.angles.y = input_y;
-            gameWork.camera.range.lockPosition.x = transformed_x;
+            gameWork.camera.range.cameraPosition.x = transformed_x;
         }
         else
         {
@@ -948,9 +942,9 @@ int cameraSetCamAct3(SbThread *scriptHandle)
     posZ = (endAnchor.z - startAnchor.z) * blend + startAnchor.z + offsetZ;
     if (cameraCamMoveFlag == 0)
     {
-        gameWork.camera.range.lockPosition.x = posX;
-        gameWork.camera.range.lockPosition.y = posY;
-        gameWork.camera.range.lockPosition.z = posZ;
+        gameWork.camera.range.cameraPosition.x = posX;
+        gameWork.camera.range.cameraPosition.y = posY;
+        gameWork.camera.range.cameraPosition.z = posZ;
     }
     else
     {
@@ -976,14 +970,14 @@ int cameraOffsCamPos(SbThread *scriptHandle)
     posX = cameraCentiToFloat(vmArgGet(scriptHandle, 1));
     posY = cameraCentiToFloat(vmArgGet(scriptHandle, 2));
     posZ = cameraCentiToFloat(vmArgGet(scriptHandle, 3));
-    posX += gameWork.camera.range.lockPosition.x;
-    posY += gameWork.camera.range.lockPosition.y;
-    posZ += gameWork.camera.range.lockPosition.z;
+    posX += gameWork.camera.range.cameraPosition.x;
+    posY += gameWork.camera.range.cameraPosition.y;
+    posZ += gameWork.camera.range.cameraPosition.z;
     if (cameraCamMoveFlag == 0)
     {
-        gameWork.camera.range.lockPosition.x = posX;
-        gameWork.camera.range.lockPosition.y = posY;
-        gameWork.camera.range.lockPosition.z = posZ;
+        gameWork.camera.range.cameraPosition.x = posX;
+        gameWork.camera.range.cameraPosition.y = posY;
+        gameWork.camera.range.cameraPosition.z = posZ;
     }
     else
     {
@@ -1016,7 +1010,7 @@ int cameraOffsCamAng(SbThread *scriptHandle)
         gameWork.camera.range.angles.x = angles.x;
         gameWork.camera.range.angles.y = angles.y;
         gameWork.camera.range.angles.w = angles.w;
-        GetCameraPos(&gameWork.camera.range.lockPosition, &gameWork.camera.range.lookAt, &angles);
+        GetCameraPos(&gameWork.camera.range.cameraPosition, &gameWork.camera.range.lookAt, &angles);
     }
     else
     {
@@ -1061,22 +1055,22 @@ int cameraMoveCamMode(SbThread *scriptHandle) {
 int cameraMove(SbThread *act)
 {
     int ok;
-    int slot_1;
-    int slot_2;
-    int slot_3;
+    int blend_mode;
+    int ease_mode;
+    int frames;
 
     cameraArgCount = 3;
     ok = cameraCheckArgCount(act);
     if (ok != 0)
     {
-        slot_1 = vmArgGet(act, 1);
-        slot_2 = vmArgGet(act, 2);
-        slot_3 = vmArgGet(act, 3);
+        blend_mode = vmArgGet(act, 1);
+        ease_mode = vmArgGet(act, 2);
+        frames = vmArgGet(act, 3);
         if (cameraMoveMode == 0)
         {
             cameraMoveMode = 3;
         }
-        cameraApplySlots(cameraMoveMode, slot_1, slot_2, slot_3);
+        cameraApplySlots(cameraMoveMode, blend_mode, ease_mode, frames);
         cameraMoveMode = 0;
         ok = 1;
     }
@@ -1221,7 +1215,7 @@ int cameraSetPers(SbThread *handle) {
     if (cameraCheckArgCount(handle) == 0) {
         return 0;
     }
-    gameWork.camera.range.lockPosition.w = cameraCentiDegToRad(vmArgGet(handle, 1));
+    gameWork.camera.range.cameraPosition.w = cameraCentiDegToRad(vmArgGet(handle, 1));
     return 1;
 }
 
@@ -1318,9 +1312,9 @@ int cameraGetCamPos(SbThread *scriptHandle) {
         return 0;
     }
     outWords = vmEntryGet(scriptHandle, vmArgGet(scriptHandle, 1));
-    camPosY = gameWork.camera.range.lockPosition.y;
-    camPosZ = gameWork.camera.range.lockPosition.z;
-    outWords[0] = cameraFloatToCenti(gameWork.camera.range.lockPosition.x);
+    camPosY = gameWork.camera.range.cameraPosition.y;
+    camPosZ = gameWork.camera.range.cameraPosition.z;
+    outWords[0] = cameraFloatToCenti(gameWork.camera.range.cameraPosition.x);
     outWords[1] = cameraFloatToCenti(camPosY);
     outWords[2] = cameraFloatToCenti(camPosZ);
     return 1;
@@ -1353,9 +1347,6 @@ void cameraRegisterNatives(void) {
     cameraCamMoveFlag = 0;
     cameraMoveMode = 0;
 }
-
-char ladderModuleName[8] = "ladder";
-LadderStateWork uwamonoLadderState = { 0 };
 unsigned char cameraNativeSetPersName[8] = "SetPers";
 unsigned char cameraNativeSetBankName[8] = "SetBank";
 unsigned char cameraNativeShakeName[8] = "Shake";
@@ -1374,15 +1365,8 @@ char cameraModuleName[8] = "camera";
 const f32 cameraCentiScale = 0.00999999978f;
 const f32 cameraRadPerCentiDeg = 0.000174532935f;
 const f32 cameraRadPerCentiDegDiv = 0.000174532935f;
-/* .data of this file (0x3E7020-0x3E71E8): the ladder and camera script natives. */
 
-/* Native table of the ladder module. */
-SbNativeMethod ladderNatives[4] = {
-    { "setLadder", ladderSetLadder },
-    { "setEntrance", ladderSetEntrance },
-    { 0, 0 },
-    { 0, 0 }
-};
+/* .data of this file (0x3E7040-0x3E71E8): the camera script natives. */
 
 /* Camera reference position: x = 0, y = 0, z = -10, w = 1. */
 Vector4 cameraRefAngOffset = { 0.0f, 0.0f, -10.0f, 1.0f };

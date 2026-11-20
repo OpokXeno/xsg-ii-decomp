@@ -46,7 +46,8 @@ void xglCurMatrixGet(Matrix4 matrix) {
     Vu0GetCurrentMatrix(matrix);
 }
 
-/* destination = current matrix * (vector.xyz, 1); the w component is passed through. */
+/* destination = current matrix * vector, all four components. The vector's own w also multiplies row 3, and the
+   transformed w is stored. */
 void xglCurApplyVector(Vector4 *destination, const Vector4 *vector) {
     __asm__ __volatile__(
         "lqc2 vf2, 0(%1)\n\t"

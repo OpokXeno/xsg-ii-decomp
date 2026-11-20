@@ -31,8 +31,8 @@ enum CdReadKind {
     CD_READ_UMN_IMAGE = 4
 };
 
-/* xglFontGetTextWidth(text): copies the text into xglFontTextBuffer and returns the width xglFontGetStringWidth
-   measures from two bytes before the buffer. */
+/* xglFontGetTextWidth(text): copies the text into xglFontMeasureBuffer and returns the width xglFontGetStringWidth
+   measures from the buffer start, two bytes before the text. */
 int xglFontGetTextWidth(const char *text) {
     strcpy(&xglFontMeasureBuffer[2], text);
     return xglFontGetStringWidth(xglFontMeasureBuffer);
@@ -52,17 +52,17 @@ void *xglCdSectorAlloc(int size) {
 
 /* xglCdArenaOpen(buffer, size): opens the arena over the caller's buffer of `size` bytes; a null buffer takes the
    memory from GameResourceWorkAlloc (the default size when `size` is 0) and sets the owned flag. Despite their
-   names, xglCdArenaSize holds the arena start address and xglCdArenaHandle its size in bytes. */
-extern u8 *xglCdArenaSize;
+   names, xglCdArenaStart holds the arena start address and xglCdArenaBytes its size in bytes. */
+extern u8 *xglCdArenaStart;
 extern unsigned char xglCdArenaOwned;
-extern long long xglCdArenaHandle;
+extern long long xglCdArenaBytes;
 
 void xglCdArenaOpen(void *buffer, long long size) {
     u8 *reserved;
 
     if (buffer != 0) {
-        xglCdArenaHandle = size;
-        xglCdArenaSize = buffer;
+        xglCdArenaBytes = size;
+        xglCdArenaStart = buffer;
         xglCdArenaOwned = 0;
         xglCdArenaUsed = (u8 *) (((u32) buffer + CD_SECTOR_MASK) & ~CD_SECTOR_MASK);
     } else {
@@ -72,15 +72,15 @@ void xglCdArenaOpen(void *buffer, long long size) {
         reserved = GameResourceWorkAlloc(size);
         xglCdArenaUsed = (u8 *) (((u32) reserved + CD_SECTOR_MASK) & ~CD_SECTOR_MASK);
         xglCdArenaOwned = 1;
-        xglCdArenaHandle = size;
-        xglCdArenaSize = reserved;
+        xglCdArenaBytes = size;
+        xglCdArenaStart = reserved;
     }
 }
 
 /* xglCdArenaClose: when the arena is open, waits for the CD (xglCdWaitIdle), runs four cleanup calls, and clears
    the arena globals. */
 void xglCdArenaClose(void) {
-    if (xglCdArenaSize != 0) {
+    if (xglCdArenaStart != 0) {
         xglCdWaitIdle();
         menuSkillModelReset();
         fontObjClearRunLists();
@@ -90,14 +90,15 @@ void xglCdArenaClose(void) {
         }
     }
     xglCdArenaUsed = 0;
-    xglCdArenaSize = 0;
+    xglCdArenaStart = 0;
     xglCdArenaOwned = 0;
-    xglCdArenaHandle = 0;
+    xglCdArenaBytes = 0;
 }
 
-/* xglCdArenaGetSize: returns xglCdArenaSize, the arena start address (0 while no arena is open). */
-u8 *xglCdArenaGetSize(void) {
-    return xglCdArenaSize;
+/* xglCdArenaGetStart: returns xglCdArenaStart, the arena start address (0 while no arena is open). */
+/* xglCdArenaGetStart: returns the arena start address (the global xglCdArenaStart), not its size. */
+u8 *xglCdArenaGetStart(void) {
+    return xglCdArenaStart;
 }
 
 /* xglCdBufferAlloc(size): reserves `size` bytes in the arena and points xglCdBufferBase and xglCdBufferCursor at
@@ -338,10 +339,10 @@ void xglCallbackQueueRun(void) {
 unsigned char xglFontMeasureBuffer[256] = { 0x19, 0x03 };
 void (*xglCallbackQueue[4])(void) = { 0, 0, 0, 0 };
 
-u8 *xglCdArenaSize = 0;
+u8 *xglCdArenaStart = 0;
 u8 *xglCdArenaUsed = 0;
 unsigned char xglCdArenaOwned = 0;
-long long xglCdArenaHandle = 0LL;
+long long xglCdArenaBytes = 0LL;
 u8 *xglCdBufferBase = 0;
 u8 *xglCdBufferCursor = 0;
 int xglTickCounter = 0;

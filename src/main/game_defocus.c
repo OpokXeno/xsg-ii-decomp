@@ -294,7 +294,7 @@ static u64 GetTex0(int type, int tex_cc)
         return ((u64)0x24020000 | (u64)(sRender.draw_buffer_base << 5) |
                 ((u64)0x9000 << 18) | ((u64)(u32)tex_cc << 34));
     case 2:
-        return ((u64)0x24020000 | (u64)(sRender.vram.flip_base << 5) |
+        return ((u64)0x24020000 | (u64)(sRender.vram.work_buffer_base << 5) |
                 ((u64)0x9000 << 18) | ((u64)(u32)tex_cc << 34));
     default:
         return 0;
@@ -353,7 +353,7 @@ void DefocusMainType02(DefocusLayer *layer, XglPacket *packet)
 {
     int depth;
 
-    TestPrim_1.framebuffer = (u64)sRender.vram.flip_base | 0x80000;
+    TestPrim_1.framebuffer = (u64)sRender.vram.work_buffer_base | 0x80000;
     TestPrim_1.texture = (u64)0x24020000 | (sRender.display_buffer_base << 5) |
                         ((u64)0xc800 << 19);
     sceVif1PkCnt(packet, 0);
@@ -361,7 +361,7 @@ void DefocusMainType02(DefocusLayer *layer, XglPacket *packet)
     depth = layer->parameters[1];
     if (depth != 0) {
         TestPrim_2.first_z = depth;
-        TestPrim_2.source_frame = (u64)sRender.vram.flip_base | 0x80000;
+        TestPrim_2.source_frame = (u64)sRender.vram.work_buffer_base | 0x80000;
         TestPrim_2.second_z = layer->parameters[1];
         TestPrim_2.destination_frame = (u64)sRender.display_buffer_base | 0x80000;
         sceVif1PkCnt(packet, 0);
@@ -845,13 +845,13 @@ void DefocusMainType09(DefocusLayer *layer, XglPacket *packet)
         layer->state = 1;
     } else {
         ScanLineInterpolate = 2;
-        DispEnv.dispfb2.field.fbp = sRender.vram.flip_base;
+        DispEnv.dispfb2.field.fbp = sRender.vram.work_buffer_base;
         DispEnv.pmode.en1 = 1;
         DispEnv.pmode.alp = 255;
         DispEnv.display2.field.dy = DispEnv.display1.field.dy;
     }
     extbuf = &DispEnv.extbuf;
-    *extbuf = 0x2120000 | (sRender.vram.flip_base << 5);
+    *extbuf = 0x2120000 | (sRender.vram.work_buffer_base << 5);
     DispEnv.extdata.field.sx = DispEnv.display1.field.dx + 7;
     DispEnv.extdata.field.sy = DispEnv.display1.field.dy / 2;
     DispEnv.extdata.field.smph = DispEnv.display1.field.magh;
@@ -887,7 +887,7 @@ void DefocusMainType10(DefocusLayer *layer, XglPacket *packet)
     switch (layer->state) {
     case 0:
         Copy_10.texture = 0x80000 | (u64)(sRender.display_buffer_base << 5) |
-                          ((u64)sRender.vram.flip_base << 37) |
+                          ((u64)sRender.vram.work_buffer_base << 37) |
                           (0x8000ULL << 36);
         sceVif1PkCnt(packet, 0);
         sceVif1PkAddDataN(packet, &Copy_10, 28);

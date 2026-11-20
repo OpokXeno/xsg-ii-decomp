@@ -705,7 +705,9 @@ void dataBattleSeLoad(void)
 }
 
 
-void dataBattleSeRelease(void) {
+/* Uploads the battle SE files to sound bank 2, then frees their buffers. */
+/* Uploads the battle sound effect bank (slot 2) to the sound driver, then frees its two EE buffers. */
+void dataBattleSeUpload(void) {
     seBankLoadMemory(2, dataBattleSeRecords.vsf.buffer, dataBattleSeRecords.prj.buffer, 0);
     ov01HeapFree(dataBattleSeRecords.prj.buffer);
     ov01HeapFree(dataBattleSeRecords.vsf.buffer);
@@ -772,8 +774,11 @@ int dataVoiceFilesLoad(struct DataSlot *slot, const char *name, int pass)
     return prj_loaded + dataFileSlotLoad(&slot->voice_files.vsf, dataPathBuf, &voice_buffer, pass);
 }
 
+/* Uploads the slot's voice bank to the sound driver (seBankLoadMemory), marks its handle present and frees the .prj buffer. */
 
-void dataSlotUnload(struct DataSlot *slot) {
+/* Uploads the slot's voice bank to the sound driver: the bank slot is the handle, the start address its
+ * handle address. Then it sets the handle's state word and frees the PRJ buffer. */
+void dataSlotVoiceUpload(struct DataSlot *slot) {
     int handle_address;
 
     handle_address = handleAddressGet(slot->handle);
@@ -1185,7 +1190,7 @@ struct SlotKeySource {
 };
 
 
-int unitEffectSlotAcquire(int key) {
+int unitEffectFilesSetup(int key) {
     struct SlotKeySource *source;
 
     if (key >= DATA_ID_COUNT) {
@@ -1245,14 +1250,15 @@ int dataStreamRelease(int key) {
     return 1;
 }
 
-int dataMapSetLoad(struct DataStreamEntry *buffer, int count, int index);
+int dataMapSetLoad(struct DataStreamEntry *buffer, int mapNumber, int index);
 const char *dataMapNameGet(int table_index);
 
-struct DataStreamEntry *dataStreamOpen(int count, int small_buffer)
+struct DataStreamEntry *dataStreamOpen(int mapNumber, int small_buffer)
 {
     struct DataStreamEntry *buffer;
     int buffer_size;
 
+    /* The original passes no key here: the register still holds the map number (mapNumber). */
     buffer = dataStreamAcquire();
     if (buffer == 0) {
         return buffer;
@@ -1265,14 +1271,14 @@ struct DataStreamEntry *dataStreamOpen(int count, int small_buffer)
         buffer->head.next_buffer = ov01HeapAlloc(buffer_size);
         buffer->head.base.buffer = buffer->head.next_buffer;
     }
-    if (buffer_size < dataMapSetLoad(buffer, count, 0)) {
+    if (buffer_size < dataMapSetLoad(buffer, mapNumber, 0)) {
         while (1) {
         }
     }
     return buffer;
 }
 
-int dataMapSetLoad(struct DataStreamEntry *buffer, int count, int index)
+int dataMapSetLoad(struct DataStreamEntry *buffer, int mapNumber, int index)
 {
     struct DataMapFiles *maps;
     int *entry;
@@ -1280,11 +1286,11 @@ int dataMapSetLoad(struct DataStreamEntry *buffer, int count, int index)
 
     maps = buffer->maps;
     entry = &maps[index].pxy.loaded_index;
-    if (count == *entry) {
+    if (mapNumber == *entry) {
         return 0;
     }
-    name = dataMapNameGet(count);
-    *entry = count;
+    name = dataMapNameGet(mapNumber);
+    *entry = mapNumber;
     dataMapFileLoad(buffer, name, index, 0);
     return dataMapFileLoad(buffer, name, index, 1);
 }

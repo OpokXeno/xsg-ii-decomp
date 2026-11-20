@@ -44,8 +44,8 @@ void xglMatrixFromRows(float matrix[4][4], const float *row0, const float *row1,
 /* GIF tag EOP bit (bit 15 of the tag's low halfword), kept when the tag's loop count is set. */
 #define GIF_TAG_EOP 0x8000
 /* VU1 addresses of the water sends (the vuAddress argument of xglPacketBeginUnpack). */
-#define TIWATER_VU_ROW80 0x3C0
-#define TIWATER_VU_ROW70 0x3C1
+#define TIWATER_VU_SCREEN_SCALE 0x3C0
+#define TIWATER_VU_SCREEN_OFFSET 0x3C1
 #define TIWATER_VU_TRANSFORMED 0x3C2
 #define TIWATER_VU_MATRIX 0x3C6
 #define TIWATER_VU_ORIENTED 0x3CA
@@ -74,13 +74,13 @@ void xglPacketEndUnpack(void) {
     sceVif1PkCloseUpkCode(xglCurrentPacket);
 }
 
-/* Count and entries of the reference table added by xglPacketRefTable. */
-extern int xglPacketRefCount;
-extern u8 xglPacketRefEntries[];
+/* Count and entries of the water microcode packet loaded by xglWaterMicrocodeLoad. */
+extern int xglWaterPacketQuadwords;
+extern u8 xglWaterPacketEntries[];
 
-/* Adds a reference to the table xglPacketRefEntries (xglPacketRefCount entries). */
-void xglPacketRefTable(void) {
-    sceVif1PkRef(xglCurrentPacket, &xglPacketRefEntries, xglPacketRefCount, 0, 0, 0);
+/* Adds a reference to the water microcode packet xglWaterPacketEntries (xglWaterPacketQuadwords quadwords). */
+void xglWaterMicrocodeLoad(void) {
+    sceVif1PkRef(xglCurrentPacket, &xglWaterPacketEntries, xglWaterPacketQuadwords, 0, 0, 0);
 }
 
 
@@ -149,10 +149,10 @@ void tiWaterSendFixedMatrix(void) {
 void tiWaterSendParamRows(XglCamera *camera) {
     camera->screen.screenScale.w = 0.001953125f;
     camera->screen.screenOffset.w = 0.4375f;
-    xglPacketBeginUnpack(TIWATER_VU_ROW80);
+    xglPacketBeginUnpack(TIWATER_VU_SCREEN_SCALE);
     sceVif1PkAddUpkData128N(xglCurrentPacket, &camera->screen.screenScale, 1);
     xglPacketEndUnpack();
-    xglPacketBeginUnpack(TIWATER_VU_ROW70);
+    xglPacketBeginUnpack(TIWATER_VU_SCREEN_OFFSET);
     sceVif1PkAddUpkData128N(xglCurrentPacket, &camera->screen.screenOffset, 1);
     xglPacketEndUnpack();
 }
@@ -174,8 +174,8 @@ void tiWaterSendDirection(XglCamera *camera, Matrix4 transform) {
     xglPacketEndUnpack();
 }
 
-/* Sends the pair (x, y) at VU address 0x3DA. */
-void tiWaterSendItemPair(f32 x, f32 y) {
+/* Sends the reflection brightness pair (x, y) at VU address 0x3DA. */
+void tiWaterSendBrightnessPair(f32 x, f32 y) {
     f32 xy[2];
 
     xy[0] = x;
@@ -185,8 +185,8 @@ void tiWaterSendItemPair(f32 x, f32 y) {
     xglPacketEndUnpack();
 }
 
-/* Sends the pair (x, y) at VU address 0x3DE. */
-void tiWaterSendFramePair(f32 x, f32 y) {
+/* Sends the bend factor pair (x, y) at VU address 0x3DE. */
+void tiWaterSendBendPair(f32 x, f32 y) {
     f32 xy[2];
 
     xy[0] = x;
@@ -199,13 +199,13 @@ void tiWaterSendFramePair(f32 x, f32 y) {
 /* Sends one water frame: packet cache, reference table, transformed matrix, matrices, parameter rows, then the pair (0.7, 0.05). */
 void tiWaterSendFrame(XglCamera *camera, Matrix4 data) {
     xglPacketCaptureCurrent();
-    xglPacketRefTable();
+    xglWaterMicrocodeLoad();
     tiWaterSendTransformed(camera, data);
     tiWaterSendMatrix(data);
     tiWaterSendOrientedMatrix(data);
     tiWaterSendFixedMatrix();
     tiWaterSendParamRows(camera);
-    tiWaterSendFramePair(0.7f, 0.05f);
+    tiWaterSendBendPair(0.7f, 0.05f);
 }
 
 typedef struct WaterStripGrid {
@@ -216,9 +216,9 @@ typedef struct WaterStripGrid {
     Vector4 origin;
     float cell;
     u8 unmodeled_54[0x28];
-    u32 vertexOffset;
+    u32 gradientOffset;
     u8 unmodeled_80[0x04];
-    u32 vertexBase;
+    u32 gradientBase;
     u8 unmodeled_88[0x48];
     Matrix4 transform;
 } WaterStripGrid;
@@ -229,7 +229,7 @@ void tiWaterSendStrip(int first, unsigned int last, int row, WaterStripGrid *gri
     DoublewordVector4 *quad = (DoublewordVector4 *)SCRATCH_QUAD_ROWS;
     unsigned int quadCount;
     DoublewordVector4 *vertexCopy;
-    Vector4 *gridVertices;
+    Vector4 *gridGradients;
     unsigned int rowStart;
     unsigned int gridColumn;
     float cellX;
@@ -237,7 +237,7 @@ void tiWaterSendStrip(int first, unsigned int last, int row, WaterStripGrid *gri
     XglPacket *packet;
 
     quadCount = 2 * (last - first) + 2;
-    gridVertices = (Vector4 *)(grid->vertexBase + grid->vertexOffset);
+    gridGradients = (Vector4 *)(grid->gradientBase + grid->gradientOffset);
     *gifTag = (*gifTag & GIF_TAG_EOP) | (2 * (last - first) + 2);
     cellX = (float)first * grid->cell + grid->origin.x;
     cellZ = (float)row * -grid->cell + grid->origin.z;
@@ -250,18 +250,18 @@ void tiWaterSendStrip(int first, unsigned int last, int row, WaterStripGrid *gri
         quad->vector.z = cellZ;
         quad->vector.w = 1.0f;
         quad++;
-        vertexCopy->vector.x = gridVertices[rowStart + gridColumn].x;
-        vertexCopy->vector.y = gridVertices[rowStart + gridColumn].y;
-        vertexCopy->vector.z = gridVertices[rowStart + gridColumn].z;
+        vertexCopy->vector.x = gridGradients[rowStart + gridColumn].x;
+        vertexCopy->vector.y = gridGradients[rowStart + gridColumn].y;
+        vertexCopy->vector.z = gridGradients[rowStart + gridColumn].z;
         vertexCopy++;
         quad->vector.x = cellX;
         quad->vector.y = 0.0f;
         quad->vector.z = cellZ - grid->cell;
         quad->vector.w = 1.0f;
         quad++;
-        vertexCopy->vector.x = gridVertices[rowStart + grid->rowStride + gridColumn].x;
-        vertexCopy->vector.y = gridVertices[rowStart + grid->rowStride + gridColumn].y;
-        vertexCopy->vector.z = gridVertices[rowStart + grid->rowStride + gridColumn].z;
+        vertexCopy->vector.x = gridGradients[rowStart + grid->rowStride + gridColumn].x;
+        vertexCopy->vector.y = gridGradients[rowStart + grid->rowStride + gridColumn].y;
+        vertexCopy->vector.z = gridGradients[rowStart + grid->rowStride + gridColumn].z;
         vertexCopy++;
         cellX += grid->cell;
     }

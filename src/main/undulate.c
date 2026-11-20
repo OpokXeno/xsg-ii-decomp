@@ -1482,7 +1482,7 @@ start:
                 object->missCount = 0;
             }
         }
-        if (object->record == 0 || (*(int *)&object->flags & 0x5000) != 0 || (gameWork.control & CONTROL_TOP_EXIT) != 0 || (object->kind & ~0xff) == 0x200) {
+        if (object->record == 0 || (*(int *)&object->flags & 0x5000) != 0 || (gameWork.control & CONTROL_MAP_LOADED) != 0 || (object->kind & ~0xff) == 0x200) {
             set->origin.x = set->probeStart.x;
             set->origin.y = set->probeStart.y;
             set->origin.z = set->probeStart.z;

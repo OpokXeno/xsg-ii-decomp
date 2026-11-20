@@ -7,7 +7,7 @@
 #include "main/gs_make_frame.h"
 #include "main/talk_draw_fade.h"
 #include "main/talk_text_box.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/msg_slot_center.h"
 #include "main/xgl_packet.h"
 

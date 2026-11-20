@@ -3,11 +3,14 @@
 
 #include "ov01/sb_vm.h"
 
-/* Script natives of src/main/runtime_math.c (the "math" owner table in runtime_pt_init.c). */
+/* Functions of src/main/runtime_math.c that other files call: the natives of the "math" script module, listed in
+ * mathNativeTable. */
 
 int mathAtan(SbThread *thread);
 int mathSin(SbThread *thread);
 int mathCos(SbThread *thread);
 int mathRandom(SbThread *thread);
+
+void mathRegisterNatives(void);
 
 #endif /* INCLUDE_MAIN_RUNTIME_MATH_H */

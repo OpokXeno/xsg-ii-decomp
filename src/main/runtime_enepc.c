@@ -4,15 +4,18 @@
 #include "shared.h"
 #include "ov01/sb_vm.h"
 #include "ov01/sb_natives.h"
+#include "main/runtime.h"
 #include "main/runtime_enepc.h"
-#include "main/runtime_prog_effect.h"
 #include "main/xenoActor.h"
 #include "main/game_camera.h"
 #include "main/vibration.h"
 #include "main/uwamono_objx.h"
-#include "main/runtime_item.h"
-#include "main/runtime_se.h"
-#include "main/runtime_adx.h"
+#include "main/ytachi_test.h"
+#include "main/res_get_path.h"
+#include "main/get.h"
+#include "main/get_ladder.h"
+#include "main/init_uwamono_sys.h"
+#include "main/sef.h"
 
 #define NULL ((void *) 0)
 
@@ -34,18 +37,17 @@ typedef struct EnepcRouteNode {
 } EnepcRouteNode;
 
 /* One preset of enepcParamSets, handed to enepcStoreParams in its argument order.
-   floatParams, floatParams48 and shortParams (and enepcStoreParams' paramA0..3,
-   paramB0..1, shortParam0..3) are named by position on purpose: only their setters
-   here and their reset (tya_draw_gauge.c) are recovered, not the code that reads them,
-   so their roles are unknown. */
+   movementFloats holds the wander step, leash range, move speed and pursuit speed (paramA0..3),
+   rangeFloats the fan length and notice range (paramB0..1), and stateShorts the wander time,
+   pick count A, wait time and pick count B (shortParam0..3), as enepcStoreParams stores them. */
 typedef struct EnepcParamSet {
     float height;                           /* +0x00 */
     float extent;                           /* +0x04 */
-    float floatParams[4];                   /* +0x08 */
+    float movementFloats[4];                   /* +0x08 */
     float angleDegrees;                     /* +0x18 */
-    float floatParams48[2];                 /* +0x1C */
+    float rangeFloats[2];                 /* +0x1C */
     unsigned char unmodeled_24[4];
-    short shortParams[4];                   /* +0x28 */
+    short stateShorts[4];                   /* +0x28 */
 } EnepcParamSet;
 
 extern struct EnepcParamSet *enepcParamSets;
@@ -54,45 +56,8 @@ void enepcStoreParams(int index, float height, float extent,
                       float paramA0, float paramA1, float paramA2, float paramA3,
                       float angleDegrees, float paramB0, float paramB1,
                       short shortParam0, short shortParam1, short shortParam2, short shortParam3,
-                      float modeValue3, short motion, float fogA, float fogB,
+                      float modeValue3, short motion, float shadowHeightA, float shadowHeightB,
                       int initState);
-
-/* Native "Vibration", at least 4 arguments.  When vmArgTagIsZero reports argument 1 as
-   absent (nonzero), the fade is stopped (Vibration_Stop); otherwise argument 1 goes to
-   Vibration_Set_Weak and arguments 2 to 4 start a Vibration_Set_Strong. */
-int runtimeVibration(SbThread *call)
-{
-    int value;
-    int targetValue;
-    int currentValue;
-    int framesTotal;
-
-    if (VM_PLUGIN_CNT_GET(call) < 4) {
-        sbSlotJumpRequest(call, 2);
-        return 0;
-    }
-    if (vmArgTagIsZero(call, 1) != 0) {
-        Vibration_Stop();
-        return 1;
-    }
-    value = vmArgGet(call, 1);
-    targetValue = vmArgGet(call, 2);
-    currentValue = vmArgGet(call, 3);
-    framesTotal = vmArgGet(call, 4);
-    Vibration_Set_Weak(value);
-    Vibration_Set_Strong(targetValue, currentValue, framesTotal);
-    return 1;
-}
-
-extern SbNativeMethod runtimeNativeTable[];
-extern char runtimeModuleName[];
-
-/* Registers the "runtime" script module: runtimeModuleName holds its name string and
-   runtimeNativeTable its table of name/function pointer pairs (setNumber, setLocater,
-   setElevator, ...).  Called from scriptRegisterModules. */
-void runtimeRegisterNatives(void) {
-    sbNativeOwnerAdd(runtimeModuleName, runtimeNativeTable);
-}
 
 /* Native "setParams", 7 arguments: argument 1 is the record key, 3 a preset of
    enepcParamSets (absent: none), 4 and 5 a path point array and its count, 6 and 7 a
@@ -163,8 +128,8 @@ int enepcSetParams(SbThread *call)
         }
         for (j = 0; j < state->pointCount; j++) {
             for (i = 0; i < 4; i++) {
-                state->pointLinks[j][i] = -1;
-                state->pointLinkValues[j][i] = 0;
+                state->actionMotions[j][i] = -1;
+                state->actionLengths[j][i] = 0;
             }
         }
     }
@@ -179,15 +144,15 @@ int enepcSetParams(SbThread *call)
     if (paramSet != -1 && enepcParamSets != NULL) {
         /* The fourth short of the preset is read before the flag is cleared: the
            original loads it ahead of every other argument. */
-        shortParam3 = enepcParamSets[paramSet].shortParams[3];
+        shortParam3 = enepcParamSets[paramSet].stateShorts[3];
         state->flags &= ~4;
         enepcStoreParams(index, enepcParamSets[paramSet].height, enepcParamSets[paramSet].extent,
-                         enepcParamSets[paramSet].floatParams[0], enepcParamSets[paramSet].floatParams[1],
-                         enepcParamSets[paramSet].floatParams[2], enepcParamSets[paramSet].floatParams[3],
+                         enepcParamSets[paramSet].movementFloats[0], enepcParamSets[paramSet].movementFloats[1],
+                         enepcParamSets[paramSet].movementFloats[2], enepcParamSets[paramSet].movementFloats[3],
                          enepcParamSets[paramSet].angleDegrees,
-                         enepcParamSets[paramSet].floatParams48[0], enepcParamSets[paramSet].floatParams48[1],
-                         enepcParamSets[paramSet].shortParams[0], enepcParamSets[paramSet].shortParams[1],
-                         enepcParamSets[paramSet].shortParams[2], shortParam3,
+                         enepcParamSets[paramSet].rangeFloats[0], enepcParamSets[paramSet].rangeFloats[1],
+                         enepcParamSets[paramSet].stateShorts[0], enepcParamSets[paramSet].stateShorts[1],
+                         enepcParamSets[paramSet].stateShorts[2], shortParam3,
                          -1000.0f, -1, -1000.0f, -1000.0f, 1);
     }
     return 1;
@@ -222,8 +187,8 @@ int enepcSetParamsAll(SbThread *call)
     signed char lockFlag;
     float modeValue3;
     short motion;
-    float fogA;
-    float fogB;
+    float shadowHeightA;
+    float shadowHeightB;
     int initState;
     UwamonoRecord *record;
     UwamonoState *state;
@@ -318,14 +283,14 @@ int enepcSetParamsAll(SbThread *call)
         motion = -1;
     }
     if (vmArgTagIsZero(call, 18) == 0) {
-        fogA = (float) vmArgGet(call, 18) / 100.0f;
+        shadowHeightA = (float) vmArgGet(call, 18) / 100.0f;
     } else {
-        fogA = -1000.0f;
+        shadowHeightA = -1000.0f;
     }
     if (vmArgTagIsZero(call, 19) == 0) {
-        fogB = (float) vmArgGet(call, 19) / 100.0f;
+        shadowHeightB = (float) vmArgGet(call, 19) / 100.0f;
     } else {
-        fogB = -1000.0f;
+        shadowHeightB = -1000.0f;
     }
     initState = vmArgTagIsZero(call, 20) != 0;
     record = &uwamonoRecords[index];
@@ -336,7 +301,7 @@ int enepcSetParamsAll(SbThread *call)
     enepcStoreParams(index, height, extent, paramA0, paramA1, paramA2, paramA3,
                      angleDegrees, paramB0, paramB1,
                      shortParam0, shortParam1, shortParam2, shortParam3,
-                     modeValue3, motion, fogA, fogB, initState);
+                     modeValue3, motion, shadowHeightA, shadowHeightB, initState);
     return 1;
 }
 
@@ -349,7 +314,7 @@ void enepcStoreParams(int index, float height, float extent,
                       float paramA0, float paramA1, float paramA2, float paramA3,
                       float angleDegrees, float paramB0, float paramB1,
                       short shortParam0, short shortParam1, short shortParam2, short shortParam3,
-                      float modeValue3, short motion, float fogA, float fogB,
+                      float modeValue3, short motion, float shadowHeightA, float shadowHeightB,
                       int initState)
 {
     UwamonoRecord *record = &uwamonoRecords[index];
@@ -388,16 +353,16 @@ void enepcStoreParams(int index, float height, float extent,
             state->noticeRange = paramB1;
         }
         if (shortParam0 != -1) {
-            state->wanderTime = shortParam0;
+            state->pauseTime = shortParam0;
         }
         if (shortParam1 != -1) {
-            state->pickCountA = shortParam1;
+            state->pauseCycle = shortParam1;
         }
         if (shortParam2 != -1) {
-            state->waitTime = shortParam2;
+            state->threatTime = shortParam2;
         }
         if (shortParam3 != -1) {
-            state->pickCountB = shortParam3;
+            state->threatCycle = shortParam3;
         }
         if (modeValue3 != -1000.0f) {
             actor->modeValue3 = modeValue3;
@@ -405,11 +370,11 @@ void enepcStoreParams(int index, float height, float extent,
         if (motion != -1) {
             record->motion = motion;
         }
-        if (fogA != -1000.0f) {
-            actor->fogA = fogA;
+        if (shadowHeightA != -1000.0f) {
+            actor->shadowHeightA = shadowHeightA;
         }
-        if (fogB != -1000.0f) {
-            actor->fogB = fogB;
+        if (shadowHeightB != -1000.0f) {
+            actor->shadowHeightB = shadowHeightB;
         }
         if (initState != 1) {
             return;
@@ -470,7 +435,7 @@ int enepcMotion(SbThread *call)
     actor = uwamonoRecords[index].body.actor;
     if (actor->slot != motion / 100 || actor->mode != motion % 100) {
         uwamonoSetMotion(index, motion, speed);
-        XenoActorSetChannelValue(actor, 4.0f);
+        XenoActorSetBlendFrames(actor, 4.0f);
         XenoActorGetSlotRange(actor, 0, motion, &rangeStart, &rangeEnd);
         if (start == -1 && end != -1) {
             XenoActorSetPlayRange(actor, 0, end);
@@ -492,52 +457,643 @@ int enepcMotion(SbThread *call)
     return 1;
 }
 
-char runtimeModuleName[8] = "runtime";
+/* The natives take the running script thread: VM_PLUGIN_CNT_GET reads its argument count (sb_natives.h). With the
+ * call declared, enepcLookAt schedules `daddu $18,$4` into the jal delay slot with $4 still live; declared without
+ * it, the copy of call moves ahead of the array init. */
 
-/* script native table: (name string pointer, function) pairs; the name pointers are .rodata of other TUs. */
-extern const char runtimeNativeNameSetNumber[];
-extern const char runtimeNativeNameSetLocater[];
-extern const char runtimeNativeNameSetElevator[];
-extern const char runtimeNativeNameSetLastDan[];
-extern const char runtimeNativeNameSetPlayer[];
-extern char runtimeNativeNameItem[];
-extern const char runtimeNativeNameTimeAttack[];
-extern const char runtimeNativeNameGetAnalogR[];
-extern const char runtimeNativeNameProgEffect[];
-extern const char runtimeNativeNameChangeRobo[];
-extern char runtimeNativeNameMessage[];
-extern char runtimeNativeNameJumpCF[];
-extern const char runtimeNativeNameMapChange[];
-extern char runtimeNativeNameFade[];
-extern char runtimeNativeNameSetFlag[];
-extern char runtimeNativeNameGetFlag[];
-extern char runtimeNativeNameSetFog[];
-extern char runtimeNativeNameSetItai[];
-extern const char runtimeNativeNameSetLight[];
-extern char runtimeNativeNameSystem[];
-extern char runtimeNativeNameMpeg2[];
-extern char runtimeNativeNameAdx[];
-extern char runtimeNativeNameAdxload[];
-extern char runtimeNativeNameAdxplay[];
-extern char runtimeNativeNameSe[];
-extern char runtimeNativeNameSePos[];
-extern char runtimeNativeNameSeVol[];
-extern char runtimeNativeNameBgmse[];
-extern const char runtimeNativeNameBgmsePos[];
-extern char runtimeNativeNameBgmFade[];
-extern char runtimeNativeNameNextBgm[];
-extern char runtimeNativeNameBgm[];
-extern const char runtimeNativeNameVibration[];
-extern const char runtimeNativeNameSetMapColor[];
-SbNativeMethod runtimeNativeTable[35] = {
-    { runtimeNativeNameSetNumber, runtimeSetNumber }, { runtimeNativeNameSetLocater, runtimeSetLocater }, { runtimeNativeNameSetElevator, runtimeSetElevator }, { runtimeNativeNameSetLastDan, runtimeSetLastDan },
-    { runtimeNativeNameSetPlayer, runtimeSetPlayer }, { runtimeNativeNameItem, runtimeItem }, { runtimeNativeNameTimeAttack, runtimeTimeAttack }, { runtimeNativeNameGetAnalogR, runtimeGetAnalogR },
-    { runtimeNativeNameProgEffect, runtimeProgEffect }, { runtimeNativeNameChangeRobo, changeRobo }, { runtimeNativeNameMessage, runtimeMessage }, { runtimeNativeNameJumpCF, runtimeJumpCf },
-    { runtimeNativeNameMapChange, runtimeMapChange }, { runtimeNativeNameFade, runtimeFade }, { runtimeNativeNameSetFlag, runtimeSetFlag }, { runtimeNativeNameGetFlag, runtimeGetFlag },
-    { runtimeNativeNameSetFog, runtimeSetMapFog }, { runtimeNativeNameSetItai, runtimeSetItai }, { runtimeNativeNameSetLight, runtimeSetMapLight }, { runtimeNativeNameSystem, runtimeSystem },
-    { runtimeNativeNameMpeg2, mpeg2 }, { runtimeNativeNameAdx, adx }, { runtimeNativeNameAdxload, adxLoad }, { runtimeNativeNameAdxplay, adxPlay },
-    { runtimeNativeNameSe, seSetVolumePan }, { runtimeNativeNameSePos, sePos }, { runtimeNativeNameSeVol, seVol }, { runtimeNativeNameBgmse, bgmSe },
-    { runtimeNativeNameBgmsePos, bgmSePos }, { runtimeNativeNameBgmFade, bgmFade }, { runtimeNativeNameNextBgm, nextBgm }, { runtimeNativeNameBgm, bgmSetTrack },
-    { runtimeNativeNameVibration, runtimeVibration }, { runtimeNativeNameSetMapColor, setMapColor },
+/* Resigne reads the moving angle of the actor through a union (alias set 0), which keeps the load behind the
+ * short store before it. Making XenoActor.direction a union would change the code of the other files that
+ * use it, so this one site reads it through a one-member view. */
+typedef union ActorDirectionView {
+    Vector4 vector;
+} ActorDirectionView;
+
+/* enepcExMotion stores the loaded resource into XenoActor.rsrc[XAct_Rsrc_5] as a pointer: the store does not order
+ * against the int store that follows it, as it would through the shared int array. This one site writes it through a
+ * view of the actor. */
+typedef struct ActorResourceView {
+    unsigned char unmodeled_000[0x5EC + XAct_Rsrc_5 * 4];
+    void *resource;                         /* 0x600: rsrc[XAct_Rsrc_5] */
+} ActorResourceView;
+
+
+/*
+ * Native "motionFace". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does not
+ * report 3 or more. Otherwise looks up vmArgGet's first argument with
+ * uwamonoFindIndexByShortKey; if found and the record is of kind
+ * MAP_KIND_ACTOR or MAP_KIND_ACTOR_STATIC and its actor's selector differs from argument 2, sets the actor's channel
+ * value to 4.0f and its selector to argument 2. Argument 3 is read but
+ * unused. Returns 1.
+ */
+int motionFace(SbThread *call)
+{
+    int lookupIndex;
+    int selector;
+    struct XenoActor *actor;
+
+    if (VM_PLUGIN_CNT_GET(call) < 3) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    lookupIndex = uwamonoFindIndexByShortKey((short) vmArgGet(call, 1));
+    if (lookupIndex == -1) {
+        return 1;
+    }
+    selector = vmArgGet(call, 2);
+    /* Argument 3 is read and discarded: the original calls vmArgGet(call, 3)
+     * and never uses the result. */
+    vmArgGet(call, 3);
+    if (uwamonoRecords[lookupIndex].kind != MAP_KIND_ACTOR
+        && uwamonoRecords[lookupIndex].kind != MAP_KIND_ACTOR_STATIC) {
+        return 1;
+    }
+    actor = uwamonoRecords[lookupIndex].body.actor;
+    if (actor->selector != selector) {
+        XenoActorSetBlendFramesB(actor, 4.0f);
+        XenoActorSetSelector(actor, selector);
+    }
+    return 1;
+}
+
+/*
+ * Native "Extra". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does not
+ * report 2 or more. Otherwise looks up vmArgGet's first argument with
+ * uwamonoFindIndexByShortKey; when found and the slot has an actor, passes
+ * vmArgGet's second argument to XenoActorSetSolverPasses for the actor.
+ * Returns 1 on success, 0 otherwise.
+ */
+int enepcExtra(SbThread *call)
+{
+    int lookupKey;
+    int lookupIndex;
+    if (VM_PLUGIN_CNT_GET(call) < 2) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    lookupKey = vmArgGet(call, 1);
+    lookupIndex = uwamonoFindIndexByShortKey((short) lookupKey);
+    /* The original reads argument 2 here, discards it, and reads it again for
+     * the XenoActorSetSolverPasses call below (two jal vmArgGet with $5 = 2). */
+    vmArgGet(call, 2);
+    if (lookupIndex == -1) {
+        return 0;
+    }
+    if (uwamonoSlotTable[lookupIndex].body.actor == 0) {
+        return 0;
+    }
+    XenoActorSetSolverPasses(uwamonoSlotTable[lookupIndex].body.actor, vmArgGet(call, 2));
+    return 1;
+}
+
+/*
+ * Native "ExMotion". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does not
+ * report 2. Otherwise looks up vmArgGet's first argument with
+ * uwamonoFindIndexByShortKey; if found, loads the resource for vmArgGet's
+ * second argument, stores the resource id to the slot's state and the loaded
+ * resource to the slot's actor. Returns 1.
+ */
+int enepcExMotion(SbThread *call)
+{
+    void *resource;
+    int lookupKey;
+    int lookupIndex;
+    int resourceId;
+    UwamonoSlot *slot;
+
+    resource = 0;
+    if (VM_PLUGIN_CNT_GET(call) != 2) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    lookupKey = vmArgGet(call, 1);
+    lookupIndex = uwamonoFindIndexByShortKey((short) lookupKey);
+    if (lookupIndex == -1) {
+        return 1;
+    }
+    resourceId = vmArgGet(call, 2);
+    GameResLoadID(resourceId, &resource, 0, 0);
+    slot = &uwamonoSlotTable[lookupIndex];
+    ((ActorResourceView *) slot->body.actor)->resource = resource;
+    slot->body.motions->resourceId = resourceId;
+    return 1;
+}
+
+/* Candidate target points and their reach (10 entries; src/main/game_camera.c reads
+ * them as Vector4 enepcLookAtPointTable[]; the float[][4] view gives this function's
+ * point-index addressing, the Vector4 one swaps the addu operands). The reach is declared in ytachi_test.h. */
+extern float enepcLookAtPointTable[][4];
+
+
+/*
+ * Native "lookat". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does not
+ * report 4 or more. Otherwise looks up vmArgGet's first argument with
+ * uwamonoFindIndexByShortKey. With argument 5 present, when one of the 10
+ * candidate target points has no reach yet, sets point number argument 5 to
+ * arguments 2 to 4 / 100 with reach argument 6 / 100. Without it: arguments
+ * 2 to 4 all omitted clear the record's target; arguments 3 and 4 omitted
+ * offer the record found for argument 2 as the target, otherwise the point
+ * arguments 2 to 4 / 100. Only records of kind MAP_KIND_ACTOR or
+ * MAP_KIND_ACTOR_STATIC take an offer (0 is returned for the others).
+ * Returns 1.
+ */
+int enepcLookAt(SbThread *call)
+{
+    int indices[2] = { -1, -1 };
+    Vector4 point;
+    int pointIndex;
+    float reach;
+    int i;
+
+    if (VM_PLUGIN_CNT_GET(call) < 4) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    indices[0] = uwamonoFindIndexByShortKey((short) vmArgGet(call, 1));
+    if (indices[0] == -1) {
+        return 1;
+    }
+    if (vmArgTagIsZero(call, 5) == 0) {
+        pointIndex = vmArgGet(call, 5);
+        reach = (float) vmArgGet(call, 6) / 100.0f;
+        for (i = 0; i < 10; i++) {
+            if (enepcLookAtReachTable[i] == 0.0f) {
+                enepcLookAtPointTable[pointIndex][0] = (float) vmArgGet(call, 2) / 100.0f;
+                enepcLookAtPointTable[pointIndex][1] = (float) vmArgGet(call, 3) / 100.0f;
+                enepcLookAtPointTable[pointIndex][2] = (float) vmArgGet(call, 4) / 100.0f;
+                enepcLookAtReachTable[pointIndex] = reach;
+                break;
+            }
+        }
+        return 1;
+    }
+    if (vmArgTagIsZero(call, 2) != 0 && vmArgTagIsZero(call, 3) != 0 && vmArgTagIsZero(call, 4) != 0) {
+        Actor_LookAt_Release(indices[0], 3);
+        return 1;
+    }
+    if (vmArgTagIsZero(call, 3) != 0 && vmArgTagIsZero(call, 4) != 0) {
+        indices[1] = uwamonoFindIndexByShortKey((short) vmArgGet(call, 2));
+    } else {
+        indices[1] = -1;
+        point.x = (float) vmArgGet(call, 2) / 100.0f;
+        point.y = (float) vmArgGet(call, 3) / 100.0f;
+        point.z = (float) vmArgGet(call, 4) / 100.0f;
+    }
+    if (uwamonoRecords[indices[0]].kind != MAP_KIND_ACTOR
+        && uwamonoRecords[indices[0]].kind != MAP_KIND_ACTOR_STATIC) {
+        return 0;
+    }
+    if (indices[1] == -1) {
+        Actor_LookAt_Set(indices[0], 3, -1, &point);
+    } else {
+        Actor_LookAt_Set(indices[0], 3, indices[1], 0);
+    }
+    return 1;
+}
+
+
+/*
+ * Native "Encount". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does not
+ * report 2. Otherwise passes the record index of argument 1 (from
+ * uwamonoFindIndexByShortKey), 1 and argument 2 to Check_Encount and
+ * returns 1.
+ */
+int enepcEncount(SbThread *call)
+{
+    int key;
+    int index;
+
+    if (VM_PLUGIN_CNT_GET(call) != 2) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    key = vmArgGet(call, 1);
+    index = uwamonoFindIndexByShortKey(key);
+    Check_Encount(index, 1, vmArgGet(call, 2));
+    return 1;
+}
+
+/* src/main/get.c defines it with two parameters; this caller passes the
+ * actor's moving angle in $f12 as a third. */
+
+/*
+ * Native "Resigne". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does not
+ * report 1. Otherwise looks up vmArgGet's first argument with
+ * uwamonoFindIndexByShortKey; if found and the slot's state is in action 5,
+ * clears the trail step, copies the actor position to the first trail point
+ * and enters action 2 with a rebuilt trail. Returns 1.
+ */
+int Resigne(SbThread *call)
+{
+    int lookupIndex;
+    UwamonoSlot *slot;
+    UwamonoState *state;
+    struct XenoActor *actor;
+
+    if (VM_PLUGIN_CNT_GET(call) != 1) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    lookupIndex = uwamonoFindIndexByShortKey((short) vmArgGet(call, 1));
+    if (lookupIndex == -1) {
+        return 1;
+    }
+    slot = &uwamonoSlotTable[lookupIndex];
+    state = slot->body.motions;
+    actor = slot->body.actor;
+    if (state->action == 5) {
+        state->trailStep = 0;
+        vectorCopyPoint(&state->trailPoints[0], &actor->position, ((ActorDirectionView *) &actor->direction)->vector.y);
+        Enemy_ActionReady(lookupIndex, 2);
+        Homing_Search(lookupIndex);
+    }
+    return 1;
+}
+
+/*
+ * Native "setGroup". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does not
+ * report 2 or more. Otherwise looks up vmArgGet's first argument with
+ * uwamonoFindIndexByShortKey; if found, for each of the 8 entries of the
+ * slot's state setNumbers[], stores -1 when vmArgTagIsZero's argument i+2 is
+ * nonzero, otherwise stores vmArgGet's argument i+1. Returns 1.
+ * Original behaviour, kept as coded: the tag test reads argument i+2 but the value is argument i+1, so
+ * group entry 0 takes the lookup key (argument 1).
+ */
+int setGroup(SbThread *call)
+{
+    int lookupKey;
+    int lookupIndex;
+    int i;
+    UwamonoSlot *slot;
+
+    if (VM_PLUGIN_CNT_GET(call) < 2) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    lookupKey = vmArgGet(call, 1);
+    lookupIndex = uwamonoFindIndexByShortKey((short) lookupKey);
+    if (lookupIndex == -1) {
+        return 1;
+    }
+    slot = &uwamonoSlotTable[lookupIndex];
+    for (i = 0; i < 8; i++) {
+        if (vmArgTagIsZero(call, i + 2) != 0) {
+            slot->body.motions->setNumbers[i] = -1;
+        } else {
+            slot->body.motions->setNumbers[i] = (short) vmArgGet(call, i + 1);
+        }
+    }
+    return 1;
+}
+
+/*
+ * Native "setBattle". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does not
+ * report 2 or more. Otherwise looks up vmArgGet's first argument with
+ * uwamonoFindIndexByShortKey; if found, stores vmArgGet's second argument
+ * as the state's cfEventBits value. Returns 1.
+ */
+int enepcSetBattle(SbThread *call)
+{
+    int lookupKey;
+    int lookupIndex;
+
+    if (VM_PLUGIN_CNT_GET(call) < 2) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    lookupKey = vmArgGet(call, 1);
+    lookupIndex = uwamonoFindIndexByShortKey((short) lookupKey);
+    if (lookupIndex == -1) {
+        return 1;
+    }
+    uwamonoStateSlots[lookupIndex].motions->cfEventBits = vmArgGet(call, 2);
+    return 1;
+}
+
+/*
+ * Native "setSE". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does not
+ * report 4 or more. Otherwise looks up vmArgGet's first argument with
+ * uwamonoFindIndexByShortKey; if found, stores vmArgGet's arguments 2
+ * through 4 into the slot's state seIds[0..2]. Returns 1.
+ */
+int enepcSetSe(SbThread *call)
+{
+    int lookupKey;
+    int lookupIndex;
+    int i;
+    UwamonoSlot *slot;
+
+    if (VM_PLUGIN_CNT_GET(call) < 4) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    lookupKey = vmArgGet(call, 1);
+    lookupIndex = uwamonoFindIndexByShortKey((short) lookupKey);
+    if (lookupIndex == -1) {
+        return 1;
+    }
+    slot = &uwamonoSlotTable[lookupIndex];
+    for (i = 0; i < 3; i++) {
+        slot->body.motions->seIds[i] = vmArgGet(call, i + 2);
+    }
+    return 1;
+}
+
+/*
+ * Native "defaultMotion". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does
+ * not report 3 or more. Otherwise looks up vmArgGet's first argument with
+ * uwamonoFindIndexByShortKey; if found, stores vmArgGet's third argument
+ * (the motion) into the state's walk[] at the slot given by the second
+ * argument. Returns 1.
+ */
+int enepcDefaultMotion(SbThread *call)
+{
+    int lookupKey;
+    int lookupIndex;
+    int slot;
+    int motion;
+
+    if (VM_PLUGIN_CNT_GET(call) < 3) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    lookupKey = vmArgGet(call, 1);
+    lookupIndex = uwamonoFindIndexByShortKey((short) lookupKey);
+    if (lookupIndex == -1) {
+        return 1;
+    }
+    slot = vmArgGet(call, 2);
+    motion = vmArgGet(call, 3);
+    uwamonoStateSlots[lookupIndex].motions->walk[slot] = motion;
+    return 1;
+}
+
+/*
+ * Native "setTogether". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does
+ * not report 2 or more. Otherwise resolves script arguments 1 through 4 with
+ * uwamonoFindIndexByShortKey (-1 when omitted) and stores the four indices
+ * into the together[] of every record found. Returns 1.
+ */
+int enepcSetTogether(SbThread *call)
+{
+    int members[4];
+    int i;
+    int j;
+    UwamonoState *state;
+
+    if (VM_PLUGIN_CNT_GET(call) < 2) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    members[0] = vmArgTagIsZero(call, 1) != 0 ? -1 : uwamonoFindIndexByShortKey((short) vmArgGet(call, 1));
+    members[1] = vmArgTagIsZero(call, 2) != 0 ? -1 : uwamonoFindIndexByShortKey((short) vmArgGet(call, 2));
+    members[2] = vmArgTagIsZero(call, 3) != 0 ? -1 : uwamonoFindIndexByShortKey((short) vmArgGet(call, 3));
+    members[3] = vmArgTagIsZero(call, 4) != 0 ? -1 : uwamonoFindIndexByShortKey((short) vmArgGet(call, 4));
+    for (i = 0; i < 4; i++) {
+        if (members[i] != -1) {
+            state = uwamonoRecords[members[i]].body.motions;
+            for (j = 0; j < 4; j++) {
+                state->together[j] = members[j];
+            }
+        }
+    }
+    return 1;
+}
+
+
+/*
+ * Native "Algorithm". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does not
+ * report 3. Otherwise looks up vmArgGet's first argument with
+ * uwamonoFindIndexByShortKey; if found, stores argument 2 as the state's mode, the record position as its
+ * home, action 1 and argument 3 / 100 as its area size (1000.0f when omitted),
+ * then calls Enemy_Init. Returns 1.
+ */
+int enepcAlgorithm(SbThread *call)
+{
+    int lookupIndex;
+    int mode;
+    float areaSize;
+
+    if (VM_PLUGIN_CNT_GET(call) != 3) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    lookupIndex = uwamonoFindIndexByShortKey((short) vmArgGet(call, 1));
+    if (lookupIndex == -1) {
+        return 1;
+    }
+    mode = vmArgGet(call, 2);
+    if (vmArgTagIsZero(call, 3) == 0) {
+        areaSize = (float) vmArgGet(call, 3) / 100.0f;
+    } else {
+        areaSize = 1000.0f;
+    }
+    uwamonoRecords[lookupIndex].body.motions->mode = mode;
+    uwamonoRecords[lookupIndex].body.motions->area.x = uwamonoRecords[lookupIndex].positionCoords[0];
+    uwamonoRecords[lookupIndex].body.motions->area.y = uwamonoRecords[lookupIndex].positionCoords[1];
+    uwamonoRecords[lookupIndex].body.motions->area.z = uwamonoRecords[lookupIndex].positionCoords[2];
+    uwamonoRecords[lookupIndex].body.motions->areaSize = areaSize;
+    uwamonoRecords[lookupIndex].body.motions->action = 1;
+    Enemy_Init(lookupIndex);
+    return 1;
+}
+
+/*
+ * Native "readyEnepcData". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET does
+ * not report 1. Otherwise loads the resource for argument 1 (the preset
+ * table that setParams indexes), stores it to enepcParamSets and returns 1.
+ */
+int enepcReadyEnepcData(SbThread *call)
+{
+    void *resource;
+    int resourceId;
+
+    resource = 0;
+    if (VM_PLUGIN_CNT_GET(call) != 1) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    resourceId = vmArgGet(call, 1);
+    /* Retries until the resource has loaded. */
+    while (GameResLoadID(resourceId, &resource, 0, 0) == -1) {
+    }
+    enepcParamSets = resource;
+    return 1;
+}
+
+/*
+ * Native "enableDrawFlags". Returns 0 after sbSlotJumpRequest when VM_PLUGIN_CNT_GET
+ * does not report 2 or more. Otherwise looks up vmArgGet's first argument
+ * with uwamonoFindIndexByShortKey; if found, ORs argument 2 into the draw
+ * flags of the actors of kind MAP_KIND_ACTOR_STATIC or MAP_KIND_ACTOR: of
+ * every record whose kind equals argument 3,
+ * or of the looked-up record alone when argument 3 is omitted. Returns 1.
+ */
+int enepcEnableDrawFlags(SbThread *call)
+{
+    int lookupIndex;
+    int flags;
+    int kind;
+    int start;
+    int end;
+    int i;
+    struct XenoActor *actor;
+
+    if (VM_PLUGIN_CNT_GET(call) < 2) {
+        sbSlotJumpRequest(call, 2);
+        return 0;
+    }
+    lookupIndex = uwamonoFindIndexByShortKey((short) vmArgGet(call, 1));
+    if (lookupIndex == -1) {
+        return 1;
+    }
+    flags = vmArgGet(call, 2);
+    kind = vmArgTagIsZero(call, 3) != 0 ? -1 : vmArgGet(call, 3);
+    if (kind == -1) {
+        start = lookupIndex;
+        end = start + 1;
+        /* Cannot be taken (lookupIndex was checked above), but the original
+         * compares start with -1 again here (bne at enepcEnableDrawFlags +0xA0). */
+        if (start == -1) {
+            return 1;
+        }
+    } else {
+        start = 0;
+        end = MAP_RECORD_COUNT;
+    }
+    for (i = start; i < end; i++) {
+        if (uwamonoRecords[i].kind == kind || kind == -1) {
+            if (uwamonoRecords[i].kind == MAP_KIND_ACTOR_STATIC || uwamonoRecords[i].kind == MAP_KIND_ACTOR) {
+                actor = uwamonoRecords[i].body.actor;
+                if (actor != 0) {
+                    actor->drawFlags |= flags;
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+const char enepcNativeNameSetSE[8] = "setSE";
+
+const char enepcNativeNameResigne[8] = "Resigne";
+
+const char enepcNativeNameEncount[8] = "Encount";
+
+const char enepcNativeNameLookat[8] = "lookat";
+
+const char enepcNativeNameMotion[8] = "motion";
+
+const char enepcNativeNameExtra[8] = "Extra";
+/* Upper bound of the uwamonoSlotTable walk in disableDrawFlags. */
+#define UWAMONO_SLOT_COUNT 0x100
+
+extern SbNativeMethod enepcNativeTable[];
+extern char enepcModuleName[];
+
+/* Native table of the enepc module: name and function pairs, then a null entry. The natives are defined in this file. */
+
+const char enepcNativeNameDisableDrawFlags[24] = "disableDrawFlags";
+
+const char enepcNativeNameEnableDrawFlags[16] = "enableDrawFlags";
+
+const char enepcNativeNameReadyEnepcData[16] = "readyEnepcData";
+
+const char enepcNativeNameAlgorithm[16] = "Algorithm";
+
+const char enepcNativeNameSetTogether[16] = "setTogether";
+
+const char enepcNativeNameDefaultMotion[16] = "defaultMotion";
+
+const char enepcNativeNameSetBattle[16] = "setBattle";
+
+const char enepcNativeNameSetGroup[16] = "setGroup";
+
+const char enepcNativeNameMotionFace[16] = "motionFace";
+
+const char enepcNativeNameExMotion[16] = "ExMotion";
+
+const char enepcNativeNameSetParamsAll[16] = "setParamsAll";
+
+const char enepcNativeNameSetParams[24] = "setParams";
+
+
+int disableDrawFlags(SbThread *thread)
+{
+    int shortKey;
+    int flagMask;
+    int slotIndex;
+    int kindFilter;
+    int firstSlot;
+    int endSlot;
+    int slot;
+    struct XenoActor *actor;
+
+    if (VM_PLUGIN_CNT_GET(thread) < 2) {
+        sbSlotJumpRequest(thread, 2);
+        return 0;
+    }
+    shortKey = vmArgGet(thread, 1);
+    slotIndex = uwamonoFindIndexByShortKey(shortKey);
+    if (slotIndex == -1) {
+        return 1;
+    }
+    flagMask = vmArgGet(thread, 2);
+    if (vmArgTagIsZero(thread, 3) != 0) {
+        kindFilter = -1;
+    } else {
+        kindFilter = vmArgGet(thread, 3);
+    }
+    if (kindFilter == -1) {
+        firstSlot = slotIndex;
+        endSlot = slotIndex + 1;
+        if (slotIndex == kindFilter) {
+            return 1;
+        }
+    } else {
+        firstSlot = 0;
+        endSlot = UWAMONO_SLOT_COUNT;
+    }
+    for (slot = firstSlot; slot < endSlot; slot++) {
+        if (uwamonoRecords[slot].kind != kindFilter && kindFilter != -1) {
+            continue;
+        }
+        if (uwamonoRecords[slot].kind != 4 && uwamonoRecords[slot].kind != 1) {
+            continue;
+        }
+        actor = uwamonoRecords[slot].body.actor;
+        if (actor != 0) {
+            actor->drawFlags &= ~flagMask;
+        }
+    }
+    return 1;
+}
+
+/* Registers the enepc native table enepcNativeTable with the module name "enepc". */
+void enepcRegisterNatives(void) {
+    sbNativeOwnerAdd(enepcModuleName, enepcNativeTable);
+}
+
+SbNativeMethod enepcNativeTable[19] = {
+    { enepcNativeNameSetParams, enepcSetParams },
+    { enepcNativeNameSetParamsAll, enepcSetParamsAll },
+    { enepcNativeNameExtra, enepcExtra },
+    { enepcNativeNameMotion, enepcMotion },
+    { enepcNativeNameExMotion, enepcExMotion },
+    { enepcNativeNameMotionFace, motionFace },
+    { enepcNativeNameLookat, enepcLookAt },
+    { enepcNativeNameEncount, enepcEncount },
+    { enepcNativeNameResigne, Resigne },
+    { enepcNativeNameSetGroup, setGroup },
+    { enepcNativeNameSetBattle, enepcSetBattle },
+    { enepcNativeNameSetSE, enepcSetSe },
+    { enepcNativeNameDefaultMotion, enepcDefaultMotion },
+    { enepcNativeNameSetTogether, enepcSetTogether },
+    { enepcNativeNameAlgorithm, enepcAlgorithm },
+    { enepcNativeNameReadyEnepcData, enepcReadyEnepcData },
+    { enepcNativeNameEnableDrawFlags, enepcEnableDrawFlags },
+    { enepcNativeNameDisableDrawFlags, disableDrawFlags },
     { 0, 0 }
 };
+
+/* Module name of the enepc natives. */
+char enepcModuleName[8] = "enepc";

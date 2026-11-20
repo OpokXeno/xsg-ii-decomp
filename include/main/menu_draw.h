@@ -159,7 +159,7 @@ void menuDrawPartnerInfo(int x, int y, ListCursor *cursor, int member, unsigned 
 void menuDrawCommandDetail(int x, int y, ListCursor *cursor, int member);
 void menuDrawCopilotInfo(int x, int y, ListCursor *cursor, int member, unsigned short mode);
 void menuDrawClassInfo(int x, int y);
-void menuDrawLicenseBoard(int x, int y, ListCursor *groupCursor, ListCursor *slotCursor, ListCursor *subCursor, int mode, int mask);
+void menuDrawSkillBoard(int x, int y, ListCursor *groupCursor, ListCursor *slotCursor, ListCursor *subCursor, int mode, int mask);
 void menuDrawConfig(int x, int y, ListCursor *cursor, unsigned char *items);
 void menuDrawControllerConfig(void);
 void menuDrawPlayTime(int x, int y);

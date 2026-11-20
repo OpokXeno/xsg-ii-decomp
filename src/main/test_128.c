@@ -31,9 +31,7 @@
 #define HEAP_OVERVIEW_WINDOW_Y 100
 #define HEAP_OVERVIEW_WINDOW_WIDTH 200
 #define HEAP_OVERVIEW_WINDOW_HEIGHT 140
-/* Text scale options of heapWindowMapStrideAdjust and the clamp range of the scale (1.0 is 0x10000). */
-#define TEXT_SCALE_OPTION_DOUBLE 0x10
-#define TEXT_SCALE_OPTION_HALF 0x80
+/* The map stride clamp range of heapWindowMapStrideAdjust (1.0 is 0x10000). */
 #define TEXT_SCALE_MIN 1
 #define TEXT_SCALE_MAX 0x10000
 
@@ -222,6 +220,8 @@ void _MergeBlocks(struct RgHeapBlock *pHead)
 /* InstanceOfRgHeapById: the heap heapId (0x20 bytes apart); its 0x800-byte arena is set up by the first call, tracked by a halfword flag per id. */
 static unsigned char heapInstances[HEAP_MAX][0x20];
 static unsigned char heapArenas[HEAP_MAX][HEAP_ARENA_SIZE];
+/* Not heap data: sefAppliedLightSet is the applied effect light set used by sef_light_set.c and sv_get_image_item.c;
+   the original layout places it among this file's heap arrays. */
 static unsigned char sefAppliedLightSet[384];
 extern short heapInitFlags[8];
 
@@ -530,8 +530,8 @@ void RgHeapDumpById(u32 heapId)
 
 /*
  * Row callback of the heap window: scales the heap map of the window's heap (RgHeap.mapStride, from
- * testWindowGetUserData) by the text scale options, doubled for option flag 0x10 and halved for 0x80, then keeps
- * it within 1..0x10000.
+ * testWindowGetUserData), doubled while PAD_TRIANGLE is pressed and halved while PAD_SQUARE is pressed, then
+ * keeps it within 1..0x10000.
  */
 void *testWindowGetUserData(int window);
 
@@ -542,10 +542,10 @@ void heapWindowMapStrideAdjust(int window)
 
     pHeap = testWindowGetUserData(window);
     flags = PadData[0].pressed;
-    if ((flags & TEXT_SCALE_OPTION_DOUBLE) != 0) {
+    if ((flags & PAD_TRIANGLE) != 0) {
         pHeap->mapStride = pHeap->mapStride * 2;
     }
-    if ((flags & TEXT_SCALE_OPTION_HALF) != 0) {
+    if ((flags & PAD_SQUARE) != 0) {
         pHeap->mapStride = pHeap->mapStride / 2;
     }
     if (pHeap->mapStride <= 0) {

@@ -161,7 +161,7 @@ typedef union UnitCommandRecord {
 void eventQueueAdd(int kind, EventQueueArgs *args);
 void eventQueueAddUnitCommand(BattleUnit *object, CmdListBody *args);
 void cmdAttackQueueAndSpend(BattleUnit *unit, CmdListBody *command);
-void cmdStockRun(BattleUnit *unit, CmdListBody *command, EventQueueArgs *args);
+void cmdCombinedEtherRun(BattleUnit *unit, CmdListBody *command, EventQueueArgs *args);
 void cmdPairRun(BattleUnit *unit, CmdListBody *command, EventQueueArgs *args);
 BattleUnit *cmdFindFirstTarget(BattleUnit *unit, CmdListBody *body);
 
@@ -218,7 +218,7 @@ int cmdExecute(BattleUnit *unit, CmdListBody *body)
             swapped = 1;
             keyRow = tableKeyRowGet(unit->stats->key);
             body->code = keyRow->entries[KEY_ROW_SWAP_CODE];
-            unit->stats->rollPercent = 0;
+            unit->stats->counterGauge = 0;
             menuPanelShow();
             target = cmdFindFirstTarget(unit, body);
             if (target == 0) {
@@ -232,8 +232,8 @@ int cmdExecute(BattleUnit *unit, CmdListBody *body)
         if (body->command != CMD_KIND_ITEM) {
             flagged = tecRecordGet(body->code)->flags & TEC_FLAG_SCRIPT_FLAGGED;
             if (flagged == 0
-                && (target->stats->state70 == TARGET_STATE_STAND_OFF
-                    || ((target->stats->defaultCode & TARGET_DEFAULT_CODE_STAND_OFF)
+                && (target->stats->breakState == TARGET_STATE_STAND_OFF
+                    || ((target->stats->defaultHeightZone & TARGET_DEFAULT_CODE_STAND_OFF)
                         && (tecRecordGet(body->code)->hitFlags & TEC_HIT_STAND_OFF)
                         && (unit->stats->key == STAND_OFF_UNIT_KEY_A || unit->stats->key == STAND_OFF_UNIT_KEY_B)))) {
                 if (!(unit->flags & UNIT_FLAG_POSED_OUT)) {
@@ -252,7 +252,7 @@ int cmdExecute(BattleUnit *unit, CmdListBody *body)
                 unit->flags |= UNIT_FLAG_MOVED_OUT;
             }
             if (body->command == CMD_KIND_TECHNIQUE && flagged != 0
-                && tecRecordGet(body->code)->gateFlag != TEC_GATE_PAIR) {
+                && tecRecordGet(body->code)->techClass != TEC_GATE_PAIR) {
                 if (!(tecRecordGet(body->code)->flags & TEC_TARGET_ALL)) {
                     command.aim.command = UNIT_CMD_TURN_AIM;
                     command.aim.toPoint = 0;
@@ -301,11 +301,11 @@ int cmdExecute(BattleUnit *unit, CmdListBody *body)
         eventQueueAdd(EVENT_KIND_ACTION_LOAD, &args);
         eventQueueAdd(EVENT_KIND_LOADS_IDLE, &args);
         eventQueueAdd(EVENT_KIND_ATTACH, &args);
-        if (tecRecordGet(body->code)->gateFlag == TEC_GATE_PAIR) {
+        if (tecRecordGet(body->code)->techClass == TEC_GATE_PAIR) {
             cmdPairRun(unit, body, &args);
             actEntryFlagSet(body->pairIndex);
-        } else if (tecRecordGet(body->code)->gateFlag == TEC_GATE_STOCK) {
-            cmdStockRun(unit, body, &args);
+        } else if (tecRecordGet(body->code)->techClass == TEC_GATE_COMBINED_ETHER) {
+            cmdCombinedEtherRun(unit, body, &args);
         } else {
             eventQueueAddUnitCommand(unit, body);
             if ((unsigned int)(body->command - CMD_KIND_LOOKUP) <= CMD_KIND_ITEM - CMD_KIND_LOOKUP) {
@@ -313,7 +313,7 @@ int cmdExecute(BattleUnit *unit, CmdListBody *body)
             }
             cmdAttackQueueAndSpend(unit, body);
             statEffOff(unit);
-            if (tecRecordGet(body->code)->gateFlag == TEC_GATE_SLOT_MARK) {
+            if (tecRecordGet(body->code)->techClass == TEC_GATE_SLOT_MARK) {
                 calcEtherDisableSet(body->pairIndex);
             }
         }
@@ -403,7 +403,7 @@ void cmdPairRun(BattleUnit *unit, CmdListBody *command, EventQueueArgs *args)
  * pays the EP calcTakeEpGet gives for the args tec, then the command runs for the unit
  * (wait for its queue, then the follow-up) and the stocked unit ends with motion 9 and
  * the boost clear. */
-void cmdStockRun(BattleUnit *unit, CmdListBody *command, EventQueueArgs *args)
+void cmdCombinedEtherRun(BattleUnit *unit, CmdListBody *command, EventQueueArgs *args)
 {
     BattleUnit *stocked;
     CmdListBody motion;
@@ -479,7 +479,7 @@ void cmdAttackQueueAndSpend(BattleUnit *unit, CmdListBody *command)
     }
     tec = tecRecordGet(owner.actionIdx);
     if (command->command == CMD_KIND_TECHNIQUE) {
-        if (tec->gateFlag == TEC_GATE_NONE || tec->gateFlag == 6 || tec->gateFlag == 7 || tec->gateFlag == 8) {
+        if (tec->techClass == TEC_GATE_NONE || tec->techClass == 6 || tec->techClass == 7 || tec->techClass == 8) {
             boost = CMD_BOOST_PROGRESS;
             if (actStepCounterValue() == CMD_BOOST_ACT_STEP) {
                 boost = CMD_BOOST_PROGRESS_STEP;
@@ -491,12 +491,12 @@ void cmdAttackQueueAndSpend(BattleUnit *unit, CmdListBody *command)
         }
     }
     calcEp(unit, -calcTakeEpGet(unit, owner.actionIdx));
-    if (tec->gateFlag == TEC_GATE_SHOW_CHILD) {
-        unitCurrentAdd(unit, -calcLevelRecordGet(owner.id)->requiredLevel);
+    if (tec->techClass == TEC_GATE_SHOW_CHILD) {
+        unitCurrentAdd(unit, -attackLevelRecordGet(owner.id)->requiredLevel);
     }
     if (unit->stats->key >= UNIT_KEY_LARGE_FIRST && unit->stats->key < UNIT_KEY_LARGE_FIRST + UNIT_KEY_LARGE_COUNT) {
         if (command->command == CMD_KIND_TECHNIQUE) {
-            if (tec->gateFlag >= 6 && tec->gateFlag <= 8) {
+            if (tec->techClass >= 6 && tec->techClass <= 8) {
                 unitCurrentAdd(unit, CMD_LARGE_CURRENT_BONUS);
             }
         }
@@ -544,8 +544,8 @@ void cmdItemAttackQueue(struct AttackCommand *owner, struct BattleUnit *value) {
 #define HIT_KIND_EP_DRAIN_SHARE 9
 #define HIT_KIND_EP_DRAIN_MAX 10
 #define HIT_KIND_TEC_NONE 0xB
-/* The flags byte of HitRecord.hitMode (bits 8 to 15): bit 8 taken, bit 9 blocked. */
-#define HIT_FLAG_TAKEN 0x1
+/* The flags byte of HitRecord.hitMode (bits 8 to 15): bit 8 critical hit, bit 9 blocked. */
+#define HIT_FLAG_CRITICAL 0x1
 #define HIT_FLAG_BLOCKED 0x2
 
 int actionTransformSlotGet(int id);
@@ -618,8 +618,8 @@ int unitJobTypeAtk(struct AttackCommand *command, struct BattleUnit *target, Tec
     } while ((target = tgtFindNext()) != 0);
     eventQueueAddAttackAction(command);
     kind = 1;
-    command->attacker->stats->valueLevel += unitRecordStateGet(command->attacker, command->actionIdx);
-    if (tecRecordGet(command->actionIdx)->gateFlag == 1) {
+    command->attacker->stats->waitWeight += unitRecordStateGet(command->attacker, command->actionIdx);
+    if (tecRecordGet(command->actionIdx)->techClass == 1) {
         kind = 2;
         pair = *command;
         pair.attacker = unitPairPartnerFind(command->attacker, command->id);
@@ -640,7 +640,7 @@ int unitJobTypeAtk(struct AttackCommand *command, struct BattleUnit *target, Tec
  * not held and has the other key of the pair; 0 when there is none. */
 BattleUnit *unitPairPartnerFind(BattleUnit *unit, int value)
 {
-    PairLink *pair;
+    DoubleTechRecord *pair;
     BattleUnit **units;
     BattleUnit *other;
     int key;
@@ -733,7 +733,7 @@ int attackEffectsFinished(struct AttackCommand *owner) {
 
     entry = tecRecordGet(owner->actionIdx);
     status = tecEffectGroupGet(owner->attacker, entry);
-    return unitEffectKeyFree(owner->attacker, status, entry->extent) != 0;
+    return unitEffectKeyFree(owner->attacker, status, entry->effectRecord) != 0;
 }
 
 /* hitPopNumCreate: forwards a hit's target, damage and hit mode to objDmgNumCreate (fourth argument 0). */
@@ -941,7 +941,7 @@ int eventUnitCommand(EventQueueEntry *entry)
     switch (command->command) {
     case CMD_KIND_TECHNIQUE:
         tec = tecRecordGet(command->code);
-        if (tec->gateFlag == TEC_GATE_NONE || tec->gateFlag == 6 || tec->gateFlag == 7 || tec->gateFlag == 8) {
+        if (tec->techClass == TEC_GATE_NONE || tec->techClass == 6 || tec->techClass == 7 || tec->techClass == 8) {
             kind = (tec->flags & TEC_FLAG_SCRIPT_FLAGGED) ? TECHNIQUE_FLAGGED_SCRIPT_EVENT : TECHNIQUE_SCRIPT_EVENT;
             event.words[0] = unitNoGet(target);
             event.words[1] = command->code;
@@ -1027,7 +1027,7 @@ int eventAttackRun(EventQueueEntry *entry)
         command = &eventQueueFindAttackAction(0)->data.attack;
         unitPlayActionSound(command->attacker, command->actionIdx);
         unitsMarkUninvolved(actions, hits);
-        if (tecRecordGet(command->actionIdx)->gateFlag == TEC_GATE_SHOW_CHILD) {
+        if (tecRecordGet(command->actionIdx)->techClass == TEC_GATE_SHOW_CHILD) {
             unitSlotResume(command->attacker, TEC_GATE_CHILD);
         }
         attackStartedState = 1;
@@ -1071,7 +1071,7 @@ int eventAttackRun(EventQueueEntry *entry)
             message.words[1] = ((mode >> HIT_MODE_FLAGS_SHIFT) & HIT_MODE_FLAGS_MASK) | flag;
             unitScriptPairEventSend(UNIT_SCRIPT_KIND_PAIR, &message);
         }
-        if (tecRecordGet(command->actionIdx)->gateFlag == TEC_GATE_SHOW_CHILD) {
+        if (tecRecordGet(command->actionIdx)->techClass == TEC_GATE_SHOW_CHILD) {
             unitSlotPause(command->attacker, TEC_GATE_CHILD);
         }
         attackHitApply(command, hit);
@@ -1239,12 +1239,12 @@ int attackHitApply(struct AttackCommand *command, struct HitRecord *hit)
         }
     }
     tec = tecRecordGet(command->actionIdx);
-    if (tec->gateFlag == TEC_GATE_CURRENT_DRAIN) {
+    if (tec->techClass == TEC_GATE_CURRENT_DRAIN) {
         unitCurrentAdd(hit->target, -TEC_CURRENT_DRAIN_AMOUNT);
     }
     if (command->kind == CMD_KIND_TECHNIQUE
-        && (tec->gateFlag == TEC_GATE_NONE || tec->gateFlag == 6 || tec->gateFlag == 7 || tec->gateFlag == 8)) {
-        unitPercentAdd(command->attacker, ((hit->hitMode.word >> HIT_MODE_FLAGS_SHIFT) & HIT_FLAG_TAKEN)
+        && (tec->techClass == TEC_GATE_NONE || tec->techClass == 6 || tec->techClass == 7 || tec->techClass == 8)) {
+        unitPercentAdd(command->attacker, ((hit->hitMode.word >> HIT_MODE_FLAGS_SHIFT) & HIT_FLAG_CRITICAL)
                                               ? HIT_PERCENT_TAKEN : HIT_PERCENT_PLAIN);
         if (actStepCounterValue() == ACT_STEP_TAKE_STOCK && (hit->hitMode.word & HIT_MODE_KIND_MASK) == HIT_KIND_PLAIN
             && command->attacker != hit->target) {
@@ -1261,11 +1261,11 @@ int attackHitApply(struct AttackCommand *command, struct HitRecord *hit)
             }
         }
     }
-    if ((hit->hitMode.word >> HIT_MODE_FLAGS_SHIFT) & HIT_FLAG_TAKEN) {
-        unitPercentAdd(hit->target, -(hit->target->stats->rollPercent / 2));
+    if ((hit->hitMode.word >> HIT_MODE_FLAGS_SHIFT) & HIT_FLAG_CRITICAL) {
+        unitPercentAdd(hit->target, -(hit->target->stats->counterGauge / 2));
     }
     if (command->kind == CMD_KIND_TECHNIQUE
-        && (tec->gateFlag == TEC_GATE_NONE || tec->gateFlag == 6 || tec->gateFlag == 7 || tec->gateFlag == 8)) {
+        && (tec->techClass == TEC_GATE_NONE || tec->techClass == 6 || tec->techClass == 7 || tec->techClass == 8)) {
         if (actStepCounterValue() == ACT_STEP_ADD_BOOST) {
             calcBp(hit->target, HIT_BOOST_PROGRESS);
         }
@@ -1366,11 +1366,11 @@ int attackHitsShow(EventQueueEntry *entry, struct AttackCommand *command)
                 } else if (flags & HIT_FLAG_BLOCKED) {
                     menuStatPanelNew(MENU_STAT_PANEL_BLOCKED);
                 }
-                if (flags & HIT_FLAG_TAKEN) {
+                if (flags & HIT_FLAG_CRITICAL) {
                     if (actStepCounterGet()->bonusFlag == 1) {
-                        menuStatPanelNew(MENU_STAT_PANEL_TAKEN_BONUS);
+                        menuStatPanelNew(MENU_STAT_PANEL_CRITICAL_BONUS);
                     } else {
-                        menuStatPanelNew(MENU_STAT_PANEL_TAKEN);
+                        menuStatPanelNew(MENU_STAT_PANEL_CRITICAL);
                     }
                 }
                 if (hit->backAttack == 1) {
@@ -1413,7 +1413,7 @@ int attackHitsShow(EventQueueEntry *entry, struct AttackCommand *command)
                     if (effect != 0 && kind == HIT_KIND_PLAIN) {
                         unitEffectStart(hit->target, HIT_EFFECT_GROUP, effect);
                     }
-                    if (flags & HIT_FLAG_TAKEN) {
+                    if (flags & HIT_FLAG_CRITICAL) {
                         unitEffectStart(hit->target, HIT_EFFECT_GROUP, HIT_EFFECT_TAKEN);
                     }
                 }
@@ -1543,7 +1543,7 @@ int flowSpecProc(EventQueueEntry *entry, struct AttackCommand *command)
         break;
     case SPECIAL_ACTION_ITEM_PICK:
         if (attackStep == 0) {
-            if (unitEffectKeyFree(command->attacker, tecEffectGroupGet(command->attacker, tec), tec->extent) != 0) {
+            if (unitEffectKeyFree(command->attacker, tecEffectGroupGet(command->attacker, tec), tec->effectRecord) != 0) {
                 specInoriProc();
                 attackStep++;
             }
@@ -1558,7 +1558,7 @@ int flowSpecProc(EventQueueEntry *entry, struct AttackCommand *command)
         break;
     case SPECIAL_ACTION_STEAL:
         if (attackStep == 0) {
-            if (unitEffectKeyFree(command->attacker, tecEffectGroupGet(command->attacker, tec), tec->extent) != 0) {
+            if (unitEffectKeyFree(command->attacker, tecEffectGroupGet(command->attacker, tec), tec->effectRecord) != 0) {
                 specNusumuProc(hit->target, STEAL_CHANCE_HALF);
                 attackStep++;
             }
@@ -1701,7 +1701,7 @@ void specInoriProc(void)
 /* StatBlock.flags bits specAnalyzeProc turns into the text mode (1 or 2). */
 #define UNIT_TEXT_MODE_1 0x200
 #define UNIT_TEXT_MODE_2 0x400
-/* StatBlock.slotValue entries specAnalyzeProc marks (values from 0x15 on). */
+/* StatBlock.attributeReaction entries specAnalyzeProc marks (values from 0x15 on). */
 #define UNIT_TEXT_SLOT_COUNT 8
 #define UNIT_TEXT_SLOT_MARKED 0x15
 
@@ -1711,7 +1711,7 @@ void specAnalyzeProc(BattleUnit *unit)
 {
     AnalyzeStats block;
     StatBlock *stats;
-    struct TableKeyRecord *record;
+    struct EnemyRewardRecord *record;
     int mode;
     int bits;
     int i;
@@ -1722,9 +1722,9 @@ void specAnalyzeProc(BattleUnit *unit)
     block.maxHp = stats->maxHp;
     block.ep = stats->ep;
     block.maxEp = stats->maxEp;
-    block.exp = record->points;
-    block.skillPoints = record->stepRate;
-    block.classPoints = record->flat;
+    block.exp = record->exp;
+    block.skillPoints = record->skillPoints;
+    block.classPoints = record->classPoints;
     block.rareItemKind = record->firstCategory;
     block.rareItem = record->firstId;
     block.itemKind = record->secondCategory;
@@ -1739,7 +1739,7 @@ void specAnalyzeProc(BattleUnit *unit)
     block.attackType = mode;
     bits = 0;
     for (i = 0; i < UNIT_TEXT_SLOT_COUNT; i++) {
-        if (unit->stats->slotValue[i] >= UNIT_TEXT_SLOT_MARKED) {
+        if (unit->stats->attributeReaction[i] >= UNIT_TEXT_SLOT_MARKED) {
             bits |= 1 << i;
         }
     }
@@ -1748,7 +1748,7 @@ void specAnalyzeProc(BattleUnit *unit)
 }
 
 /* BattleUnit.flags bits of the data box drops already taken from a unit: the first and the second pair of its
- * TableKeyRecord. */
+ * EnemyRewardRecord. */
 #define UNIT_FLAG_DROP_FIRST 0x10000
 #define UNIT_FLAG_DROP_SECOND 0x8000
 /* The data box category whose names itemTextGet gives (the others: hitActionTextGet). */
@@ -1762,7 +1762,7 @@ void specAnalyzeProc(BattleUnit *unit)
  */
 void specNusumuProc(BattleUnit *unit, int percent)
 {
-    struct TableKeyRecord *record;
+    struct EnemyRewardRecord *record;
     char *name;
     int category;
     int id;
@@ -1870,7 +1870,7 @@ void unitRecreate(BattleUnit *owner)
     unitLoadSnapshot(owner, level);
     unitSetAngleRadians(ov01LastUnit, scale);
     dataUnitFileLoad(index);
-    unitEffectSlotAcquire(index);
+    unitEffectFilesSetup(index);
 }
 
 /*
@@ -1934,7 +1934,7 @@ int tecEffectGroupGet(BattleUnit *unit, TecRecord *tec)
 {
     int group;
 
-    switch (tec->gateFlag) {
+    switch (tec->techClass) {
     case 2:
     case 3:
         group = 0;
@@ -1957,7 +1957,7 @@ int tecEffectGroupGet(BattleUnit *unit, TecRecord *tec)
     default:
         group = unit->stats->sequenceIndex;
         if ((unsigned int)(group - TEC_EFFECT_SEQUENCE_FIRST) < TEC_EFFECT_SEQUENCE_COUNT) {
-            if (tec->extent < 8) {
+            if (tec->effectRecord < 8) {
                 group += TEC_EFFECT_SEQUENCE_SHIFT;
             }
         }
@@ -1996,9 +1996,9 @@ void attackEffectsStart(EventQueueEntry *event)
         memset(&request, 0, sizeof(request));
         attack = &eventQueueFindAttackAction(i)->data.attack;
         tec = tecRecordGet(attack->actionIdx);
-        request.key = (tecEffectGroupGet(attack->attacker, tec) << EFFECT_KEY_GROUP_SHIFT) | tec->extent;
+        request.key = (tecEffectGroupGet(attack->attacker, tec) << EFFECT_KEY_GROUP_SHIFT) | tec->effectRecord;
         request.mode = attack->attacker->stats->state;
-        if (tec->gateFlag == TEC_GATE_PAIR) {
+        if (tec->techClass == TEC_GATE_PAIR) {
             partner = unitPairPartnerFind(attack->attacker, attack->id);
             stats = attack->attacker->stats;
             if (stats->key == pairLinkGet(attack->id)->slotFirst) {
@@ -2033,7 +2033,7 @@ void attackEffectsStart(EventQueueEntry *event)
             if ((unsigned char)hitMode == HIT_KIND_PLAIN) {
                 /* Three separate updates of the halfword, as the original stores it three times. */
                 request.hitCode &= EFFECT_HIT_ROW;
-                request.hitCode = (request.hitCode | (unsigned char)tecRecordGet(attack->actionIdx)->actionBits)
+                request.hitCode = (request.hitCode | (unsigned char)tecRecordGet(attack->actionIdx)->attributeBits)
                     & EFFECT_HIT_CODE;
                 request.hitCode |= (hit->target->stats->flags & 3) << EFFECT_HIT_ROW_SHIFT;
             } else {
@@ -2041,7 +2041,7 @@ void attackEffectsStart(EventQueueEntry *event)
             }
             sefCreateEffect(&request);
         }
-        if (tec->gateFlag == TEC_GATE_PAIR) {
+        if (tec->techClass == TEC_GATE_PAIR) {
             break;
         }
     }
@@ -2391,7 +2391,7 @@ int actionResourcesLoad(EventQueueEntry *entry)
     BattleUnit *unit;
     int value;
     TecRecord *tec;
-    TgtIdRecord *record;
+    SpecialAttackRecord *record;
     int first;
     int second;
     int group;
@@ -2400,8 +2400,8 @@ int actionResourcesLoad(EventQueueEntry *entry)
     tec = tecRecordGet(entry->data.args.tecIndex);
     value = entry->data.args.pairIndex;
     ov01ModelEntry = 0;
-    if (tec->timer != 0) {
-        if (tec->gateFlag == TEC_GATE_PAIR) {
+    if (tec->motionIndex != 0) {
+        if (tec->techClass == TEC_GATE_PAIR) {
             if (pairLinkGet(value)->slotFirst == unit->stats->key) {
                 first = 0;
                 second = 1;
@@ -2409,21 +2409,21 @@ int actionResourcesLoad(EventQueueEntry *entry)
                 first = 1;
                 second = 0;
             }
-            ov01ModelEntry = dataMotEntryLoad(tec->timer, first, 0);
-            ov01ModelEntry = dataMotEntryLoad(tec->timer, second, 1);
+            ov01ModelEntry = dataMotEntryLoad(tec->motionIndex, first, 0);
+            ov01ModelEntry = dataMotEntryLoad(tec->motionIndex, second, 1);
         } else {
-            ov01ModelEntry = dataMotEntryLoad(tec->timer, 0, 0);
+            ov01ModelEntry = dataMotEntryLoad(tec->motionIndex, 0, 0);
         }
     }
-    if (tec->gateFlag == TEC_GATE_TARGET_MODEL) {
-        record = tgtIdRecordGet(value);
+    if (tec->techClass == TEC_GATE_TARGET_MODEL) {
+        record = attackTargetRecordGet(value);
         if (record->modelIndex != 0) {
             unit->stats->pairSecond[2] = record->modelJoint;
             ov01ModelEntry = dataModelEntryLoad(record->modelIndex);
         }
     }
     group = tecEffectGroupGet(unit, tec);
-    sefLoadEffect((group << EFFECT_KEY_GROUP_SHIFT) | tec->extent, group);
+    sefLoadEffect((group << EFFECT_KEY_GROUP_SHIFT) | tec->effectRecord, group);
     return 1;
 }
 
@@ -2451,7 +2451,7 @@ int unitAttachRequest(EventQueueEntry *entry)
     if (ov01ModelEntry != 0) {
         unit = entry->data.args.unit;
         unitAttachChild(unit, ov01ModelEntry, 0);
-        if (tecRecordGet(entry->data.args.tecIndex)->gateFlag == 1) {
+        if (tecRecordGet(entry->data.args.tecIndex)->techClass == 1) {
             unitAttachChild(unitPairPartnerFind(unit, entry->data.args.pairIndex), ov01ModelEntry, 1);
         }
     }
@@ -2480,7 +2480,7 @@ int unitSpawnFromRequest(EventQueueEntry *entry)
     unitLoadSnapshot(ov01LastUnit, index);
     unitSetAngleDegrees(ov01LastUnit, value);
     dataUnitFileLoad(id);
-    unitEffectSlotAcquire(id);
+    unitEffectFilesSetup(id);
     ov01LastUnit->flags |= 8;
     return 1;
 }
@@ -2564,7 +2564,7 @@ int battleExecDead(void)
             sefApplyRecordMode(table.units[i]->unit, AURA_KEY(1), SEF_RECORD_MODE_RELEASE);
             sefApplyRecordMode(table.units[i]->unit, AURA_KEY(2), SEF_RECORD_MODE_RELEASE);
             sefApplyRecordMode(table.units[i]->unit, AURA_KEY(3), SEF_RECORD_MODE_RELEASE);
-            if (actStepCounterValue() == 2 && enemyRewardRecordGet(table.units[i]->stats->key)->stepRate != 0) {
+            if (actStepCounterValue() == 2 && enemyRewardRecordGet(table.units[i]->stats->key)->skillPoints != 0) {
                 menuStatPanelNew(STAT_PANEL_DEFEAT);
             }
         } else {
@@ -2690,10 +2690,10 @@ int stat1Proc(BattleUnit *unit, int commandKind, int hitDamage, int hitMode)
         ep -= STATUS_EP_REGEN;
     }
     if (calcStatGet(unit, STAT_ROW_1, STAT1_CURRENT_DRAIN)) {
-        current = unit->stats->currentMax / 4;
+        current = unit->stats->esEnergyMax / 4;
     }
     if (calcStatGet(unit, STAT_ROW_2, STAT2_CURRENT_DRAIN)) {
-        current += unit->stats->currentMax / 2;
+        current += unit->stats->esEnergyMax / 2;
     }
     if (hp != 0) {
         if (hp > 0) {
@@ -2916,7 +2916,7 @@ int eventPairBegin(EventQueueEntry *entry)
         }
         monsActiveSlotsGet(&slots);
         monsSlotHide(slots[0]);
-        sefSetGateDefault(0, tecRecordGet(tecIndex)->extent);
+        sefSetGateDefault(0, tecRecordGet(tecIndex)->effectRecord);
         decoFlagsSetAll();
         screenFlashStart();
         attackFillWait = 0;
@@ -3058,7 +3058,7 @@ int eventPairEnd(EventQueueEntry *entry)
         monsSlotShow(slots[0]);
         calcTurnEnd(entry->data.args.target);
         actStockClearBoost1();
-        sefSetGateDefault(1, tecRecordGet(tecIndex)->extent);
+        sefSetGateDefault(1, tecRecordGet(tecIndex)->effectRecord);
         decoFlagsClearAll();
         event.unit = entry->data.args.unit;
         unitScriptEventSend(PAIR_END_SCRIPT_EVENT, &event);
@@ -3092,7 +3092,7 @@ int (*eventQueueHandlers[EVENT_HANDLER_SLOTS])() = {
     eventNoneRun, eventUnitCommand, (int (*)()) eventWaitUnitQueue, eventAttackRun, eventAttackActionSkip, eventAttackHitSkip,
     actionResourcesLoad, ov01LoadsIdle, unitAttachRequest, unitSpawnFromRequest, unitBindRequest,
     battleExecDead, battleResolveStatus, battleStatusQueueWait, ov01StreamOpen, ov01StreamBind,
-    eventPairBegin, eventPairEnd, eventStockBegin, eventActStockBoostClear, eventWaitCountdown,
+    eventPairBegin, eventPairEnd, eventCombinedEtherBegin, eventActStockBoostClear, eventWaitCountdown,
 };
 DoublewordAlignedVector4 pairSavedPos[3] = { 0 };
 float pairSavedAngle[3] = { 0 };

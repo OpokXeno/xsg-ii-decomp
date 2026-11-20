@@ -26,6 +26,7 @@ typedef struct CdReadMode {
 typedef struct CdArchiveEntry {
     unsigned char source;   /* CD_SOURCE_*, or CD_SOURCE_UNUSED */
     unsigned char unmodeled_01;
+    /* 1 for an extended (packed) archive record; the read takes the extract path for it. */
     unsigned char packed;
     unsigned char unmodeled_03;
     unsigned char *destination;
@@ -60,8 +61,8 @@ void xglCdStreamReadRingCore(CdStreamParam *stream);
 /* A CD sector is fixed at 2048 bytes on this drive/read path (see also
  * xglCdStreamReadRing's own `& -2048` sector rounding later in this TU). */
 #define CD_SECTOR_BYTES 2048
-#define ARC_RECORD_EXTENDED        0x80
-#define ARC_RECORD_TYPE_EXTENDED   0x40
+#define ARC_RECORD_DIRECTORY        0x80
+#define ARC_RECORD_PACKED   0x40
 #define ARC_RECORD_LENGTH_MASK     0x3f
 #define ARC_RECORD_HEADER_BYTES    7
 #define ARC_RECORD_TYPE_EXTRA_BYTES 3
@@ -789,9 +790,9 @@ int xglCdGetFilePosSub(CdArchiveEntry *entry, const char *path)
     }
     path_length = cursor - path;
     while ((flags = *record) != 0) {
-        packed = flags & ARC_RECORD_TYPE_EXTENDED;
+        packed = flags & ARC_RECORD_PACKED;
         length = flags & ARC_RECORD_LENGTH_MASK;
-        if ((flags & ARC_RECORD_EXTENDED) != 0) {
+        if ((flags & ARC_RECORD_DIRECTORY) != 0) {
             if (record[1] != 0) {
                 current.part.depth -= record[1];
                 directory[current.part.depth + 1][-1] = 0;
@@ -1271,22 +1272,23 @@ void xglCdReadCancel(int immediate)
 }
 
 /* Unsized: the original addresses it absolutely, not through $gp. */
-extern signed char xglCdStreamsActive[];
+extern signed char xglCdDispatchState[];
 
-/* Services the stream list when xglCdStreamsActive is set. */
+/* Services the pending CD request when the library is not idle (the xglCdDispatchState byte, LW.dispatch_state);
+   returns 1 when it did. */
 int xglCdServiceIfPending(void)
 {
-    if (xglCdStreamsActive[0] == 0) {
+    if (xglCdDispatchState[0] == 0) {
         return 0;
     }
     xglCdServiceRead();
     return 1;
 }
 
-/* Returns the stream-service flag xglCdStreamsActive. */
+/* Returns nonzero while the library is not idle (the xglCdDispatchState byte, LW.dispatch_state). */
 signed char xglCdGetServicePending(void)
 {
-    return xglCdStreamsActive[0];
+    return xglCdDispatchState[0];
 }
 
 /* Nonzero when the CD side has finished its last request. */
@@ -1638,7 +1640,7 @@ int xglCdStreamClose(CdStreamParam *stream)
         break;
     }
     if (last) {
-        xglCdStreamsActive[0] = 0;
+        xglCdDispatchState[0] = 0;
     }
     return 0;
 }
@@ -2152,10 +2154,10 @@ int xglCdArcInitSub1(CdArchiveEntry *archive_entry,
  * table's last record so the caller can place fresh data there.
  *
  * Each record begins with a one-byte length/flags field:
- *   - ARC_RECORD_EXTENDED set: no fixed header past this byte.
- *   - ARC_RECORD_EXTENDED clear: a fixed ARC_RECORD_HEADER_BYTES-byte header
+ *   - ARC_RECORD_DIRECTORY set: a directory record (a name follows), no fixed header past this byte.
+ *   - ARC_RECORD_DIRECTORY clear: a fixed ARC_RECORD_HEADER_BYTES-byte header
  *     follows, extended by ARC_RECORD_TYPE_EXTRA_BYTES more bytes when
- *     ARC_RECORD_TYPE_EXTENDED is also set.
+ *     ARC_RECORD_PACKED is also set.
  *   - ARC_RECORD_LENGTH_MASK (the low bits) is the record's payload length,
  *     walked past after the fixed header, if any.
  * A zero length/flags byte ends the table.
@@ -2166,8 +2168,8 @@ unsigned char *xglCdArcInitSub2(unsigned char *archive_data)
     unsigned char value = *cursor;
 
     while (value != 0) {
-        int high_bit = value & ARC_RECORD_EXTENDED;
-        int type_flag = value & ARC_RECORD_TYPE_EXTENDED;
+        int high_bit = value & ARC_RECORD_DIRECTORY;
+        int type_flag = value & ARC_RECORD_PACKED;
         if (high_bit == 0) {
             cursor += ARC_RECORD_HEADER_BYTES;
             if (type_flag != 0)

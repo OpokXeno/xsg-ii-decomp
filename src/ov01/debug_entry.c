@@ -1,6 +1,6 @@
 /*
  * The BATTLE CONFIG debug menu: a main page (THINK, MONSTER SET, the three
- * party rows, mute flags, LEARN ALL, CF FLAG, GATTAI, MEMBER), an equip page
+ * party rows, invincible (MUTEKI) and ICHIGEKI rows, LEARN ALL, CF FLAG, GATTAI, MEMBER), an equip page
  * for the selected unit, and a script page.
  */
 #include "common.h"
@@ -32,7 +32,6 @@
 #define CONFIG_NO_MAX 999
 #define CONFIG_GATTAI_BASE 0x16000
 #define SKILL_CYCLE_LEN 5
-#define TEXT_OPTION_SELECT 0x20
 #define CONFIG_PARTY_CHARA_MAX 0xF
 #define CONFIG_PARTY_POS_MAX 0x1F
 #define CONFIG_CF_FLAG_MAX 0xFFFF
@@ -165,7 +164,8 @@ int configMenuRun(int mode)
 int valUD(int *value, int min, int max, int step);
 
 /* Row cursor of a debug menu: counts the handlers, moves the cursor, clears the marker column when the
- * cursor row changes, draws the marker and runs the handler of the current row. */
+ * cursor row changes, draws the marker and runs the handler of the current row. The original has no return
+ * statement: the caller's menuDone takes whatever the row handler left in the return register. */
 int configMenuUpdate(int (**rowHandlers)(void), int baseX, int baseY, int *markerColumn, int *cursorRow)
 {
     int handlerCount;
@@ -299,7 +299,7 @@ void configMainPageDraw(int x, int y)
 }
 
 
-/* Cloth name of a unit: table entry unit + 1 resolved to a name, "NULL" when missing. */
+/* Cloth name of a unit: clothIds[unit - 1] resolved to a name, "NULL" when missing. */
 void *unitClothNameGet(int unit)
 {
     PartyStatusBlock *status;
@@ -345,7 +345,7 @@ void configEquipPageDraw(int x, int y)
 }
 
 /* STOCK MUGEN apply: run by configMenuFrame only when the
- * STOCK MUGEN row value is nonzero. Copies byte 0 of the stock record to byte 1. */
+ * STOCK MUGEN row value is nonzero. Sets the stock of boost gauge record 0 to its maximum stock count. */
 void configStockMugenApply(void) {
     struct BoostGauge *stockRecord;
 
@@ -458,12 +458,12 @@ int configScriptPage(void)
 }
 
 
-/* Nonzero while the TEXT_OPTION_SELECT bit of PadData[0].pressed is set. */
+/* Nonzero while the PAD_CIRCLE bit of PadData[0].pressed is set. */
 int configStart(void)
 {
     int selectBit;
 
-    selectBit = PadData[0].pressed & TEXT_OPTION_SELECT;
+    selectBit = PadData[0].pressed & PAD_CIRCLE;
     return selectBit != 0;
 }
 
@@ -564,7 +564,7 @@ int configLearnAll(void) {
 /* Row 14 of the main page: when the select flag is set, refreshes the battle slots. Returns 0. */
 int configBattleSlotsRefresh(void)
 {
-    if ((PadData[0].pressed & TEXT_OPTION_SELECT) != 0) {
+    if ((PadData[0].pressed & PAD_CIRCLE) != 0) {
         battleSlotsRestoreAll();
     }
     return 0;
@@ -610,7 +610,7 @@ int configMember(void)
 int configUnitSelect(void)
 {
     valLR(&configUnitIndex, 1, CONFIG_UNIT_INDEX_MAX, 1);
-    if ((PadData[0].pressed & TEXT_OPTION_SELECT) != 0 && configUnitIndex != 0) {
+    if ((PadData[0].pressed & PAD_CIRCLE) != 0 && configUnitIndex != 0) {
         configPageState = CONFIG_PAGE_EQUIP;
         configEquipColumn = 0;
     }
@@ -632,7 +632,7 @@ int equipSkill(void)
     while (skillIndex < SKILL_CYCLE_LEN && configEquipColumn != configEquipSkillColumns[skillIndex]) {
         skillIndex++;
     }
-    if (PadData[0].pressed & TEXT_OPTION_SELECT) {
+    if (PadData[0].pressed & PAD_CIRCLE) {
         if (skillIndex < SKILL_CYCLE_LEN - 1) {
             skillIndex = skillIndex + 1;
         } else {
@@ -658,7 +658,7 @@ int configLearnSkill(void)
     while (skillIndex < SKILL_CYCLE_LEN && configEquipColumn != configLearnSkillColumns[skillIndex]) {
         skillIndex++;
     }
-    if (PadData[0].pressed & TEXT_OPTION_SELECT) {
+    if (PadData[0].pressed & PAD_CIRCLE) {
         int nextEntry;
 
         if (skillIndex < SKILL_CYCLE_LEN - 1) {
@@ -696,7 +696,7 @@ int configAcc(void)
     while (skillIndex < SKILL_CYCLE_LEN && configEquipColumn != configAccColumns[skillIndex]) {
         skillIndex++;
     }
-    if (PadData[0].pressed & TEXT_OPTION_SELECT) {
+    if (PadData[0].pressed & PAD_CIRCLE) {
         if (skillIndex < SKILL_CYCLE_LEN - 1) {
             skillIndex = skillIndex + 1;
         } else {
@@ -806,7 +806,7 @@ int configScriptNo(void)
     int flags;
 
     valLR(&configScriptNumber, 0, CONFIG_SCRIPT_NO_MAX, 1);
-    flags = PadData[0].pressed & TEXT_OPTION_SELECT;
+    flags = PadData[0].pressed & PAD_CIRCLE;
     return flags != 0;
 }
 

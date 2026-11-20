@@ -43,17 +43,18 @@ float xglWrapDegrees(float degrees) {
 #include "main/gr_screen.h"
 
 
-/* GS TEX0 of a 512x512 PSMCT32 frame page (TBW 8, TW and TH 9): buffer 0 is the display page with CBP set to
- * frame_base_1, buffer 1 the page copy_base, buffer 2 the page frame_base; tex_cc goes to TCC, TFX stays 0. */
+/* GS TEX0 of a 512x512 PSMCT32 frame page (TBW 8, TW and TH 9): buffer 0 is the display page with the texture base
+ * page in CBP (no effect for PSMCT32), buffer 1 the draw page (draw_buffer_base), buffer 2 the work page
+ * (vram.work_buffer_base); tex_cc goes to TCC, TFX stays 0. */
 u64 gsMakeTex0(int buffer, int tex_cc)
 {
     switch (buffer) {
     case 0:
-        return GS_SET_TEX0(sRender.display_buffer_base << 5, 8, GS_PSMCT32, 9, 9, tex_cc, 0, sRender.vram.second_base, 0, 0, 0, 0);
+        return GS_SET_TEX0(sRender.display_buffer_base << 5, 8, GS_PSMCT32, 9, 9, tex_cc, 0, sRender.vram.texture_base, 0, 0, 0, 0);
     case 1:
         return GS_SET_TEX0(sRender.draw_buffer_base << 5, 8, GS_PSMCT32, 9, 9, tex_cc, 0, 0, 0, 0, 0, 0);
     case 2:
-        return GS_SET_TEX0(sRender.vram.flip_base << 5, 8, GS_PSMCT32, 9, 9, tex_cc, 0, 0, 0, 0, 0, 0);
+        return GS_SET_TEX0(sRender.vram.work_buffer_base << 5, 8, GS_PSMCT32, 9, 9, tex_cc, 0, 0, 0, 0, 0, 0);
     default:
         return 0;
     }

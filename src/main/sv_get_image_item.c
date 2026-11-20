@@ -121,9 +121,9 @@ static u8 svDrawStatePacketBuffer[256];
 static SvViewUpload svViewUpload;
 static DrawList svDrawList;
 static u8 _scheduler[0x29C00];
-extern u32 svDrawModeTagTable[];
-extern int svStaticRefQuadwordCount[];
-extern unsigned char svStaticRefData[];
+extern u32 svDrawModeRoutineTable[];
+extern int svEffectMicrocodeQuadwords[];
+extern unsigned char svEffectMicrocodeData[];
 
 /*
  * Clears the depth-sort state: the item count, the 0x200 bucket heads
@@ -299,7 +299,7 @@ void svDrawListAppend(int vuAddress, int operand_a, int operand_b)
 void sceVif1PkAddUpkData128(XglPacket *packet, Quadword word);
 extern u8 D_80[];
 extern u8 D_110[];
-extern u32 svDrawRecordDivisors[];
+extern u32 svDrawRecordQuadwords[];
 
 /* Emits the VIF packet for `count` records at `entry`: sceVif1PkRef calls and UNPACK headers, split at 0x100 records. */
 void svDrawListEmit(XglPacket *packet, DrawListEntry *records, int pending_count)
@@ -313,7 +313,7 @@ void svDrawListEmit(XglPacket *packet, DrawListEntry *records, int pending_count
 
     drawMode = svDrawMode;
     sourceAddress = (u32) records & 0xfffffff;
-    divisor = svDrawRecordDivisors[drawMode * 2];
+    divisor = svDrawRecordQuadwords[drawMode * 2];
     header = (DrawListEntry *) (svDrawList.entries + svDrawList.begin_index);
     countMinusOne = pending_count - 1;
     if (drawMode == 13) {
@@ -370,7 +370,7 @@ void svDrawListFlush(int pending_count)
                       pending_count);
         sceVif1PkCnt(packet, 0);
         sceVif1PkAddCode(packet, 0x11000000);
-        tag = svDrawModeTagTable[svDrawMode * 2];
+        tag = svDrawModeRoutineTable[svDrawMode * 2];
         sceVif1PkAddCode(packet, (tag >> 3) | 0x14000000);
         sceVif1PkAddCode(packet, 0x11000000);
         entry = (DrawListEntry *) (svDrawList.entries + svDrawList.begin_index);
@@ -388,14 +388,14 @@ void svDrawListTryFlush(void)
     }
 }
 
-void svDrawSendStaticRef(void)
+void svDrawLoadEffectMicrocode(void)
 {
     XglPacket *packet;
 
     packet = xglPacketGetCurrent();
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddCode(packet, 0x11000000);
-    sceVif1PkRef(packet, svStaticRefData, svStaticRefQuadwordCount[0], 0, 0, 0);
+    sceVif1PkRef(packet, svEffectMicrocodeData, svEffectMicrocodeQuadwords[0], 0, 0, 0);
 }
 
 #include "main/xgl_camera.h"
@@ -1125,6 +1125,7 @@ void svDeleteImageMapperID(int entryCount) {
 void svDeleteImageMapperByDimensions(int dimensions) {
     int listIndex;
 
+    /* the loop reaches index 57, one past the 57 mapper lists (original) */
     for (listIndex = 9; listIndex < 58; listIndex++) {
         if (_imageMapper.typeLists[listIndex].dimensions == dimensions) {
             svImageListDestroy(&_imageMapper.typeLists[listIndex]);
@@ -1774,7 +1775,7 @@ typedef struct SvTransformBlock {
     unsigned char unmodeled_40[0x40];
     Vector4 rotated_rows[3];
     unsigned char unmodeled_B0[0x140 - 0xB0];
-    Vector4 rotation_aux;      /* +0x140 */
+    Vector4 position;         /* +0x140: the point position */
     unsigned char unmodeled_150[0x160 - 0x150];
     Vector4 scale;
     unsigned char unmodeled_170[0x1C0 - 0x170];
@@ -1872,17 +1873,17 @@ void svBuildItemMatrix(Vector4 *point, SvTransformBlock *transform, int useFixed
 }
 
 
-/* Partial view of the render item svSetModelRenderState draws: the scale vector at +0x160, the fixed-point position at +0x1D0 whose w word at +0x1DC is the transparency (0x80 is opaque), the part at +0x1E8, the bias at +0x248 and the stencil index at +0x28C. */
+/* Partial view of the render item svSetModelRenderState draws: the scale vector at +0x160, the item colour at +0x1D0 whose w word at +0x1DC is the transparency (0x80 is opaque), the part at +0x1E8, the animation time at +0x248 and the stencil index at +0x28C. */
 typedef struct SvRenderItem {
     unsigned char unmodeled_00[0x160];
     Vector4 scale;
     unsigned char unmodeled_170[0x1D0 - 0x170];
-    int position[3];
+    int color[3];
     unsigned int transparency;
     unsigned char unmodeled_1E0[0x1E8 - 0x1E0];
     struct SvRenderPart *part;
     unsigned char unmodeled_1EC[0x248 - 0x1EC];
-    float bias;
+    float animTime;
     unsigned char unmodeled_24C[0x28C - 0x24C];
     int stencilIndex;
 } SvRenderItem;
@@ -1894,12 +1895,12 @@ typedef struct SvRenderPart {
     TxyBlock *txyBlock;
 } SvRenderPart;
 
-/* The view block svSetModelRenderState writes: the scaled vertex position at +0xD0 and its copy at +0xE0. */
-typedef struct SvViewBlock {
+/* The light set block svSetModelRenderState writes through svActiveLightSet: the two ambient colours at +0xD0 and +0xE0, both set to the scaled item colour. */
+typedef struct SvLightSetColors {
     unsigned char unmodeled_00[0xD0];
-    AlignedVector4 scaled;
-    AlignedVector4 scaledCopy;
-} SvViewBlock;
+    AlignedVector4 ambient;
+    AlignedVector4 ambientCopy;
+} SvLightSetColors;
 
 extern const u64 svStencilTable[];
 extern void *svActiveLightSet;
@@ -1911,7 +1912,7 @@ void svSetModelRenderState(SvRenderItem *item, Matrix4 *matrix, int scale)
     u64 stencil;
     const Vector4 *vertexScale;
     AlignedVector4 *vertexOut;
-    SvViewBlock *view;
+    SvLightSetColors *view;
     SefFogOverride *fog;
     int itemFlags;
     AlignedVector4 vertex;
@@ -1929,12 +1930,12 @@ void svSetModelRenderState(SvRenderItem *item, Matrix4 *matrix, int scale)
         "vitof0.xyzw vf2, vf2\n\t"
         "vmulx.xyz vf2, vf2, vf1x\n\t"
         "sqc2 vf2, 0(%1)"
-        : : "r"(item->position), "r"((AlignedVector4 *) &svEffectLightSet[208]) : "$8", "$f0");
+        : : "r"(item->color), "r"((AlignedVector4 *) &svEffectLightSet[208]) : "$8", "$f0");
     do {
         vertexScale = svVertexScale;
     } while (0);
     vertexOut = &vertex;
-    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(item->position));
+    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(item->color));
     if (vertexScale != 0) {
         __asm__ __volatile__(
             "lqc2 vf2, 0(%1)\n\t"
@@ -1946,6 +1947,7 @@ void svSetModelRenderState(SvRenderItem *item, Matrix4 *matrix, int scale)
             : : "r"(&svColorMaxVector), "r"(vertexScale));
     }
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(vertexOut));
+    /* svActiveLightSet is a light set; the block below is its two ambient colours */
     view = svActiveLightSet;
     __asm__ __volatile__("li.s $f0, 0.0078125" : : : "$f0");
     __asm__ __volatile__(
@@ -1955,8 +1957,8 @@ void svSetModelRenderState(SvRenderItem *item, Matrix4 *matrix, int scale)
         "vitof0.xyzw vf2, vf2\n\t"
         "vmulx.xyz vf2, vf2, vf1x\n\t"
         "sqc2 vf2, 0(%1)"
-        : : "r"(&vertex), "r"(&view->scaled) : "$8", "$f0");
-    QuadwordCopyT0(&view->scaledCopy, &view->scaled);
+        : : "r"(&vertex), "r"(&view->ambient) : "$8", "$f0");
+    QuadwordCopyT0(&view->ambientCopy, &view->ambient);
 
     nmlModelSetStencil(stencil);
     if (stencil != 0) {
@@ -1966,7 +1968,7 @@ void svSetModelRenderState(SvRenderItem *item, Matrix4 *matrix, int scale)
     if (item->part->txyBlock != 0 && item->part->submitBlock != 0) {
         itemFlags = svItemDrawFlags;
         pxySetLightCopy(svActiveLightSet);
-        pxySetAnimTime(item->bias);
+        pxySetAnimTime(item->animTime);
         nmlModelSetTexture(item->part->txyBlock);
         nmlModelSetDrawMatrix(*matrix);
         nmlModelSetTransparency((float) item->transparency * 0.0078125f);
@@ -3569,17 +3571,17 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
             }
             if (hasPartScale != 0) {
                 if (reflectFlag != 0) {
-                    svSubVectorXYZ(&localPosition, &slot->rotation_aux, &sefGlobalTransform.position);
+                    svSubVectorXYZ(&localPosition, &slot->position, &sefGlobalTransform.position);
                     svBuildItemMatrix(&localPosition, slot, scaledRecord, s19Mask8);
                     svCopyVector((Vector4 *) &sefGlobalTransform.matrix[3], &sefGlobalTransform.position);
                 } else {
-                    svSubVectorXYZ(&localPosition, &slot->rotation_aux, &slot->pivot);
+                    svSubVectorXYZ(&localPosition, &slot->position, &slot->pivot);
                     svBuildItemMatrix(&localPosition, slot, scaledRecord, s19Mask8);
                     svCopyVector((Vector4 *) &sefGlobalTransform.matrix[3], &slot->pivot);
                 }
                 vu0CurMatrixMulRight((Vector4 *) &sefGlobalTransform);
             } else {
-                svBuildItemMatrix(&slot->rotation_aux, slot, scaledRecord, s19Mask8);
+                svBuildItemMatrix(&slot->position, slot, scaledRecord, s19Mask8);
             }
             if (svRecordSourceRowsPointer != 0) {
                 vu0CurMatrixMulRight(svRecordSourceRowsPointer);
@@ -3611,7 +3613,7 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
                 continue;
             }
             ctx.quad = &slot->scale;
-            slotPosition = &slot->rotation_aux;
+            slotPosition = &slot->position;
             if (hasPartScale != 0) {
                 __asm__ __volatile__("lqc2 vf20, 0(%0)" : : "r"(slotPosition));
                 if (reflectFlag != 0) {
@@ -4169,7 +4171,7 @@ void sefCullSchedulerEntries(void) {
         visibleSlots[visibleCount].recordIndex = i;
         visibleSlots[visibleCount].disabled = 0;
         if (record->flags & 0x01000000) {
-            radius = record->fieldA60;
+            radius = record->cullRadius;
             sefTransformClipPoint((Vector4 *) SV_SCRATCHPAD, &record->position);
             if (1.0f < record->scale.x) {
                 radius *= record->scale.x;
@@ -4276,7 +4278,7 @@ void svDrawScene(void)
     activeMapper = -1;
     drawMode = _draw3D;
     entries = sefEntryCountsEntryGet(0);
-    svDrawSendStaticRef();
+    svDrawLoadEffectMicrocode();
     svDrawSendViewSetup();
     svSetZTestEnv(1);
     if ((drawMode == SV_RENDER_2D && entries[0].buffers.first != 0) || (drawMode == SV_RENDER_2D_SPRITE && entries[0].buffers.second != 0)) {
@@ -4402,9 +4404,9 @@ float svDefaultScreenParamsTail[4] = {
     1.0f
 };
 
-u32 svDrawModeTagTable[] = { 0 };
+u32 svDrawModeRoutineTable[] = { 0 };
 
-u32 svDrawRecordDivisors[31] = {
+u32 svDrawRecordQuadwords[31] = {
     0x00000000u, 0x000006D0u, 0x0000000Eu, 0x000009D8u, 0x0000001Cu, 0x000001D8u, 0x0000000Eu, 0x00000430u,
     0x0000001Cu, 0x00000D28u, 0x00000011u, 0x00000D58u, 0x00000022u, 0x00000D38u, 0x00000011u, 0x00000D68u,
     0x00000022u, 0x00000D48u, 0x00000011u, 0x00000D78u, 0x00000022u, 0x00001688u, 0x0000000Eu, 0x000018D8u,

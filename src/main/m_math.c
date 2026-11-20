@@ -694,9 +694,8 @@ Vector4 *MMathDivVectorS4(Vector4 *destination, const Vector4 *source, float sca
     return destination;
 }
 
-/* 128-bit equality test: 1 when the two quadwords are identical, else 0. The hand-written MMI block
- * compares both doubleword halves of the xor mask; MMathIsVectorEqual4 differs only in the permute
- * before the second movn. The original keeps an untouched 16-byte frame: the unused scratch quadword. */
+/* Equality of the x, y and z words of two quadwords: 1 when they match, else 0. The w word is not compared;
+ * MMathIsVectorEqual4 compares all four words. The original keeps an untouched 16-byte frame: the unused scratch quadword. */
 short MMathIsVectorEqual(const Vector4 *first, const Vector4 *second)
 {
     short equal;

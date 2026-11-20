@@ -25,7 +25,7 @@ extern void *mapObjectResources[MAP_RESOURCE_COUNT];
 extern MapBits mapMainHideMask;
 extern MapBits mapSecondHideMask;
 extern int mapSecondPartMask[10];
-/* Frames the pause-search wait still counts (game_camera.c counts it down, -1 once it ran out). */
-extern int uwamonoSearchWaitCount;
+/* Frames the SQUARE attack on a map object still counts (game_camera.c counts it down, -1 once it ran out). */
+extern int uwamonoSquareWaitCount;
 
 #endif /* INCLUDE_MAIN_GAME_MAP_OBJECT_H */

@@ -7,6 +7,16 @@
 #include "main/msg_state.h"
 #include "main/game_data.h"
 
+#include "shared.h"
+#include "main/menu_scene.h"
+#include "main/xgl_flags.h"
+#include "main/tya_display_setting.h"
+#include "ov01/calc.h"
+#include "main/xgl_cd.h"
+#include "main/msg_balance.h"
+#include "main/save_party_init.h"
+#include "main/menu_selection.h"
+
 /* Member ids from 11 on are back members: they take the back slots 7-9. */
 #define BACK_MEMBER_ID 11
 /* memberClothIdTable layout (ptGetClothId): the late-story cloth ids of members 1-7 (indexed by member - 1), then
@@ -33,16 +43,6 @@ PartyMember *ptGetMenuMember(void)
     }
     return member;
 }
-
-#include "shared.h"
-#include "main/menu_scene.h"
-#include "main/xgl_flags.h"
-#include "main/game_over_065.h"
-#include "ov01/calc.h"
-#include "main/xgl_cd.h"
-#include "main/msg_balance.h"
-#include "main/save_party_init.h"
-#include "main/menu_selection.h"
 
 /* The battle state record of the member the menu shows. */
 StatBlock *ptGetMenuMemberState(void) {
@@ -875,14 +875,14 @@ void ptLoadPartyModels(void)
     resPlayerSlotsLoadModels(modelId0, modelId1, modelId2);
 }
 
-extern SaveFlagBlock1080 battleSlotTable;
-extern SaveFlagBlock400 slotRecordTable;
+extern SaveBattleSlots battleSlotTable;
+extern SaveSlotRecords slotRecordTable;
 extern SaveShortTable dataBoxQuantityTable1;
 extern SaveShortTable dataBoxQuantityTable2;
 extern SaveShortTable dataBoxQuantityTable3;
 extern SaveShortTable dataBoxQuantityTable4;
 extern int startStockCount;
-extern SaveWords4 sdvSpecialBuf;
+extern SaveWords4 brokenEnemyBuf;
 extern QuestFlagBlock questFlags;
 extern CitizenFlagBlock citizenFlags;
 extern SegFlagBlock segAddrOnFlags;
@@ -909,7 +909,7 @@ void saveChecksum(struct SaveData *image, long long *sum)
  * counters, then the checksum. The blocks are copied through their address
  * (the original addresses them as SaveData+offset constants, not from the
  * SaveData base). */
-#define MAP_ID_GAME_END 0x1B91 /* game_over_059.c's name; entering it sets the progress record's mapFlag */
+#define MAP_ID_GAME_END 0x1B91 /* game_over.c's name; entering it sets the progress record's mapFlag */
 #define SAVE_VERSION 200
 
 void saveWriteImage(void)
@@ -923,14 +923,14 @@ void saveWriteImage(void)
     ptRefresh();
     xglClockRead(&now);
     xglClockUInt2DayTime(&SaveData.playTime, xglClockDayTime2UInt(&now) - ptState.progress->playTime);
-    *(SaveFlagBlock1080 *)(u8 *)&SaveData.flagBlock1080 = battleSlotTable;
-    *(SaveFlagBlock400 *) (unsigned char *) &SaveData.flagBlock400 = slotRecordTable;
+    *(SaveBattleSlots *)(u8 *)&SaveData.battleSlots = battleSlotTable;
+    *(SaveSlotRecords *) (unsigned char *) &SaveData.slotRecords = slotRecordTable;
     *(SaveShortTable *) (unsigned char *) &SaveData.shortTables[0] = dataBoxQuantityTable1;
     *(SaveShortTable *) (unsigned char *) &SaveData.shortTables[1] = dataBoxQuantityTable2;
     *(SaveShortTable *) (unsigned char *) &SaveData.shortTables[2] = dataBoxQuantityTable3;
     *(SaveShortTable *) (unsigned char *) &SaveData.shortTables[3] = dataBoxQuantityTable4;
-    *(SaveWords4 *) (unsigned char *) &SaveData.words2E70 = sdvSpecialBuf;
-    SaveData.word2E6C = startStockCount;
+    *(SaveWords4 *) (unsigned char *) &SaveData.brokenEnemyBuf = brokenEnemyBuf;
+    SaveData.startStockCount = startStockCount;
     party = &SaveData.party;
     if (gameWork.mapId == MAP_ID_GAME_END) {
         ptState.progress->mapFlag = 1;
@@ -959,7 +959,7 @@ void saveWriteImage(void)
         } else {
             party->rosterIds[i] = 0;
         }
-        party->names[i] = ptMemberTakenTable[i];
+        party->takenBits[i] = ptMemberTakenTable[i];
     }
     if (ptState.splitMode == 0) {
         PartyMember *leader = ptState.slots[ptState.frontIndex];
@@ -967,10 +967,10 @@ void saveWriteImage(void)
         if (leader != 0) {
             party->leaderId = leader->id;
             leaderInfo = calcTotalParaMenu(leader->id);
-            party->leaderValue = leaderInfo->expLevel;
+            party->leaderLevel = leaderInfo->expLevel;
         } else {
             party->leaderId = 0;
-            party->leaderValue = 0;
+            party->leaderLevel = 0;
         }
         for (i = 0; i < PARTY_FRONT_SLOTS; i++) {
             if (ptState.slots[i] != 0) {
@@ -985,10 +985,10 @@ void saveWriteImage(void)
         if (leader != 0) {
             party->leaderId = leader->id;
             leaderInfo = calcTotalParaMenu(leader->id);
-            party->leaderValue = leaderInfo->expLevel;
+            party->leaderLevel = leaderInfo->expLevel;
         } else {
             party->leaderId = 0;
-            party->leaderValue = 0;
+            party->leaderLevel = 0;
         }
         for (i = 0; i < PARTY_BACK_SLOTS; i++) {
             if (ptState.slots[i + PARTY_FRONT_SLOTS] != 0) {
@@ -1016,7 +1016,7 @@ void saveWriteImage(void)
 
 /* Restores the play time base, the global blocks and the party from the save
  * image: the reverse of saveWriteImage. The blocks are read through a cast of
- * their address: with plain assignments (battleSlotTable = SaveData.flagBlock1080;
+ * their address: with plain assignments (battleSlotTable = SaveData.battleSlots;
  * ...) gcc computes the later source addresses from one SaveData base register
  * and allocates other registers; through the cast each source is a
  * SaveData+offset constant (lui/addiu), as in the original. */
@@ -1031,14 +1031,14 @@ void saveReadImage(void)
     xglClockRead(&now);
     playTime = xglClockDayTime2UInt(&SaveData.playTime);
     ptState.progress->playTime = xglClockDayTime2UInt(&now) - playTime;
-    battleSlotTable = *(SaveFlagBlock1080 *) (unsigned char *) &SaveData.flagBlock1080;
-    slotRecordTable = *(SaveFlagBlock400 *) (unsigned char *) &SaveData.flagBlock400;
+    battleSlotTable = *(SaveBattleSlots *) (unsigned char *) &SaveData.battleSlots;
+    slotRecordTable = *(SaveSlotRecords *) (unsigned char *) &SaveData.slotRecords;
     dataBoxQuantityTable1 = *(SaveShortTable *) (unsigned char *) &SaveData.shortTables[0];
     dataBoxQuantityTable2 = *(SaveShortTable *) (unsigned char *) &SaveData.shortTables[1];
     dataBoxQuantityTable3 = *(SaveShortTable *) (unsigned char *) &SaveData.shortTables[2];
     dataBoxQuantityTable4 = *(SaveShortTable *) (unsigned char *) &SaveData.shortTables[3];
-    sdvSpecialBuf = *(SaveWords4 *) (unsigned char *) &SaveData.words2E70;
-    startStockCount = SaveData.word2E6C;
+    brokenEnemyBuf = *(SaveWords4 *) (unsigned char *) &SaveData.brokenEnemyBuf;
+    startStockCount = SaveData.startStockCount;
     party = &SaveData.party;
     ptState.progress->mapFlag = party->mapFlag;
     ptState.progress->memberMask = party->memberMask;
@@ -1064,7 +1064,7 @@ void saveReadImage(void)
         } else {
             ptState.roster[i] = 0;
         }
-        ptMemberTakenTable[i] = party->names[i];
+        ptMemberTakenTable[i] = party->takenBits[i];
     }
     ptRefresh();
 }
@@ -1075,7 +1075,7 @@ void saveReadImage(void)
 /* Restores gameWork, the quest, citizen and segment flags and the balance
  * from the save image. A save made on MAP_ID_GAME_END resumes on
  * MAP_ID_GAME_END_RESUME with story progress 0x75. CONTROL_SOFT_RESET and
- * the control bits 27, 26 and 20 do not survive a load (runtimeSystem in runtime_prog_effect.c
+ * the control bits 27, 26 and 20 do not survive a load (runtimeSystem in runtime.c
  * sets 27 and toggles 20). The original copies the flag blocks inline in the
  * order quest, citizen, segment, all addressed from &SaveData.questFlags. A
  * plain memcpy is a call (the build has -fno-builtin), and plain struct
@@ -1136,23 +1136,6 @@ PartyMember *ptGetMember(int index) {
 
 PartyStatusBlock *ptGetStatusBlock(void) {
     return &ptStatusBlock;
-}
-
-
-int talkCheck(void) {
-    int previous;
-
-    previous = talkResult;
-    talkResult = -1;
-    if (msgWindowBusy() != 0) {
-        return -1;
-    }
-    return (gameWork.control & CONTROL_SEARCHING) ? -1 : previous;
-}
-
-int talkReset(void) {
-    talkResult = -1;
-    return 1;
 }
 
 /* Data of main/pt_member.c, in address order. */
@@ -1254,14 +1237,9 @@ FlagCombination flagCombinationTable[82] = {
 /* The party state (0x60 bytes), declared in pt_member.h. */
 PartyState ptState = { 0 };
 
-unsigned char selectionWindowList[256] = { 0 };
+unsigned char selectionUsableItemList[256] = { 0 };
 
-unsigned char selectionPlainList[256] = { 0 };
-
-/* .sdata of this file (0x69D770-0x69D778), also read by script_register_natives.c. */
-struct UwamonoRecord *mapActiveObject = 0;
-
-int talkResult = -1;
+unsigned char selectionAccessoryList[256] = { 0 };
 
 /* .bss of this file after its own (0x6ABBC0), read by menu_selection.c. */
 u16 selectionFlagTable[44];

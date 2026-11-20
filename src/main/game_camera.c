@@ -1,6 +1,6 @@
 #include "common.h"
-#include "main/script_register_natives.h"
-#include "main/ladder_table.h"
+#include "main/talk_natives.h"
+#include "main/get_ladder.h"
 #include "main/game_pause_disp.h"
 #include "main/xgl_camera.h"
 #include "main/pad.h"
@@ -20,7 +20,6 @@
 #include "main/undulate.h"
 #include "main/elevator.h"
 #include "main/uwamono_event_check.h"
-#include "main/get_ladder.h"
 #include "main/res_get_path.h"
 
 /* Studio camera state of the game camera (xglStudioGetCamera2(0)->state). */
@@ -55,25 +54,24 @@
 #define CAMERA_SEARCH_PITCH_DOWN (-1.57079637f)
 #define CAMERA_SEARCH_TOLERANCE 0.01f
 #define CAMERA_SEARCH_MAX_STEPS 60
-/* uwamono records: 256 of them; kind 4 is the player, kind 5 a part attached to it. */
+/* uwamono records: 256 of them; kind MAP_KIND_ACTOR_STATIC is the player, MAP_KIND_PART a hand-held part of it. */
 #define UWAMONO_RECORD_COUNT 256
-#define UWAMONO_KIND_TALK 1
-#define UWAMONO_KIND_PLAYER 4
-#define UWAMONO_KIND_PART 5
 /* Draw flags of a XenoActor (drawFlags). */
 #define UWAMONO_DRAW_HIDDEN 0x4
 /* uwamonoChangePlayerModel: the request that takes the key mapped from the current record, and the key flags. */
 #define UWAMONO_KEY_FROM_CURRENT (-1000)
 #define UWAMONO_KEY_MASK 0x7FFFFFFF
-#define UWAMONO_ES_KEY_FIRST 0x10000
-#define UWAMONO_ES_KEY_COUNT 0x4000
-/* The form value of an ES (the mecha the party rides) in record+0x338. */
-#define UWAMONO_FORM_ES 1.0f
-/* Joints the player parts attach to: the ES pair, then the walking pair. */
-#define UWAMONO_PART_JOINT_ES_0 80
-#define UWAMONO_PART_JOINT_ES_1 81
-#define UWAMONO_PART_JOINT_WALK_0 10
-#define UWAMONO_PART_JOINT_WALK_1 7
+/* Keys 0x10000-0x13FFF are the characters on foot. */
+#define UWAMONO_FOOT_KEY_FIRST 0x10000
+#define UWAMONO_FOOT_KEY_COUNT 0x4000
+/* The form value of a character on foot in record+0x338 (body radius 0.64); the E.S. form has UWAMONO_FORM_ES (5.0). */
+#define UWAMONO_FORM_FOOT 1.0f
+#define UWAMONO_FORM_ES 5.0f
+/* Joints the player parts attach to: the foot pair, then the E.S. pair. */
+#define UWAMONO_PART_JOINT_FOOT_0 80
+#define UWAMONO_PART_JOINT_FOOT_1 81
+#define UWAMONO_PART_JOINT_ES_0 10
+#define UWAMONO_PART_JOINT_ES_1 7
 /* UwamonoAttachIdTable (uwamonoAttachIdTable): eight entries of {lo, hi, id0, id1}. */
 #define UWAMONO_ATTACH_ENTRY_WORDS 4
 #define UWAMONO_ATTACH_TABLE_WORDS 32
@@ -91,9 +89,9 @@ typedef struct {
 
 /* One camera record of cameraCfSlots (208 bytes): its flag is cleared and its index set to -1 by GameCameraReset. */
 struct CameraRecord {
-    unsigned char unmodeled_00;
+    unsigned char cameraType;           /* +0x00: the camera type, copied to gameWork.camera.cameraType */
     unsigned char flag01;               /* +0x01: cleared by GameCameraReset */
-    signed char index02;                /* +0x02: -1 after GameCameraReset */
+    signed char surfaceGroup;           /* +0x02: the surface group, -1 after GameCameraReset */
     unsigned char unmodeled_03[0xD];
     struct CameraSlot slot;             /* +0x10: the slot settings of this record */
     struct CameraRange range;           /* +0x20: the range cleared by cameraRangeSetDefaults */
@@ -196,7 +194,7 @@ void cameraRangeSetDefaults(struct CameraRange *range)
     range->angles.x = CAMERA_DEFAULT_PITCH;
     range->angles.y = 0.0f;
     range->angles.w = CAMERA_DEFAULT_DISTANCE;
-    range->lockPosition.w = CAMERA_DEFAULT_PERSPECTIVE;
+    range->cameraPosition.w = CAMERA_DEFAULT_PERSPECTIVE;
 }
 
 
@@ -239,15 +237,15 @@ void cameraInit(void)
     gameWork.camera.to.position.w = perspective;
     do {
     } while (0);
-    gameWork.camera.range.lockPosition.y = startY;
-    gameWork.camera.range.lockPosition.z = startZ;
+    gameWork.camera.range.cameraPosition.y = startY;
+    gameWork.camera.range.cameraPosition.z = startZ;
     gameWork.camera.range.lookAt.z = 0.0f;
     do {
     } while (0);
     gameWork.camera.from.position.w = perspective;
     do {
     } while (0);
-    gameWork.camera.range.lockPosition.x = 0.0f;
+    gameWork.camera.range.cameraPosition.x = 0.0f;
     do {
     } while (0);
     gameWork.camera.range.lookAt.x = 0.0f;
@@ -276,7 +274,7 @@ void GameCameraReset(void)
     for (i = 31; i >= 0; i--) {
         memset(record, 0, 208);
         record->flag01 = 0;
-        record->index02 = -1;
+        record->surfaceGroup = -1;
         cameraRangeSetDefaults(&record->range);
         record++;
     }
@@ -298,30 +296,30 @@ void GameCameraReset(void)
     cameraProbePosition.word[0] = 0;
     cameraProbePosition.word[1] = 0;
     cameraProbePosition.word[2] = 0;
-    gameWork.camera.mode = 0;
+    gameWork.camera.surfaceGroup = 0;
     gameWork.camera.trackIndex = -1;
     GameCameraChangeID(-1, 0, 0);
 }
 
 
-void GameCameraChangeID(int mode, int arg1, int arg2)
+void GameCameraChangeID(int surfaceGroup, int arg1, int arg2)
 {
     struct MapFixupEntry *probeBlock;
 
-    if (gameWork.camera.mode == mode && CamLookAt.block != 0 && cameraPositionProbe.block != 0) {
+    if (gameWork.camera.surfaceGroup == surfaceGroup && CamLookAt.block != 0 && cameraPositionProbe.block != 0) {
         return;
     }
     probeBlock = 0;
-    if (mode >= 0) {
-        probeBlock = UnduDataGetHeader(512, mode);
+    if (surfaceGroup >= 0) {
+        probeBlock = UnduDataGetHeader(512, surfaceGroup);
         if (probeBlock == 0) {
             probeBlock = UnduDataGetHeader(512, -1);
-            mode = -1;
+            surfaceGroup = -1;
         }
     } else {
-        mode = -1;
+        surfaceGroup = -1;
     }
-    gameWork.camera.mode = mode;
+    gameWork.camera.surfaceGroup = surfaceGroup;
     UnduParamInit(&CamLookAt);
     CamLookAt.recordSet = (MapRecordSet *) 0x70000170;
     CamLookAt.block = probeBlock;
@@ -413,9 +411,9 @@ void cameraApplySlots(int slot_mask, int blend_mode, int ease_mode, int frames)
     }
     if (slot_mask & CAMERA_SLOT_MASK(1)) {
         cameraSlotSetup(&gameWork.camera.slot[1], blend_mode, ease_mode, frames);
-        gameWork.camera.from.position.x = gameWork.camera.range.lockPosition.x;
-        gameWork.camera.from.position.y = gameWork.camera.range.lockPosition.y;
-        gameWork.camera.from.position.z = gameWork.camera.range.lockPosition.z;
+        gameWork.camera.from.position.x = gameWork.camera.range.cameraPosition.x;
+        gameWork.camera.from.position.y = gameWork.camera.range.cameraPosition.y;
+        gameWork.camera.from.position.z = gameWork.camera.range.cameraPosition.z;
         gameWork.camera.from.angles.x = gameWork.camera.range.angles.x;
         gameWork.camera.from.angles.y = gameWork.camera.range.angles.y;
         gameWork.camera.from.angles.w = gameWork.camera.range.angles.w;
@@ -425,7 +423,7 @@ void cameraApplySlots(int slot_mask, int blend_mode, int ease_mode, int frames)
     }
     if (slot_mask & CAMERA_SLOT_MASK(2)) {
         cameraSlotSetup(&gameWork.camera.slot[2], blend_mode, ease_mode, frames);
-        gameWork.camera.from.position.w = gameWork.camera.range.lockPosition.w;
+        gameWork.camera.from.position.w = gameWork.camera.range.cameraPosition.w;
     }
     if (slot_mask & CAMERA_SLOT_MASK(3)) {
         cameraSlotSetup(&gameWork.camera.slot[3], blend_mode, ease_mode, frames);
@@ -585,9 +583,8 @@ void cameraAnglesBetween(Vector4 *angles, const Vector4 *from, const Vector4 *to
 #include "vu0_macro.h"
 #include "main/vibration.h"
 #include "main/uwamono_record.h"
-#include "main/uwamono_objx.h"
+#include "main/runtime.h"
 #include "main/init_uwamono_sys.h"
-#include "main/script_register_natives.h"
 #include "main/ytachi_test.h"
 
 void cameraRangeSetDefaults(struct CameraRange *range);
@@ -924,13 +921,13 @@ void cameraUpdateFollow(void)
     }
     record = scratch->record;
     if (record->range.lockX != 0) {
-        CAMERA_PAD->position.x = record->range.lockPosition.x;
+        CAMERA_PAD->position.x = record->range.cameraPosition.x;
     }
     if (record->range.lockY != 0) {
-        CAMERA_PAD->position.y = record->range.lockPosition.y;
+        CAMERA_PAD->position.y = record->range.cameraPosition.y;
     }
     if (record->range.lockZ != 0) {
-        CAMERA_PAD->position.z = record->range.lockPosition.z;
+        CAMERA_PAD->position.z = record->range.cameraPosition.z;
     }
     cameraAnglesBetween(&scratch->angles, &scratch->lookAt, &scratch->position);
     gameWork.camera.range.angles.x = CAMERA_PAD->angles.x;
@@ -939,10 +936,10 @@ void cameraUpdateFollow(void)
     /* The Vector4Elements union: the original orders these three stores with alias set 0. */
     ((Vector4Elements *)&cameraProbePosition)->vector.x = *(float *)0x700000C0;
     ((Vector4Elements *)&cameraProbePosition)->vector.y = *(float *)0x700000C4;
-    gameWork.camera.range.lockPosition.x = *(float *)0x700000C0;
-    gameWork.camera.range.lockPosition.y = *(float *)0x700000C4;
-    gameWork.camera.range.lockPosition.z = ((Vector4Elements *)&cameraProbePosition)->vector.z = *(float *)0x700000C8;
-    gameWork.camera.range.lockPosition.w = scratch->record->range.lockPosition.w;
+    gameWork.camera.range.cameraPosition.x = *(float *)0x700000C0;
+    gameWork.camera.range.cameraPosition.y = *(float *)0x700000C4;
+    gameWork.camera.range.cameraPosition.z = ((Vector4Elements *)&cameraProbePosition)->vector.z = *(float *)0x700000C8;
+    gameWork.camera.range.cameraPosition.w = scratch->record->range.cameraPosition.w;
     gameWork.camera.range.lookAt.w = scratch->record->range.lookAt.w;
 }
 
@@ -958,20 +955,20 @@ void cameraUpdateFromRecord(void)
 
     if (cameraPlayerProbe.block != 0) {
         record = CAMERA_PAD->record;
-        gameWork.camera.range.lockPosition.x = record->range.lockPosition.x;
-        gameWork.camera.range.lockPosition.y = record->range.lockPosition.y;
-        gameWork.camera.range.lockPosition.z = record->range.lockPosition.z;
+        gameWork.camera.range.cameraPosition.x = record->range.cameraPosition.x;
+        gameWork.camera.range.cameraPosition.y = record->range.cameraPosition.y;
+        gameWork.camera.range.cameraPosition.z = record->range.cameraPosition.z;
         gameWork.camera.range.lookAt.x = record->range.lookAt.x;
         gameWork.camera.range.lookAt.y = record->range.lookAt.y;
         gameWork.camera.range.lookAt.z = record->range.lookAt.z;
-        gameWork.camera.range.lockPosition.w = record->range.lockPosition.w;
+        gameWork.camera.range.cameraPosition.w = record->range.cameraPosition.w;
         gameWork.camera.range.lookAt.w = record->range.lookAt.w;
     } else {
         record = CAMERA_PAD->record;
     }
-    ((Vector4Elements *)&cameraProbePosition)->vector.x = gameWork.camera.range.lockPosition.x;
-    ((Vector4Elements *)&cameraProbePosition)->vector.y = gameWork.camera.range.lockPosition.y;
-    ((Vector4Elements *)&cameraProbePosition)->vector.z = gameWork.camera.range.lockPosition.z;
+    ((Vector4Elements *)&cameraProbePosition)->vector.x = gameWork.camera.range.cameraPosition.x;
+    ((Vector4Elements *)&cameraProbePosition)->vector.y = gameWork.camera.range.cameraPosition.y;
+    ((Vector4Elements *)&cameraProbePosition)->vector.z = gameWork.camera.range.cameraPosition.z;
     if (record->range.anchorIndex >= 0) {
         cameraApplyAnchorOffset(&anchorPosition, record->range.anchorIndex, record->range.anchorSubIndex, &gameWork.camera.range.offset);
         gameWork.camera.range.lookAt.x = anchorPosition.x;
@@ -993,9 +990,9 @@ void cameraStageLookAt(void)
     Vector4 anchorPosition;
     int anchorIndex;
 
-    cameraProbePosition.v.x = gameWork.camera.range.lockPosition.x;
-    cameraProbePosition.v.y = gameWork.camera.range.lockPosition.y;
-    cameraProbePosition.v.z = gameWork.camera.range.lockPosition.z;
+    cameraProbePosition.v.x = gameWork.camera.range.cameraPosition.x;
+    cameraProbePosition.v.y = gameWork.camera.range.cameraPosition.y;
+    cameraProbePosition.v.z = gameWork.camera.range.cameraPosition.z;
     anchorIndex = gameWork.camera.range.anchorIndex;
     if (anchorIndex >= 0) {
         cameraApplyAnchorOffset(&anchorPosition, anchorIndex, gameWork.camera.range.anchorSubIndex, &gameWork.camera.range.offset);
@@ -1072,10 +1069,10 @@ void cameraClampAngles(int afterCommit)
         limitIndex = cameraAngleLimitIndex(&(CAMERA_PAD->record)->range.angleLimits.z, yaw);
         if (limitIndex >= 0) {
             yaw = (&(CAMERA_PAD->record)->range.angleLimits.z)[limitIndex];
-            depth = gameWork.camera.range.lookAt.z - gameWork.camera.range.lockPosition.z;
+            depth = gameWork.camera.range.lookAt.z - gameWork.camera.range.cameraPosition.z;
             tanYaw = xglSin(yaw) / xglCos(yaw);
-            gameWork.camera.range.lookAt.x = gameWork.camera.range.lockPosition.x + depth * tanYaw;
-            cameraAnglesBetween(&CAMERA_PAD->angles, &gameWork.camera.range.lookAt, &gameWork.camera.range.lockPosition);
+            gameWork.camera.range.lookAt.x = gameWork.camera.range.cameraPosition.x + depth * tanYaw;
+            cameraAnglesBetween(&CAMERA_PAD->angles, &gameWork.camera.range.lookAt, &gameWork.camera.range.cameraPosition);
             gameWork.camera.range.angles.x = CAMERA_PAD->angles.x;
             pitch = gameWork.camera.range.angles.x;
             gameWork.camera.range.angles.y = CAMERA_PAD->angles.y;
@@ -1097,10 +1094,10 @@ void cameraClampAngles(int afterCommit)
         }
         gameWork.camera.range.angles.x = pitch;
         gameWork.camera.range.angles.y = yaw;
-        eye.x = gameWork.camera.range.lockPosition.x;
-        eye.y = gameWork.camera.range.lockPosition.y;
+        eye.x = gameWork.camera.range.cameraPosition.x;
+        eye.y = gameWork.camera.range.cameraPosition.y;
         back.z = -gameWork.camera.range.angles.w;
-        eye.z = gameWork.camera.range.lockPosition.z;
+        eye.z = gameWork.camera.range.cameraPosition.z;
         back.x = 0.0f;
         back.y = 0.0f;
         back.w = 1.0f;
@@ -1149,10 +1146,10 @@ int cameraCommitSlots(void)
         state->camera.to.lookAt.y = state->camera.range.lookAt.y;
         state->camera.to.lookAt.z = state->camera.range.lookAt.z;
         state->camera.to.lookAt.w = state->camera.range.lookAt.w;
-        state->camera.to.position.x = state->camera.range.lockPosition.x;
-        state->camera.to.position.y = state->camera.range.lockPosition.y;
-        state->camera.to.position.z = state->camera.range.lockPosition.z;
-        state->camera.to.position.w = state->camera.range.lockPosition.w;
+        state->camera.to.position.x = state->camera.range.cameraPosition.x;
+        state->camera.to.position.y = state->camera.range.cameraPosition.y;
+        state->camera.to.position.z = state->camera.range.cameraPosition.z;
+        state->camera.to.position.w = state->camera.range.cameraPosition.w;
         state->camera.to.angles.x = state->camera.range.angles.x;
         state->camera.to.angles.y = state->camera.range.angles.y;
         state->camera.to.angles.w = state->camera.range.angles.w;
@@ -1319,10 +1316,10 @@ float cameraSwayNoiseScale = 9.9999997473787516e-05f;
 
 extern const float playerInitialRadius;
 extern const float playerInitialHeightReach;
-extern const float esFormRadius;
-extern const float esFrameScale;
-extern const float humanModelScale;
+extern const float humanFormRadius;
 extern const float humanFrameScale;
+extern const float esModelScale;
+extern const float esFrameScale;
 
 void cameraAdvanceTracks(float *tracks)
 {
@@ -1357,8 +1354,8 @@ void cameraAdvanceTracks(float *tracks)
         e = cameraEase((unsigned char)gameWork.camera.slot[1].easeMode, gameWork.camera.slot[1].progress, gameWork.camera.slot[1].duration);
         gameWork.camera.slot[1].fraction = e;
         if (gameWork.camera.slot[1].blendMode == 0) {
-            cameraLerpVector(&gameWork.camera.range.lockPosition, &gameWork.camera.from.position, &gameWork.camera.to.position, e);
-            cameraAnglesBetween(&CAMERA_PAD->angles, &gameWork.camera.range.lookAt, &gameWork.camera.range.lockPosition);
+            cameraLerpVector(&gameWork.camera.range.cameraPosition, &gameWork.camera.from.position, &gameWork.camera.to.position, e);
+            cameraAnglesBetween(&CAMERA_PAD->angles, &gameWork.camera.range.lookAt, &gameWork.camera.range.cameraPosition);
             gameWork.camera.range.angles.x = CAMERA_PAD->angles.x;
             gameWork.camera.range.angles.y = CAMERA_PAD->angles.y;
             gameWork.camera.range.angles.w = CAMERA_PAD->angles.w;
@@ -1366,7 +1363,7 @@ void cameraAdvanceTracks(float *tracks)
             gameWork.camera.range.angles.x = cameraLerpAngle(gameWork.camera.from.angles.x, gameWork.camera.to.angles.x, e);
             gameWork.camera.range.angles.y = cameraLerpAngle(gameWork.camera.from.angles.y, gameWork.camera.to.angles.y, e);
             gameWork.camera.range.angles.w = cameraLerpFloat(gameWork.camera.from.angles.w, gameWork.camera.to.angles.w, e);
-            GetCameraPos(&gameWork.camera.range.lockPosition, &gameWork.camera.range.lookAt, &gameWork.camera.range.angles);
+            GetCameraPos(&gameWork.camera.range.cameraPosition, &gameWork.camera.range.lookAt, &gameWork.camera.range.angles);
         }
         cameraLerpVector(&gameWork.camera.range.offset, &gameWork.camera.fromOffset, (Vector4 *)tracks, gameWork.camera.slot[1].fraction);
     }
@@ -1378,7 +1375,7 @@ void cameraAdvanceTracks(float *tracks)
         gameWork.camera.slot[2].progress = next2;
         d2 = cameraEase((unsigned char)gameWork.camera.slot[2].easeMode, next2, lim2);
         gameWork.camera.slot[2].fraction = d2;
-        gameWork.camera.range.lockPosition.w = cameraLerpFloat(gameWork.camera.from.position.w, gameWork.camera.to.position.w, gameWork.camera.slot[2].fraction);
+        gameWork.camera.range.cameraPosition.w = cameraLerpFloat(gameWork.camera.from.position.w, gameWork.camera.to.position.w, gameWork.camera.slot[2].fraction);
         p2 = next2;
     }
 
@@ -1404,9 +1401,9 @@ void cameraAdvanceTracks(float *tracks)
 
     if (gameWork.camera.slot[1].progress >= gameWork.camera.slot[1].duration) {
         gameWork.camera.slot[1].fraction = 1.0f;
-        gameWork.camera.from.position.x = gameWork.camera.range.lockPosition.x;
-        gameWork.camera.from.position.y = gameWork.camera.range.lockPosition.y;
-        gameWork.camera.from.position.z = gameWork.camera.range.lockPosition.z;
+        gameWork.camera.from.position.x = gameWork.camera.range.cameraPosition.x;
+        gameWork.camera.from.position.y = gameWork.camera.range.cameraPosition.y;
+        gameWork.camera.from.position.z = gameWork.camera.range.cameraPosition.z;
         gameWork.camera.from.angles.x = gameWork.camera.range.angles.x;
         gameWork.camera.from.angles.y = gameWork.camera.range.angles.y;
         gameWork.camera.from.angles.w = gameWork.camera.range.angles.w;
@@ -1420,7 +1417,7 @@ void cameraAdvanceTracks(float *tracks)
 
     if (p2 >= lim2) {
         gameWork.camera.slot[2].fraction = 1.0f;
-        gameWork.camera.from.position.w = gameWork.camera.range.lockPosition.w;
+        gameWork.camera.from.position.w = gameWork.camera.range.cameraPosition.w;
         gameWork.camera.slot[2].progress = 0.0f;
         gameWork.camera.slot[2].duration = 0.0f;
     }
@@ -1466,14 +1463,14 @@ void cameraAdvanceTracks(float *tracks)
         }
     }
 
-    scratch->p->position.x = gameWork.camera.range.lockPosition.x;
-    cy = gameWork.camera.range.lockPosition.y;
+    scratch->p->position.x = gameWork.camera.range.cameraPosition.x;
+    cy = gameWork.camera.range.cameraPosition.y;
     scratch->p->position.y = cy;
-    cz = gameWork.camera.range.lockPosition.z;
+    cz = gameWork.camera.range.cameraPosition.z;
     scratch->p->position.z = cz;
     {
         CameraTravel *q = scratch->p;
-        q->fov = gameWork.camera.range.lockPosition.w;
+        q->fov = gameWork.camera.range.cameraPosition.w;
         q->chase_position.x = gameWork.camera.range.lookAt.x;
     }
     scratch->p->chase_position.y = gameWork.camera.range.lookAt.y;
@@ -1503,7 +1500,7 @@ typedef struct CameraFrameScratch {
     unsigned char anchorLocked;         /* +0x18 */
     unsigned char anchorMatched;        /* +0x19: the record anchors the current anchor index */
     unsigned char unmodeled_1a[2];
-    float height;                       /* +0x1C */
+    float step;                         /* +0x1C: the frame step, camera->unknown_5f4 (0 while paused) */
     unsigned char unmodeled_20[0x3C - 0x20];
     float scale;                        /* +0x3C */
     unsigned char unmodeled_40[0xC0 - 0x40];
@@ -1539,16 +1536,16 @@ void cameraUpdateFrame(void)
         }
         control = gameWork.control;
         scratch->travel = &camera->travel;
-        scratch->height = camera->unknown_5f4;
+        scratch->step = camera->unknown_5f4;
         if (control & CONTROL_PAUSED) {
-            scratch->height = 0.0f;
+            scratch->step = 0.0f;
         }
         scratch->anchorMatched = 0;
         scratch->scale = 1.0f;
         gameWork.camera.shakeFlags = 0;
         scratch->anchor = ((CameraAnchorHead *) &uwamonoRecords[uwamonoCurrentIndex].body)->actor;
         if (!(control & 0x400)) {
-            if (control & CONTROL_TOP_EXIT) {
+            if (control & CONTROL_MAP_LOADED) {
                 cameraStudioReset();
                 gameWork.camera.flags |= CAMERA_FLAG_SNAP;
             } else {
@@ -1561,7 +1558,7 @@ void cameraUpdateFrame(void)
                     probe->recordSet = (MapRecordSet *) 0x70000170;
                     probe->flags = 0x800;
                     cameraSetIndex(-1);
-                    gameWork.camera.mode = 0;
+                    gameWork.camera.surfaceGroup = 0;
                     GameCameraChangeID(-1, 0, 0);
                     flags = gameWork.camera.flags;
                 }
@@ -1602,7 +1599,7 @@ void cameraUpdateFrame(void)
                         record = scratch->record;
                         anchorReady = gameWork.camera.range.rangeMode = (unsigned char)record->range.rangeMode;
                     }
-                    GameCameraChangeID((signed char)scratch->record->index02, 0, 0);
+                    GameCameraChangeID((signed char)scratch->record->surfaceGroup, 0, 0);
                     if (gameWork.camera.allSlotsFlagA == 0) {
                         slot = scratch->slot;
                         cameraApplySlots(0xF, slot->blendMode, slot->easeMode, (int)slot->duration);
@@ -1615,9 +1612,9 @@ void cameraUpdateFrame(void)
                         }
                     }
                     record = scratch->record;
-                    if (gameWork.camera.cameraType != record->unmodeled_00) {
+                    if (gameWork.camera.cameraType != record->cameraType) {
                         gameWork.camera.previousCameraType = gameWork.camera.cameraType;
-                        gameWork.camera.cameraType = record->unmodeled_00;
+                        gameWork.camera.cameraType = record->cameraType;
                         *(XglQuadword *)gameWork.camera.typeState = 0;
                         gameWork.camera.cameraSubType = 0;
                     }
@@ -1701,10 +1698,10 @@ void cameraApplyView(void)
         return;
     }
     scratch->travel = &camera->travel;
-    scratch->height = camera->unknown_5f4;
+    scratch->step = camera->unknown_5f4;
     scratch->scale = 1.0f;
     if ((gameWork.control & CONTROL_PAUSED) != 0) {
-        *(int *)&scratch->height = 0;
+        *(int *)&scratch->step = 0;
     }
     cameraStageLookAt();
     cameraAdvanceTracks(&gameWork.camera.range.offset.x);
@@ -1780,8 +1777,8 @@ void resPlayerSlotsLoadModels(int modelId0, int modelId1, int modelId2)
     }
 }
 
-/* Attaches the player's part records (uwamonoPartIndices) to the player actor: in the ES form to joints 80 and 81 (the first shown, the
-   second hidden), otherwise released and re-attached to joints 10 and 7; then applies the key range value to the actor. */
+/* Attaches the player's part records (uwamonoPartIndices) to the player actor: on foot to joints 80 and 81 (the first shown, the
+   second hidden), in the E.S. form released and re-attached to joints 10 and 7; then applies the key range value to the actor. */
 void uwamonoAttachPlayerParts(void)
 {
     UwamonoRecord *record = &uwamonoRecords[uwamonoCurrentIndex];
@@ -1789,27 +1786,27 @@ void uwamonoAttachPlayerParts(void)
     UwamonoKeyRange *keyRange;
     int wordsLeft;
 
-    if (form == UWAMONO_FORM_ES) {
+    if (form == UWAMONO_FORM_FOOT) {
         if (uwamonoPartIndices[0] != -1) {
             uwamonoRecords[uwamonoPartIndices[0]].body.actor->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
-            uwamonoRecords[uwamonoPartIndices[0]].body.actor->drawMode = 1;
-            XenoActorAttachChildToJoint(record->body.actor, uwamonoRecords[uwamonoPartIndices[0]].body.actor, UWAMONO_PART_JOINT_ES_0);
+            uwamonoRecords[uwamonoPartIndices[0]].body.actor->shadowType = 1;
+            XenoActorAttachChildToJoint(record->body.actor, uwamonoRecords[uwamonoPartIndices[0]].body.actor, UWAMONO_PART_JOINT_FOOT_0);
         }
         if (uwamonoPartIndices[1] != -1) {
             uwamonoRecords[uwamonoPartIndices[1]].body.actor->drawFlags |= UWAMONO_DRAW_HIDDEN;
-            uwamonoRecords[uwamonoPartIndices[1]].body.actor->drawMode = 1;
-            XenoActorAttachChildToJoint(record->body.actor, uwamonoRecords[uwamonoPartIndices[1]].body.actor, UWAMONO_PART_JOINT_ES_1);
+            uwamonoRecords[uwamonoPartIndices[1]].body.actor->shadowType = 1;
+            XenoActorAttachChildToJoint(record->body.actor, uwamonoRecords[uwamonoPartIndices[1]].body.actor, UWAMONO_PART_JOINT_FOOT_1);
         }
     } else {
         if (uwamonoPartIndices[0] != -1) {
             uwamonoRecords[uwamonoPartIndices[0]].body.actor->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
             XenoActorReleaseChild(record->body.actor, uwamonoRecords[uwamonoPartIndices[0]].body.actor);
-            XenoActorAttachChildToJoint(record->body.actor, uwamonoRecords[uwamonoPartIndices[0]].body.actor, UWAMONO_PART_JOINT_WALK_0);
+            XenoActorAttachChildToJoint(record->body.actor, uwamonoRecords[uwamonoPartIndices[0]].body.actor, UWAMONO_PART_JOINT_ES_0);
         }
         if (uwamonoPartIndices[1] != -1) {
             uwamonoRecords[uwamonoPartIndices[1]].body.actor->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
             XenoActorReleaseChild(record->body.actor, uwamonoRecords[uwamonoPartIndices[1]].body.actor);
-            XenoActorAttachChildToJoint(record->body.actor, uwamonoRecords[uwamonoPartIndices[1]].body.actor, UWAMONO_PART_JOINT_WALK_1);
+            XenoActorAttachChildToJoint(record->body.actor, uwamonoRecords[uwamonoPartIndices[1]].body.actor, UWAMONO_PART_JOINT_ES_1);
         }
     }
     for (wordsLeft = 153, keyRange = (UwamonoKeyRange *)uwamonoKeyRangeTable; wordsLeft >= 0; wordsLeft -= 17, keyRange++) {
@@ -1828,14 +1825,14 @@ enum UwamonoKeyField {
     KEY_MAPPED = 8,     /* the id the block-A search maps a key to */
     KEY_VALUE = 9,
     KEY_LEVEL_B = 10,   /* 3 words: copied to uwamonoSearchEventTable */
-    KEY_LEVEL_A = 13,   /* 3 words: copied to uwamonoSearchWaitTable */
+    KEY_LEVEL_A = 13,   /* 3 words: copied to uwamonoSquareWaitTable */
     KEY_EFFECT = 16,
     KEY_RANGE_WORDS = 17
 };
 extern unsigned int uwamonoAttachIdTable[32];
 extern int uwamonoPartIndices[];
 extern short uwamonoKeyEffectId;
-extern short uwamonoSearchWaitTable[3];
+extern short uwamonoSquareWaitTable[3];
 extern short uwamonoSearchEventTable[3];
 extern unsigned char uwamonoKeyColorA[3];
 extern unsigned char uwamonoKeyColorB[3];
@@ -1878,10 +1875,10 @@ void uwamonoChangePlayerModel(int request)
     uwamonoPartIndices[0] = -1;
     uwamonoPartIndices[1] = -1;
     for (recordIndex = 0; recordIndex < UWAMONO_RECORD_COUNT; recordIndex++) {
-        if (uwamonoRecords[recordIndex].kind == UWAMONO_KIND_PLAYER) {
+        if (uwamonoRecords[recordIndex].kind == MAP_KIND_ACTOR_STATIC) {
             uwamonoCurrentIndex = recordIndex;
         }
-        if (uwamonoRecords[recordIndex].kind == UWAMONO_KIND_PART && partCount < UWAMONO_ATTACH_PARTS) {
+        if (uwamonoRecords[recordIndex].kind == MAP_KIND_PART && partCount < UWAMONO_ATTACH_PARTS) {
             uwamonoPartIndices[partCount] = recordIndex;
             partCount++;
         }
@@ -1894,7 +1891,7 @@ void uwamonoChangePlayerModel(int request)
     currentIndex = uwamonoCurrentIndex;
     if (currentIndex == -1) {
         resPlayerSlotLoadID(slot, key, 0);
-        playerIndex = uwamonoCreateRecord(0, UWAMONO_KIND_PLAYER, key, -1, -1);
+        playerIndex = uwamonoCreateRecord(0, MAP_KIND_ACTOR_STATIC, key, -1, -1);
         uwamonoCurrentIndex = playerIndex;
         record = &uwamonoRecords[playerIndex];
     } else {
@@ -1917,7 +1914,7 @@ void uwamonoChangePlayerModel(int request)
                 actor->rsrc[XAct_Rsrc_EntryTableC] = values[3];
             }
             XenoActorAllocMatrices(actor);
-            XenoActorSetChannelValue(actor, 4.0f);
+            XenoActorSetBlendFrames(actor, 4.0f);
             XenoActorSetMode(actor, 0);
             record->body.actor = actor;
             actor->kind = key;
@@ -1932,10 +1929,10 @@ void uwamonoChangePlayerModel(int request)
     record->body.actor->radius = playerInitialRadius;
     record->extent.x = playerInitialRadius;
     record->body.actor->collision.probeEnabled = 1;
-    if ((unsigned int)(key - UWAMONO_ES_KEY_FIRST) < UWAMONO_ES_KEY_COUNT) {
-        record->form = UWAMONO_FORM_ES;
+    if ((unsigned int)(key - UWAMONO_FOOT_KEY_FIRST) < UWAMONO_FOOT_KEY_COUNT) {
+        record->form = UWAMONO_FORM_FOOT;
     } else {
-        record->form = 5.0f;
+        record->form = UWAMONO_FORM_ES;
     }
 
     gameWork.control &= ~CONTROL_SCRIPTED;
@@ -1962,7 +1959,7 @@ void uwamonoChangePlayerModel(int request)
 
             if (id != -1) {
                 resPlayerSlotLoadID(slot, id, 0);
-                uwamonoPartIndices[j] = uwamonoCreateRecord(j + 1, UWAMONO_KIND_PART, id, -1, -1);
+                uwamonoPartIndices[j] = uwamonoCreateRecord(j + 1, MAP_KIND_PART, id, -1, -1);
             }
         }
         break;
@@ -1986,9 +1983,9 @@ void uwamonoChangePlayerModel(int request)
         uwamonoSearchEventTable[0] = uwamonoKeyRangeTable[i + KEY_LEVEL_B + 0];
         uwamonoSearchEventTable[1] = uwamonoKeyRangeTable[i + KEY_LEVEL_B + 1];
         uwamonoSearchEventTable[2] = uwamonoKeyRangeTable[i + KEY_LEVEL_B + 2];
-        uwamonoSearchWaitTable[0] = uwamonoKeyRangeTable[i + KEY_LEVEL_A + 0];
-        uwamonoSearchWaitTable[1] = uwamonoKeyRangeTable[i + KEY_LEVEL_A + 1];
-        uwamonoSearchWaitTable[2] = uwamonoKeyRangeTable[i + KEY_LEVEL_A + 2];
+        uwamonoSquareWaitTable[0] = uwamonoKeyRangeTable[i + KEY_LEVEL_A + 0];
+        uwamonoSquareWaitTable[1] = uwamonoKeyRangeTable[i + KEY_LEVEL_A + 1];
+        uwamonoSquareWaitTable[2] = uwamonoKeyRangeTable[i + KEY_LEVEL_A + 2];
         XenoActorSetInitCode(record->body.actor, uwamonoKeyRangeTable[i + KEY_VALUE]);
         effectId = uwamonoKeyRangeTable[i + KEY_EFFECT];
         effectFlags = 0x10000001;
@@ -1997,22 +1994,22 @@ void uwamonoChangePlayerModel(int request)
         sceCdSync(0);
     }
 
-    if (record->form == UWAMONO_FORM_ES) {
-        gameWork.frameScale = esFrameScale;
-        record->body.actor->collision.radius = esFormRadius;
-        record->body.actor->radius = esFormRadius;
-        record->extent.x = esFormRadius;
+    if (record->form == UWAMONO_FORM_FOOT) {
+        gameWork.frameScale = humanFrameScale;
+        record->body.actor->collision.radius = humanFormRadius;
+        record->body.actor->radius = humanFormRadius;
+        record->extent.x = humanFormRadius;
         record->scale.z = 1.0f;
         record->scale.y = 1.0f;
         record->scale.x = 1.0f;
     } else {
-        gameWork.frameScale = humanFrameScale;
+        gameWork.frameScale = esFrameScale;
         record->body.actor->collision.radius = 4.0f;
         record->body.actor->radius = 4.0f;
         record->extent.x = 4.0f;
-        record->scale.z = humanModelScale;
-        record->scale.y = humanModelScale;
-        record->scale.x = humanModelScale;
+        record->scale.z = esModelScale;
+        record->scale.y = esModelScale;
+        record->scale.x = esModelScale;
         gameWork.playerParams[0][0] = 20.0f;
         gameWork.playerParams[1][0] = 1.0f;
     }
@@ -2022,8 +2019,8 @@ void uwamonoChangePlayerModel(int request)
 
 #define NULL ((void *) 0)
 
-extern int uwamonoSearchEventCount;
-extern int uwamonoSearchMode;
+extern int uwamonoSquareEventCount;
+extern int uwamonoSquareMode;
 extern short uwamonoKeyEffectId;
 extern signed char uwamonoMovingFlag;
 static float cameraNorthAngle;
@@ -2032,9 +2029,9 @@ extern float uwamonoSlopeFactorTable[];
 extern unsigned char uwamonoSlopeDirectionTable[];
 extern MapCollisionObject uwamonoProbeTemplate;
 
-/* Per jump height step (UwamonoRecord.level): the frames before the landing
- * check (uwamonoSearchWaitCount) and before the target action (uwamonoSearchEventCount). */
-short uwamonoSearchWaitTable[3] = { -1, -1, -1 };
+/* Per key range (KEY_LEVEL_A of uwamonoKeyRangeTable, copied by the model change): the wait counts of the SQUARE attack on a
+ * map object, which uwamonoSquareWaitCount counts down. uwamonoSearchEventTable holds the event counts. */
+short uwamonoSquareWaitTable[3] = { -1, -1, -1 };
 
 short uwamonoSearchEventTable[3] = { -1, -1, -1 };
 
@@ -2047,22 +2044,23 @@ void uwamonoPickTarget(short index);
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define UWAMONO_IS_ES(actor) ((unsigned int) ((actor)->kind - 0x10000) < 0x4000)
+#define UWAMONO_IS_FOOT(actor) ((unsigned int) ((actor)->kind - 0x10000) < 0x4000)
 /* Stick directions snap to 16 sectors: pi/8 per sector, offset by half a sector. */
 #define EIGHTH_TURN 0.39269909f
 #define EIGHTH_TURN_HALF 0.19634955f
 #define QUARTER_TURN_FLOAT 0.78539819f /* pi/4 as the original float constant */
 /* Draw flags of a XenoActor (drawFlags): UWAMONO_DRAW_HIDDEN is defined at the top of the file. */
 #define UWAMONO_DRAW_TRANSLUCENT 0x08000000
-/* Record keys: the ES range of the party starts at 0x10000; 0x10026 is Jin's ES. */
-#define UWAMONO_KEY_JIN_ES 0x10026
+/* Record keys: the character model range starts at 0x10000; 0x10026 is the model of Jin (jin00). */
+#define UWAMONO_KEY_JIN 0x10026
 #define UWAMONO_KEY_IN(key, first, count) ((unsigned int) ((key) - (first)) < (count))
 /* Ground status classes of XenoActor.status. */
 #define GROUND_SLOPE 0x10000
-#define GROUND_LADDER 0x100
+/* Map jump area class: uwamonoSendEvent 3 (RES_MAP_KEY_JUMP in res_get_path.c). */
+#define GROUND_MAP_JUMP 0x100
 #define GROUND_ELEVATOR 0x200
 
-/* Candidate target points (10 entries; runtime_motion_face.c views the same table as float rows) and their reach. */
+/* Candidate target points (10 entries; runtime_enepc.c views the same table as float rows) and their reach. */
 extern Vector4 enepcLookAtPointTable[];
 
 /*
@@ -2124,9 +2122,9 @@ void uwamonoPickTarget(short index)
 }
 
 /*
- * Per-frame control of the player's map object: rider fade, input, walk
+ * Per-frame control of the player's map object: part fade, input, walk
  * motions, talk/search targets, jumps, ground status and the move probe, then
- * copies the result to the record and to the riders.
+ * copies the result to the record and to the part actors.
  */
 void uwamonoPlayerUpdate(void)
 {
@@ -2134,14 +2132,14 @@ void uwamonoPlayerUpdate(void)
        is kept for the original code generation. */
     UwamonoRecord *record = &uwamonoRecords[uwamonoCurrentIndex];
     struct XenoActor *actor = uwamonoRecords[uwamonoCurrentIndex].body.actor;
-    struct XenoActor *riders[2];
+    struct XenoActor *partActors[2];
     Vector4 unused; /* Kept: the original builds this (0, 0, 0, 1) vector and never reads it. */
     Vector4 elevator;
     AlignedVector4 old;
     float speed;
     float frameScale;
     int i;
-    int riding;
+    int onFoot;
     int moving;
     int walk;
     int target;
@@ -2150,14 +2148,14 @@ void uwamonoPlayerUpdate(void)
     unsigned int status;
 
     if (uwamonoPartIndices[0] != -1) {
-        riders[0] = uwamonoRecords[uwamonoPartIndices[0]].body.actor;
+        partActors[0] = uwamonoRecords[uwamonoPartIndices[0]].body.actor;
     } else {
-        riders[0] = NULL;
+        partActors[0] = NULL;
     }
     if (uwamonoPartIndices[1] != -1) {
-        riders[1] = uwamonoRecords[uwamonoPartIndices[1]].body.actor;
+        partActors[1] = uwamonoRecords[uwamonoPartIndices[1]].body.actor;
     } else {
-        riders[1] = NULL;
+        partActors[1] = NULL;
     }
     actor->previous.vector.x = actor->position.x;
     actor->previous.vector.y = actor->position.y;
@@ -2165,13 +2163,13 @@ void uwamonoPlayerUpdate(void)
     actor->previous.vector.w = actor->position.w;
     actor->moved = 0;
     for (i = 0; i < 2; i++) {
-        if (riders[i] != NULL) {
-            riders[i]->moved = 0;
-            riders[i]->radius = actor->radius;
-            riders[i]->previous.vector.x = actor->position.x;
-            riders[i]->previous.vector.y = actor->position.y;
-            riders[i]->previous.vector.z = actor->position.z;
-            riders[i]->previous.vector.w = actor->position.w;
+        if (partActors[i] != NULL) {
+            partActors[i]->moved = 0;
+            partActors[i]->radius = actor->radius;
+            partActors[i]->previous.vector.x = actor->position.x;
+            partActors[i]->previous.vector.y = actor->position.y;
+            partActors[i]->previous.vector.z = actor->position.z;
+            partActors[i]->previous.vector.w = actor->position.w;
         }
     }
     if (gameWork.control & CONTROL_PAUSED) {
@@ -2186,53 +2184,53 @@ void uwamonoPlayerUpdate(void)
             gameWork.fadeTimer = 0;
             actor->alpha = 1.0f;
             actor->drawFlags &= ~UWAMONO_DRAW_TRANSLUCENT;
-            if (riders[0] != NULL) {
-                riders[0]->alpha = 1.0f;
-                riders[0]->drawFlags &= ~UWAMONO_DRAW_TRANSLUCENT;
+            if (partActors[0] != NULL) {
+                partActors[0]->alpha = 1.0f;
+                partActors[0]->drawFlags &= ~UWAMONO_DRAW_TRANSLUCENT;
             }
-            if (riders[1] != NULL) {
-                riders[1]->alpha = 1.0f;
-                riders[1]->drawFlags &= ~UWAMONO_DRAW_TRANSLUCENT;
+            if (partActors[1] != NULL) {
+                partActors[1]->alpha = 1.0f;
+                partActors[1]->drawFlags &= ~UWAMONO_DRAW_TRANSLUCENT;
             }
         } else if (gameWork.fadeTimer % 2 == 0 || gameWork.fadeTimer >= 23) {
             actor->drawFlags |= UWAMONO_DRAW_TRANSLUCENT;
             actor->alpha = (100.0f - record->transparency) / 100.0f;
-            if (riders[0] != NULL) {
-                riders[0]->drawFlags |= UWAMONO_DRAW_TRANSLUCENT;
-                riders[0]->alpha = (100.0f - record->transparency) / 100.0f;
+            if (partActors[0] != NULL) {
+                partActors[0]->drawFlags |= UWAMONO_DRAW_TRANSLUCENT;
+                partActors[0]->alpha = (100.0f - record->transparency) / 100.0f;
             }
-            if (riders[1] != NULL) {
-                riders[1]->drawFlags |= UWAMONO_DRAW_TRANSLUCENT;
-                riders[1]->alpha = (100.0f - record->transparency) / 100.0f;
+            if (partActors[1] != NULL) {
+                partActors[1]->drawFlags |= UWAMONO_DRAW_TRANSLUCENT;
+                partActors[1]->alpha = (100.0f - record->transparency) / 100.0f;
             }
         } else {
             actor->alpha = 1.0f;
             actor->drawFlags &= ~UWAMONO_DRAW_TRANSLUCENT;
-            if (riders[0] != NULL) {
-                riders[0]->alpha = 1.0f;
-                riders[0]->drawFlags &= ~UWAMONO_DRAW_TRANSLUCENT;
+            if (partActors[0] != NULL) {
+                partActors[0]->alpha = 1.0f;
+                partActors[0]->drawFlags &= ~UWAMONO_DRAW_TRANSLUCENT;
             }
-            if (riders[1] != NULL) {
-                riders[1]->alpha = 1.0f;
-                riders[1]->drawFlags &= ~UWAMONO_DRAW_TRANSLUCENT;
+            if (partActors[1] != NULL) {
+                partActors[1]->alpha = 1.0f;
+                partActors[1]->drawFlags &= ~UWAMONO_DRAW_TRANSLUCENT;
             }
         }
     }
     if (Ladder_Main() == 0) {
         speed = 0.0f;
         frameScale = gameWork.frameScale;
-        if (uwamonoSearchWaitCount >= 0 && record->key == UWAMONO_KEY_JIN_ES) {
+        if (uwamonoSquareWaitCount >= 0 && record->key == UWAMONO_KEY_JIN) {
             if (actor->mode == 5 && actor->motion[0].frame >= 18.0f) {
                 /* The original calls it twice in a row (and ShowPart below the same). */
-                XenoActorHidePart(riders[0], "jin_saya_tuka");
-                XenoActorHidePart(riders[0], "jin_saya_tuka");
+                XenoActorHidePart(partActors[0], "jin_saya_tuka");
+                XenoActorHidePart(partActors[0], "jin_saya_tuka");
             }
-            if (record->key == UWAMONO_KEY_JIN_ES && actor->mode == 5 && actor->motion[0].frame >= 50.0f) {
-                XenoActorShowPart(riders[0], "jin_saya_tuka");
-                XenoActorShowPart(riders[0], "jin_saya_tuka");
+            if (record->key == UWAMONO_KEY_JIN && actor->mode == 5 && actor->motion[0].frame >= 50.0f) {
+                XenoActorShowPart(partActors[0], "jin_saya_tuka");
+                XenoActorShowPart(partActors[0], "jin_saya_tuka");
             }
         }
-        if (uwamonoSearchEventCount != -1 && --uwamonoSearchEventCount == -1 && uwamonoSearchMode < 6 && uwamonoSearchMode >= 3) {
+        if (uwamonoSquareEventCount != -1 && --uwamonoSquareEventCount == -1 && uwamonoSquareMode < 6 && uwamonoSquareMode >= 3) {
             target = uwamonoFindSelected();
             if (target != -1) {
                 uwamonoSendEvent(1, uwamonoRecords[target].id, 0);
@@ -2242,48 +2240,48 @@ void uwamonoPlayerUpdate(void)
                 }
             }
         }
-        if (uwamonoSearchWaitCount >= 0) {
-            uwamonoSearchWaitCount--;
+        if (uwamonoSquareWaitCount >= 0) {
+            uwamonoSquareWaitCount--;
         }
         /* JP: ウェイト %3d
          * EN: Wait %3d */
-        xglFontDebugPrintf(8, 0x40, "\xa5\xa6\xa5\xa7\xa5\xa4\xa5\xc8 %3d", uwamonoSearchWaitCount);
-        if (uwamonoSearchWaitCount == -1) {
-            uwamonoSearchWaitCount = 0;
-            if (uwamonoSearchMode < 6) {
-                if (uwamonoSearchMode >= 3) {
-                    XenoActorSetChannelValueB(actor, 4.0f);
+        xglFontDebugPrintf(8, 0x40, "\xa5\xa6\xa5\xa7\xa5\xa4\xa5\xc8 %3d", uwamonoSquareWaitCount);
+        if (uwamonoSquareWaitCount == -1) {
+            uwamonoSquareWaitCount = 0;
+            if (uwamonoSquareMode < 6) {
+                if (uwamonoSquareMode >= 3) {
+                    XenoActorSetBlendFramesB(actor, 4.0f);
                     XenoActorSetSelector(actor, 0);
-                    gameWork.control &= ~CONTROL_SEARCHING;
+                    gameWork.control &= ~CONTROL_MAP_ATTACK;
                 }
             }
-            uwamonoSearchMode = -1;
-            if (UWAMONO_IS_ES(actor)) {
+            uwamonoSquareMode = -1;
+            if (UWAMONO_IS_FOOT(actor)) {
                 /* do/while(0) with break: kept for the original branch layout (same in the blocks below). */
                 do {
                     if (UWAMONO_KEY_IN(record->key, 0x10025, 7)) {
-                        if (riders[0] != NULL) {
-                            riders[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                        if (partActors[0] != NULL) {
+                            partActors[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                         }
-                        if (riders[1] != NULL) {
-                            riders[1]->drawFlags |= UWAMONO_DRAW_HIDDEN;
+                        if (partActors[1] != NULL) {
+                            partActors[1]->drawFlags |= UWAMONO_DRAW_HIDDEN;
                         }
                         break;
                     }
                     if (UWAMONO_KEY_IN(record->key, 0x10015, 6)) {
-                        if (riders[0] != NULL) {
-                            riders[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                        if (partActors[0] != NULL) {
+                            partActors[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                         }
-                        if (riders[1] != NULL) {
-                            riders[1]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                        if (partActors[1] != NULL) {
+                            partActors[1]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                         }
                         break;
                     }
-                    if (riders[0] != NULL) {
-                        riders[0]->drawFlags |= UWAMONO_DRAW_HIDDEN;
+                    if (partActors[0] != NULL) {
+                        partActors[0]->drawFlags |= UWAMONO_DRAW_HIDDEN;
                     }
-                    if (riders[1] != NULL) {
-                        riders[1]->drawFlags |= UWAMONO_DRAW_HIDDEN;
+                    if (partActors[1] != NULL) {
+                        partActors[1]->drawFlags |= UWAMONO_DRAW_HIDDEN;
                     }
                 } while (0);
             }
@@ -2293,32 +2291,32 @@ void uwamonoPlayerUpdate(void)
                 float angle;
                 float step;
                 int pressure;
-                int digital;
+                int analog;
 
                 if (gameWork.control & CONTROL_REPLAYED) {
                     stick_x = gameWork.replayStickX;
                     stick_y = gameWork.replayStickY;
                     actor->collision.kind = gameWork.replayStatus;
                 } else {
-                    /* D-pad pressure and the pad's digital direction (scaled to the same range): the one with
+                    /* D-pad pressure and the left analog stick (scaled to the same range): the one with
                        the larger magnitude wins, opposite signs cancel. */
                     pressure = PadData[0].horizontalPressure;
-                    digital = PadData[0].leftX * 2;
-                    if (pressure != 0 && digital != 0 && (pressure ^ digital) < 0) {
+                    analog = PadData[0].leftX * 2;
+                    if (pressure != 0 && analog != 0 && (pressure ^ analog) < 0) {
                         stick_x = 0;
-                    } else if (pressure < 0 || digital < 0) {
-                        stick_x = MIN(pressure, digital);
+                    } else if (pressure < 0 || analog < 0) {
+                        stick_x = MIN(pressure, analog);
                     } else {
-                        stick_x = MAX(pressure, digital);
+                        stick_x = MAX(pressure, analog);
                     }
                     pressure = PadData[0].verticalPressure;
-                    digital = PadData[0].leftY * 2;
-                    if (pressure != 0 && digital != 0 && (pressure ^ digital) < 0) {
+                    analog = PadData[0].leftY * 2;
+                    if (pressure != 0 && analog != 0 && (pressure ^ analog) < 0) {
                         stick_y = 0;
-                    } else if (pressure < 0 || digital < 0) {
-                        stick_y = MIN(pressure, digital);
+                    } else if (pressure < 0 || analog < 0) {
+                        stick_y = MIN(pressure, analog);
                     } else {
-                        stick_y = MAX(pressure, digital);
+                        stick_y = MAX(pressure, analog);
                     }
                     gameWork.replayStickX = stick_x;
                     gameWork.replayStickY = stick_y;
@@ -2364,20 +2362,20 @@ void uwamonoPlayerUpdate(void)
                     && (walk != 0 || actor->mode != 5)) {
                     actor->flags &= ~2;
                     if (uwamonoMovingFlag != 0) {
-                        XenoActorEnableChannel(actor);
+                        XenoActorSetBlendLocal(actor);
                     }
                     XenoActorCheckMode(actor, uwamonoRecords[uwamonoCurrentIndex].body.motions->walk[walk]);
-                    XenoActorSetChannelValue(actor, 4.0f);
-                    /* moving and riding are kept as locals: the original goes through them for its code generation. */
+                    XenoActorSetBlendFrames(actor, 4.0f);
+                    /* moving and onFoot are kept as locals: the original goes through them for its code generation. */
                     moving = 1;
-                    riding = UWAMONO_IS_ES(actor);
+                    onFoot = UWAMONO_IS_FOOT(actor);
                     uwamonoMovingFlag = moving;
-                    if (riding) {
+                    if (onFoot) {
                         for (i = 0; i < 2; i++) {
-                            if (riders[i] != NULL) {
-                                XenoActorSetChannelValue(riders[i], 4.0f);
-                                XenoActorEnableChannel(riders[i]);
-                                XenoActorSetMode(riders[i], walk);
+                            if (partActors[i] != NULL) {
+                                XenoActorSetBlendFrames(partActors[i], 4.0f);
+                                XenoActorSetBlendLocal(partActors[i]);
+                                XenoActorSetMode(partActors[i], walk);
                             }
                         }
                     }
@@ -2392,11 +2390,11 @@ void uwamonoPlayerUpdate(void)
 
                         switch (object->kind) {
                         case 2:
-                            if (UWAMONO_IS_ES(actor)) {
-                                if (uwamonoRecords[target].searchState == 0) {
+                            if (UWAMONO_IS_FOOT(actor)) {
+                                if (uwamonoRecords[target].openerKind == 0) {
                                     uwamonoSetPairMode(target, 0);
                                 }
-                            } else if (uwamonoRecords[target].searchState == 2) {
+                            } else if (uwamonoRecords[target].openerKind == 2) {
                                 uwamonoSetPairMode(target, 0);
                             }
                             uwamonoStartPairMove(target, 5, 30);
@@ -2407,7 +2405,7 @@ void uwamonoPlayerUpdate(void)
                             if (UWAMONO_KEY_IN(other->kind, 0x10000, 0x8000) && msgWindowInUse() == 0) {
                                 talkSetResult(object->id);
                                 mapObjectSetActive(record, object);
-                                XenoActorEnableChannel(record->body.actor);
+                                XenoActorSetBlendLocal(record->body.actor);
                                 XenoActorSetMode(record->body.actor, 0);
                             }
                             break;
@@ -2429,7 +2427,7 @@ void uwamonoPlayerUpdate(void)
                 if (walk != 0) {
                     uwamonoMoveSelection(0);
                 }
-                if (!(gameWork.control & CONTROL_SCRIPTED) && !(gameWork.control & CONTROL_SEARCHING) && uwamonoSearchEventCount == -1) {
+                if (!(gameWork.control & CONTROL_SCRIPTED) && !(gameWork.control & CONTROL_MAP_ATTACK) && uwamonoSquareEventCount == -1) {
                     if (PadData[0].pressed & PAD_L1) {
                         uwamonoMoveSelection(1);
                     }
@@ -2442,51 +2440,51 @@ void uwamonoPlayerUpdate(void)
 
                         searched = uwamonoFindSelected();
                         if (searched != -1 && (uwamonoRecords[searched].flags & 0x20000)) {
-                            gameWork.control |= CONTROL_SEARCHING;
+                            gameWork.control |= CONTROL_MAP_ATTACK;
                             uwamonoSendEvent(0, uwamonoRecords[searched].id, 0);
                             actor->direction.y = Get_Angle(&actor->position, &uwamonoRecords[searched].position);
                             actor->rotation.y = Get_Cursol_by_Reduce_Speed_Angle_Loop(actor->rotation.y, actor->direction.y, 4.0f);
                             /* The smoothed value above is overwritten at once; the call stays for the original code. */
                             actor->rotation.y = Get_Angle(&actor->position, &uwamonoRecords[searched].position);
-                            XenoActorSetChannelValue(actor, 0.0f);
+                            XenoActorSetBlendFrames(actor, 0.0f);
                             uwamonoMovingFlag = 0;
                             XenoActorSetMode(actor, uwamonoRecords[searched].level + 3);
                             actor->requested_mode = 0;
-                            uwamonoSearchWaitCount = uwamonoSearchWaitTable[uwamonoRecords[searched].level];
-                            uwamonoSearchEventCount = uwamonoSearchEventTable[uwamonoRecords[searched].level];
-                            if (UWAMONO_IS_ES(actor)) {
+                            uwamonoSquareWaitCount = uwamonoSquareWaitTable[uwamonoRecords[searched].level];
+                            uwamonoSquareEventCount = uwamonoSearchEventTable[uwamonoRecords[searched].level];
+                            if (UWAMONO_IS_FOOT(actor)) {
                                 for (i = 0; i < 2; i++) {
-                                    if (riders[i] != NULL) {
-                                        XenoActorSetChannelValue(riders[i], 0.0f);
-                                        XenoActorEnableChannel(riders[i]);
-                                        XenoActorSetMode(riders[i], uwamonoRecords[searched].level + 3);
-                                        riders[i]->flags |= 2;
+                                    if (partActors[i] != NULL) {
+                                        XenoActorSetBlendFrames(partActors[i], 0.0f);
+                                        XenoActorSetBlendLocal(partActors[i]);
+                                        XenoActorSetMode(partActors[i], uwamonoRecords[searched].level + 3);
+                                        partActors[i]->flags |= 2;
                                     }
                                 }
                                 do {
                                     if (UWAMONO_KEY_IN(record->key, 0x10025, 7)) {
-                                        if (riders[0] != NULL) {
-                                            riders[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                                        if (partActors[0] != NULL) {
+                                            partActors[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                                         }
-                                        if (riders[1] != NULL) {
-                                            riders[1]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                                        if (partActors[1] != NULL) {
+                                            partActors[1]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                                         }
                                         break;
                                     }
                                     if (UWAMONO_KEY_IN(record->key, 0x10015, 6)) {
-                                        if (riders[0] != NULL) {
-                                            riders[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                                        if (partActors[0] != NULL) {
+                                            partActors[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                                         }
-                                        if (riders[1] != NULL) {
-                                            riders[1]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                                        if (partActors[1] != NULL) {
+                                            partActors[1]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                                         }
                                         break;
                                     }
-                                    if (riders[0] != NULL) {
-                                        riders[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                                    if (partActors[0] != NULL) {
+                                        partActors[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                                     }
-                                    if (riders[1] != NULL) {
-                                        riders[1]->drawFlags |= UWAMONO_DRAW_HIDDEN;
+                                    if (partActors[1] != NULL) {
+                                        partActors[1]->drawFlags |= UWAMONO_DRAW_HIDDEN;
                                     }
                                 } while (0);
                                 seVoiceStartDefault(uwamonoRecords[searched].level * 3 + Get_Rnd(0, 2) + 0x07000001);
@@ -2500,12 +2498,12 @@ void uwamonoPlayerUpdate(void)
                                 uwamonoSearchEffectHandle = sefCreateEffectCf((uwamonoKeyEffectId << 12) | 0x10000002, 0, 0);
                             }
                             sefSetRecordOwner(uwamonoSearchEffectHandle, actor);
-                            sefSetRecordValues(uwamonoSearchEffectHandle, riders[0], riders[1], 0);
+                            sefSetRecordValues(uwamonoSearchEffectHandle, partActors[0], partActors[1], 0);
                             /* jumpMode is kept as a local for the original code generation. */
                             jumpMode = uwamonoRecords[searched].level + 3;
                             actor->motion[0].speed = 1.0f;
-                            uwamonoSearchMode = jumpMode;
-                            XenoActorSetChannelValueB(actor, 4.0f);
+                            uwamonoSquareMode = jumpMode;
+                            XenoActorSetBlendFramesB(actor, 4.0f);
                             XenoActorSetSelector(actor, 5);
                             Vibration_Set_Weak(4);
                         }
@@ -2581,7 +2579,7 @@ void uwamonoPlayerUpdate(void)
             uwamonoPushOutOfActor(uwamonoCurrentIndex, uwamonoRecords[target].body.actor);
         }
         actor->velocity.x = actor->velocity.z = 0.0f;
-        if (!(((GameWorkAlias0 *)&gameWork)->control & CONTROL_TOP_EXIT) && (actor->collision.kind & ~0x1F) == GROUND_LADDER) {
+        if (!(((GameWorkAlias0 *)&gameWork)->control & CONTROL_MAP_LOADED) && (actor->collision.kind & ~0x1F) == GROUND_MAP_JUMP) {
             if (!(gameWork.control & 0x420)) {
                 gameWork.control |= 0x400;
                 uwamonoSendEvent(3, (actor->collision.kind & 0x1F) + 1, 0);
@@ -2591,31 +2589,31 @@ void uwamonoPlayerUpdate(void)
             gameWork.control &= ~0x400;
         }
     } else {
-        if (UWAMONO_IS_ES(actor)) {
+        if (UWAMONO_IS_FOOT(actor)) {
             do {
                 if (UWAMONO_KEY_IN(record->key, 0x10025, 7)) {
-                    if (riders[0] != NULL) {
-                        riders[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                    if (partActors[0] != NULL) {
+                        partActors[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                     }
-                    if (riders[1] != NULL) {
-                        riders[1]->drawFlags |= UWAMONO_DRAW_HIDDEN;
+                    if (partActors[1] != NULL) {
+                        partActors[1]->drawFlags |= UWAMONO_DRAW_HIDDEN;
                     }
                     break;
                 }
                 if (UWAMONO_KEY_IN(record->key, 0x10015, 6)) {
-                    if (riders[0] != NULL) {
-                        riders[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                    if (partActors[0] != NULL) {
+                        partActors[0]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                     }
-                    if (riders[1] != NULL) {
-                        riders[1]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
+                    if (partActors[1] != NULL) {
+                        partActors[1]->drawFlags &= ~UWAMONO_DRAW_HIDDEN;
                     }
                     break;
                 }
-                if (riders[0] != NULL) {
-                    riders[0]->drawFlags |= UWAMONO_DRAW_HIDDEN;
+                if (partActors[0] != NULL) {
+                    partActors[0]->drawFlags |= UWAMONO_DRAW_HIDDEN;
                 }
-                if (riders[1] != NULL) {
-                    riders[1]->drawFlags |= UWAMONO_DRAW_HIDDEN;
+                if (partActors[1] != NULL) {
+                    partActors[1]->drawFlags |= UWAMONO_DRAW_HIDDEN;
                 }
             } while (0);
         }
@@ -2625,17 +2623,17 @@ void uwamonoPlayerUpdate(void)
     UnduCheck(&actor->position, NULL, &uwamonoProbeTemplate);
     record->position = actor->position;
     record->rotation = actor->rotation;
-    if (UWAMONO_IS_ES(actor)) {
+    if (UWAMONO_IS_FOOT(actor)) {
         for (i = 0; i < 2; i++) {
-            if (riders[i] != NULL) {
-                riders[i]->position = actor->position;
-                riders[i]->rotation = actor->rotation;
-                riders[i]->direction = actor->direction;
-                riders[i]->scale = actor->scale;
-                riders[i]->vector70 = actor->vector70;
-                riders[i]->vector80 = actor->vector80;
-                riders[i]->velocity = actor->velocity;
-                riders[i]->radius = actor->radius;
+            if (partActors[i] != NULL) {
+                partActors[i]->position = actor->position;
+                partActors[i]->rotation = actor->rotation;
+                partActors[i]->direction = actor->direction;
+                partActors[i]->scale = actor->scale;
+                partActors[i]->vector70 = actor->vector70;
+                partActors[i]->vector80 = actor->vector80;
+                partActors[i]->velocity = actor->velocity;
+                partActors[i]->radius = actor->radius;
             }
         }
     }
@@ -2666,11 +2664,11 @@ int uwamonoFindOverlapRecord(int owner, AlignedVector4 *point, float reachScale)
 
         int motionBlocked;
 
-        if (uwamonoRecords[other].kind != UWAMONO_KIND_TALK && uwamonoRecords[other].kind != UWAMONO_KIND_PLAYER) {
+        if (uwamonoRecords[other].kind != MAP_KIND_ACTOR && uwamonoRecords[other].kind != MAP_KIND_ACTOR_STATIC) {
             continue;
         }
         motionBlocked = motions->flags & 1;
-        if (motionBlocked && uwamonoRecords[other].kind == UWAMONO_KIND_PLAYER) {
+        if (motionBlocked && uwamonoRecords[other].kind == MAP_KIND_ACTOR_STATIC) {
             continue;
         }
         if (owner == other || uwamonoRecords[other].body.actor->radius == 0.0f || (uwamonoRecords[other].flags & 0x02000000) != 0) {
@@ -2742,13 +2740,15 @@ void *uwamonoCurrentRecord(void)
 
 const float playerInitialRadius = 0.639999986f;
 const float playerInitialHeightReach = 0.200000003f;
-const float esFormRadius = 0.639999986f;
-const float esFrameScale = 0.000510000042f;
-const float humanModelScale = 0.899999976f;
-const float humanFrameScale = 0.00144500006f;
+/* The names are inverted: humanFormRadius and humanFrameScale are the on-foot values (form 1.0), esModelScale and
+   esFrameScale the E.S. values (form 5.0). */
+const float humanFormRadius = 0.639999986f;
+const float humanFrameScale = 0.000510000042f;
+const float esModelScale = 0.899999976f;
+const float esFrameScale = 0.00144500006f;
 
-int uwamonoSearchEventCount = -1;
-int uwamonoSearchMode = -1;
+int uwamonoSquareEventCount = -1;
+int uwamonoSquareMode = -1;
 int uwamonoCurrentIndex = -1;
 int uwamonoPartIndices[2] = { -1, -1 };
 unsigned char uwamonoKeyUnusedByte = 0xff;   /* no reader in this file */

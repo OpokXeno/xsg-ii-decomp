@@ -1,5 +1,5 @@
 #include "common.h"
-#include "main/ladder_table.h"
+#include "main/get_ladder.h"
 #include "main/enemy_1.h"
 #include "main/pause_menu_page_uwamono.h"
 #include "main/xenoActor.h"
@@ -24,11 +24,8 @@
 #include "main/menu_selection.h"
 #include "main/sef.h"
 
-/* uwamono records (game_camera.c has the same kinds and states): kind 0 free, 1 talks, 2 searched. */
+/* uwamono records: kind MAP_KIND_FREE is an unused record, MAP_KIND_ACTOR a talk target, MAP_KIND_MODEL a searched object (ytachi_test.h). */
 #define UWAMONO_RECORD_COUNT 256
-#define UWAMONO_KIND_FREE 0
-#define UWAMONO_KIND_TALK 1
-#define UWAMONO_KIND_SEARCHED 2
 /* record state: 0 out of reach, 1 selected, 2 in reach (ytachi_test.h). */
 #define UWAMONO_STATE_OUT_OF_REACH 0
 #define UWAMONO_STATE_SELECTED 1
@@ -59,7 +56,7 @@ int uwamonoCountLeadingInUse(void)
     int count = 0;
     unsigned char *kindPtr;
 
-    if (uwamonoRecords[0].kind != UWAMONO_KIND_FREE)
+    if (uwamonoRecords[0].kind != MAP_KIND_FREE)
     {
         kindPtr = &uwamonoRecords[0].kind;
         for (;;)
@@ -93,7 +90,7 @@ void uwamonoReleaseRecord(int index)
     for (recordIndex = 0; recordIndex < UWAMONO_RECORD_COUNT; recordIndex++)
     {
         record = &uwamonoRecords[recordIndex];
-        if (record->kind != UWAMONO_KIND_FREE && (record->parent == index || recordIndex == index))
+        if (record->kind != MAP_KIND_FREE && (record->parent == index || recordIndex == index))
         {
         for (ownedIndex = 0; ownedIndex < UWAMONO_RECORD_COUNT; ownedIndex++)
         {
@@ -112,14 +109,14 @@ void uwamonoReleaseRecord(int index)
         }
         switch (record->kind)
         {
-        case UWAMONO_KIND_TALK:
+        case MAP_KIND_ACTOR:
         case 4:
         case 5:
             uwamonoRecords[recordIndex].body.actor->drawFlags |= 4;
             XenoActorRelease(uwamonoRecords[recordIndex].body.actor);
             record->body.actor = 0;
             break;
-        case UWAMONO_KIND_SEARCHED:
+        case MAP_KIND_MODEL:
             if (record->key != -1)
             {
                 mapSecondHideMask.bits[record->key >> 5] |= 1 << (record->key & 0x1F);
@@ -216,7 +213,7 @@ int uwamonoCountInReach(void)
     {
         UwamonoRecord *record = &uwamonoRecords[index];
 
-        if (record->kind != UWAMONO_KIND_FREE && uwamonoRecords[index].state == 2)
+        if (record->kind != MAP_KIND_FREE && uwamonoRecords[index].state == 2)
         {
             count++;
         }
@@ -236,7 +233,7 @@ int uwamonoFindNearest(void)
     {
         UwamonoRecord *record = &uwamonoRecords[index];
 
-        if (record->kind != UWAMONO_KIND_FREE && uwamonoRecords[index].state != 0)
+        if (record->kind != MAP_KIND_FREE && uwamonoRecords[index].state != 0)
         {
             float distance = Get_Distance(&uwamonoRecords[uwamonoCurrentIndex].position, &uwamonoRecords[index].position);
 
@@ -260,7 +257,7 @@ short uwamonoFindSelected(void)
     {
         UwamonoRecord *record = &uwamonoRecords[index];
 
-        if (record->kind != UWAMONO_KIND_FREE && record->kind != 4)
+        if (record->kind != MAP_KIND_FREE && record->kind != 4)
         {
             float distance;
             double height;
@@ -292,7 +289,7 @@ void UnlockMapUnit(void)
 
     for (index = 0; index < UWAMONO_RECORD_COUNT; index++)
     {
-        if (record->kind != UWAMONO_KIND_FREE && record->kind != 4)
+        if (record->kind != MAP_KIND_FREE && record->kind != 4)
         {
             void *handle_63c = record->handles[1];
             void *handle_640;
@@ -334,7 +331,7 @@ void uwamonoUpdateInReach(struct XenoActor *actor, int index)
     slot = index;
     object = &uwamonoRecords[slot];
     record = &uwamonoRecords[slot];
-    if (record->kind == UWAMONO_KIND_FREE || record->kind == 4 || record->kind == 6)
+    if (record->kind == MAP_KIND_FREE || record->kind == 4 || record->kind == 6)
     {
         return;
     }
@@ -354,7 +351,7 @@ void uwamonoUpdateInReach(struct XenoActor *actor, int index)
     {
         return;
     }
-    if (gameWork.control & CONTROL_TOP_EXIT)
+    if (gameWork.control & CONTROL_MAP_LOADED)
     {
         if (gameWork.entryKey != -1)
         {
@@ -512,7 +509,7 @@ void uwamonoMoveSelection(int step)
         }
         for (current = 0; current < UWAMONO_RECORD_COUNT; current++)
         {
-            if (uwamonoRecords[current].kind != UWAMONO_KIND_FREE
+            if (uwamonoRecords[current].kind != MAP_KIND_FREE
                 && uwamonoRecords[current].kind != 4
                 && uwamonoRecords[current].kind != 6
                 && uwamonoRecords[current].state == UWAMONO_STATE_IN_REACH)
@@ -542,7 +539,7 @@ void uwamonoMoveSelection(int step)
             {
                 index = (current + probe) - ((current + probe) / 256) * 256;
                 probe++;
-                if (uwamonoRecords[index].kind != UWAMONO_KIND_FREE && uwamonoRecords[index].kind != 4
+                if (uwamonoRecords[index].kind != MAP_KIND_FREE && uwamonoRecords[index].kind != 4
                     && uwamonoRecords[index].state != UWAMONO_STATE_OUT_OF_REACH)
                 {
                     UwamonoHandleBlock *handles;
@@ -574,7 +571,7 @@ void uwamonoMoveSelection(int step)
                 probeSum = current - probe + 256;
                 index = probeSum - (probeSum / 256) * 256;
                 probe++;
-                if (uwamonoRecords[index].kind != UWAMONO_KIND_FREE && uwamonoRecords[index].kind != 4
+                if (uwamonoRecords[index].kind != MAP_KIND_FREE && uwamonoRecords[index].kind != 4
                     && uwamonoRecords[index].state != UWAMONO_STATE_OUT_OF_REACH)
                 {
                     UwamonoHandleBlock *handles;
@@ -767,21 +764,21 @@ void uwamonoSetPairMode(int index, int mode)
     int side;
 
     pair[0] = &uwamonoRecords[index];
-    if (pair[0]->lookLink != -1)
+    if (pair[0]->partnerLink != -1)
     {
-        pair[1] = &uwamonoRecords[uwamonoRecords[index].lookLink];
+        pair[1] = &uwamonoRecords[uwamonoRecords[index].partnerLink];
     }
     if (pair[0]->motionKind != 0)
     {
         recordIds[0] = index;
-        recordIds[1] = uwamonoRecords[index].lookLink;
-        if (pair[0]->tiltStep == -1 && (pair[0]->lookLink == -1 || pair[1]->tiltStep == -1))
+        recordIds[1] = uwamonoRecords[index].partnerLink;
+        if (pair[0]->moveTicks == -1 && (pair[0]->partnerLink == -1 || pair[1]->moveTicks == -1))
         {
             if (mode == 2)
             {
-                mode = (pair[0]->busy == 0);
+                mode = (pair[0]->openState == 0);
             }
-            if (pair[0]->busy != mode)
+            if (pair[0]->openState != mode)
             {
                 if (mode == 0)
                 {
@@ -799,11 +796,11 @@ void uwamonoSetPairMode(int index, int mode)
                 side = 0;
                 ownZOff = ownRowOff + 0x5f8;
                 partnerZOff = partnerPoseOff + 0x5f8;
-                for (; side < 2 && (side != 1 || pair[0]->lookLink != -1); side++)
+                for (; side < 2 && (side != 1 || pair[0]->partnerLink != -1); side++)
                 {
-                    pair[side]->tiltStep = 0;
-                    pair[side]->tiltCount = pair[side]->timer;
-                    if (side == 0 && pair[0]->tiltCount != 0)
+                    pair[side]->moveTicks = 0;
+                    pair[side]->moveDuration = pair[side]->timer;
+                    if (side == 0 && pair[0]->moveDuration != 0)
                     {
                         seVoiceStartDefault(pair[0]->moveSound);
                     }
@@ -825,7 +822,7 @@ void uwamonoSetPairMode(int index, int mode)
                         ((UwamonoPoses *) &pair[side]->turnFrom)->point[1].z = *(float *)((char *) pair[side] + partnerZOff);
                         ((UwamonoPoses *) &pair[side]->turnFrom)->point[1].w = 1.0f;
                     }
-                    pair[side]->busy = mode;
+                    pair[side]->openState = mode;
                 }
             }
         }
@@ -835,7 +832,7 @@ void uwamonoSetPairMode(int index, int mode)
 extern float uwamonoDoorOpenTurnAngle;
 extern float uwamonoPairMoveLinkScale;
 
-/* Sets the pose and the pair mode of record `index`, then hands its partner the saved position and a move. */
+/* Starts the lid move of the treasure box at `index`, then hands its partner the saved position and a move. */
 /* Pair-move constants (read by uwamonoStartPairMove). */
 float uwamonoDoorOpenTurnAngle = -2.09439516f;
 float uwamonoPairMoveLinkScale = 0.400000006f;
@@ -845,7 +842,7 @@ void uwamonoStartPairMove(int index, int mode, int duration)
     UwamonoRecord *record = &uwamonoRecords[index];
     Vector4Elements ones;
 
-    if (record->kind != UWAMONO_KIND_SEARCHED)
+    if (record->kind != MAP_KIND_MODEL)
     {
         return;
     }
@@ -853,7 +850,7 @@ void uwamonoStartPairMove(int index, int mode, int duration)
     {
         return;
     }
-    if (record->tiltStep != -1)
+    if (record->moveTicks != -1)
     {
         return;
     }
@@ -863,7 +860,7 @@ void uwamonoStartPairMove(int index, int mode, int duration)
     }
     if (mode == 5)
     {
-        mode = (record->busy == 3) ? 4 : 3;
+        mode = (record->openState == 3) ? 4 : 3;
     }
     else if (mode == 3)
     {
@@ -881,8 +878,8 @@ void uwamonoStartPairMove(int index, int mode, int duration)
     {
         seVoiceStartDefault(0x0200000F);
     }
-    record->tiltCount = duration;
-    record->tiltStep = 0;
+    record->moveDuration = duration;
+    record->moveTicks = 0;
     record->turnFrom.x = 0.0f;
     record->turnFrom.y = record->rotation.y;
     record->turnFrom.z = record->rotation.z;
@@ -890,20 +887,20 @@ void uwamonoStartPairMove(int index, int mode, int duration)
     record->turnTo.x = uwamonoDoorOpenTurnAngle;
     record->turnTo.y = record->rotation.y;
     record->turnTo.z = record->rotation.z;
-    record->busy = mode;
+    record->openState = mode;
     record->turnTo.w = 1.0f;
-    if (record->linkB == -1)
+    if (record->itemLink == -1)
     {
         return;
     }
     {
-        int offset = record->linkB * sizeof(UwamonoRecord) + 0x10;
+        int offset = record->itemLink * sizeof(UwamonoRecord) + 0x10;
         DoublewordVector4 *destination = (DoublewordVector4 *) ((unsigned char *) uwamonoRecords + offset);
         destination->words[0] = ((DoublewordVector4 *) &record->position)->words[0];
         destination->words[1] = ((DoublewordVector4 *) &record->position)->words[1];
     }
     {
-        int offset = record->linkB * sizeof(UwamonoRecord) + 0x14;
+        int offset = record->itemLink * sizeof(UwamonoRecord) + 0x14;
         float *y = (float *) ((unsigned char *) uwamonoRecords + offset);
         *y += 0.5f;
     }
@@ -911,21 +908,21 @@ void uwamonoStartPairMove(int index, int mode, int duration)
         int xOffset = 80;
         int yOffset = 84;
         int zOffset = 88;
-        (*(float *) ((unsigned char *) uwamonoRecords + record->linkB * sizeof(UwamonoRecord) + xOffset)) = (*(float *) ((unsigned char *) uwamonoRecords + record->linkB * sizeof(UwamonoRecord) + yOffset)) = (*(float *) ((unsigned char *) uwamonoRecords + record->linkB * sizeof(UwamonoRecord) + zOffset)) = 0.0f;
+        (*(float *) ((unsigned char *) uwamonoRecords + record->itemLink * sizeof(UwamonoRecord) + xOffset)) = (*(float *) ((unsigned char *) uwamonoRecords + record->itemLink * sizeof(UwamonoRecord) + yOffset)) = (*(float *) ((unsigned char *) uwamonoRecords + record->itemLink * sizeof(UwamonoRecord) + zOffset)) = 0.0f;
     }
-    uwamonoRecords[record->linkB].scale.w = 1.0f;
+    uwamonoRecords[record->itemLink].scale.w = 1.0f;
     ones.vector.x = ones.vector.y = ones.vector.z = 1.0f;
     ones.vector.w = 1.0f;
-    uwamonoStartScale(record->linkB, &ones, 20);
-    uwamonoRecords[record->linkB].velocity.y = uwamonoPairMoveLinkScale;
+    uwamonoStartScale(record->itemLink, &ones, 20);
+    uwamonoRecords[record->itemLink].velocity.y = uwamonoPairMoveLinkScale;
     {
-        uwamonoRecords[record->linkB].flags |= 2;
+        uwamonoRecords[record->itemLink].flags |= 2;
     }
     {
-        uwamonoRecords[record->linkB].flags &= 0xFDFFFFFF;
+        uwamonoRecords[record->itemLink].flags &= 0xFDFFFFFF;
     }
-    uwamonoStartPickupMove(record->linkB);
-    record->linkB = -1;
+    uwamonoStartItemFlight(record->itemLink);
+    record->itemLink = -1;
 }
 
 
@@ -937,7 +934,7 @@ int uwamonoFindTalkTarget(struct XenoActor *subject, float range)
     int index;
     UwamonoRecord *record;
 
-    if ((gameWork.control & CONTROL_TOP_EXIT) != 0 && gameWork.entryKey != bestIndex) {
+    if ((gameWork.control & CONTROL_MAP_LOADED) != 0 && gameWork.entryKey != bestIndex) {
         return -1;
     }
     for (index = 0; index < UWAMONO_RECORD_COUNT; index++) {
@@ -947,7 +944,7 @@ int uwamonoFindTalkTarget(struct XenoActor *subject, float range)
         record = &uwamonoRecords[index];
 
         switch (record->kind) {
-        case UWAMONO_KIND_SEARCHED:
+        case MAP_KIND_MODEL:
             if ((unsigned int) (record->type - 4) < 3) {
                 float angleMid;
 
@@ -983,10 +980,10 @@ int uwamonoFindTalkTarget(struct XenoActor *subject, float range)
             } else {
                 int linkedIndex;
 
-                if (record->motionKind != 0 && record->tiltStep != -1) {
+                if (record->motionKind != 0 && record->moveTicks != -1) {
                     continue;
                 }
-                linkedIndex = record->lookLink;
+                linkedIndex = record->partnerLink;
                 if (linkedIndex == -1) {
                     spot.vector = record->closedPosition.vector;
                 } else {
@@ -1005,12 +1002,12 @@ int uwamonoFindTalkTarget(struct XenoActor *subject, float range)
                 if (record->motionKind == 0) {
                     continue;
                 }
-                if (record->searchState == 2) {
-                    if (record->speed * 5.0f < dist) {
+                if (record->openerKind == 2) {
+                    if (record->openDistance * 5.0f < dist) {
                         continue;
                     }
                 } else {
-                    if (record->speed < dist) {
+                    if (record->openDistance < dist) {
                         continue;
                     }
                 }
@@ -1024,7 +1021,7 @@ int uwamonoFindTalkTarget(struct XenoActor *subject, float range)
                 bestIndex = index;
             }
             break;
-        case UWAMONO_KIND_TALK:
+        case MAP_KIND_ACTOR:
             {
                 float reachLimit;
 
@@ -1064,15 +1061,15 @@ int uwamonoFindTalkTarget(struct XenoActor *subject, float range)
     return bestIndex;
 }
 
-/* Restores the record at `index`: clears flags bit 0x8, arms the 60-tick countdown and copies the saved position home. */
-void uwamonoStartPickupMove(int index)
+/* Starts the 60-tick flight of the picked-up item at `index` to the player. */
+void uwamonoStartItemFlight(int index)
 {
     UwamonoRecord *record = &uwamonoRecords[index];
 
     record->flags &= ~8;
-    record->tiltCount = 0x3C;
+    record->moveDuration = 0x3C;
     record->moveFrom = record->position;
-    record->tiltStep = 0;
+    record->moveTicks = 0;
     seVoiceStartDefault(0x02000002);
 }
 
@@ -1105,7 +1102,7 @@ void uwamonoUpdateItemPickups(void)
     records = (UwamonoRecord *) uwamonoRecords;
     for (index = 0; index < UWAMONO_RECORD_COUNT; index++) {
         record = &records[index];
-        if (records[index].kind != UWAMONO_KIND_SEARCHED) {
+        if (records[index].kind != MAP_KIND_MODEL) {
             continue;
         }
         if (records[index].type < 12) {
@@ -1114,30 +1111,30 @@ void uwamonoUpdateItemPickups(void)
         if ((records[index].flags & 0x02000000) != 0) {
             continue;
         }
-        if (record->tiltStep == -1 && Get_Distance3D(&record->position, (Vector4 *) (uwamonoCurrentIndex * sizeof(UwamonoRecord) + (int) &records->position)) <= records[uwamonoCurrentIndex].extent.x) {
-            uwamonoStartPickupMove(index);
+        if (record->moveTicks == -1 && Get_Distance3D(&record->position, (Vector4 *) (uwamonoCurrentIndex * sizeof(UwamonoRecord) + (int) &records->position)) <= records[uwamonoCurrentIndex].extent.x) {
+            uwamonoStartItemFlight(index);
         }
-        if (record->tiltStep == -1) {
+        if (record->moveTicks == -1) {
             continue;
         }
 
-        moveFrameCopy = record->tiltStep;
+        moveFrameCopy = record->moveTicks;
         currentOffset = uwamonoCurrentIndex * sizeof(UwamonoRecord);
         pose.vector.y = *(float *) (currentOffset + ((currentOffset & 0xFF) >> 8) + (int) records + 20) + 1.0f;
         pose.vector.x = *(float *) (currentOffset + ((currentOffset & 0xFE) >> 8) + (int) records + 16);
         pose.vector.z = *(float *) (currentOffset + ((currentOffset & 0xFC) >> 8) + (int) records + 24);
         pose.vector.w = 1.0f;
-        Get_MiddlePoint(&record->moveFrom, &pose.vector, record->tiltStep, record->tiltCount, &record->position);
+        Get_MiddlePoint(&record->moveFrom, &pose.vector, record->moveTicks, record->moveDuration, &record->position);
 
-        if (record->tiltStep == record->tiltCount / 2) {
+        if (record->moveTicks == record->moveDuration / 2) {
             record->scale.x = record->scale.y = record->scale.z = 1.0f;
             record->scale.w = 1.0f;
             pose.vector.x = pose.vector.y = pose.vector.z = 0.0f;
             pose.vector.w = 1.0f;
-            uwamonoStartScale(index, &pose, record->tiltStep);
+            uwamonoStartScale(index, &pose, record->moveTicks);
         }
 
-        if (record->tiltStep == 1) {
+        if (record->moveTicks == 1) {
             entry = (UwamonoEventRow *) (record->eventRow * 8 + (int) uwamonoEventTable);
             count = entry->count;
             id = entry->id;
@@ -1174,7 +1171,7 @@ void uwamonoUpdateItemPickups(void)
                         dataBoxIncCategory3(id);
                     } while (--repeat != 0);
                 }
-                selectionBlockFill();
+                selectionKeyItemBitsFill();
                 break;
             }
             gameWork.eventFlags[record->eventRow] = 1;
@@ -1194,8 +1191,8 @@ void uwamonoUpdateItemPickups(void)
             uwamonoSendEvent(8, *(short *) record, -1);
         }
 
-        if (record->tiltStep >= record->tiltCount) {
-            record->tiltStep = -1;
+        if (record->moveTicks >= record->moveDuration) {
+            record->moveTicks = -1;
             uwamonoReleaseRecord(index);
         }
     }
@@ -1274,31 +1271,31 @@ void uwamonoTriggerRecord(int index)
         }
     }
 
-    if (record->linkB != -1) {
-        farPartner = uwamonoRecords[record->linkB].type >= 12;
-        partnerPosOff = record->linkB * sizeof(UwamonoRecord) + 16;
+    if (record->itemLink != -1) {
+        farPartner = uwamonoRecords[record->itemLink].type >= 12;
+        partnerPosOff = record->itemLink * sizeof(UwamonoRecord) + 16;
         partnerPos = (long long *) ((char *) uwamonoRecords + partnerPosOff);
         partnerPos[0] = ((DoublewordVector4 *) &record->position)->words[0];
         partnerPos[1] = ((DoublewordVector4 *) &record->position)->words[1];
-        partnerYOff = record->linkB * sizeof(UwamonoRecord) + 20;
+        partnerYOff = record->itemLink * sizeof(UwamonoRecord) + 20;
         partnerY = (float *) ((char *) uwamonoRecords + partnerYOff);
         *partnerY += (farPartner == 1) ? 0.5f : 0.0f;
         unit.vector.x = unit.vector.y = unit.vector.z = unit.vector.w = 1.0f;
         partnerBase = uwamonoRecords;
-        partnerOff = record->linkB * sizeof(UwamonoRecord);
+        partnerOff = record->itemLink * sizeof(UwamonoRecord);
         *(float *) (partnerOff + ((partnerOff & 0xFE) >> 8) + (int) partnerBase + 80) = *(float *) (partnerOff + ((partnerOff & 0xFC) >> 8) + (int) partnerBase + 84) = *(float *) (partnerOff + (int) partnerBase + 88) = 0.0f;
-        uwamonoRecords[record->linkB].scale.w = 1.0f;
-        uwamonoStartScale(record->linkB, &unit, (farPartner == 1) ? 20 : 0);
-        partnerScaleOff = record->linkB * sizeof(UwamonoRecord) + 52;
+        uwamonoRecords[record->itemLink].scale.w = 1.0f;
+        uwamonoStartScale(record->itemLink, &unit, (farPartner == 1) ? 20 : 0);
+        partnerScaleOff = record->itemLink * sizeof(UwamonoRecord) + 52;
         partnerScale = (float *) ((char *) uwamonoRecords + partnerScaleOff);
         *partnerScale = (farPartner == 1) ? uwamonoFarPartnerScale : 0.0f;
-        uwamonoRecords[record->linkB].flags |= 2;
-        uwamonoRecords[record->linkB].flags &= ~0x02000000;
+        uwamonoRecords[record->itemLink].flags |= 2;
+        uwamonoRecords[record->itemLink].flags &= ~0x02000000;
     }
 
-    if (record->linkA != -1) {
-        other = &uwamonoRecords[record->linkA];
-        secondPosOff = record->linkA * sizeof(UwamonoRecord) + 16;
+    if (record->enemyLink != -1) {
+        other = &uwamonoRecords[record->enemyLink];
+        secondPosOff = record->enemyLink * sizeof(UwamonoRecord) + 16;
         secondPos = (long long *) ((char *) uwamonoRecords + secondPosOff);
         secondPos[0] = ((DoublewordVector4 *) &record->position)->words[0];
         secondPos[1] = ((DoublewordVector4 *) &record->position)->words[1];
@@ -1306,17 +1303,17 @@ void uwamonoTriggerRecord(int index)
         ((DoublewordVector4 *) &actor->position)->words[0] = secondPos[0];
         ((DoublewordVector4 *) &actor->position)->words[1] = secondPos[1];
         unit.vector.x = unit.vector.y = unit.vector.z = unit.vector.w = 1.0f;
-        secondYOff = record->linkA * sizeof(UwamonoRecord) + 20;
+        secondYOff = record->enemyLink * sizeof(UwamonoRecord) + 20;
         secondY = (float *) ((char *) uwamonoRecords + secondYOff);
         *secondY += 0.0f;
         secondBase = uwamonoRecords;
-        secondOff = record->linkA * sizeof(UwamonoRecord);
+        secondOff = record->enemyLink * sizeof(UwamonoRecord);
         *(float *) (secondOff + ((secondOff & 0xFE) >> 8) + (int) secondBase + 80) = *(float *) (secondOff + ((secondOff & 0xFC) >> 8) + (int) secondBase + 84) = *(float *) (secondOff + (int) secondBase + 88) = 0.0f;
-        uwamonoRecords[record->linkA].scale.w = 1.0f;
-        uwamonoStartScale(record->linkA, &unit, 20);
-        uwamonoRecords[record->linkA].velocity.y = uwamonoTriggerLinkScale;
-        uwamonoRecords[record->linkA].flags |= 2;
-        uwamonoRecords[record->linkA].flags &= ~0x02000000;
+        uwamonoRecords[record->enemyLink].scale.w = 1.0f;
+        uwamonoStartScale(record->enemyLink, &unit, 20);
+        uwamonoRecords[record->enemyLink].velocity.y = uwamonoTriggerLinkScale;
+        uwamonoRecords[record->enemyLink].flags |= 2;
+        uwamonoRecords[record->enemyLink].flags &= ~0x02000000;
         if (uwamonoRecords[uwamonoCurrentIndex].form != 5.0f) {
             sefCreateEffectCf(0x1003400a, &record->position, 0);
         } else {
@@ -1358,7 +1355,7 @@ void uwamonoAddPoint(Vector4 *position, int key, float value)
 }
 
 
-/* The point scan reads the first state of a record's motion block (+0x334) through this view: the cooldown at +0x60 as
+/* The point scan reads the first state of a record's motion block (+0x334) through this view: the stun time at +0x60 as
  * a signed short (UwamonoState declares it unsigned for the enemy code) and the action at +0x0C as a signed byte. */
 typedef struct UwamonoMotionScan {
     unsigned char unmodeled_00[0x0C];
@@ -1384,7 +1381,7 @@ void uwamonoUpdatePoints(void)
             record = &uwamonoRecords[recordIndex];
             motion = (UwamonoMotionScan *) record->body.motions;
 
-            if (record->kind != UWAMONO_KIND_TALK) {
+            if (record->kind != MAP_KIND_ACTOR) {
                 continue;
             }
             if (motion->hold != 0) {
@@ -1408,14 +1405,14 @@ extern char uwamonoSearchDistanceFormat[];
 
 /* Scans the records for one with kind 2 and type in 7..11 (save points and dummies) that lies within half of the
  * current record's form from the current record; prints it and returns its low byte, else -1. */
-int uwamonoGetNearbySearchType(void)
+int uwamonoGetNearbyUnitType(void)
 {
     UwamonoRecord *record;
     int index;
 
     for (index = 0; index < UWAMONO_RECORD_COUNT; index++) {
         record = &uwamonoRecords[index];
-        if (record->kind == UWAMONO_KIND_SEARCHED && (unsigned int) (record->type - 7) < 5) {
+        if (record->kind == MAP_KIND_MODEL && (unsigned int) (record->type - 7) < 5) {
             float distance = Get_Distance3D(&uwamonoRecords[uwamonoCurrentIndex].position, &record->position);
             if (distance <= 0.5f * uwamonoRecords[uwamonoCurrentIndex].form) {
                 xglFontDebugPrintf(8, 8, uwamonoSearchDistanceFormat, (double) distance);
@@ -1438,7 +1435,7 @@ const UwamonoCellBits uwamonoCellBitTable = { { 0, 1, 2, 3, 0, 4, 5, 6, 7 } };
 /* Zero data after the ladder table (.data, address order). The types are guesses from the sizes; */
 /* uwamonoRecords (0x33FDC0) is declared by include/main/ytachi_test.h and is not defined here. */
 
-/* .data of this file (0x3E7270-0x3E7400), also read by runtime_item.c. */
+/* .data of this file (0x3E7270-0x3E7400), also read by runtime.c. */
 char itemPickupMessageBuffer[400] = {
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,

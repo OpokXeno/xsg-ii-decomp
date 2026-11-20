@@ -2,11 +2,11 @@
 #define INCLUDE_MAIN_INTERP_UPDATE_H
 
 #include "shared.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
-/* Functions of src/main/interp_update.c: the state 1 (text) slot (MsgSlot of timecode_counter.h, body MsgSlotText). */
+/* Functions of src/main/interp_update.c: the slot type 1 (text) slot (MsgSlot of msg_slot_core.h, body MsgSlotText). */
 
-/* Flag bits of MsgSlot.flags of a text slot beyond the phase bits shared with MSG_SLOT_* (timecode_counter.h). */
+/* Flag bits of MsgSlot.flags of a text slot beyond the phase bits shared with MSG_SLOT_* (msg_slot_core.h). */
 #define INTERP_OPEN_FRAMES 12   /* frames the opening phase (flag 0x4) lasts before the slot is open */
 #define INTERP_ANGLE_END 180    /* degrees at which the cosine ease reaches its end value */
 

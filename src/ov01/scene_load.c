@@ -104,10 +104,10 @@ extern int ov01SceneDone;
 void ov01StepSceneScript(struct SaveStack *context);
 void ov01StepLoadBattleFiles(struct SaveStack *context);
 
-/* Load thread entry: releases the battle sound effects (dataBattleSeRelease), marks the load done (ov01LoadDone)
+/* Load thread entry: uploads the battle sound effects to the sound driver (dataBattleSeUpload), marks the load done (ov01LoadDone)
  * and ends the thread. */
 void ov01LoadComplete(void) {
-    dataBattleSeRelease();
+    dataBattleSeUpload();
     ov01LoadDone = 1;
     ExitDeleteThread();
 }
@@ -126,10 +126,10 @@ void ov01LoadBlockStart(void)
     StartThread(CreateThread(&param), 0);
 }
 
-/* Load thread entry of ov01LoadRequest: passes the owner (ov01LoadOwner) to dataSlotUnload, marks the load
+/* Load thread entry of ov01LoadRequest: passes the owner (ov01LoadOwner) to dataSlotVoiceUpload, which uploads its voice bank, marks the load
  * done and ends the thread. */
 void ov01LoadCompleteForOwner(void) {
-    dataSlotUnload(ov01LoadOwner);
+    dataSlotVoiceUpload(ov01LoadOwner);
     ov01LoadDone = 1;
     ExitDeleteThread();
 }
@@ -282,7 +282,7 @@ void ov01StepSpawnPartyMember(struct SaveStack *context) {
     ov01CurUnit->stats->spawnArgC = 0;
     ov01CurUnit->stats->spawnArgD = 0;
     ov01CurSlot = dataUnitFileLoad(id);
-    unitEffectSlotAcquire(id);
+    unitEffectFilesSetup(id);
     ov01StepSetNext(context, ov01StepLoadPartyMember);
     ov01StackPush(context, ov01StepAwaitLoads);
 }
@@ -348,7 +348,7 @@ void ov01StepSpawnEnemy(struct SaveStack *context) {
     ov01CurUnit->stats->spawnArgC = ov01EnemyList[ov01EnemyIndex].spawnArgC;
     ov01CurUnit->stats->spawnArgD = ov01EnemyList[ov01EnemyIndex].spawnArgD;
     ov01CurSlot = dataUnitFileLoad(id);
-    unitEffectSlotAcquire(id);
+    unitEffectFilesSetup(id);
     ov01StepSetNext(context, ov01StepLoadEnemy);
     ov01StackPush(context, ov01StepAwaitLoads);
 }

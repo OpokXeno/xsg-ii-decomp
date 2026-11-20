@@ -5,8 +5,8 @@
 #include "main/control_entry.h"
 
 /* Sound driver layer of main/sound_driver.c (KORG IOP driver, bound by soundDriverInit).
- * soundCtrl is the control block (main/sound_driver.h). korgEvagSetUnitVolume(channel, level) sets a channel level;
- * channel 0 is the master. */
+ * soundCtrl is the control block (main/sound_driver.h). korgEvagSetUnitVolume(unit, level) sets a unit's level;
+ * unit 0 is the master. */
 
 /* soundSetDefaults: master volume, default master, voice and slot levels. */
 #define SOUND_DEFAULT_MASTER_VOLUME 0x6E
@@ -14,9 +14,9 @@
 #define SOUND_DEFAULT_VOICE_LEVEL 0x64
 #define SOUND_DEFAULT_SLOT_LEVEL 0x64
 
-int korgEvagSetUnitVolume(int channel, int level);
+int korgEvagSetUnitVolume(int unit, int level);
 
-/* Mutes channels 1 to 3, or restores them to full level. */
+/* Mutes units 1 to 3, or restores them to full level. */
 void soundSetMuted(int muted)
 {
     if (muted != 0) {
@@ -98,7 +98,7 @@ void adxSetSlotFile(int index, const char *name)
 
 void ADXT_Pause(int id, int value);
 
-/* Sets the level of slot index and keeps a copy in ramp.set_level. */
+/* Pauses slot index's voice at value (ADXT_Pause) and keeps the value in ramp.pause_value. */
 void soundSlotSetPause(int index, int value)
 {
     SoundSlot *slot;
@@ -106,18 +106,18 @@ void soundSlotSetPause(int index, int value)
     if (index < 2) {
         slot = &soundCtrl.slots[index];
         ADXT_Pause(slot->driver_id, value);
-        slot->ramp.set_level = (unsigned char) value;
+        slot->ramp.pause_value = (unsigned char) value;
     }
 }
 
-/* Sets the level of slot index's voice, unless the slot already has a level (ramp.set_level). */
+/* Pauses slot index's voice at value, unless the slot already holds a pause value (ramp.pause_value). */
 void soundSlotSetPauseIfNotHeld(int index, int value)
 {
     SoundSlot *slot;
 
     if (index < 2) {
         slot = &soundCtrl.slots[index];
-        if (slot->ramp.set_level != 0) {
+        if (slot->ramp.pause_value != 0) {
             return;
         }
         ADXT_Pause(slot->driver_id, value);
@@ -126,7 +126,7 @@ void soundSlotSetPauseIfNotHeld(int index, int value)
 
 void ADXT_Stop(int id);
 
-/* Stops the driver voice of slot index and sets its level to 0. */
+/* Stops the driver voice of slot index and pauses it at 0. */
 void soundSlotStop(int index)
 {
     SoundSlot *slot;
@@ -230,7 +230,7 @@ void soundStereoSet(int flag)
 
 void korgEvagMidiProcBatchFlush(void);
 
-/* Runs the one-time driver setup when the control block's flag byte is still 0. */
+/* Flushes the MIDI batch queue while the control block's initialized byte is 0. Nothing sets that byte. */
 void soundInitIfNeeded(void)
 {
     if (soundCtrl.initialized == 0) {
@@ -240,7 +240,7 @@ void soundInitIfNeeded(void)
 
 void ADXM_ExecMain(void);
 
-/* Steps the master volume ramp (channel 0) and the ramps of both slots, applying the levels that
+/* Steps the master volume ramp (unit 0) and the ramps of both slots, applying the levels that
  * changed. */
 void soundApplySettings(void)
 {
@@ -263,7 +263,7 @@ void soundApplySettings(void)
     ADXM_ExecMain();
 }
 
-/* Writes the default volume and levels and sets channels 1 to 3 to full level. */
+/* Writes the default volume and levels and sets units 1 to 3 to full level. */
 void soundSetDefaults(void)
 {
     soundCtrl.master_volume = SOUND_DEFAULT_MASTER_VOLUME;
@@ -290,7 +290,8 @@ void ADXT_SetSvrFreq(int id, int value);
 int ADXT_SetReloadSct(int id, int frames);
 
 /* Reopens slot index: destroys the old voice when there is one, creates a new one from the create
- * parameters, starts it, applies its level and fades it in (50 for slot 0, 70 for slot 1). */
+ * parameters, sets its server frequency, applies its level and sets its reload threshold (50 sectors for
+ * slot 0, 70 for slot 1). */
 int soundSlotReopen(int index)
 {
     if (soundCtrl.records[index + 1].driver_id != 0) {
@@ -326,7 +327,7 @@ int korgEvagBind(void);
 int korgEvagInitSpu2(int value);
 int korgEvagInit(int, int);
 int korgEvagAllocVagParam(int, int);
-int korgEvagSetChannelPriority(int kind, int channel, int level);
+int korgEvagSetChannelPriority(int unit, int channel, int level);
 int printf(const char *format, ...);
 
 /* The work buffers of the two voices, and the part of each the driver uses. */

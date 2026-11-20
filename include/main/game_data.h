@@ -44,7 +44,7 @@ typedef struct CameraRange {
     unsigned char unmodeled_0014[0xC];
     Vector4 offset;                             /* +0x20: the look-at offset above the anchor */
     Vector4 angleLimits;                        /* +0x30: pitch min and max, yaw min and max */
-    Vector4 lockPosition;                       /* +0x40: the camera position, w is the perspective */
+    Vector4 cameraPosition;                       /* +0x40: the camera position, w is the perspective */
     Vector4 lookAt;                             /* +0x50: the look-at point, w is the roll */
     Vector4 angles;                             /* +0x60: x pitch, y yaw, w the distance to the look-at point */
 } CameraRange;
@@ -65,7 +65,7 @@ typedef struct GameWorkCamera {
     unsigned char cameraType;                   /* +0xD2: the camera type of the active record */
     unsigned char cameraSubType;                /* +0xD3: cleared with typeState when the camera type changes */
     signed char recordIndex;                    /* +0xD4: the camera record in use */
-    signed char mode;                           /* +0xD5: set by GameCameraChangeID */
+    signed char surfaceGroup;                   /* +0xD5: the camera surface group, set by GameCameraChangeID */
     unsigned char allSlotsFlagA;                /* +0xD6 */
     unsigned char allSlotsFlagB;                /* +0xD7: also the anchor pending flag of the range update */
     unsigned char previousRecordIndex;          /* +0xD8 */
@@ -147,7 +147,7 @@ typedef struct GameWork {
     int nextMap;                                /* +0x14: the requested next map, -1 when none */
     int mapId;                                  /* +0x18: the current map */
     int entryKey;                               /* +0x1C: -1 none, -2 the party position, else an entry key */
-    int resourceId;                             /* +0x20: the current resource id (chapter id) */
+    int resourceId;                             /* +0x20: the file id of the map model (game_map_object.c sets it; game_over.c also writes chapter + 1) */
     unsigned char unmodeled_0024[0x1];
     unsigned char elevatorMask;                 /* +0x25: the copy of elvActiveMask (elevator.c) saved with the scene */
     unsigned char unmodeled_0026[0x2];
@@ -181,13 +181,13 @@ typedef struct GameWork {
     unsigned char unmodeled_0328[0x4];
     int encounterRecord;                        /* +0x32C: record index of the current encounter */
     short fadeTimer;                            /* +0x330: frames left of the rider fade */
-    unsigned char vibrationTarget;              /* +0x332: the vibration fade target */
-    unsigned char vibrationValue;               /* +0x333: the vibration fade current value */
+    unsigned char vibrationStart;              /* +0x332: the fade\'s start value (the output of its first step) */
+    unsigned char vibrationEnd;               /* +0x333: the fade\'s end value (the output settles near it) */
     int vibrationHold;                          /* +0x334: hold countdown of the fade */
     int vibrationFramesLeft;                    /* +0x338: steps left in the fade */
     int vibrationFramesTotal;                   /* +0x33C: steps the fade was started with */
     unsigned char unmodeled_0340[0x4];
-    void *releaseHandle;                        /* +0x344 */
+    void *releaseHandle;                        /* +0x344: effect handle deleted when a battle ends (game_data.c) */
     DoublewordAlignedVector4 fogDist;           /* +0x348: setFog near, far, min, max */
     unsigned char unmodeled_0358[0x8];
     Vector4 fogColor;                           /* +0x360: setFog color */
@@ -214,11 +214,13 @@ typedef struct GameWork {
 #define CONTROL_PAUSED 0x1
 #define CONTROL_SCRIPTED 0x8000
 #define CONTROL_REPLAYED 0x10000
-#define CONTROL_SEARCHING 0x20000
-#define CONTROL_TOP_EXIT 0x20 /* reaching the top of a ladder moves on to the top state (get_ladder.c) */
+/* the SQUARE attack on a map object is running (game_camera.c) */
+#define CONTROL_MAP_ATTACK 0x20000
+/* set when a map resource loads and cleared two frames later (DispMapObject); readers treat it as "the map just loaded" */
+#define CONTROL_MAP_LOADED 0x20
 /* Set while a cut scene runs (cfePlugIn.c sets it at the start, clears it at the end). */
 #define CONTROL_CFE_SCENE 0x200
-#define CONTROL_CFE_NO_FADE 0x100000 /* set with it: events then start no fade-out (runtime_prog_effect.c) */
+#define CONTROL_CFE_NO_FADE 0x100000 /* set with it: events then start no fade-out (runtime.c) */
 #define CONTROL_SOFT_RESET 0x10000000 /* the soft-reset pad combo was pressed; Title will not start a game while it is set */
 
 extern GameWork gameWork;

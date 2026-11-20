@@ -58,13 +58,13 @@ static int enemyCursorBit;
 static int enemyCursorTimer;
 
 extern int statBitValues[];
-/* The enemy-cursor task: enemyCursorOpen opens it, enemyCursorClose and enemyCursorTextRemove
+/* The enemy-cursor task: statusLineOpen opens it, enemyCursorClose and enemyCursorTextRemove
  * remove it. X1 names the same global the enemy-cursor task (battle_init.c). */
 /* Text task that the choice-menu openers allocate (the textEntryAlloc result) and the close functions remove. */
 /* The choice menu's text page list for textEntryAlloc: the text of the entry under the cursor (set by the pickers),
  * then 0. */
 /* The text page list of the enemy cursor (and of the paired technique menu): the text (set by pairedMenuPick and
- * enemyCursorStep), then 0. */
+ * statusLineStep), then 0. */
 
 /* The lists the choice-menu openers fill for choice slot 0: the entry texts (0 after the last), the value shown with
  * each entry, its id and its flag (CHOICE_ENTRY_DISABLED greys it out). The pickers index ids and flags with the
@@ -83,7 +83,7 @@ extern int statBitValues[];
 #define CHOICE_TEXT_HEIGHT 0x28
 #define CHOICE_TEXT_STYLE 8
 
-/* Items 1..ITEM_ID_LAST; an item can be picked in battle when its HitAction flags have ITEM_BATTLE_USE. */
+/* Items 1..ITEM_ID_LAST; an item can be picked in battle when its UsableItemRecord flags have ITEM_BATTLE_USE. */
 #define ITEM_ID_LAST 40
 #define ITEM_BATTLE_USE 0x4000
 #define ITEM_MENU_STYLE 2
@@ -102,7 +102,7 @@ void choiceMenuOpenItems(BattleUnit *unit)
     n = 0;
     for (id = 1; id <= ITEM_ID_LAST; id++) {
         count = dataBoxChkCategory1(id);
-        if (count > 0 && (hitActionGet(id)->flags & ITEM_BATTLE_USE)) {
+        if (count > 0 && (usableItemRecordGet(id)->flags & ITEM_BATTLE_USE)) {
             choiceMenuItems[n] = hitActionTextGet(id, RECORD_TEXT_NAME);
             choiceMenuValues[n] = count;
             choiceMenuEntryIds[n] = id;
@@ -169,7 +169,7 @@ void choiceMenuOpenTecs(BattleUnit *unit)
     for (id = 1; id <= TEC_LOOKUP_LAST; id++) {
         if (slotCodeTest(unit, id)) {
             choiceMenuItems[n] = battleLookupTextGet(id, RECORD_TEXT_NAME);
-            choiceMenuValues[n] = calcTakeEpGet(unit, battleLookupGet(id)->tecIndex);
+            choiceMenuValues[n] = calcTakeEpGet(unit, etherRecordGet(id)->tecIndex);
             choiceMenuEntryIds[n] = id;
             choiceMenuEntryFlags[n] = calcEthEnableChk(unit, id) ? 0 : CHOICE_ENTRY_DISABLED;
             n++;
@@ -233,7 +233,7 @@ void choiceMenuOpenLevels(BattleUnit *unit)
     levelMenuCount = calcKeyBandRecords(unit, levelMenuIds);
     for (i = 0; i < levelMenuCount; i++) {
         choiceMenuItems[n] = calcLevelTextGet(levelMenuIds[i], RECORD_TEXT_NAME);
-        choiceMenuValues[n] = calcLevelRecordGet(levelMenuIds[i])->requiredLevel;
+        choiceMenuValues[n] = attackLevelRecordGet(levelMenuIds[i])->requiredLevel;
         choiceMenuEntryIds[n] = levelMenuIds[i];
         choiceMenuEntryFlags[n] = calcCurrentMeetsRecord(unit, levelMenuIds[i]) ? 0 : CHOICE_ENTRY_DISABLED;
         n++;
@@ -358,7 +358,7 @@ void choiceMenuOpenPaired(BattleUnit *unit)
     pairedMenuCount = calcPairedRecords(unit, tecMenuChoice, pairedMenuIds);
     for (i = 0; i < pairedMenuCount; i++) {
         choiceMenuItems[n] = battleLookupTextGet(pairedMenuIds[i], RECORD_TEXT_NAME);
-        choiceMenuValues[n] = calcTakeEpGet(unit, battleLookupGet(pairedMenuIds[i])->tecIndex);
+        choiceMenuValues[n] = calcTakeEpGet(unit, etherRecordGet(pairedMenuIds[i])->tecIndex);
         choiceMenuEntryIds[n] = pairedMenuIds[i];
         choiceMenuEntryFlags[n] = calcPairEntryUsable(unit, pairedMenuIds[i]) ? 0 : CHOICE_ENTRY_DISABLED;
         n++;
@@ -420,7 +420,7 @@ void choiceMenuOpenTgtIds(BattleUnit *unit)
     tgtIdMenuCount = slotFlagCollect(unit, tgtIdMenuIds);
     for (i = 0; i < tgtIdMenuCount; i++) {
         choiceMenuItems[n] = tgtIdTextGet(tgtIdMenuIds[i], RECORD_TEXT_NAME);
-        choiceMenuValues[n] = tgtIdRecordGet(tgtIdMenuIds[i])->minLevel;
+        choiceMenuValues[n] = attackTargetRecordGet(tgtIdMenuIds[i])->minLevel;
         choiceMenuEntryIds[n] = tgtIdMenuIds[i];
         choiceMenuEntryFlags[n] = tgtSideAccepts(unit, tgtIdMenuIds[i]) ? 0 : CHOICE_ENTRY_DISABLED;
         n++;
@@ -494,11 +494,11 @@ int statBitTextIdGet(BattleUnit *unit, int row, int mask) {
 #define ENEMY_CURSOR_HEIGHT 0x14
 #define ENEMY_CURSOR_STYLE 7
 
-/* The status shown by the enemy cursor: row and bit mask (enemyCursorStep walks them with statBitTextIdGet) and
- * the frames left before the next one. */
+/* The status line shown while the command panel is open: the acting unit's status bits (statusLineStep walks them
+ * with statBitTextIdGet) and the frames left before the next one. */
 
-/* Opens the enemy cursor's text entry when the unit has any status bit set. */
-void enemyCursorOpen(BattleUnit *unit)
+/* Opens the status line text entry (pTaskEnCur) when the unit has any status bit set. */
+void statusLineOpen(BattleUnit *unit)
 {
     u16 *bits = unit->stats->activeMask;
     int row;
@@ -524,11 +524,11 @@ void enemyCursorOpen(BattleUnit *unit)
 #define STAT_BIT_NONE -1
 
 /*
- * Every ENEMY_CURSOR_FRAMES frames moves the enemy cursor to the next status bit unit has (from the bit after the
+ * Every ENEMY_CURSOR_FRAMES frames moves the status line to the next status bit unit has (from the bit after the
  * shown one, over the rows from the shown row on, then the shown row again from bit 1) and shows its text
  * (tableStringGet), or no text when none is set.
  */
-void enemyCursorStep(BattleUnit *unit)
+void statusLineStep(BattleUnit *unit)
 {
     int i;
     int row;
@@ -648,7 +648,7 @@ void manInput(BattleUnit *unit)
         seVoiceStartDefault(SE_MENU_OPEN);
         event.unit = unit;
         unitScriptEventSend(BATTLE_PANEL_OPEN_EVENT, &event);
-        enemyCursorOpen(unit);
+        statusLineOpen(unit);
         tgtSelectState.menuMode = BATTLE_MENU_PANEL;
         /* fall through */
     case BATTLE_MENU_PANEL:
@@ -711,7 +711,7 @@ void manInput(BattleUnit *unit)
             }
         } else {
             selection = choice;
-            enemyCursorStep(unit);
+            statusLineStep(unit);
         }
         break;
     case BATTLE_MENU_END:
@@ -733,7 +733,7 @@ void manInput(BattleUnit *unit)
             if (index != 0) {
                 seVoiceStartDefault(SE_CONFIRM);
                 tecMenuClose();
-                tec = tecRecordGet(battleLookupGet(tgtSelectState.selectionIndex)->tecIndex);
+                tec = tecRecordGet(etherRecordGet(tgtSelectState.selectionIndex)->tecIndex);
                 curSelGrpSet(-1, tec->flags);
                 tgtSelectState.menuMode = BATTLE_MENU_TEC_TARGET;
             } else {
@@ -755,7 +755,7 @@ void manInput(BattleUnit *unit)
         }
         break;
     case BATTLE_MENU_TEC_TARGET:
-        tec = tecRecordGet(battleLookupGet(tgtSelectState.selectionIndex)->tecIndex);
+        tec = tecRecordGet(etherRecordGet(tgtSelectState.selectionIndex)->tecIndex);
         tgtSelectState.targetFlags = &tec->flags;
         target = tgtUnitGet();
         curTgtProcInit(&target, unit, tec->flags);
@@ -780,7 +780,7 @@ void manInput(BattleUnit *unit)
             if (tgtSelectState.selectionIndex != 0) {
                 seVoiceStartDefault(SE_CONFIRM);
                 enemyCursorClose();
-                tec = tecRecordGet(battleLookupGet(tgtSelectState.selectionIndex)->tecIndex);
+                tec = tecRecordGet(etherRecordGet(tgtSelectState.selectionIndex)->tecIndex);
                 curSelGrpSet(-1, tec->flags);
                 tgtSelectState.menuMode = BATTLE_MENU_TEC_TARGET;
             } else {
@@ -799,7 +799,7 @@ void manInput(BattleUnit *unit)
             if (tgtSelectState.selectionIndex != 0) {
                 seVoiceStartDefault(SE_CONFIRM);
                 choiceMenuTextClose();
-                tec = tecRecordGet(hitActionGet(tgtSelectState.selectionIndex)->entry);
+                tec = tecRecordGet(usableItemRecordGet(tgtSelectState.selectionIndex)->entry);
                 curSelGrpSet(-1, tec->flags);
                 tgtSelectState.menuMode = BATTLE_MENU_ITEM_TARGET;
             } else {
@@ -812,7 +812,7 @@ void manInput(BattleUnit *unit)
         }
         break;
     case BATTLE_MENU_ITEM_TARGET:
-        tec = tecRecordGet(hitActionGet(tgtSelectState.selectionIndex)->entry);
+        tec = tecRecordGet(usableItemRecordGet(tgtSelectState.selectionIndex)->entry);
         tgtSelectState.targetFlags = &tec->flags;
         target = tgtUnitGet();
         curTgtProcInit(&target, unit, tec->flags);
@@ -838,7 +838,7 @@ void manInput(BattleUnit *unit)
             if (tgtSelectState.selectionIndex != 0) {
                 seVoiceStartDefault(SE_CONFIRM);
                 levelMenuClose();
-                tec = tecRecordGet(calcLevelRecordGet(tgtSelectState.selectionIndex)->tecIndex);
+                tec = tecRecordGet(attackLevelRecordGet(tgtSelectState.selectionIndex)->tecIndex);
                 curSelGrpSet(-1, tec->flags);
                 tgtSelectState.menuMode = BATTLE_MENU_LEVEL_TARGET;
             } else {
@@ -851,7 +851,7 @@ void manInput(BattleUnit *unit)
         }
         break;
     case BATTLE_MENU_LEVEL_TARGET:
-        tec = tecRecordGet(calcLevelRecordGet(tgtSelectState.selectionIndex)->tecIndex);
+        tec = tecRecordGet(attackLevelRecordGet(tgtSelectState.selectionIndex)->tecIndex);
         tgtSelectState.targetFlags = &tec->flags;
         target = tgtUnitGet();
         curTgtProcInit(&target, unit, tec->flags);
@@ -859,7 +859,7 @@ void manInput(BattleUnit *unit)
         tgtUnitSet(target);
         dataTargetShow(target, &tec->flags);
         if (pad & PAD_CIRCLE) {
-            if (battleEffectApplies(unit, calcLevelRecordGet(tgtSelectState.selectionIndex)->tecIndex, target) != 0) {
+            if (battleEffectApplies(unit, attackLevelRecordGet(tgtSelectState.selectionIndex)->tecIndex, target) != 0) {
                 selection = SELECT_LEVEL;
                 seVoiceStartDefault(SE_CONFIRM);
                 dataTargetHide();
@@ -880,7 +880,7 @@ void manInput(BattleUnit *unit)
             if (tgtSelectState.selectionIndex != 0) {
                 seVoiceStartDefault(SE_CONFIRM);
                 tgtIdMenuClose();
-                tec = tecRecordGet(tgtIdRecordGet(tgtSelectState.selectionIndex)->actionIndex);
+                tec = tecRecordGet(attackTargetRecordGet(tgtSelectState.selectionIndex)->actionIndex);
                 curSelGrpSet(-1, tec->flags);
                 tgtSelectState.menuMode = BATTLE_MENU_TGT_ID_TARGET;
             } else {
@@ -893,7 +893,7 @@ void manInput(BattleUnit *unit)
         }
         break;
     case BATTLE_MENU_TGT_ID_TARGET:
-        tec = tecRecordGet(tgtIdRecordGet(tgtSelectState.selectionIndex)->actionIndex);
+        tec = tecRecordGet(attackTargetRecordGet(tgtSelectState.selectionIndex)->actionIndex);
         tgtSelectState.targetFlags = &tec->flags;
         target = tgtUnitGet();
         curTgtProcInit(&target, unit, tec->flags);
@@ -903,7 +903,7 @@ void manInput(BattleUnit *unit)
         if (pad & PAD_CIRCLE) {
             selection = SELECT_TGT_ID;
             seVoiceStartDefault(SE_CONFIRM);
-            unitLevelAdd(unit, -tgtIdRecordGet(tgtSelectState.selectionIndex)->minLevel);
+            unitLevelAdd(unit, -attackTargetRecordGet(tgtSelectState.selectionIndex)->minLevel);
             dataTargetHide();
             tgtSelectState.menuMode = BATTLE_MENU_END;
         } else if (pad & PAD_CROSS) {
@@ -995,11 +995,11 @@ int convKey2unit(BattleUnit *unit, CmdListBody *command, BattleUnit *target)
 {
     int selection;
     short code;
-    BattleLookupEntry *lookup;
-    HitAction *hitAction;
-    CalcLevelRecord *level;
-    PairLink *pair;
-    TgtIdRecord *tgtId;
+    EtherRecord *lookup;
+    UsableItemRecord *hitAction;
+    EsSpecialRecord *level;
+    DoubleTechRecord *pair;
+    SpecialAttackRecord *tgtId;
 
     selection = tgtSelectState.selection;
     if (selection == 0) {
@@ -1028,21 +1028,21 @@ int convKey2unit(BattleUnit *unit, CmdListBody *command, BattleUnit *target)
             break;
         case SELECT_LOOKUP:
             command->command = CMD_KIND_LOOKUP;
-            lookup = battleLookupGet(tgtSelectState.selectionIndex);
+            lookup = etherRecordGet(tgtSelectState.selectionIndex);
             command->arg.target = (int)target;
             command->code = lookup->tecIndex;
             command->pairIndex = tgtSelectState.selectionIndex;
             break;
         case SELECT_HIT_ACTION:
             command->command = CMD_KIND_ITEM;
-            hitAction = hitActionGet(tgtSelectState.selectionIndex);
+            hitAction = usableItemRecordGet(tgtSelectState.selectionIndex);
             command->arg.target = (int)target;
             command->code = hitAction->entry;
             command->pairIndex = tgtSelectState.selectionIndex;
             break;
         case SELECT_LEVEL:
             command->command = CMD_KIND_TECHNIQUE;
-            level = calcLevelRecordGet(tgtSelectState.selectionIndex);
+            level = attackLevelRecordGet(tgtSelectState.selectionIndex);
             command->arg.target = (int)target;
             command->code = level->tecIndex;
             command->pairIndex = tgtSelectState.selectionIndex;
@@ -1056,7 +1056,7 @@ int convKey2unit(BattleUnit *unit, CmdListBody *command, BattleUnit *target)
             break;
         case SELECT_TGT_ID:
             command->command = CMD_KIND_TECHNIQUE;
-            tgtId = tgtIdRecordGet(tgtSelectState.selectionIndex);
+            tgtId = attackTargetRecordGet(tgtSelectState.selectionIndex);
             command->arg.target = (int)target;
             command->code = tgtId->actionIndex;
             command->pairIndex = tgtSelectState.selectionIndex;

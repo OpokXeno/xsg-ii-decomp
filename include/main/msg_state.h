@@ -9,10 +9,10 @@
 #define MSG_SLOT_CROSS_CLOSES 0x40   /* CROSS closes the slot */
 
 /* Flag bits of the message window (msgWindowTestCurrentFlags). */
-#define MSG_WINDOW_LOCKED 0x4        /* CROSS cannot close it */
-#define MSG_WINDOW_TYPING 0x10       /* the text is still being typed; CIRCLE shows the rest at once */
-/* msgWindowBusy's mask: bit 0x2 (not recovered), locked or typing. */
-#define MSG_WINDOW_BUSY (0x2 | MSG_WINDOW_LOCKED | MSG_WINDOW_TYPING)
+#define MSG_WINDOW_OPENING 0x4       /* the window is opening (the MSG_SLOT_OPENING bit); CROSS cannot close it */
+#define MSG_WINDOW_SCANNING 0x10     /* the text is still being scanned (INTERP_FLAG_SCAN); CIRCLE shows the rest at once */
+/* msgWindowBusy's mask: the closing bit (0x2, MSG_SLOT_CLOSING), opening or scanning. */
+#define MSG_WINDOW_BUSY (0x2 | MSG_WINDOW_OPENING | MSG_WINDOW_SCANNING)
 
 /* Flag bit of the choice object (msgChoiceTestFlags): a choice is open. */
 #define MSG_CHOICE_OPEN 0x8
@@ -31,7 +31,7 @@ int msgSlotCurrent(void);
 void msgGameFlagClearUnlessKept(void);
 int msgWindowHasMore(void);
 void msgUpdateTimed(void);
-void msgClose(void);
+void msgQueueClose(void);
 void msgPanelSetTimecode(int hours, int minutes, int seconds, int frames);
 void msgPanelOpen(void);
 void msgPanelClear(void);

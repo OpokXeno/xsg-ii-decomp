@@ -1,8 +1,8 @@
 #include "common.h"
 #include "main/talk_text_box.h"
 #include "main/talk_speaker_name.h"
-#include "main/timecode_counter.h"
-#include "main/debt_box.h"
+#include "main/msg_slot_core.h"
+#include "main/msg_text_draw.h"
 #include "main/xgl_font.h"
 
 

@@ -47,7 +47,7 @@ typedef struct GifStatusBlock {
     int centerY;
     int effectAlphaType;
     int effectAlpha;
-    int fbp;                    /* +0x14: gifStateSetFbp */
+    int fbp;                    /* +0x14: gifStateSetFbp; the source page selector of gifStateSetupContext (0 display, 1 draw) */
     int blur;                   /* +0x18: gifStateSetBlur */
     int depth;                  /* +0x1C: the Z of the camera quad (gifStateSetDepth sets it) */
     f32 ratio;
@@ -56,7 +56,7 @@ typedef struct GifStatusBlock {
                                  * gifStateDrawFadeQuad moves its corners by all four */
     f32 subWindowValue[4];      /* +0x38: nmlModelSetSubWindowValue */
     u8 unmodeled_48[0x50 - 0x48];
-    Vector4 mulColor;           /* +0x50: the model multiply colour nmlModelSetMulColor sets;
+    Vector4 mulColor;           /* +0x50: a direction vector nmlModelSetMulColor sets;
                                  * gifStateDrawCameraQuad scales it by blur into its offset */
 } GifStatusBlock;
 
@@ -69,7 +69,7 @@ enum GifEffectMode {
     GIF_EFFECT_CAMERA_QUAD,     /* gifStateDrawCameraQuad */
     GIF_EFFECT_JITTER_GRID,     /* gifStateDrawJitterGrid */
     GIF_EFFECT_FADE_QUAD,       /* gifStateDrawFadeQuad */
-    GIF_EFFECT_FRAME,           /* gifStateDrawBreakShards (gifStateEnableEffect) */
+    GIF_EFFECT_BREAK_SHARDS,    /* gifStateDrawBreakShards (gifStateEnableEffect) */
     GIF_EFFECT_NONE,            /* gifStateDrawNone, an empty function */
     GIF_EFFECT_COUNT
 };

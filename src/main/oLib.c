@@ -48,16 +48,16 @@ void oLibLoadObject(struct XenoActor **object, int Id)
     actor = XenoActorAlloc();
     ((XenoActorKindView *) actor)->kind = (void *) Id;
     actor->rsrc[XAct_Rsrc_MDL] = values[0];
-    actor->drawMode = 1;
+    actor->shadowType = 1;
     *object = actor;
     actor->rsrc[XAct_Rsrc_TEX] = values[1];
     actor->rsrc[XAct_Rsrc_XHR] = values[2];
     actor->rsrc[XAct_Rsrc_XAP] = values[4];
     actor->rsrc[XAct_Rsrc_EntryTableC] = values[3];
     XenoActorAllocMatrices(actor);
-    XenoActorSetChannelValue(*object, 0.0f);
+    XenoActorSetBlendFrames(*object, 0.0f);
     XenoActorSetModeInSlot(*object, 0, 0);
-    XenoActorSetChannelValueB(*object, 0.0f);
+    XenoActorSetBlendFramesB(*object, 0.0f);
     XenoActorSetSelector(*object, 0);
 }
 

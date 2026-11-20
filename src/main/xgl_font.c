@@ -95,17 +95,17 @@ struct FontImage {
 
 struct FontState {
     struct FontImage *font_image;
-    void *window_image;
+    void *texture_buffer;
     unsigned short flags;
     unsigned char font_selection;
     unsigned char debug_mode;
     unsigned short line_height;
-    unsigned short character_spacing;
+    unsigned short wrap_width;
     unsigned char default_width;
     unsigned char text_mode;
     unsigned char proportional_mode;
     unsigned char horizontal_shift;
-    int stored_value;
+    int debug_prefix;
     /* XS1 keeps the queue write cursor at +0x1c; XS2 moved it to the end of
      * the block (FontStateFromWindow.queue_cursor, FS + 0x128). */
     unsigned char unmodeled_18[8];
@@ -149,9 +149,9 @@ struct FontPositionCommand {
     unsigned char x_low;
     unsigned char y_high;
     unsigned char y_low;
-    unsigned char color_high;
-    unsigned char color_middle;
-    unsigned char color_low;
+    unsigned char ot_high;
+    unsigned char ot_middle;
+    unsigned char ot_low;
 };
 
 struct FontCompactPositionCommand {
@@ -160,9 +160,9 @@ struct FontCompactPositionCommand {
     unsigned char y_high;
     unsigned char y_low;
     unsigned char opcode;
-    unsigned char color_high;
-    unsigned char color_middle;
-    unsigned char color_low;
+    unsigned char ot_high;
+    unsigned char ot_middle;
+    unsigned char ot_low;
 };
 
 struct FontNumericCommand {
@@ -180,7 +180,7 @@ struct KanjiClutEnvironment {
 };
 
 extern unsigned char spCodeParameterSizeTable[];
-void set_xyz(int x, int y, int color);
+void set_xyz(int x, int y, int ot);
 void xglFontPrintSub(void *args);
 void xglFontPrintDirectCore(const char *text);
 void set_ot(int ot);
@@ -190,7 +190,7 @@ extern struct KanjiClutEnvironment KanjiClutEnv;
 extern unsigned char spcode_0[32];
 extern signed char tbl_7[];
 extern FontStateStorage FS;
-/* xglFontLoad reads the font texture files into this buffer (through fontStateFromWindow.window_image). */
+/* xglFontLoad reads the font texture files into this buffer (through fontStateFromWindow.texture_buffer). */
 int xglFontCheckProportional(unsigned char row, int column);
 unsigned int hex2val(signed char digit);
 int xglFontGetStringWidth2(const char *text, int delimiter);
@@ -204,17 +204,17 @@ extern unsigned char spCodeParameterSizeTable[8];
  * at the end of the slot array, where the first record goes.
  */
 struct FontStateFromWindow {
-    void *window_image;
+    void *texture_buffer;
     unsigned short flags;
     unsigned char font_selection;
     unsigned char debug_mode;
     unsigned short line_height;
-    unsigned short character_spacing;
+    unsigned short wrap_width;
     unsigned char default_width;
     unsigned char text_mode;
     unsigned char proportional_mode;
     unsigned char horizontal_shift;
-    int stored_value;
+    int debug_prefix;
     /* "$rubyb;" marks where the base text of a ruby annotation starts. */
     const unsigned char *ruby_base;
     /* From the end of the annotation back to the end of its base text; set by "$rubys;". */
@@ -394,8 +394,8 @@ int xglFontGetKanjiClutUV(int code, int *clut)
 #define FONT_CURSOR_COMPACT 1
 #define FONT_CURSOR_PROPORTIONAL 2
 #define FONT_CURSOR_WIDE_ASCII 4
-/* Second half-width mode of the $han inline command ("n2"). */
-#define FONT_CURSOR_WIDE_ALL 8
+/* $han "n2" mode: 8x8 glyphs keep their native size and are not doubled by xglFontFlushSub. */
+#define FONT_CURSOR_NATIVE_8X8 8
 /* Set between "$rubyb;" and "$rubye;": the base text of a ruby annotation was marked. */
 #define FONT_CURSOR_RUBY 0x10
 #define FONT_CURSOR_STYLE_CLEAR \
@@ -465,9 +465,9 @@ void set_ot(int ot)
     state->queue_cursor += 2;
 }
 
-void set_xyz(int x, int y, int color)
+void set_xyz(int x, int y, int ot)
 {
-    set_ot(color);
+    set_ot(ot);
     if ((unsigned int)x >= FONT_COMPACT_X_LIMIT || y < 0 || y >= FONT_COMPACT_Y_LIMIT) {
         struct FontPositionCommand *command = (struct FontPositionCommand *)fontStateFromWindow.queue_cursor;
 
@@ -477,9 +477,9 @@ void set_xyz(int x, int y, int color)
         command->x_low = x;
         command->y_high = y >> 8;
         command->y_low = y;
-        command->color_high = color >> 16;
-        command->color_middle = color >> 8;
-        command->color_low = color;
+        command->ot_high = ot >> 16;
+        command->ot_middle = ot >> 8;
+        command->ot_low = ot;
         fontStateFromWindow.queue_cursor += sizeof(*command);
     } else {
         struct FontCompactPositionCommand *command = (struct FontCompactPositionCommand *)fontStateFromWindow.queue_cursor;
@@ -489,9 +489,9 @@ void set_xyz(int x, int y, int color)
         command->y_high = (y >> 8) + FONT_OP_POS_Y_0;
         command->y_low = y;
         command->opcode = FONT_OP_DEPTH;
-        command->color_high = color >> 16;
-        command->color_middle = color >> 8;
-        command->color_low = color;
+        command->ot_high = ot >> 16;
+        command->ot_middle = ot >> 8;
+        command->ot_low = ot;
         fontStateFromWindow.queue_cursor += sizeof(*command);
     }
 }
@@ -670,18 +670,18 @@ void xglFontPrintDirectCore(const char *text)
     *fontStateFromWindow.queue_cursor++ = 0;
 }
 
-void xglFontPrintf(int x, int y, unsigned int color, void *arg)
+void xglFontPrintf(int x, int y, unsigned int ot, void *arg)
 {
     if (FONT_STATE_FLAGS & FONT_STATE_ENABLED & 0xFFFF) {
-        set_xyz(x, y, color);
+        set_xyz(x, y, ot);
         xglFontPrintSub(arg);
     }
 }
 
-void xglFontPrint(int x, int y, unsigned int color, const char *text)
+void xglFontPrint(int x, int y, unsigned int ot, const char *text)
 {
     if (FONT_STATE_FLAGS & FONT_STATE_ENABLED & 0xFFFF) {
-        set_xyz(x, y, color);
+        set_xyz(x, y, ot);
         xglFontPrintDirectCore(text);
     }
 }
@@ -722,9 +722,9 @@ void xglFontPrintExtFunc(int ot, FontExtFunc function, void *argument)
     }
 }
 
-/* Stores a value in the font state's stored_value field. */
-void xglFontDebugPrefixSet(int stored_value) {
-    FS.state.stored_value = stored_value;
+/* Stores the debug prefix string address in the font state's debug_prefix field. */
+void xglFontDebugPrefixSet(int debug_prefix) {
+    FS.state.debug_prefix = debug_prefix;
 }
 
 void xglFontDebugPrintf(int x, int y, const char *format, ...)
@@ -758,9 +758,9 @@ void xglFontDebugPrintf(int x, int y, const char *format, ...)
         set_xyz(x, y, -1);
         /* XS2 addition: a text set with xglFontDebugPrefixSet is queued as an
            include in place of the reset, so it prefixes every debug line. */
-        if (fontStateFromWindow.stored_value != 0) {
+        if (fontStateFromWindow.debug_prefix != 0) {
             struct FontIncludeCommand *command = (struct FontIncludeCommand *)fontStateFromWindow.queue_cursor;
-            unsigned int text = fontStateFromWindow.stored_value;
+            unsigned int text = fontStateFromWindow.debug_prefix;
 
             command->opcode = FONT_OP_INCLUDE;
             command->text_high = text >> 24;
@@ -1205,7 +1205,7 @@ int xglFontCmdInit(FontDrawCursor *cursor, const char **text)
     fontStateFromWindow.default_width = 4;
     fontStateFromWindow.proportional_mode = 0;
     fontStateFromWindow.horizontal_shift = 0;
-    fontStateFromWindow.character_spacing = 0;
+    fontStateFromWindow.wrap_width = 0;
     fontStateFromWindow.compact_width = 16;
     fontStateFromWindow.compact_height = 16;
     fontStateFromWindow.ruby_offset_y = 2;
@@ -1381,7 +1381,7 @@ int xglFontCmdXx(FontDrawCursor *cursor, const char **text)
         if (!xglFontParseNumber(&next, &value)) {
             return 0;
         }
-        fontStateFromWindow.character_spacing = value;
+        fontStateFromWindow.wrap_width = value;
         break;
     case 3:
         if (!xglFontParseNumber(&next, &value)) {
@@ -1615,7 +1615,7 @@ int xglFontCmdHan(FontDrawCursor *cursor, const char **text)
         }
         break;
     case 'n':
-        flags &= ~(FONT_CURSOR_WIDE_ASCII | FONT_CURSOR_WIDE_ALL);
+        flags &= ~(FONT_CURSOR_WIDE_ASCII | FONT_CURSOR_NATIVE_8X8);
         switch (next[0]) {
         case '0':
             break;
@@ -1623,7 +1623,7 @@ int xglFontCmdHan(FontDrawCursor *cursor, const char **text)
             flags |= FONT_CURSOR_WIDE_ASCII;
             break;
         case '2':
-            flags |= FONT_CURSOR_WIDE_ALL;
+            flags |= FONT_CURSOR_NATIVE_8X8;
             break;
         default:
             return 0;
@@ -1732,7 +1732,7 @@ void buffer_reset(void)
     }
     /* The block ends where the slot array begins; it is the state starting at fontStateFromWindow. */
     block = (struct FontStateFromWindow *) &fontPrintQueueBuffer - 1;
-    block->stored_value = 0;
+    block->debug_prefix = 0;
     block->text_mode = 0;
     block->queue_cursor = (unsigned char *) slot;
 }
@@ -1796,7 +1796,7 @@ struct FontSpritePacket {
     struct FontSpriteCorner corners[4];
 };
 
-/* Unit offsets of the outline effect: right, left, down, up (signed x, y pairs). */
+/* Unit offsets of the outline effect: up, left, right, down (signed x, y pairs). */
 extern signed char fontOutlineDirections[4][2];
 
 void xglFontFlushSub(int texture_u, int texture_v, int size, int flags)
@@ -1817,7 +1817,7 @@ void xglFontFlushSub(int texture_u, int texture_v, int size, int flags)
 
     texture_width = glyph_width * 16;
     texture_height = glyph_height * 16;
-    if (!fontStateFromWindow.debug_mode && (flags & FONT_DRAW_DOUBLE_SIZE) && !(cursor->flags & FONT_CURSOR_WIDE_ALL)) {
+    if (!fontStateFromWindow.debug_mode && (flags & FONT_DRAW_DOUBLE_SIZE) && !(cursor->flags & FONT_CURSOR_NATIVE_8X8)) {
         draw_width = texture_width * 2;
         draw_height = texture_height * 2;
     } else {
@@ -2400,7 +2400,7 @@ void xglFontFlushCore(FontDrawCursor *cursor, unsigned char *text)
             switch (payload[0]) {
             case FONT_CONFIG_LINE_HEIGHT: if (length == 2) FS.state.line_height = payload[1]; break;
             case FONT_CONFIG_DEFAULT_WIDTH: if (length == 2) FS.state.default_width = payload[1]; break;
-            case FONT_CONFIG_WRAP_WIDTH: if (length == 3) FS.state.character_spacing = (payload[1] << 8) + payload[2]; break;
+            case FONT_CONFIG_WRAP_WIDTH: if (length == 3) FS.state.wrap_width = (payload[1] << 8) + payload[2]; break;
             case FONT_CONFIG_PROPORTIONAL_MODE: if (length == 2) FS.state.proportional_mode = payload[1]; break;
             case FONT_CONFIG_HORIZONTAL_SHIFT: if (length == 2) FS.state.horizontal_shift = payload[1]; break;
             }
@@ -2492,9 +2492,9 @@ void xglFontFlushCore(FontDrawCursor *cursor, unsigned char *text)
                 }
             }
             state = &fontStateFromWindow;
-            if ((short) state->character_spacing > 0 && opcode == ' ' &&
+            if ((short) state->wrap_width > 0 && opcode == ' ' &&
                 (short) cursor->x - cursor->origin_x + xglFontGetStringWidth2((const char *) text, 1) >
-                    (short) state->character_spacing) {
+                    (short) state->wrap_width) {
                 xglFontFlushSubCRLF();
                 text++;
             } else if (code < 0x40) {
@@ -2534,13 +2534,13 @@ void xglFontFlushCore(FontDrawCursor *cursor, unsigned char *text)
 /* The kana cell codes of the debug font, one per EUC column (copied to the stack before use). */
 extern const unsigned char kanaFontCodeTable[104];
 
-/* The glyph rows of the debug font texture: V of a glyph cell is its row << 23. */
-#define FONT_GLYPH_ROW(row) ((unsigned int)(row) << 23)
-/* The blank cell: last row of the high ASCII block. */
-#define FONT_GLYPH_BLANK (FONT_GLYPH_ROW(0x3F) + FONT_ASCII_V_HIGH)
+/* The glyph columns of the debug font texture: the U of a glyph cell is its column << 23 (the high half of the cell word). */
+#define FONT_GLYPH_COLUMN(row) ((unsigned int)(row) << 23)
+/* The blank cell: last column of the high ASCII block. */
+#define FONT_GLYPH_BLANK (FONT_GLYPH_COLUMN(0x3F) + FONT_ASCII_V_HIGH)
 
 /*
- * Texture cell (row << 23 | U) of an EUC code in the debug font: the alphanumeric row 0xA3, a few
+ * Texture cell (column << 23 | V) of an EUC code in the debug font, used by the compact text mode: the alphanumeric row 0xA3, a few
  * symbols of row 0xA1, and the kana rows 0xA4 / 0xA5 through a per-column cell table. Anything else
  * gives the blank cell.
  */
@@ -2555,25 +2555,25 @@ unsigned int xglFontGetDebugCell(unsigned char high, unsigned char low)
             cell = 0;
             break;
         case 0xA2:
-            cell = FONT_GLYPH_ROW(4) + FONT_SYMBOL_V;
+            cell = FONT_GLYPH_COLUMN(4) + FONT_SYMBOL_V;
             break;
         case 0xA3:
-            cell = FONT_GLYPH_ROW(1) + FONT_SYMBOL_V;
+            cell = FONT_GLYPH_COLUMN(1) + FONT_SYMBOL_V;
             break;
         case 0xA6:
-            cell = FONT_GLYPH_ROW(5) + FONT_SYMBOL_V;
+            cell = FONT_GLYPH_COLUMN(5) + FONT_SYMBOL_V;
             break;
         case 0xBC:
         case 0xDD:
-            cell = FONT_GLYPH_ROW(16) + FONT_SYMBOL_V;
+            cell = FONT_GLYPH_COLUMN(16) + FONT_SYMBOL_V;
             break;
         }
         break;
     case EUC_ROW_ALNUM:
         if (low < 0xC0) {
-            cell = FONT_GLYPH_ROW(low & 0x3F) + FONT_ASCII_V_LOW;
+            cell = FONT_GLYPH_COLUMN(low & 0x3F) + FONT_ASCII_V_LOW;
         } else {
-            cell = FONT_GLYPH_ROW(low & 0x3F) + FONT_ASCII_V_HIGH;
+            cell = FONT_GLYPH_COLUMN(low & 0x3F) + FONT_ASCII_V_HIGH;
         }
         break;
     case EUC_ROW_HIRAGANA:
@@ -2582,7 +2582,7 @@ unsigned int xglFontGetDebugCell(unsigned char high, unsigned char low)
 
         __builtin_memcpy(kana, kanaFontCodeTable, sizeof(kana));
         low = kana[low - 0xA0];
-        cell = FONT_GLYPH_ROW(low) + ((0x101 - high) << 7);
+        cell = FONT_GLYPH_COLUMN(low) + ((0x101 - high) << 7);
         break;
     }
     }
@@ -2647,7 +2647,7 @@ int xglFontGetProportionalSize(int code)
     bounds = FONT_FIXED_BOUNDS;
     if (state->proportional_mode == 0) {
         bounds = 0xFFFF;
-        image = (struct FontImage *) state->window_image;
+        image = (struct FontImage *) state->texture_buffer;
         bounds = (image->proportional_widths[code] + 0xFF) & bounds;
         if ((bounds & 0xFF) == 0xFF) {
             bounds = FONT_BOUNDS(0, state->default_width);
@@ -2693,7 +2693,7 @@ void xglFontReloadTexture(FontDrawCursor *cursor, unsigned int request)
         }
     }
     sceVif1PkRef(cursor->packet, KanjiTex0Env_8, 7, 0, 0, 0);
-    sceVif1PkRef(cursor->packet, fontStateFromWindow.window_image, FONT_KANJI_TEXTURE_QWORDS, 0, 0, 0);
+    sceVif1PkRef(cursor->packet, fontStateFromWindow.texture_buffer, FONT_KANJI_TEXTURE_QWORDS, 0, 0, 0);
     sceVif1PkRef(cursor->packet, &KanjiClutEnv, 15, 0, 0, 0);
     sceVif1PkRef(cursor->packet, KanjiDrawEnv, 9, 0, 0, 0);
     if (fontStateFromWindow.debug_mode) {
@@ -2797,7 +2797,7 @@ void xglFontFlush(void)
 
 void *xglFontGetLoadAddress(void)
 {
-    return FS.state.window_image;
+    return FS.state.texture_buffer;
 }
 
 unsigned short xglFontGetFlags(void)
@@ -2828,9 +2828,9 @@ unsigned char xglFontLoad(int font_index, CdCompletionCallback *notify)
         }
     }
     if (font_index == 0) {
-        xglCdReadFile(fontTexture0Path, fontStateFromWindow.window_image, read_mode, notify);
+        xglCdReadFile(fontTexture0Path, fontStateFromWindow.texture_buffer, read_mode, notify);
     } else {
-        xglCdReadFile(fontTexture1Path, fontStateFromWindow.window_image, read_mode, notify);
+        xglCdReadFile(fontTexture1Path, fontStateFromWindow.texture_buffer, read_mode, notify);
     }
     return previous_font;
 }
@@ -2838,7 +2838,7 @@ unsigned char xglFontLoad(int font_index, CdCompletionCallback *notify)
 void xglFontInitial(void)
 {
     fontStateFromWindow.font_selection = 0xFF;
-    fontStateFromWindow.window_image = fontTextureBuffer;
+    fontStateFromWindow.texture_buffer = fontTextureBuffer;
     xglFontLoad(1, CD_NOTIFY_CURRENT);
     buffer_reset();
     fontStateFromWindow.flags = FONT_STATE_ENABLED | FONT_STATE_CLIP;
@@ -2847,7 +2847,7 @@ void xglFontInitial(void)
     fontStateFromWindow.debug_mode = 0;
     fontStateFromWindow.proportional_mode = 0;
     fontStateFromWindow.horizontal_shift = 0;
-    fontStateFromWindow.character_spacing = 0;
+    fontStateFromWindow.wrap_width = 0;
     fontStateFromWindow.compact_width = 16;
     fontStateFromWindow.compact_height = 16;
     fontStateFromWindow.ruby_offset_y = 2;

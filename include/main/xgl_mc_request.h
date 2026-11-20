@@ -19,8 +19,8 @@ typedef struct McRequestParam {
     int (*callback)();
 } McRequestParam;
 
-/* The save image SaveData (src/main/xgl_mc_request.c) is the memory card file contents: card file 0 holds its
- * 0x50-byte header, the other files the rest. */
+/* The save image SaveData (src/main/xgl_mc_request.c) is the memory card file contents: the save screen writes
+ * the whole image to one save file of this size. */
 #define SAVE_DATA_SIZE 0x5160
 
 /* The 64-bit party values saveWriteImage copies; the pair of them in PartyProgress is the actor position
@@ -64,10 +64,10 @@ typedef struct SaveParty {
     unsigned char frontIndex;
     unsigned char backIndex;
     unsigned char counts[3];
-    PartyTakenBits names[10];
+    PartyTakenBits takenBits[10];
     unsigned char unmodeled_1E5;
     unsigned char leaderId;
-    unsigned char leaderValue;
+    unsigned char leaderLevel;
     unsigned short slotValues[7];
     unsigned char mapFlag;
     PartyEligibility eligibility;
@@ -75,14 +75,16 @@ typedef struct SaveParty {
 
 /* The blocks saveWriteImage copies whole into the save image. Their types set
  * the copy alignment the original shows: the int blocks and the short tables
- * take the runtime alignment test, the byte blocks unaligned moves. */
-typedef struct SaveFlagBlock1080 {
+ * take the runtime alignment test, the byte blocks unaligned moves. SaveBattleSlots
+ * is the battle slot table (unit parameter blocks), SaveSlotRecords the table of
+ * PartyMemberExpPoints records. */
+typedef struct SaveBattleSlots {
     int words[0x420];
-} SaveFlagBlock1080;
+} SaveBattleSlots;
 
-typedef struct SaveFlagBlock400 {
+typedef struct SaveSlotRecords {
     int words[0x100];
-} SaveFlagBlock400;
+} SaveSlotRecords;
 
 typedef struct SaveShortTable {
     short values[0xFF];
@@ -136,12 +138,12 @@ struct SaveData {
     unsigned char unmodeled_70[4];
     unsigned char scriptFlags[0x100];       /* +0x74: the packed script flags of xgl_flags.c */
     SaveThumbnail thumbnail;                /* +0x174 */
-    SaveFlagBlock1080 flagBlock1080;
+    SaveBattleSlots battleSlots;
     unsigned char unmodeled_21F4[0x2274 - 0x21F4];
-    SaveFlagBlock400 flagBlock400;
+    SaveSlotRecords slotRecords;
     SaveShortTable shortTables[4];
-    int word2E6C;
-    SaveWords4 words2E70;
+    int startStockCount;
+    SaveWords4 brokenEnemyBuf;
     GameWork game;
     unsigned char unmodeled_49B0[0x4E80 - 0x49B0];
     QuestFlagBlock questFlags;

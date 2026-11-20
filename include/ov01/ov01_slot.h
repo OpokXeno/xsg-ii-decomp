@@ -12,7 +12,7 @@
 /* Slot helpers: the record is any slot-shaped struct (flags, update and draw at +0, +4, +8). */
 int ov01SlotClaim(int *flags);
 void ov01SlotClear(void *slot);
-/* Unprototyped on purpose: monsSlotReleaseRecord (unit_side_table.c) and unitSideRelease (data_obj_table.c)
+/* Unprototyped on purpose: monsSlotRecordRelease (unit_side_table.c) and unitSlotRelease (data_obj_table.c)
  * call it with no argument. */
 void ov01SlotRelease();
 

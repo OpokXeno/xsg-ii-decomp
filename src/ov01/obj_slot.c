@@ -121,7 +121,7 @@ void ov01UpdateAll(void) {
 
 /* ov01DrawAll: a GS packet with the ZBUF_1 register (GS_ZBUF_1) set, the second callbacks
  * of the five tables, then the object table's draw pass (objSlotRunDraw). It is the scene's draw hook
- * (sRender.fade_callback, set by ov01SceneInit) and does not use the hook's packet. */
+ * (sRender.battle_draw_callback, set by ov01SceneInit) and does not use the hook's packet. */
 void ov01DrawAll(struct XglPacket *hookPacket)
 {
     GrPacket packet;

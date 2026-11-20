@@ -1,5 +1,5 @@
 #include "common.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/msg_slot_center.h"
 
 /* Indices into one control point of grControlPoints. A struct {float x, y;} point type changes grControlPointSet's code (6 rows),

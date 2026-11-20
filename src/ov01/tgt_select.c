@@ -362,7 +362,7 @@ int battleRetCodeGet(void)
     return tgtSelectState.status;
 }
 
-/* StatBlock.state70 values whose units get an end-of-turn command. */
+/* StatBlock.breakState values whose units get an end-of-turn command. */
 #define TGT_UNIT_STATE_RATIO 2
 #define TGT_UNIT_STATE_PANEL 3
 /* menuUnitPanelOpen mode of the UNIT_CMD_MOVE_RAMP command TGT_UNIT_STATE_PANEL units get. */
@@ -393,7 +393,7 @@ void tgtSelectTurnEnd(BattleUnit *unit)
             }
             unitEntryTableClear(units[i]);
             calcComboReset(units[i]);
-            state = units[i]->stats->state70;
+            state = units[i]->stats->breakState;
             if (state == TGT_UNIT_STATE_RATIO) {
                 command.command = UNIT_CMD_MOVE_RATIO;
                 unitCmdClear(units[i]);
@@ -411,7 +411,7 @@ void tgtSelectTurnEnd(BattleUnit *unit)
     if (target == 0) {
         return;
     }
-    state = target->stats->state70;
+    state = target->stats->breakState;
     if (state == 0) {
         menuUnitPanelArmTimer();
     } else {

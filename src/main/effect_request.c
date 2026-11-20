@@ -5,11 +5,11 @@
 #include "main/xgl_render.h"
 #include "main/msg_window_run.h"
 #include "main/talk_script.h"
-#include "main/debt_box.h"
-#include "main/timecode_counter.h"
+#include "main/msg_text_draw.h"
+#include "main/msg_slot_core.h"
 #include "main/text_tag.h"
 
-/* Opens the .sdata of this file (0x69DCA0); read by debt_box.c. */
+/* Opens the .sdata of this file (0x69DCA0); read by msg_text_draw.c. */
 int sellLabelTextOff = 0;
 
 extern void *memset(void *destination, int value, unsigned int count);
@@ -309,7 +309,7 @@ void recordUpdatesHold(void) {
 void msgWindowReset(MsgWindow *window) {
     memset(window, 0, sizeof(MsgWindow));
     window->current_index = -1;
-    talkStartScriptLoad();
+    talkStartTextureLoad();
     msgWindowLoadBotanXtx();
     textOutputReset();
 }

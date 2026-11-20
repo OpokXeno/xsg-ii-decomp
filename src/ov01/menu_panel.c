@@ -258,7 +258,7 @@ void menuStatPanelNew(s32 kind)
     menu->slide.goal.y = row;
     menu->flag = kind;
     menu->wait = MENU_STAT_PANEL_TICKS;
-    menu->value = actStepCounterGet()->multiplier;
+    menu->value = actStepCounterGet()->skillPointMultiplier;
 }
 
 /* Update step of the stat panel: slides in at speed 1
@@ -580,7 +580,7 @@ void menuStatusIconsDraw(GrPacket *packet, int x, int y, int index)
             int bit;
 
             bit = one << bitIndex;
-            if (record->actionBits & bit) {
+            if (record->attributeBits & bit) {
                 menuStatSprite(packet, x, y, MENU_STATUS_CELL_W, MENU_STATUS_CELL_H, iconUV->srcX, iconUV->srcY);
                 x += MENU_STATUS_CELL_W;
             }

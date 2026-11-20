@@ -13,9 +13,9 @@ void tiDynamicsSolveLink(TiSolverState *node, Matrix4 other, const float *restLe
     dir = (TiVector3) { other[3][0] - node->position.vector.x, other[3][1] - node->position.vector.y, other[3][2] - node->position.vector.z };
     length = __builtin_sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
     correction = *restLength - length;
-    node->accumulator.vector.x -= dir.x * correction;
-    node->accumulator.vector.y -= dir.y * correction;
-    node->accumulator.vector.z -= dir.z * correction;
+    node->velocity.vector.x -= dir.x * correction;
+    node->velocity.vector.y -= dir.y * correction;
+    node->velocity.vector.z -= dir.z * correction;
     node->position.vector.z -= dir.z * correction;
     node->position.vector.x -= dir.x * correction;
     node->position.vector.y -= dir.y * correction;
@@ -33,9 +33,9 @@ void tiDynamicsSolveLink(TiSolverState *node, Matrix4 other, const float *restLe
  * Directional wind table entry, 0x60 bytes.
  * flags: 0x1 enabled, 0x2 global (no falloff with distance).
  * 0x10: unit direction (w = 1 at 0x1C). 0x20: velocity, direction * phase * 0.1.
- * 0x30: position (w = 1 at 0x3C). 0x40: phase, oscillates between upper and lower.
+ * 0x30: position (w = 1 at 0x3C). 0x40: phase, oscillates between the lower and upper bounds.
  * phaseStep: +1 or -1, the direction of the phase; speed scales each step.
- * 0x4C: upper bound, 0x50: lower bound, 0x54: radius of the falloff.
+ * 0x4C: lower bound, 0x50: upper bound, 0x54: radius of the falloff.
  */
 typedef struct DirWind {
     int flags;
@@ -50,8 +50,8 @@ typedef struct DirWind {
     float phase;
     float phaseStep;
     float speed;
-    float upper;
-    float lower;
+    float lowerBound;
+    float upperBound;
     float radius;
     unsigned char unmodeled_58[0x8];
 } DirWind;
@@ -67,7 +67,7 @@ typedef struct DirWindValue {
 /*
  * Point wind table entry, 0x40 bytes.
  * flags as DirWind. 0x10: position (w = 1 at 0x1C). 0x24: scalar wave, phase * 0.1.
- * 0x28: phase. phaseStep: +1 or -1. speedRange[0]: speed, [1]: upper bound, [2]: lower bound.
+ * 0x28: phase. phaseStep: +1 or -1. speedRange[0]: speed, [1]: lower bound, [2]: upper bound.
  * 0x3C: radius of the falloff.
  */
 typedef struct PointWind {
@@ -123,7 +123,7 @@ void tiDynamicsSolveCellPairs(TiMRPackage *world)
                     pairIndex++;
                     tiDynamicsSolveLink(&nodes[cell->cell.firstNode - nodeBase], world->globalMat[pair->link.node], &pair->link.restLength);
                     tiDynamicsCollSolveSpherePair(&nodes[cell->cell.firstNode - nodeBase], &nodes[pair->link.node - nodeBase], world);
-                    tiDynamicsCollSolveMatrixPair(&nodes[cell->cell.firstNode - nodeBase], &nodes[pair->link.node - nodeBase], world);
+                    tiDynamicsCollSolvePlanePair(&nodes[cell->cell.firstNode - nodeBase], &nodes[pair->link.node - nodeBase], world);
                     tiDynamicsCollSolveCapsulePair(&nodes[cell->cell.firstNode - nodeBase], &nodes[pair->link.node - nodeBase], world);
                     pair++;
                 } while (pairIndex < cell->cell.linkCount);
@@ -203,8 +203,8 @@ void tiWindDirSetSpeed(u32 index, float speed)
     }
 }
 
-/* Sets the upper and lower phase bounds of directional wind `index`. */
-void tiWindDirSetRange(u32 index, float upper, float lower)
+/* Sets the lower and upper phase bounds of directional wind `index`. */
+void tiWindDirSetRange(u32 index, float lowerBound, float upperBound)
 {
     DirWind *entry;
 
@@ -212,8 +212,8 @@ void tiWindDirSetRange(u32 index, float upper, float lower)
         assertFailed(tiWindDirIndexAssertText, tiWindBaseSourceFile, 87);
     }
     entry = &tiWindDirTable[index];
-    entry->upper = upper;
-    tiWindDirTable[index].lower = lower;
+    entry->lowerBound = lowerBound;
+    tiWindDirTable[index].upperBound = upperBound;
 }
 
 /* Sets the falloff radius of directional wind `index`; a non-zero `global` sets the global flag (no falloff with distance). */
@@ -267,8 +267,8 @@ void tiWindPointSetSpeed(u32 index, float speed)
     }
 }
 
-/* Sets the upper and lower phase bounds of point wind `index`. */
-void tiWindPointSetRange(u32 index, float upper, float lower)
+/* Sets the lower and upper phase bounds of point wind `index`. */
+void tiWindPointSetRange(u32 index, float lowerBound, float upperBound)
 {
     PointWindValues *entry;
 
@@ -276,8 +276,8 @@ void tiWindPointSetRange(u32 index, float upper, float lower)
         assertFailed(tiWindPointIndexAssertText, tiWindBaseSourceFile, 152);
     }
     entry = &tiWindPointValueTable[index];
-    entry->speedRange[1] = upper;
-    entry->speedRange[2] = lower;
+    entry->speedRange[1] = lowerBound;
+    entry->speedRange[2] = upperBound;
 }
 
 /* Sets the falloff radius of point wind `index`; a non-zero `global` sets the global flag (no falloff with distance). */
@@ -297,7 +297,7 @@ void tiWindPointSetRadius(u32 index, float radius, int global)
 extern const char tiWindWindAssertText[];
 
 /* Pushes the state with a directional wind: a global wind moves it by velocity * time step * gust; otherwise the push
- * falls off with distance over the radius. The gust is redrawn when the phase reaches its upper bound. */
+ * falls off with distance over the radius. The gust is redrawn when the phase reaches its lower bound. */
 void tiWindDirApply(DirWind *entry, TiHrcDynamics *step, TiSolverState *state)
 {
     float delta[3];
@@ -308,14 +308,14 @@ void tiWindDirApply(DirWind *entry, TiHrcDynamics *step, TiSolverState *state)
     if (entry == 0) {
         assertFailed(tiWindWindAssertText, tiWindBaseSourceFile, 177);
     }
-    if (entry->phase == entry->upper) {
+    if (entry->phase == entry->lowerBound) {
         gustRoll = xglSRand() % WIND_GUST_STEPS;
         state->gust = (float)gustRoll * 0.01f + 0.5f;
     }
     if (entry->flags & WIND_FLAG_GLOBAL) {
-        state->position.vector.x += entry->velocity[0] * step->timeStep * state->gust;
-        state->position.vector.y += entry->velocity[1] * step->timeStep * state->gust;
-        state->position.vector.z += entry->velocity[2] * step->timeStep * state->gust;
+        state->position.vector.x += entry->velocity[0] * step->windMultiplier * state->gust;
+        state->position.vector.y += entry->velocity[1] * step->windMultiplier * state->gust;
+        state->position.vector.z += entry->velocity[2] * step->windMultiplier * state->gust;
         return;
     }
     delta[0] = state->position.vector.x - entry->position[0];
@@ -326,13 +326,13 @@ void tiWindDirApply(DirWind *entry, TiHrcDynamics *step, TiSolverState *state)
         return;
     }
     falloff = dist / entry->radius;
-    state->position.vector.x += entry->velocity[0] * step->timeStep * falloff * state->gust;
-    state->position.vector.y += entry->velocity[1] * step->timeStep * falloff * state->gust;
-    state->position.vector.z += entry->velocity[2] * step->timeStep * falloff * state->gust;
+    state->position.vector.x += entry->velocity[0] * step->windMultiplier * falloff * state->gust;
+    state->position.vector.y += entry->velocity[1] * step->windMultiplier * falloff * state->gust;
+    state->position.vector.z += entry->velocity[2] * step->windMultiplier * falloff * state->gust;
 }
 
 /* Pushes the state with a point wind: along the unit direction from the wind's position to the state, scaled by the
- * wave strength; a global wind has no falloff with distance. The gust is redrawn when the phase reaches its upper bound. */
+ * wave strength; a global wind has no falloff with distance. The gust is redrawn when the phase reaches its lower bound. */
 void tiWindPointApply(PointWind *entry, TiHrcDynamics *step, TiSolverState *state)
 {
     float delta[4];
@@ -360,18 +360,18 @@ void tiWindPointApply(PointWind *entry, TiHrcDynamics *step, TiSolverState *stat
     delta[1] *= scale;
     delta[2] *= scale;
     if (entry->flags & WIND_FLAG_GLOBAL) {
-        state->position.vector.x += delta[0] * entry->wave * step->timeStep * state->gust;
-        state->position.vector.y += delta[1] * entry->wave * step->timeStep * state->gust;
-        state->position.vector.z += delta[2] * entry->wave * step->timeStep * state->gust;
+        state->position.vector.x += delta[0] * entry->wave * step->windMultiplier * state->gust;
+        state->position.vector.y += delta[1] * entry->wave * step->windMultiplier * state->gust;
+        state->position.vector.z += delta[2] * entry->wave * step->windMultiplier * state->gust;
         return;
     }
     if (entry->radius == 0.0f || !(dist <= entry->radius)) {
         return;
     }
     scale = dist / entry->radius;
-    state->position.vector.x += delta[0] * entry->wave * step->timeStep * scale * state->gust;
-    state->position.vector.y += delta[1] * entry->wave * step->timeStep * scale * state->gust;
-    state->position.vector.z += delta[2] * entry->wave * step->timeStep * scale * state->gust;
+    state->position.vector.x += delta[0] * entry->wave * step->windMultiplier * scale * state->gust;
+    state->position.vector.y += delta[1] * entry->wave * step->windMultiplier * scale * state->gust;
+    state->position.vector.z += delta[2] * entry->wave * step->windMultiplier * scale * state->gust;
 }
 
 
@@ -392,7 +392,7 @@ void tiWindApplyAll(TiHrcDynamics *first_input, TiSolverState *second_input)
     }
 }
 
-/* Advances the phase of directional wind `entry`: the phase is clamped to the upper bound (0x4C) and to the lower bound (0x50), reversing the step at each. The velocity is direction * phase * 0.1. */
+/* Advances the phase of directional wind `entry`: the phase is clamped to the lower bound (0x4C) and to the upper bound (0x50), reversing the step at each. The velocity is direction * phase * 0.1. */
 void tiWindDirAdvance(DirWind *entry)
 {
     float nextPhase;
@@ -402,11 +402,11 @@ void tiWindDirAdvance(DirWind *entry)
     }
     nextPhase = entry->phase + entry->speed * entry->phaseStep * 0.1f;
     entry->phase = nextPhase;
-    if (nextPhase <= entry->upper) {
-        entry->phase = entry->upper;
+    if (nextPhase <= entry->lowerBound) {
+        entry->phase = entry->lowerBound;
         entry->phaseStep = 1.0f;
-    } else if (entry->lower <= nextPhase) {
-        entry->phase = entry->lower;
+    } else if (entry->upperBound <= nextPhase) {
+        entry->phase = entry->upperBound;
         entry->phaseStep = -1.0f;
     }
     entry->velocity[0] = entry->direction[0] * entry->phase * 0.1f;

@@ -4,7 +4,7 @@
 #include "main/msg_window_run.h"
 #include "main/msg_window_update.h"
 #include "main/msg_window_size.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
 /* Runs the current record by its state; text and window slots call a handler with value. */
 int msgWindowAdvanceCurrent(MsgWindow *window, int value)
@@ -18,12 +18,12 @@ int msgWindowAdvanceCurrent(MsgWindow *window, int value)
     result = current * 4; /* computed before the current >= 0 test, as in the original */
     if (current >= 0) {
         slot = &window->slots[current];
-        state = slot->state;
-        result = state < MSG_SLOT_STATE_TIMECODE;
-        if (state != MSG_SLOT_STATE_WINDOW) {
+        state = slot->slot_type;
+        result = state < MSG_SLOT_TYPE_TIMECODE;
+        if (state != MSG_SLOT_TYPE_WINDOW) {
             if (result != 0) {
                 result = 1;
-                if (state == MSG_SLOT_STATE_TEXT) {
+                if (state == MSG_SLOT_TYPE_TEXT) {
                     result = interpScrollBy(slot, value);
                 }
             }
@@ -45,10 +45,10 @@ int msgWindowPollMoreText(MsgWindow *window) {
         return 0;
     }
     slot = &window->slots[current];
-    state = slot->state;
-    if (state != MSG_SLOT_STATE_WINDOW) {
-        if (state < MSG_SLOT_STATE_TIMECODE) {
-            if (state == MSG_SLOT_STATE_TEXT) {
+    state = slot->slot_type;
+    if (state != MSG_SLOT_TYPE_WINDOW) {
+        if (state < MSG_SLOT_TYPE_TIMECODE) {
+            if (state == MSG_SLOT_TYPE_TEXT) {
                 pending = talkHasMoreLines(slot);
             }
         }

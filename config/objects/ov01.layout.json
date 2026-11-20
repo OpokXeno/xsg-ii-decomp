@@ -217,7 +217,7 @@
    "0x00aaad58",
    "0x00aab010"
   ],
-  "ov01/m_ef_path_debug": [
+  "ov01/m_ef_path": [
    "0x00aab010",
    "0x00aab888"
   ],
@@ -495,7 +495,7 @@
     "0x00abb0a0"
    ],
    [
-    "ov01/m_ef_path_debug",
+    "ov01/m_ef_path",
     "0x00abb0a0",
     "0x00abb108"
    ],

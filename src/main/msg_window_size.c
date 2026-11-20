@@ -3,7 +3,7 @@
 
 /* Overflow test: 1 when the window is active and its text has six lines or more (layout clamps at five). */
 int msgWindowOverflows(MsgSlot *window) {
-    if (window->state != MSG_SLOT_STATE_WINDOW) {
+    if (window->slot_type != MSG_SLOT_TYPE_WINDOW) {
         return 0;
     }
     if (window->u.list.capacity < MSG_WINDOW_OVERFLOW_LINES) {

@@ -346,6 +346,7 @@ void menuTgtStatusNew(void)
         panel->slide.position.x = 376.0f;
         panel->slide.position.y = 314.0f;
         panel->slide.position.z = 0;
+        /* The 376 store above is overwritten: the panel starts at x 348. */
         panel->slide.position.x = 348.0f;
         panel->state = MENU_PANEL_STATE_IDLE;
         panel->flag = 0;
@@ -448,16 +449,16 @@ void menuTgtStatusDraw(MenuState *panel) {
         grOpenSpr(packet);
         menuStatSprite(packet, x, y + 24, 18, 12, 194, 106);
         grCloseSpr();
-        menuNumDraw(packet, x + 54, y + 24, unit->stats->rollPercent, 3, 2);
+        menuNumDraw(packet, x + 54, y + 24, unit->stats->counterGauge, 3, 2);
     } else {
         grOpenSpr(packet);
         menuStatSprite(packet, x, y + 24, 46, 12, 146, 106);
         grCloseSpr();
-        if (calcSkillEquChkAll(16) && sdvSpecialBitGet(unit->stats->key)) {
+        if (calcSkillEquChkAll(16) && brokenEnemyBitGet(unit->stats->key)) {
             grOpenSpr(packet);
             menuUnitStatusIconsDraw(unit, packet, x + 54, y + 24);
             grCloseSpr();
-        } else if (unit->stats->liveRows[0] != 0) {
+        } else if (unit->stats->breakZones[0] != 0) {
             grOpenSpr(packet);
             menuStatSprite(packet, x + 54, y + 24, 10, 14, 130, 50);
             grCloseSpr();
@@ -477,8 +478,8 @@ void menuUnitStatusIconsDraw(BattleUnit *unit, GrPacket *packet, int x, int y) {
     int iconIndex;
     int iconSrcX;
 
-    for (iconIndex = 0; stats->liveRows[iconIndex] != 0 && iconIndex < 4; iconIndex++) {
-        switch (stats->liveRows[iconIndex]) {
+    for (iconIndex = 0; stats->breakZones[iconIndex] != 0 && iconIndex < 4; iconIndex++) {
+        switch (stats->breakZones[iconIndex]) {
         case 1:
             iconSrcX = 0xAE;
             break;
@@ -521,7 +522,7 @@ void menuRollPercentDraw(BattleUnit *unit) {
     grOpenSpr(packet);
     menuStatSprite(packet, 0x178, 0x154, 0x12, 0xC, 0xC2, 0x6A);
     grCloseSpr();
-    menuNumDraw(packet, 0x1AE, 0x154, unit->stats->rollPercent, 3, 2);
+    menuNumDraw(packet, 0x1AE, 0x154, unit->stats->counterGauge, 3, 2);
     grPacketSend(packet);
 }
 

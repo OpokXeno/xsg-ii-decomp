@@ -3,7 +3,7 @@
 #include "ov01/cmd_exec.h"
 #include "ov01/event_stock.h"
 
-int eventStockBegin(void) {
+int eventCombinedEtherBegin(void) {
     return 1;
 }
 

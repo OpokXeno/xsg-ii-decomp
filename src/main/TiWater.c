@@ -166,7 +166,7 @@ void tiWaterSendStateTemplate(void)
 {
     XglPacket *packet = xglPacketGetCurrent();
 
-    tiWaterStateTemplate[TI_WATER_TEMPLATE_FRAME_1] = GS_SET_FRAME(sRender.vram.flip_base, 8, 0, 0);
+    tiWaterStateTemplate[TI_WATER_TEMPLATE_FRAME_1] = GS_SET_FRAME(sRender.vram.work_buffer_base, 8, 0, 0);
     tiWaterStateTemplate[TI_WATER_TEMPLATE_TEX0_1]
         = GS_SET_TEX0(sRender.display_buffer_base << 5, 8, 0, 9, 9, 1, 0, 0, 0, 0, 0, 0);
     sceVif1PkCnt(packet, 0);
@@ -183,10 +183,10 @@ void tiWaterSendGrid(TiWatSimItem *item, void *program);
 extern unsigned char D_688[];
 /* the surface pass */
 extern unsigned char D_7F0[];
-/* the depth pass while tiWaterDepthProgramSelect is set */
+/* the grazing-angle pass while tiWaterPerVertexDirection is set */
 extern unsigned char D_9F0[];
-/* the depth pass otherwise */
-extern int tiWaterDepthProgramSelect;
+/* set: per-vertex view direction; clear: one direction per sheet */
+extern int tiWaterPerVertexDirection;
 extern unsigned char tiWaterSurfaceGridHeader[];
 extern unsigned char tiWaterDepthGridHeader[];
 
@@ -194,7 +194,7 @@ extern unsigned char tiWaterDepthGridHeader[];
 #define TI_WATER_VIF_MSCAL(address) (0x14000000 | ((unsigned int) (address) >> 3))
 /* Item flags: the two draw passes. */
 #define TI_WATER_ITEM_DRAW_SURFACE 0x4
-#define TI_WATER_ITEM_DRAW_DEPTH 0x2
+#define TI_WATER_ITEM_DRAW_GRAZING 0x2
 
 /* Draws one water item: sends its frame, values and direction, then for each enabled pass the GS state
  * (clamp, frame on the display page, blend, the frame page as texture, Z test) and the VU1 program with
@@ -205,7 +205,7 @@ void tiWaterDrawItem(TiWatSimItem *item)
     XglCamera *camera = xglStudioSelectGetActiveCamera(0);
 
     tiWaterSendFrame(camera, item->transform.rows);
-    tiWaterSendItemPair(item->drawPair[0], item->drawPair[1]);
+    tiWaterSendBrightnessPair(item->drawPair[0], item->drawPair[1]);
     tiWaterSendDirection(camera, item->transform.rows);
     if (item->flags & TI_WATER_ITEM_DRAW_SURFACE) {
         sceVif1PkCnt(packet, 0);
@@ -214,7 +214,7 @@ void tiWaterDrawItem(TiWatSimItem *item)
         gifStateAddReg(GS_FBA_1, 1);
         gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_buffer_base, 8, 0, 0));
         gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 1, 2, 1, 0x4F));
-        gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.flip_base << 5, 8, 0, 9, 9, 0, 0, 0, 0, 0, 0, 0));
+        gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.work_buffer_base << 5, 8, 0, 9, 9, 0, 0, 0, 0, 0, 0, 0));
         gifStateAddReg(GS_TEX1_1, GS_SET_TEX1(0, 0, 1, 1, 0, 0, 0));
         gifStateAddReg(GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
         gifStateAddReg(GS_TEXFLUSH, 0);
@@ -225,14 +225,14 @@ void tiWaterDrawItem(TiWatSimItem *item)
         sceVif1PkAddCode(packet, TI_WATER_VIF_MSCAL(D_688));
         tiWaterSendGrid(item, tiWaterSurfaceGridHeader);
     }
-    if (item->flags & TI_WATER_ITEM_DRAW_DEPTH) {
+    if (item->flags & TI_WATER_ITEM_DRAW_GRAZING) {
         sceVif1PkCnt(packet, 0);
         sceVif1PkOpenDirectHLCode(packet, 0);
         gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(GS_REGION_CLAMP, GS_REGION_CLAMP, 0, 254, 0, 222));
         gifStateAddReg(GS_FBA_1, 1);
         gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_buffer_base, 8, 0, 0));
         gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 2, 2, 1, 0x40));
-        gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.flip_base << 5, 8, 0, 8, 8, 1, 0, 0, 0, 0, 0, 0));
+        gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.work_buffer_base << 5, 8, 0, 8, 8, 1, 0, 0, 0, 0, 0, 0));
         gifStateAddReg(GS_TEX1_1, GS_SET_TEX1(0, 0, 1, 1, 0, 0, 0));
         gifStateAddReg(GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
         gifStateAddReg(GS_TEXFLUSH, 0);
@@ -240,7 +240,7 @@ void tiWaterDrawItem(TiWatSimItem *item)
         gifStateFlush();
         sceVif1PkCloseDirectHLCode(packet);
         sceVif1PkCnt(packet, 0);
-        if (tiWaterDepthProgramSelect != 0) {
+        if (tiWaterPerVertexDirection != 0) {
             sceVif1PkAddCode(packet, TI_WATER_VIF_MSCAL(D_7F0));
         } else {
             sceVif1PkAddCode(packet, TI_WATER_VIF_MSCAL(D_9F0));
@@ -322,7 +322,7 @@ void tiWaterUpdateSource(struct XenoActor *actor)
     actor->position.x += PadData[0].leftX * TI_WATER_SOURCE_STEP;
     actor->position.z += PadData[0].leftY * TI_WATER_SOURCE_STEP;
     if (PadData[0].held & PAD_CROSS) {
-        XenoActorEnableChannel(actor);
+        XenoActorSetBlendLocal(actor);
     }
     if (PadData[0].leftX != 0 || PadData[0].leftY != 0) {
         actor->rotation.y = tiWaterVectorAngle(PadData[0].leftY, PadData[0].leftX);
@@ -435,7 +435,7 @@ void tiWaterSceneLoop(void)
     }
     kosmos->drawFlags |= TI_WATER_SOURCE_DRAW_FLAG;
     XenoActorAllocMatrices(kosmos);
-    XenoActorSetChannelValue(kosmos, 8.0f);
+    XenoActorSetBlendFrames(kosmos, 8.0f);
     XenoActorSetMode(kosmos, 0);
     tiWaterDebugReset();
     gifStateSetCenter(tiWaterCx, tiWaterCy);
@@ -476,12 +476,12 @@ void tiWaterSceneLoop(void)
 
 
 
-/* Per-object update: the word at +0xC0 of the pxy header (waterFlag) is the offset of its water table; registers the
+/* Per-object update: the word at +0xC0 of the pxy header (waterOffset) is the offset of its water table; registers the
  * table when it has items, steps it when stepMode is 0, and installs the draw callback tiWaterDrawAll. */
 void tiWaterObjectUpdate(PxyHeader *header, int stepMode) {
     TiWaterSub *sub;
 
-    sub = (TiWaterSub *) ((char *) header + header->waterFlag);
+    sub = (TiWaterSub *) ((char *) header + header->waterOffset);
     if (sub->active != 0) {
         tiWaterRegisterSub(sub);
         if (stepMode == 0) {

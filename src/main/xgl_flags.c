@@ -121,7 +121,7 @@ int xglFlagsGet(int bit_offset, int bit_count)
      * five count bits, so the target count 32 makes this mask zero after the
      * subtract-one instruction while retaining the preceding memory reads.
      * The unguarded C shift is intentionally target-specific and is not an
-     * ISO C defined-width-32 contract.  The Java caller forwards signed
+     * ISO C defined-width-32 contract.  The caller forwards signed
      * offsets and widths unchecked; sufficient access bounds are not enforced
      * by this function.
      */

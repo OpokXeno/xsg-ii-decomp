@@ -2,6 +2,8 @@
 #include "shared.h"
 #include "main/xgl_render.h"
 #include "main/fade_ctrl.h"
+#include "ov01/sb_vm.h"
+#include "ov01/sb_natives.h"
 
 /* Fade record. fadeStartIn/fadeStartColorAlpha copy current into start, set target and
  * delta = (target - start) / totalFrames (fadeDeltaVector) and install fadeUpdate as the hook.
@@ -196,7 +198,105 @@ void fadeApplyColor(float red, float green, float blue, float alpha)
 /* Fade record (.data), zero until the first fade starts. */
 FadeState fadeState = { 0 };
 
-/* Fade strings (.sdata): fade_commands.c data (its .word table) refers to them. */
+/* The short names of fadeCommandTable (.sdata 0x69DC90-0x69DCA0, address order). */
 int fadeSuppressFlags = 0;
 char fadeNativeNameFadeout[8] = "Fadeout";
 char fadeNativeNameFadein[8] = "Fadein";
+
+/* fadeColorSet: sets the fade colour from three script arguments (fadeSetColor). */
+int fadeColorSet(SbThread *call) {
+    float color[3];
+    int i;
+
+    if (VM_PLUGIN_CNT_GET(call) != 3) {
+        return 0;
+    }
+    for (i = 0; i < 3; i++) {
+        color[i] = (float) vmArgGet(call, i + 1);
+    }
+    fadeSetColor(color[0], color[1], color[2]);
+    return 1;
+}
+
+/* Fadein: the overlay alpha fades from 255 to 0 over the frame count (fadeStartIn). */
+int Fadein(SbThread *call) {
+    int frames;
+
+    if (VM_PLUGIN_CNT_GET(call) != 1) {
+        return 0;
+    }
+    frames = vmArgGet(call, 1);
+    fadeStartIn(frames);
+    return 1;
+}
+
+/* Fadeout: the overlay alpha fades from 0 to 255 over the frame count (fadeStartOut). */
+int Fadeout(SbThread *call) {
+    int frames;
+
+    if (VM_PLUGIN_CNT_GET(call) != 1) {
+        return 0;
+    }
+    frames = vmArgGet(call, 1);
+    fadeStartOut(frames);
+    return 1;
+}
+
+/* Colorfade: fades the colour to red, green, blue over the frame count (fadeStartColor). */
+int Colorfade(SbThread *call) {
+    float red;
+    float green;
+    float blue;
+    int frames;
+
+    if (VM_PLUGIN_CNT_GET(call) != 4) {
+        return 0;
+    }
+    red = (float) vmArgGet(call, 1);
+    green = (float) vmArgGet(call, 2);
+    blue = (float) vmArgGet(call, 3);
+    frames = vmArgGet(call, 4);
+    fadeStartColor(frames, red, green, blue);
+    return 1;
+}
+
+/* Five-argument fade: colour and alpha over the frame count (fadeStartColorAlpha). */
+int ColorfadeAlpha(SbThread *call) {
+    float red;
+    float green;
+    float blue;
+    float alpha;
+    int frames;
+
+    if (VM_PLUGIN_CNT_GET(call) != 5) {
+        return 0;
+    }
+    red = (float) vmArgGet(call, 1);
+    green = (float) vmArgGet(call, 2);
+    blue = (float) vmArgGet(call, 3);
+    alpha = (float) vmArgGet(call, 4);
+    frames = vmArgGet(call, 5);
+    fadeStartColorAlpha(frames, red, green, blue, alpha);
+    return 1;
+}
+
+extern SbNativeMethod fadeCommandTable[];
+
+/* Registers the fade script commands (command table fadeCommandTable, module name "Samplefade"). */
+void fadeRegisterCommands(void) {
+    sbNativeOwnerAdd("Samplefade", fadeCommandTable);
+}
+
+/* The long names of fadeCommandTable (.rodata 0x68D270-0x68D2A0, address order). */
+const char fadeNativeNameColorfade2[16] = "Colorfade2";
+const char fadeNativeNameColorfade[16] = "Colorfade";
+const char fadeNativeNameColorSet[16] = "ColorSet";
+
+SbNativeMethod fadeCommandTable[6] = {
+    { fadeNativeNameColorSet, fadeColorSet },
+    { fadeNativeNameFadein, Fadein },
+    { fadeNativeNameFadeout, Fadeout },
+    { fadeNativeNameColorfade, Colorfade },
+    { fadeNativeNameColorfade2, ColorfadeAlpha },
+    { 0, 0 },
+};

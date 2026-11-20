@@ -172,7 +172,7 @@ BattleUnit *unitCreateSide(int kind, int side)
     }
     actor->alpha = 0.0f;
     if (kind != 125) {
-        actor->drawMode = 2;
+        actor->shadowType = 2;
         actor->drawParam = 0.5f;
     }
     XenoActorSetChannelFlag80(actor);
@@ -223,7 +223,7 @@ void unitRemove(BattleUnit *unit)
             XenoActorRelease(child);
         }
     }
-    unitSideRelease(unit);
+    unitSlotRelease(unit);
     unitTblRemove(unit);
     if (unit->stats->key >= 16) {
         battleEntryRelease(unit);
@@ -268,8 +268,8 @@ int unitBindActors(BattleUnit *unit, struct DataSlot *slot)
     actor->rsrc[XAct_Rsrc_XAP] = spawn->entries[16].value;
     actor->rsrc[XAct_Rsrc_SlotTableB] = dataFaceHandleGet();
     XenoActorAllocMatrices(actor);
-    XenoActorSetFirstWord(actor, 20);
-    XenoActorSetChannelValue(actor, 0.0f);
+    XenoActorSetSolverPasses(actor, 20);
+    XenoActorSetBlendFrames(actor, 0.0f);
     XenoActorSetMode(actor, 0);
     for (i = 0; i < 3; i++) {
         child = unit->children[i];
@@ -282,7 +282,7 @@ int unitBindActors(BattleUnit *unit, struct DataSlot *slot)
             child->rsrc[XAct_Rsrc_XAP] = spawn->entries[18 + 2 * i].value;
             XenoActorAllocMatrices(child);
             if (child->rsrc[XAct_Rsrc_XAP] != 0) {
-                XenoActorSetChannelValue(child, 0.0f);
+                XenoActorSetBlendFrames(child, 0.0f);
                 XenoActorSetMode(child, 0);
             }
             if ((unsigned int)(unit->stats->pairFirstUnsigned[i] - 1) < 2) {
@@ -426,8 +426,8 @@ void unitSetPhase(BattleUnit *object, int phase) {
     } else {
         channelValue = 0.0f;
     }
-    XenoActorSetChannelValue(unit, channelValue);
-    XenoActorEnableChannel(unit);
+    XenoActorSetBlendFrames(unit, channelValue);
+    XenoActorSetBlendLocal(unit);
     XenoActorSetMode(unit, phase - 1);
     /* The loop walks the children through the same variable, which then holds each child in turn. */
     for (i = 0; i < UNIT_CHILD_COUNT; i++) {
@@ -450,7 +450,7 @@ void unitSetTimedPhase(BattleUnit *object, int phase) {
     }
     unit = object->unit;
     unit->flags |= 2;
-    XenoActorEnableChannel(unit);
+    XenoActorSetBlendLocal(unit);
     XenoActorSetModeInSlot(unit, 1, phase - 1);
     for (i = 0; i < UNIT_CHILD_COUNT; i++) {
         unit = object->children[i];
@@ -470,8 +470,8 @@ void unitSetSelector(BattleUnit *object, int selector) {
     if ((unsigned int) (object->stats->keyUnsigned - 1) < 10) {
         unit = object->unit;
         if (!(unit->flags & 0x200)) {
-            XenoActorSetChannelValueB(unit, 7.0f);
-            XenoActorEnableChannelB(unit);
+            XenoActorSetBlendFramesB(unit, 7.0f);
+            XenoActorSetBlendLocalB(unit);
         }
         XenoActorSetSelector(unit, selector);
     }
@@ -748,7 +748,7 @@ int unitCmdSetPhase(BattleUnit *object, Ov01Command *step) {
     record = tecRecordGet(step->code);
     switch (step->state) {
     case 0:
-        if (record->timer == 0) {
+        if (record->motionIndex == 0) {
             unitSetPhase(object, record->phase);
         } else {
             unitSetTimedPhase(object, record->phase);
@@ -756,7 +756,7 @@ int unitCmdSetPhase(BattleUnit *object, Ov01Command *step) {
         if (record->hitFlags & 0x100) {
             object->flags |= 0x2000;
         }
-        if (record->rowGate[0] & 0x10) {
+        if (record->strikeZones[0] & 0x10) {
             object->flags &= ~0x2000;
         }
         step->state++;
@@ -988,13 +988,13 @@ int unitCmdUnbind(BattleUnit *object, Ov01Command *unusedStep) {
     if ((object->flags & 4) == 0) {
         statEffOn(object);
     }
-    if ((unsigned int) ((unsigned char) object->stats->state70 - 2) < 2) {
+    if ((unsigned int) ((unsigned char) object->stats->breakState - 2) < 2) {
         return 1;
     }
     return unitCmdRefreshPhase(object, unusedStep);
 }
 
-/* Handlers of entries 10 to 39 are defined below; entries 34 to 38 are in unit_cmd_set.c (unit_cmd_set.h). */
+/* Handlers of entries 10 to 39 are defined below in this file. */
 int unitCmdDmg(BattleUnit *object, Ov01Command *step);
 int unitCmdEva(BattleUnit *object, Ov01Command *step);
 int unitCmdDef(BattleUnit *object, Ov01Command *step);
@@ -1054,7 +1054,7 @@ int unitCmdModeRamp(BattleUnit *object, Ov01Command *step)
     case 0:
         unitSetPhase(object, unitCmdCodeGet(step->code, step->arg.wait));
         step->poseIndex = 0;
-        object->stats->state70 = unitCmdModeGet(step->code);
+        object->stats->breakState = unitCmdModeGet(step->code);
         step->state = step->state + 1;
         break;
     case 1:
@@ -1085,7 +1085,7 @@ int unitCmdModeStart(BattleUnit *object, Ov01Command *step)
     SlideBlock *pose = &object->pose;
 
     if (step->state == 0) {
-        object->stats->state70 = unitCmdModeGet(step->code);
+        object->stats->breakState = unitCmdModeGet(step->code);
         unitSetPhase(object, unitCmdCodeGet(step->code, step->arg.wait));
         if (step->code == 3) {
             seObjectVoiceStartDefault(object, 14);
@@ -1129,20 +1129,20 @@ int unitCmdModeStart(BattleUnit *object, Ov01Command *step)
 int unitCmdDmg(BattleUnit *object, Ov01Command *step)
 {
     if (step->code == 4) {
-        if (object->stats->state70 == 1) {
+        if (object->stats->breakState == 1) {
             step->command = UNIT_CMD_MODE_RAMP;
             seObjectVoiceStartDefault(object, 13);
             return unitCmdModeRamp(object, step);
         }
-        if (object->stats->state70 == 3) {
-            object->stats->state70 = unitCmdModeGet(4);
+        if (object->stats->breakState == 3) {
+            object->stats->breakState = unitCmdModeGet(4);
             object->flags &= ~1;
             seObjectVoiceStartDefault(object, 13);
             return 1;
         }
     }
-    if (step->code == 3 && object->stats->state70 == 2) {
-        object->stats->state70 = unitCmdModeGet(3);
+    if (step->code == 3 && object->stats->breakState == 2) {
+        object->stats->breakState = unitCmdModeGet(3);
         object->flags &= ~1;
         seObjectVoiceStartDefault(object, 14);
         return 1;
@@ -1218,7 +1218,7 @@ int unitCmdModeGet(int mode)
     return result;
 }
 
-/* Command 0xB, one-shot start: issues command 0x18 and effect 0xB, then waits for the command to finish. */
+/* Command 0xB, one-shot start: sets phase 0x18 (UNIT_CMD_MOVE_CHA_JUMP) and effect 0xB, then waits for the phase to finish. */
 int unitCmdEva(BattleUnit *object, Ov01Command *step)
 {
     if (step->state == 0) {
@@ -1266,13 +1266,13 @@ int unitCmdDead(BattleUnit *object, Ov01Command *step)
     switch (step->state) {
     case 0:
         object->flags |= 4;
-        if (object->stats->state70 != 2) {
+        if (object->stats->breakState != 2) {
             unitSetPhase(object, 42);
         } else if (unitDeadSpecChk(object) != 0) {
             unitSetPhase(object, 42);
         }
-        if (object->stats->state70 == 1) {
-            object->stats->state70 = 0;
+        if (object->stats->breakState == 1) {
+            object->stats->breakState = 0;
         }
         calcTurnEnd(object);
         mask = calcStatGet(object, 3, 0xffff);
@@ -1289,7 +1289,7 @@ int unitCmdDead(BattleUnit *object, Ov01Command *step)
         if (mask & 0x4000) {
             calcStatSet(object, 3, 16384);
         }
-        object->stats->entryCount = 0;
+        object->stats->hitZoneCount = 0;
         object->stats->comboHits = 0;
         seObjectVoiceStartDefault(object, 5);
         streamPlayByKey(object, 4);
@@ -1502,10 +1502,10 @@ int unitCmdMovePos(BattleUnit *object, Ov01Command *step)
     return result;
 }
 
-/* Values of Ov01Motion.moveMode: unitCmdMoveRatio sets RATIO, the pose ramp (unitCmdMoveRamp) sets RAMP. */
+/* Values of StatBlock.breakState that the move steps set: unitCmdMoveRatio sets NORMAL, the pose ramp (unitCmdMoveRamp) sets DOWN. */
 enum {
-    UNIT_PARAM_MODE_RATIO = 0,
-    UNIT_PARAM_MODE_RAMP = 2
+    UNIT_BREAK_STATE_NORMAL = 0,
+    UNIT_BREAK_STATE_DOWN = 2
 };
 
 /* The pose index viewed as a plain int through a union (alias set 0), so its store keeps its place in the block. */
@@ -1618,7 +1618,7 @@ int unitCmdMoveRatio(BattleUnit *object, Ov01Command *step)
 
     snapshot = (DoublewordVector4 *) &object->pose.position;
     if (step->state == 0) {
-        object->stats->state70 = UNIT_PARAM_MODE_RATIO;
+        object->stats->breakState = UNIT_BREAK_STATE_NORMAL;
         effectPosIndex = object->stats->posIndex;
         primary = (f32) *effectPosGet(effectPosIndex);
         snapshot->vector.y = 0.0f;
@@ -1653,7 +1653,7 @@ int unitCmdMoveRamp(BattleUnit *object, Ov01Command *step)
     pose = &object->pose;
     snapshot = (DoublewordVector4 *) &pose->position;
     if (step->state == 0) {
-        object->stats->state70 = UNIT_PARAM_MODE_RAMP;
+        object->stats->breakState = UNIT_BREAK_STATE_DOWN;
         facing = 0;
         if (unitCurrentPhase(object) != 0x20) {
             facing = 1;
@@ -1725,14 +1725,14 @@ int unitCmdRec(BattleUnit *object, Ov01Command *unusedStep)
 }
 
 /*
- * Command 0x2B, then waits. When motion->state70 is 2 it sets step->command to
+ * Command 0x2B, then waits. When motion->breakState is 2 it sets step->command to
  * 0x1C instead and returns without issuing the command.
  */
 int unitCmdWake(BattleUnit *object, Ov01Command *step)
 {
     if (step->state == 0) {
-        object->flags &= ~4;
-        if (object->stats->state70 == UNIT_PARAM_MODE_RAMP) {
+        object->flags &= ~UNIT_FLAG_DOWN;
+        if (object->stats->breakState == UNIT_BREAK_STATE_DOWN) {
             step->command = UNIT_CMD_MOVE_RATIO;
             return 0;
         }
@@ -1755,9 +1755,6 @@ int unitCmdWake(BattleUnit *object, Ov01Command *step)
 
 /* The pose ramp table has eight entries (unitPoseRamp). */
 #define POSE_RAMP_COUNT 8
-
-/* Object flag bit 0x4: set by unitCmdDeadSet once the object's moves are queued. */
-#define UNIT_FLAG_QUEUED 0x4
 
 /* The limit block of the actor's model pack (XenoActor.rsrc[XAct_Rsrc_MDL]); only its four extents are read. */
 typedef struct Ov01Limit {
@@ -1860,7 +1857,7 @@ int unitCmdRemove(BattleUnit *object, Ov01Command *unusedStep) {
 
 int unitCmdFinishRefresh(BattleUnit *object, Ov01Command *unusedStep) {
     /* mode 2 and mode 3 skip the call */
-    if ((unsigned int) ((unsigned char) object->stats->state70 - 2) >= 2U) {
+    if ((unsigned int) ((unsigned char) object->stats->breakState - 2) >= 2U) {
         unitRefreshPhase(object);
     }
     object->flags &= ~UNIT_FLAG_ACTIVE;
@@ -1882,7 +1879,7 @@ void unitSlotsClear(BattleUnit *object, int rowKey) {
         object->flags |= 0x800;
     }
     row = tecRecordGet(rowKey);
-    if (row->gateFlag == 5) {
+    if (row->techClass == 5) {
         source = object->children[2];
         if (source != 0) {
             source->rsrc[XAct_Rsrc_5] = 0;
@@ -1910,20 +1907,20 @@ void unitHitFlagsClear(BattleUnit *object) {
 
 /* Queues the object's commands for its motion mode: mode 3 queues 29 first,
  * and mode 2 queues 28 as well when unitDeadSpecChk says so; command 13 always
- * follows. The object gets flag 0x4 and the call returns 1, or it returns 0
- * when it is already flagged or its motion is held. */
+ * follows. The object gets UNIT_FLAG_DOWN and the call returns 1, or it returns 0
+ * when it already has that flag or its motion is held. */
 int unitCmdDeadSet(BattleUnit *object) {
     Ov01Command command;
 
-    if ((object->flags & UNIT_FLAG_QUEUED) != 0) {
+    if ((object->flags & UNIT_FLAG_DOWN) != 0) {
         return 0;
     }
     if (object->stats->hp == 0) {
-        if (object->stats->state70 == 3) {
+        if (object->stats->breakState == 3) {
             command.command = 29;
             unitCmdSet(object, &command);
         }
-        if (object->stats->state70 == 2) {
+        if (object->stats->breakState == 2) {
             if (unitDeadSpecChk(object) != 0) {
                 command.command = 28;
                 unitCmdSet(object, &command);
@@ -1931,7 +1928,7 @@ int unitCmdDeadSet(BattleUnit *object) {
         }
         command.command = 13;
         unitCmdSet(object, &command);
-        object->flags |= UNIT_FLAG_QUEUED;
+        object->flags |= UNIT_FLAG_DOWN;
         return 1;
     }
     return 0;

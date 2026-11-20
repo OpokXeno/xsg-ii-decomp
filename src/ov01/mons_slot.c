@@ -88,11 +88,11 @@ struct MonsSlot *monsSlotNew(void) {
 
 /*
  * monsSlotRelease: releases the actor (XenoActorRelease),
- * removes the record from the table (monsSlotRemove) and calls monsSlotReleaseRecord
+ * removes the record from the table (monsSlotRemove) and calls monsSlotRecordRelease
  * first. Called by eventPairEnd.
  */
 void monsSlotRelease(struct MonsSlot *slot) {
-    monsSlotReleaseRecord();
+    monsSlotRecordRelease();
     XenoActorRelease(slot->actor);
     monsSlotRemove(slot);
 }

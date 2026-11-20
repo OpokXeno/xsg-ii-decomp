@@ -175,7 +175,7 @@ typedef struct {
 #define SHADOW_RING_CORNER_SCALE 0.7f /* diagonal ring points sit at 0.7 of the radius */
 #define SHADOW_ALPHA_SCALE 90.0f /* shadow_alpha, 0..1, becomes the packet alpha 0..90 */
 #define SHADOW_GROUND_SEARCH_START 100000.0f /* above any joint height: the lowest joint wins */
-#define SHADOW_LINK_MAGIC 0x797870 /* "pxy" in the low three bytes of the link record */
+#define SHADOW_MODEL_MAGIC 0x797870 /* "pxy" in the low three bytes of the model record */
 
 /* Status of a drop-shadow quad, set by DrawDropShadowSubChk: 1 back-facing, 2 front-facing. */
 enum {
@@ -219,8 +219,8 @@ typedef struct {
 typedef struct {
     u64 magic;
     u8 unmodeled_08[84];
-    int count;
-} ActDropCircleLink;
+    int jointMatrixCount;
+} ActPxyRecord;
 
 /* A view of the XenoActor (main/xenoActor.h) with the fields the shadow code reads. Reading the actor as XenoActor
  * instead (position, vector80, radius, drawMode, drawParam, localMatrix, light.directions[0] / light.fourthDirection,
@@ -229,8 +229,8 @@ typedef struct {
  *
  * The actor fields the shadow code reads: the circle and Zelda shadows, the drop circle and
  * the drop shadow. shadow_center_offset is the local offset of the drop-circle centre, moved
- * through shadow_matrix. The ground search runs only while ground_link is set; link is the
- * record (magic "pxy") whose count says how many joint matrices, from shadow_matrices->matrices[2]
+ * through shadow_matrix. The ground search runs only while pGlobalMat is set; model is the
+ * record (magic "pxy") whose jointMatrixCount says how many joint matrices, from shadow_matrices->matrices[2]
  * on, give candidate ground heights. The Zelda shadow reads light_direction (alternate_light
  * .w == 0) or alternate_light (w != 0) as its ground direction, the same selection the drop
  * shadow makes for its light. */
@@ -254,13 +254,13 @@ typedef struct {
     u8 unmodeled_1a0[0x280 - 0x1a0];
     Vector4 alternate_light;
     u8 unmodeled_290[0x5ec - 0x290];
-    ActDropCircleLink *link;
+    ActPxyRecord *model;
     u8 unmodeled_5f0[0x62c - 0x5f0];
-    void *ground_link;
+    void *pGlobalMat;
     u8 unmodeled_630[0x720 - 0x630];
     ActShadowMatrixSet *shadow_matrices;
     u8 unmodeled_724[0x754 - 0x724];
-    float height_override;
+    float collisionDistance;
     u8 unmodeled_758[0x798 - 0x758];
     u32 kind;
 } ActShadowActor;
@@ -283,10 +283,10 @@ void DrawCircleShadow(void *actor_pointer)
     xglMatrixUnit(scratchpad->model.elements);
     scratchpad->model.elements[3][0] = actor->position[0];
     scratchpad->model.elements[3][2] = actor->position[2];
-    if (actor->height_override == GROUND_HEIGHT_NONE) {
+    if (actor->collisionDistance == GROUND_HEIGHT_NONE) {
         scratchpad->model.elements[3][1] = actor->position[1] + SHADOW_GROUND_LIFT;
     } else {
-        scratchpad->model.elements[3][1] = actor->height_override + SHADOW_GROUND_LIFT;
+        scratchpad->model.elements[3][1] = actor->collisionDistance + SHADOW_GROUND_LIFT;
     }
     xglMatrixRotY(scratchpad->transform.elements, scratchpad->model.elements, actor->yaw);
     for (camera_index = 0; camera_index < SHADOW_CAMERA_SLOT_COUNT; camera_index++) {
@@ -502,10 +502,10 @@ void DrawZeldaShadow(void *actor_pointer)
     if (actor->shadow_matrices == 0) {
         return;
     }
-    if (actor->height_override == GROUND_HEIGHT_NONE) {
+    if (actor->collisionDistance == GROUND_HEIGHT_NONE) {
         scratchpad->height = actor->position[1] + SHADOW_GROUND_LIFT;
     } else {
-        scratchpad->height = actor->height_override + SHADOW_GROUND_LIFT;
+        scratchpad->height = actor->collisionDistance + SHADOW_GROUND_LIFT;
     }
     for (camera_index = 0; camera_index < SHADOW_CAMERA_SLOT_COUNT; camera_index++) {
         if (xglStudioGetCamera2(camera_index)->active == 1) {
@@ -771,10 +771,10 @@ DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
     Vector4 *points = vertices;
     DropShadowSourceVertex *projected;
 
-    if (actor->height_override == GROUND_HEIGHT_NONE) {
+    if (actor->collisionDistance == GROUND_HEIGHT_NONE) {
         ground_height = actor->position[1] - SHADOW_DROP_CONTACT_DEPTH;
     } else {
-        ground_height = actor->height_override - SHADOW_DROP_CONTACT_DEPTH;
+        ground_height = actor->collisionDistance - SHADOW_DROP_CONTACT_DEPTH;
     }
     segments = 0;
     if (contacts[0].matrix_index != SHADOW_CONTACT_END) {
@@ -1022,7 +1022,7 @@ void DrawDropCircle(ActShadowActor *actor)
     int i;
     DropShadowQuadIndexTable indices;
     DropShadowSourceVertex *projected;
-    ActDropCircleLink *link;
+    ActPxyRecord *model;
 
     {
         u64 alpha_descriptor = ((u64)(int)(actor->shadow_alpha * SHADOW_ALPHA_SCALE) << 32) | 100;
@@ -1041,21 +1041,21 @@ void DrawDropCircle(ActShadowActor *actor)
     scratch->camera_index = camera;
     center[0] = actor->position[0];
     center[2] = actor->position[2];
-    if (actor->height_override == GROUND_HEIGHT_NONE) {
+    if (actor->collisionDistance == GROUND_HEIGHT_NONE) {
         center[1] = actor->position[1] + SHADOW_GROUND_LIFT;
     } else {
-        center[1] = actor->height_override + SHADOW_GROUND_LIFT;
+        center[1] = actor->collisionDistance + SHADOW_GROUND_LIFT;
     }
-    if (actor->ground_link != 0) {
+    if (actor->pGlobalMat != 0) {
         if (actor->shadow_center_offset.x != 0.0f || actor->shadow_center_offset.y != 0.0f ||
             actor->shadow_center_offset.z != 0.0f) {
             xglVectorMulMat(&scratch->temporary.vector, actor->shadow_matrix.elements, &actor->shadow_center_offset);
-            link = actor->link;
-            if (link != 0 && (link->magic & 0xffffff) == SHADOW_LINK_MAGIC) {
+            model = actor->model;
+            if (model != 0 && (model->magic & 0xffffff) == SHADOW_MODEL_MAGIC) {
                 /* The lowest joint height (matrix translation y) is the ground under the circle. */
                 ActShadowMatrixView *joint = &actor->shadow_matrices->matrices[2];
                 ground = SHADOW_GROUND_SEARCH_START;
-                i = link->count;
+                i = model->jointMatrixCount;
                 if (i > 0) {
                     int remaining = i;
                     do {

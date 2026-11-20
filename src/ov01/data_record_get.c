@@ -112,8 +112,8 @@ extern int battleLookupTableOffset;
 extern int statusTableOffset;
 extern int itemTableOffset;
 extern int hitActionTableOffset;
-extern int batTable70Offset;
-extern int batTable74Offset;
+extern int batSecretKeyTableOffset;
+extern int batKeyItemTableOffset;
 extern int pairLinkTableOffset;
 extern int calcLevelTableOffset;
 extern int tgtIdTableOffset;
@@ -172,7 +172,7 @@ ShortPair *slotPairRowGet(int index)
 
 /* Records of battleLookupTableOffset (entries 1..0x6D). */
 
-BattleLookupEntry *battleLookupGet(int index)
+EtherRecord *etherRecordGet(int index)
 {
     unsigned char *table;
 
@@ -180,12 +180,12 @@ BattleLookupEntry *battleLookupGet(int index)
         return 0;
     }
     table = (unsigned char *)&battleLookupTableOffset - 32 + battleLookupTableOffset;
-    return (BattleLookupEntry *) (table + (index - 1) * 12);
+    return (EtherRecord *) (table + (index - 1) * 12);
 }
 
 /* Records of itemTableOffset (entries 1..0x28). */
 
-ItemRecord *itemRecordGet(int index)
+EsAccessoryRecord *accessoryRecordGet(int index)
 {
     unsigned char *table;
 
@@ -193,12 +193,12 @@ ItemRecord *itemRecordGet(int index)
         return 0;
     }
     table = (unsigned char *)&itemTableOffset - 40 + itemTableOffset;
-    return (ItemRecord *) (table + (index - 1) * 16);
+    return (EsAccessoryRecord *) (table + (index - 1) * 16);
 }
 
-/* Records of statusTableOffset (entries 1..0x68). */
+/* Skill or equipment effect records of statusTableOffset (entries 1..0x68). */
 
-StatusRecord *statusRecordGet(int index)
+SkillRecord *skillRecordGet(int index)
 {
     unsigned char *table;
 
@@ -206,12 +206,12 @@ StatusRecord *statusRecordGet(int index)
         return 0;
     }
     table = (unsigned char *)&statusTableOffset - 36 + statusTableOffset;
-    return (StatusRecord *) (table + (index - 1) * 12);
+    return (SkillRecord *) (table + (index - 1) * 12);
 }
 
 /* Records of hitActionTableOffset (entries 1..0x28). */
 
-HitAction *hitActionGet(int index)
+UsableItemRecord *usableItemRecordGet(int index)
 {
     unsigned char *table;
 
@@ -219,38 +219,38 @@ HitAction *hitActionGet(int index)
         return 0;
     }
     table = (unsigned char *)&hitActionTableOffset - 44 + hitActionTableOffset;
-    return (HitAction *) (table + (index - 1) * 16);
+    return (UsableItemRecord *) (table + (index - 1) * 16);
 }
 
-/* Records of batTable70Offset (entries 1..0x63). */
+/* Records of batSecretKeyTableOffset: the file holds 31 records; the getter checks index < 0x64 as the original does. */
 
-RecordTexts *dataBoxCategory4RecordGet(int index)
+RecordTexts *dataBoxSecretKeyRecordGet(int index)
 {
     unsigned char *table;
 
     if (!(index < 0x64)) {
         return 0;
     }
-    table = (unsigned char *)&batTable70Offset - 48 + batTable70Offset;
+    table = (unsigned char *)&batSecretKeyTableOffset - 48 + batSecretKeyTableOffset;
     return (RecordTexts *) (table + (index - 1) * 4);
 }
 
-/* Records of batTable74Offset (entries 1..0x63). */
+/* Records of batKeyItemTableOffset: the file holds 107 records; the getter checks index < 0x64 as the original does. */
 
-TextRecord8 *dataBoxCategory3RecordGet(int index)
+TextRecord8 *dataBoxKeyItemRecordGet(int index)
 {
     unsigned char *table;
 
     if (!(index < 0x64)) {
         return 0;
     }
-    table = (unsigned char *)&batTable74Offset - 52 + batTable74Offset;
+    table = (unsigned char *)&batKeyItemTableOffset - 52 + batKeyItemTableOffset;
     return (TextRecord8 *) (table + (index - 1) * 8);
 }
 
 /* Records of pairLinkTableOffset (entries 1..0x10). */
 
-PairLink *pairLinkGet(int index)
+DoubleTechRecord *pairLinkGet(int index)
 {
     unsigned char *table;
 
@@ -258,12 +258,12 @@ PairLink *pairLinkGet(int index)
         return 0;
     }
     table = (unsigned char *)&pairLinkTableOffset - 56 + pairLinkTableOffset;
-    return (PairLink *) (table + (index - 1) * 16);
+    return (DoubleTechRecord *) (table + (index - 1) * 16);
 }
 
 /* Records of calcLevelTableOffset (entries 1..0x15). */
 
-CalcLevelRecord *calcLevelRecordGet(int index)
+EsSpecialRecord *attackLevelRecordGet(int index)
 {
     unsigned char *table;
 
@@ -271,12 +271,12 @@ CalcLevelRecord *calcLevelRecordGet(int index)
         return 0;
     }
     table = (unsigned char *)&calcLevelTableOffset - 60 + calcLevelTableOffset;
-    return (CalcLevelRecord *) (table + (index - 1) * 16);
+    return (EsSpecialRecord *) (table + (index - 1) * 16);
 }
 
 /* Records of tgtIdTableOffset (entries 1..0xA). */
 
-TgtIdRecord *tgtIdRecordGet(int index)
+SpecialAttackRecord *attackTargetRecordGet(int index)
 {
     unsigned char *table;
 
@@ -284,13 +284,13 @@ TgtIdRecord *tgtIdRecordGet(int index)
         return 0;
     }
     table = (unsigned char *)&tgtIdTableOffset - 64 + tgtIdTableOffset;
-    return (TgtIdRecord *) (table + (index - 1) * 16);
+    return (SpecialAttackRecord *) (table + (index - 1) * 16);
 }
 
 /* Self-relative table at tableKeyRecordsOffset: 16-byte entries, valid for index 16..143. */
 extern int tableKeyRecordsOffset;
 
-struct TableKeyRecord *enemyRewardRecordGet(int key)
+struct EnemyRewardRecord *enemyRewardRecordGet(int key)
 {
     u32 offset = key - 16;
     unsigned char *table;
@@ -340,12 +340,12 @@ short *stringOffsetsGet(int index)
 /* The *TextGet getters below decrement index after the table call: decremented first, the copy of index and the
  * decrement merge into one instruction, unlike the original. */
 
-/* Text `field` of record `index` (numbered from 1) of the battleLookupGet table; 0 for another field. */
+/* Text `field` of record `index` (numbered from 1) of the etherRecordGet table; 0 for another field. */
 char *battleLookupTextGet(int index, int field)
 {
-    BattleLookupEntry *table;
+    EtherRecord *table;
 
-    table = battleLookupGet(1);
+    table = etherRecordGet(1);
     index--;
     switch (field) {
     case RECORD_TEXT_NAME:
@@ -356,12 +356,12 @@ char *battleLookupTextGet(int index, int field)
     return 0;
 }
 
-/* Text `field` of record `index` (numbered from 1) of the itemRecordGet table; 0 for another field. */
+/* Text `field` of record `index` (numbered from 1) of the accessoryRecordGet table; 0 for another field. */
 char *itemTextGet(int index, int field)
 {
-    ItemRecord *table;
+    EsAccessoryRecord *table;
 
-    table = itemRecordGet(1);
+    table = accessoryRecordGet(1);
     index--;
     switch (field) {
     case RECORD_TEXT_NAME:
@@ -372,12 +372,12 @@ char *itemTextGet(int index, int field)
     return 0;
 }
 
-/* Text `field` of record `index` (numbered from 1) of the statusRecordGet table; 0 for another field. */
+/* Text `field` of record `index` (numbered from 1) of the skillRecordGet table; 0 for another field. */
 char *statusTextGet(int index, int field)
 {
-    StatusRecord *table;
+    SkillRecord *table;
 
-    table = statusRecordGet(1);
+    table = skillRecordGet(1);
     index--;
     switch (field) {
     case RECORD_TEXT_NAME:
@@ -388,12 +388,12 @@ char *statusTextGet(int index, int field)
     return 0;
 }
 
-/* Text `field` of record `index` (numbered from 1) of the hitActionGet table; 0 for another field. */
+/* Text `field` of record `index` (numbered from 1) of the usableItemRecordGet table; 0 for another field. */
 char *hitActionTextGet(int index, int field)
 {
-    HitAction *table;
+    UsableItemRecord *table;
 
-    table = hitActionGet(1);
+    table = usableItemRecordGet(1);
     index--;
     switch (field) {
     case RECORD_TEXT_NAME:
@@ -404,12 +404,12 @@ char *hitActionTextGet(int index, int field)
     return 0;
 }
 
-/* Text `field` of record `index` (numbered from 1) of the dataBoxCategory4RecordGet table; 0 for another field. */
+/* Text `field` of record `index` (numbered from 1) of the dataBoxSecretKeyRecordGet table; 0 for another field. */
 char *dataBoxCategory4TextGet(int index, int field)
 {
     RecordTexts *table;
 
-    table = dataBoxCategory4RecordGet(1);
+    table = dataBoxSecretKeyRecordGet(1);
     index--;
     switch (field) {
     case RECORD_TEXT_NAME:
@@ -420,12 +420,12 @@ char *dataBoxCategory4TextGet(int index, int field)
     return 0;
 }
 
-/* Text `field` of record `index` (numbered from 1) of the dataBoxCategory3RecordGet table; 0 for another field. */
+/* Text `field` of record `index` (numbered from 1) of the dataBoxKeyItemRecordGet table; 0 for another field. */
 char *dataBoxCategory3TextGet(int index, int field)
 {
     TextRecord8 *table;
 
-    table = dataBoxCategory3RecordGet(1);
+    table = dataBoxKeyItemRecordGet(1);
     index--;
     switch (field) {
     case RECORD_TEXT_NAME:
@@ -439,7 +439,7 @@ char *dataBoxCategory3TextGet(int index, int field)
 /* Text `field` of record `index` (numbered from 1) of the pairLinkGet table; 0 for another field. */
 char *pairLinkTextGet(int index, int field)
 {
-    PairLink *table;
+    DoubleTechRecord *table;
 
     table = pairLinkGet(1);
     index--;
@@ -452,12 +452,12 @@ char *pairLinkTextGet(int index, int field)
     return 0;
 }
 
-/* Text `field` of record `index` (numbered from 1) of the calcLevelRecordGet table; 0 for another field. */
+/* Text `field` of record `index` (numbered from 1) of the attackLevelRecordGet table; 0 for another field. */
 char *calcLevelTextGet(int index, int field)
 {
-    CalcLevelRecord *table;
+    EsSpecialRecord *table;
 
-    table = calcLevelRecordGet(1);
+    table = attackLevelRecordGet(1);
     index--;
     switch (field) {
     case RECORD_TEXT_NAME:
@@ -468,12 +468,12 @@ char *calcLevelTextGet(int index, int field)
     return 0;
 }
 
-/* Text `field` of record `index` (numbered from 1) of the tgtIdRecordGet table; 0 for another field. */
+/* Text `field` of record `index` (numbered from 1) of the attackTargetRecordGet table; 0 for another field. */
 char *tgtIdTextGet(int index, int field)
 {
-    TgtIdRecord *table;
+    SpecialAttackRecord *table;
 
-    table = tgtIdRecordGet(1);
+    table = attackTargetRecordGet(1);
     index--;
     switch (field) {
     case RECORD_TEXT_NAME:

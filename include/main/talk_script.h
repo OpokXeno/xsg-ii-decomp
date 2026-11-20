@@ -17,7 +17,7 @@ typedef union GsPair {
 } GsPair;
 
 /* talkWindowDrawFrame draws the page cursor of an active text slot while it is open and no longer
- * revealing text (bit 0x10, INTERP_FLAG_SCAN of timecode_counter.h, clear). */
+ * revealing text (bit 0x10, INTERP_FLAG_SCAN of msg_slot_core.h, clear). */
 
 /* Frame modes of talkWindowDrawFrame; 3 is the sized frame of talkWindowFrameRect. */
 #define TALK_FRAME_FULL 0
@@ -33,21 +33,21 @@ typedef union GsPair {
  * NLOOP 0; the pair count is added to it when the packet is sent. */
 #define TALK_GIF_TAG_AD_EOP (GIF_TAG_ONE_AD_EOP - 1)
 
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
 extern int talkActive;
-extern void *talkScriptHandle;
+extern void *talkTextureHandle;
 
 void talkWindowDrawFrame(MsgSlot *window, int mode, float scale);
 
 int textSlotWrapWidth(int value);
 int interpLineScrollY(int value);
-void talkEndScript(void);
+void talkEndTexture(void);
 void talkDeactivate(void);
 void talkSetActive(void);
-void talkStartScriptLoad(void);
-void talkLoadOmiyaScript(void);
-void talkCloseScript(void);
+void talkStartTextureLoad(void);
+void talkLoadOmiyaTexture(void);
+void talkCloseTexture(void);
 void talkSetPending(int value);
 int talkTakePending(void);
 void talkDrawFramesBasic(MsgSlot *slot);
@@ -55,6 +55,6 @@ void talkDrawFramesWithCursor(MsgSlot *slot);
 void talkDrawFramesWithBox(MsgSlot *slot);
 void talkDrawFrameRects(MsgSlot *slot);
 void talkDrawFramesWithFade(MsgSlot *slot);
-void talkDrawListHeaderWindow(MsgSlot *slot);
+void talkDrawListFooterWindow(MsgSlot *slot);
 
 #endif /* INCLUDE_MAIN_TALK_SCRIPT_H */

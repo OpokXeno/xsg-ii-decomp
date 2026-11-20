@@ -3,7 +3,7 @@
 
 /* Functions of src/main/msg_slot_center.c that other files call. */
 
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
 int msgSlotCenterX(MsgSlot *record);
 int msgSlotCenterY(MsgSlot *record);

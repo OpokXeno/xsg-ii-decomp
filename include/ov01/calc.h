@@ -14,8 +14,8 @@ int battleUnitHasEffectCode(int key, int code);
 /* BattleUnit and StatBlock (its +0x144 block) are defined in unit_cmd.h. */
 
 /*
- * The boost gauge of a side (boostGaugeParty for the party, boostGaugeRest for the rest; boostGaugeGet
- * picks one for a unit). stock is the number of banked boosts, capped by maxStock (counted up to 5 by
+ * The boost gauge of a side (boostGaugeParty[0] is the party gauge, boostGaugeParty[1] the rest gauge;
+ * boostGaugeSelect picks one). stock is the number of banked boosts, capped by maxStock (counted up to 5 by
  * calcUseItem, through its unsigned view); progress counts toward the next stock and is held at 50
  * while the gauge is full.
  */
@@ -106,10 +106,10 @@ int calcBattleChk(BattleUnit *unit);
 typedef struct SlotRecord SlotRecord;
 
 struct SlotRecord {
-    int gainFirst;                          /* +0x00: capped at 99999999 */
+    int expGain;                            /* +0x00: experience gained, capped at 99999999 */
     int expCounter;                         /* +0x04: the experience counter calcLvUp spends; it levels up at 0 */
-    int gainSecond;                         /* +0x08: capped at 99999 */
-    int gainThird;                          /* +0x0C: capped at 99999 */
+    int skillPointsGain;                    /* +0x08: skill points gained, capped at 99999 */
+    int classPointsGain;                    /* +0x0C: class points gained, capped at 99999 */
     unsigned short growth[8];               /* +0x10: growth values; dataPlUnitInit loads their start, unitGrowthStep steps them toward the GrowthRecord targets */
     union {
         unsigned char codeBits[8];
@@ -156,7 +156,7 @@ void dataEtherLearnSet(int key, int flag);
 int dataSkillLearnGet(int key, int code);
 int dataSkillLearnSet(int key, int code);
 void partySnapshotBuild(void);
-int sdvSpecialBitGet(int index);
+int brokenEnemyBitGet(int index);
 int slotPairSet(int index);
 int unitIsInFacingArc(BattleUnit *origin, BattleUnit *target);
 
@@ -247,9 +247,9 @@ void sdvInitSpecialWork(void);
  * that order, battleResultBuildEntries of src/main/battle_result.c switches on the category); the pair count at +0x4C.
  */
 struct BattleResult {
-    int points;                    /* +0x00: points summed by monsGainSet */
-    int stepRateTotal;             /* +0x04: stepRate summed, scaled by the phase-2 multiplier */
-    int flatTotal;                 /* +0x08: flat summed by monsGainSet */
+    int exp;                                /* +0x00: experience summed by monsGainSet */
+    int skillPointsTotal;                   /* +0x04: skill points summed, scaled by the phase-2 multiplier */
+    int classPointsTotal;                   /* +0x08: class points summed by monsGainSet */
     int categories[8];             /* +0x0C: data box category of each pair */
     int ids[8];                    /* +0x2C: data box id of each pair */
     int count;                     /* +0x4C */
@@ -261,9 +261,9 @@ struct BattleResult {
  */
 struct BattleResultRow {
     int key;                       /* +0x00 */
-    int gainFirst;                 /* +0x04 */
-    int gainSecond;                /* +0x08 */
-    int gainThird;                 /* +0x0C */
+    int expGain;                            /* +0x04: experience */
+    int skillPointsGain;                    /* +0x08: skill points */
+    int classPointsGain;                    /* +0x0C: class points */
     int levelGain;                 /* +0x10 */
     int maxHpGain;                 /* +0x14 */
     int maxEpGain;                 /* +0x18 */
@@ -277,13 +277,13 @@ void battleWorkTablesReset(void);
 int calcTrg2PE(struct BattleUnit *entity, int flags);
 
 /*
- * The step counter actStepCounter: step runs 0..3; at step 3 `hold` is a random value of 4 or
- * more. actStepCounterSet draws the multiplier and clears the words from +0xC.
+ * The Event Slot (actStepCounterGet): step runs 0..3; at step 3 `hold` is a random value of 4 or
+ * more. actStepCounterSet draws the skill point multiplier and clears the words from +0xC.
  */
-struct ActStepCounter {
+struct EventSlot {
     int step;                               /* +0x00 */
     int hold;                               /* +0x04 */
-    int multiplier;                         /* +0x08: 2, 4 or 10; monsGainSet's rate at phase 2 */
+    int skillPointMultiplier;               /* +0x08: 2, 4 or 10; monsGainSet's rate at phase 2 */
     union {
         int cleared0C;                      /* +0x0C: cleared by actStepCounterSet */
         int levelGranted;                   /* same word: set once calcDmg granted the attacker a level */
@@ -293,6 +293,6 @@ struct ActStepCounter {
     int stepState;                          /* +0x14: 1 to 3, set by calcHitStateStep and calcHitRowGate */
 };
 
-struct ActStepCounter *actStepCounterGet(void);
+struct EventSlot *actStepCounterGet(void);
 
 #endif /* INCLUDE_OV01_CALC_H */

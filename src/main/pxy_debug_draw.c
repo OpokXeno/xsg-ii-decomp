@@ -284,9 +284,9 @@ u8 pxyGlyphUpperZ[16] = {
     7, 1, 7, 255, 0, 0, 0, 0
 };
 u8 *pxyGlyphDigits[10] = {
-    pxyGlyphDigitTable + 4, pxyGlyphDigitTable + 36, pxyGlyphDigitTable + 52, pxyGlyphDigitTable + 76,
-    pxyGlyphDigitTable + 108, pxyGlyphDigitTable + 124, pxyGlyphDigitTable + 148, pxyGlyphDigitTable + 172,
-    pxyGlyphDigitTable + 188, pxyGlyphDigitTable + 228
+    pxyDigitStrokeTable + 4, pxyDigitStrokeTable + 36, pxyDigitStrokeTable + 52, pxyDigitStrokeTable + 76,
+    pxyDigitStrokeTable + 108, pxyDigitStrokeTable + 124, pxyDigitStrokeTable + 148, pxyDigitStrokeTable + 172,
+    pxyDigitStrokeTable + 188, pxyDigitStrokeTable + 228
 };
 u8 *pxyGlyphUpper[26] = {
     pxyGlyphUpperA, pxyGlyphUpperB, pxyGlyphUpperC, pxyGlyphUpperD,

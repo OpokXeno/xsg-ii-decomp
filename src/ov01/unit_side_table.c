@@ -9,7 +9,7 @@
 /*
  * One 0x1F0-byte slot of the nine-entry table unitSideTable: a unit object (BattleUnit, 0x1F0 bytes). Bit 0x1 of the slot flags is the claim bit (unitSideClaim, called by unitCreateSide); unitCreateSide
  * stores unitUpdate and the draw callback in it, and unitRemove releases the slot through
- * unitSideRelease (data_obj_table.c).
+ * unitSlotRelease (data_obj_table.c).
  * Update runs unless flags & 2 (update sweep unitSideRunUpdate), draw runs unless flags & 4 (draw sweep unitSideRunDraw).
  */
 typedef struct UnitSideSlot {
@@ -19,10 +19,10 @@ typedef struct UnitSideSlot {
 static UnitSideSlot unitSideTable[UNIT_SIDE_COUNT];
 
 /*
- * Releases one MonsSlot record (monsSlotReleaseRecord): the only caller is monsSlotRelease (mons_slot.c,
+ * Releases one MonsSlot record (monsSlotRecordRelease): the only caller is monsSlotRelease (mons_slot.c,
  * monsSlotRelease), which calls it before it releases the actor. Same body as the other release wrappers.
  */
-void monsSlotReleaseRecord(void)
+void monsSlotRecordRelease(void)
 {
     ov01SlotRelease();
 }

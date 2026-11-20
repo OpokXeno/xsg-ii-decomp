@@ -96,7 +96,7 @@ int keyCmdGet(BattleUnit *unit)
 
     if (unit->stats->keyUnsigned - 1U < 10U) {
         if (unit->stats->keysSpent > 0 &&
-            (unit->stats->level == 0 || (unit->flags & 0x800))) {
+            (unit->stats->stockCount == 0 || (unit->flags & 0x800))) {
             keyBuffClear();
             return DATA_KEY_CANCEL;
         }
@@ -164,7 +164,7 @@ int keyCmdChk(BattleUnit *unit, int key, void *tgt)
         return 2;
     }
     if (unit->stats->keyUnsigned - 1U < 10U) {
-        budget = unit->stats->level;
+        budget = unit->stats->stockCount;
         if (budget < keyCmdApGet(unit, key)) {
             return 1;
         }
@@ -331,7 +331,7 @@ unsigned short dataPadRead(int port)
 }
 
 
-/* Clears the pair menuWepSpPanelCursor / menuWepSpPanelRowCount. Their meaning is still open. */
+/* Clears the command panel cursor (menuWepSpPanelCursor) and its row count (menuWepSpPanelRowCount). */
 void menuWepSpPanelReset(void) {
     menuWepSpPanelCursor = 0;
     menuWepSpPanelRowCount = 0;
@@ -426,7 +426,7 @@ int dataSlotKeyTest(BattleUnit *unit, int key)
         count = 0;
         for (i = 1; i < 41; i++) {
             if (dataBoxChkCategory1(i) > 0) {
-                HitAction *box = hitActionGet(i);
+                UsableItemRecord *box = usableItemRecordGet(i);
                 if (box->flags & 0x4000) {
                     count++;
                 }
@@ -691,7 +691,7 @@ void dataTargetHide(void)
     menuUnitPanelArmTimer();
     menuComboPanelArmTick();
     unit = tgtUnitGet();
-    if ((unit == 0) || (unit->stats->entryCount <= 0)) {
+    if ((unit == 0) || (unit->stats->hitZoneCount <= 0)) {
         menuIconListClose();
     }
 }

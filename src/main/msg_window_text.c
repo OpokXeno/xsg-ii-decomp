@@ -3,11 +3,10 @@
 #include "main/interp_text.h"
 #include "main/interp_update.h"
 #include "main/msg_slot_center.h"
-#include "main/timecode_forward.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_start.h"
+#include "main/msg_slot_core.h"
 
-/* Stores the start value that msgWindowOpenNextTextSlot passes to the record starter
- * (msgWindowStartValue; msgResetAll in main/msg_state.c sets it to 1). */
+/* Default reveal delay of new text slots (msgWindowStartValue; msgResetAll in main/msg_state.c sets it to 1). */
 extern int msgWindowStartValue;
 
 /* Geometry of a newly opened text slot, passed through msgTextSlotFit to msgSlotSetGeometry (x, y, width, height). */
@@ -16,6 +15,7 @@ extern int msgWindowStartValue;
 #define TEXT_SLOT_WIDTH 0x208
 #define TEXT_SLOT_HEIGHT 0x9A
 
+/* Sets the default reveal delay of new text slots. */
 void msgWindowSetStartValue(int start_value) {
     msgWindowStartValue = start_value;
 }

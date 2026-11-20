@@ -33,7 +33,7 @@ typedef struct MSeFireEntry {
     DoublewordAlignedVector4 offset;    /* +0x20 */
     struct XenoActor *target;           /* +0x30 */
     int targetPart;                     /* +0x34 */
-    int param;                          /* +0x38: the effect record's id (sef_164 record +0x6C) */
+    int param;                          /* +0x38: the effect record's id */
     int unmodeled_3C;                   /* +0x3C */
 } MSeFireEntry;
 

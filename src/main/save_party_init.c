@@ -11,8 +11,8 @@
 #include "main/xgl_flags.h"
 #include "main/game_data.h"
 #include "main/pt_member.h"
-#include "main/runtime_prog_effect.h"
-#include "main/game_over_065.h"
+#include "main/runtime.h"
+#include "main/tya_display_setting.h"
 #include "main/menu_selection.h"
 
 
@@ -50,7 +50,7 @@ void menuLoadTxds(void) {
 }
 
 static PartyMemberStatus ptMemberStatuses[10];
-extern PartyMemberLimits slotRecordTable[];
+extern PartyMemberExpPoints slotRecordTable[];
 
 static PartyMember ptMemberRecords[10];
 
@@ -136,7 +136,7 @@ void ptReset(void) {
     ptAddMember(13);
     ptSetCurrentSlot(0);
     ptRefresh();
-    selectionBlockClear();
+    selectionKeyItemBitsClear();
     menuLoadPending = 0;
 }
 
@@ -158,9 +158,9 @@ PartyMember *ptMemberRecordFindById(int id) {
     return found;
 }
 
-/* Attaches ptState.progress to the current uwamono: saves the current map, the actor's position
- * and the split mode, enters or leaves split mode as runSplit asks and starts the transition to
- * the map of kind (partyAttachMapIdTable). */
+/* Saves the current map, the actor's position and the split mode in ptState.progress as the
+ * return place, enters or leaves split mode as runSplit asks and starts the transition to the
+ * map of kind (partyAttachMapIdTable). Attaches nothing to a uwamono. */
 void uwamonoAttachCurrent(unsigned int kind, int runSplit) {
     PartyProgress *progress = ptState.progress;
 
@@ -218,7 +218,7 @@ int partyAttachMapIdTable[8] = {
     1010, 2110, 2210, 3120, 3410, 4310, 4610, 5010
 };
 
-struct LookupRecord specialAttackRecordTable[88] = {
+struct LookupRecord attackRecordTable[88] = {
     { 0, { 2, 2, 0 }, 1, 1, 1, 1, 0, 0, 0, 0x44 },
     { 0, { 2, 1, 0 }, 1, 2, 1, 1, 0, 0, 0, 0x44 },
     { 0, { 1, 1, 0 }, 1, 3, 1, 1, 0, 0, 0, 0x44 },

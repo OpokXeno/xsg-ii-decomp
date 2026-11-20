@@ -117,10 +117,10 @@ unsigned long *make_gstrans(XglMovieWork *info, int y)
     switch (info->transMode) {
     case MOVIE_TRANS_BUFFER_0:
     default:
-        packet[4] = ((unsigned long) sRender.vram.flip_base << 37) | MOVIE_BITBLTBUF_DBW_512;
+        packet[4] = ((unsigned long) sRender.vram.work_buffer_base << 37) | MOVIE_BITBLTBUF_DBW_512;
         break;
     case MOVIE_TRANS_BUFFER_1:
-        packet[4] = ((unsigned long) sRender.vram.second_base << 37) | MOVIE_BITBLTBUF_DBW_512;
+        packet[4] = ((unsigned long) sRender.vram.texture_base << 37) | MOVIE_BITBLTBUF_DBW_512;
         break;
     case MOVIE_TRANS_BITBLTBUF:
         packet[4] = info->bitbltbuf;

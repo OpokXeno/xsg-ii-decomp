@@ -29,7 +29,7 @@
 
 typedef struct PxyRange {
     unsigned char unmodeled_00[0x18];
-    int zwrite;                             /* 0x18 */
+    int count;                              /* 0x18: the same word as PxyPartRange.count */
 } PxyRange;
 
 typedef struct PxyGeometry {
@@ -55,9 +55,9 @@ typedef struct XenoActorSlotView {
 
 /* Bits of XenoActor.flags. */
 #define XENO_FLAG_FREEZE_A 0x1           /* XenoActorUpdateTree does not advance motion A */
-#define XENO_FLAG_UNWRAP_A 0x2           /* motion A advances through the unwrapped variant */
+#define XENO_FLAG_UNWRAP_A 0x2           /* motion A plays once: it does not loop at the end of its range */
 #define XENO_FLAG_FREEZE_B 0x4           /* XenoActorUpdateTree does not advance motion B */
-#define XENO_FLAG_UNWRAP_B 0x8           /* motion B advances through the unwrapped variant */
+#define XENO_FLAG_UNWRAP_B 0x8           /* motion B plays once: it does not loop at the end of its range */
 #define XENO_FLAG_BLEND_SWAPPED 0x10     /* the channel blend was swapped in; cleared when the mode is re-applied */
 #define XENO_FLAG_RANGE_SET 0x40         /* a play range was set (XenoActorSetPlayRange) */
 #define XENO_FLAG_CHANNEL_BIT20 0x80     /* either channel flag word has bit 0x20 set */
@@ -85,6 +85,8 @@ XenoActor *XenoActorPoolGet(int index)
 }
 
 static u8 xenoActorPoolBuffer[97728];
+/* The actor matrix heap of XenoActorInitHeap (0x38000 bytes from xenoActorHeapBuffer) runs on into
+   xenoActorHeapTailBuffer: the two arrays are one block in the original layout. */
 static u8 xenoActorHeapBuffer[54096];
 static u8 xenoActorHeapTailBuffer[175360];
 XenoActor *XenoActorPool = (XenoActor *)xenoActorPoolBuffer;
@@ -144,12 +146,12 @@ void XenoActorInit(XenoActor *actor) {
     actor->activeItem = -1;
     actor->itemCursorB = -1;
     actor->drawParam = 0.2f;
-    actor->drawMode = 0;
+    actor->shadowType = 0;
     actor->radius = 0.3f;
     actor->requested_mode = -1;
     actor->slotIndex = -1;
-    actor->fogC = 0.5f;
-    actor->fogD = -1.0f;
+    actor->shadowHeightC = 0.5f;
+    actor->shadowHeightD = -1.0f;
     actor->position.w = 1.0f;
     actor->vector70.w = 1.0f;
     actor->alpha = 1.0f;
@@ -159,15 +161,15 @@ void XenoActorInit(XenoActor *actor) {
     actor->scale.x = 1.0f;
     actor->renderValue2 = 1.0f;
     actor->sweepSpeed = 1.0f;
-    actor->shadowValue2 = 1.0f;
-    actor->shadowValue3 = 1.0f;
+    actor->clipPlaneValue2 = 1.0f;
+    actor->clipPlaneValue3 = 1.0f;
     actor->modeValue4 = 1.0f;
     actor->modeValue3 = 0.0f;
-    actor->shadowValue = 0.0f;
+    actor->clipPlaneValue = 0.0f;
     actor->sweepPhase = 0.0f;
-    actor->shadowCount = 0;
-    actor->fogA = 0.0f;
-    actor->fogB = 0.0f;
+    actor->clipPlaneCount = 0;
+    actor->shadowHeightA = 0.0f;
+    actor->shadowHeightB = 0.0f;
     actor->modeValue2 = 0.0f;
     actor->modeValue5 = 0.0f;
     actor->fadeRadius = 0.0f;
@@ -348,10 +350,10 @@ int XenoActorAttachChildToJoint(XenoActor *actor, XenoActor *child, int jointId)
         return 0;
     }
     if (resource->version < 2.4f) {
-        if (jointId >= actor->pHrcData->jointCount) {
+        if (jointId >= actor->pHrcData->staticCount) {
             return 0;
         }
-        return XenoActorAppendChildOnJoint(actor, child, actor->pHrcData->leadCountA + actor->pHrcData->leadCountB + actor->pHrcData->focus + actor->pHrcData->jointRecordCount + jointId);
+        return XenoActorAppendChildOnJoint(actor, child, actor->pHrcData->jointCount + actor->pHrcData->joint2Count + actor->pHrcData->skipCount + actor->pHrcData->dynamicsCount + jointId);
     }
     joints = (TiHrcStatic *)((unsigned char *)resource + resource->staticOffset);
     found = -1;
@@ -364,7 +366,7 @@ int XenoActorAttachChildToJoint(XenoActor *actor, XenoActor *child, int jointId)
     if (found < 0) {
         return 0;
     }
-    return XenoActorAppendChildOnJoint(actor, child, actor->pHrcData->leadCountA + actor->pHrcData->leadCountB + actor->pHrcData->focus + actor->pHrcData->jointRecordCount + found);
+    return XenoActorAppendChildOnJoint(actor, child, actor->pHrcData->jointCount + actor->pHrcData->joint2Count + actor->pHrcData->skipCount + actor->pHrcData->dynamicsCount + found);
 }
 
 /* XenoActorAttachAtSlot: stores the slot index, attaches the child to parent and returns 1; 0 on bad arguments. */
@@ -408,21 +410,24 @@ void XenoActorSetFlagAll(int flag) {
     }
 }
 
-void XenoActorSetChannelValue(struct XenoActor *actor, float value) {
+/* Sets the blend length, in frames, of motion state A (XenoMotionState.blendFrames). */
+void XenoActorSetBlendFrames(struct XenoActor *actor, float value) {
     if (actor == 0) {
         assertFailed(xenoActorAssertExpr, xenoActorAssertFile, 0x19F);
     }
-    tiMRStateSetValue(XenoActorMotionState(actor, 0), value);
+    tiMRStateSetBlendFrames(XenoActorMotionState(actor, 0), value);
 }
 
-void XenoActorSetChannelValueB(struct XenoActor *actor, float value) {
+/* Sets the blend length, in frames, of motion state B. */
+void XenoActorSetBlendFramesB(struct XenoActor *actor, float value) {
     if (actor == 0) {
         assertFailed(xenoActorAssertExpr, xenoActorAssertFile, 0x1A9);
     }
-    tiMRStateSetValue(XenoActorMotionState(actor, 1), value);
+    tiMRStateSetBlendFrames(XenoActorMotionState(actor, 1), value);
 }
 
-void XenoActorEnableChannel(struct XenoActor *actor) {
+/* Starts a blend of motion A (flag 2) that is local (flag 4 set). */
+void XenoActorSetBlendLocal(struct XenoActor *actor) {
     if (actor == 0) {
         assertFailed(xenoActorAssertExpr, xenoActorAssertFile, 0x1B5);
     }
@@ -430,7 +435,8 @@ void XenoActorEnableChannel(struct XenoActor *actor) {
     tiWordSetBits(&actor->motion[0].flags, 2);
 }
 
-void XenoActorDisableChannel(struct XenoActor *actor) {
+/* Starts a blend of motion A (flag 2) that is global (flag 4 cleared). */
+void XenoActorSetBlendGlobal(struct XenoActor *actor) {
     if (actor == 0) {
         assertFailed(xenoActorAssertExpr, xenoActorAssertFile, 0x1C2);
     }
@@ -438,7 +444,8 @@ void XenoActorDisableChannel(struct XenoActor *actor) {
     tiWordSetBits(&actor->motion[0].flags, 2);
 }
 
-void XenoActorEnableChannelB(struct XenoActor *actor) {
+/* Starts a blend of motion B (flag 2) that is local (flag 4 set). */
+void XenoActorSetBlendLocalB(struct XenoActor *actor) {
     if (actor == 0) {
         assertFailed(xenoActorAssertExpr, xenoActorAssertFile, 0x1CD);
     }
@@ -446,7 +453,8 @@ void XenoActorEnableChannelB(struct XenoActor *actor) {
     tiWordSetBits(&actor->motion[1].flags, 2);
 }
 
-void XenoActorDisableChannelB(struct XenoActor *actor) {
+/* Starts a blend of motion B (flag 2) that is global (flag 4 cleared). */
+void XenoActorSetBlendGlobalB(struct XenoActor *actor) {
     if (actor == 0) {
         assertFailed(xenoActorAssertExpr, xenoActorAssertFile, 0x1D8);
     }
@@ -643,7 +651,7 @@ void XenoActorApplyRequestedMode(XenoActor *actor) {
         assertFailed(xenoActorAssertExpr, xenoActorAssertFile, 0x2CF);
     }
     if (actor->requested_mode >= 0 && XenoActorIsDone(actor)) {
-        XenoActorEnableChannel(actor);
+        XenoActorSetBlendLocal(actor);
         XenoActorSetMode(actor, actor->requested_mode);
         actor->requested_mode = -1;
     }
@@ -760,16 +768,16 @@ void XenoActorUpdateClipSweep(XenoActor *actor) {
     float scale;
     float speed;
 
-    if (actor->shadowCount == 0) {
+    if (actor->clipPlaneCount == 0) {
         return;
     }
     speed = 0.0f;
     scale = 1.0f;
-    actor->shadowValue2 = scale;
+    actor->clipPlaneValue2 = scale;
     if (XenoActorPack(actor) != 0 && XenoActorPack(actor)->magic[0] == 'p' && XenoActorPack(actor)->magic[1] == 'x' && XenoActorPack(actor)->magic[2] == 'y') {
         scale = XenoActorPack(actor)->sphere.w;
         if (speed < scale) {
-            actor->shadowValue2 = scale;
+            actor->clipPlaneValue2 = scale;
         }
     }
     speed = actor->sweepSpeed;
@@ -777,7 +785,7 @@ void XenoActorUpdateClipSweep(XenoActor *actor) {
     if (speed < 0.0f) {
         if (actor->sweepPhase >= 1.0f) {
             actor->sweepPhase = 0.0f;
-            actor->shadowCount = 0;
+            actor->clipPlaneCount = 0;
         }
     }
     switch (actor->moveState) {
@@ -787,16 +795,16 @@ void XenoActorUpdateClipSweep(XenoActor *actor) {
         } else {
             speed = (1.0f - actor->sweepPhase) * scale - scale * 0.5f;
         }
-        actor->shadowB.y = actor->rotation.y;
-        actor->shadowA.z = speed;
-        actor->shadowA.w = 1.0f;
-        actor->shadowB.x = 0.0f;
-        actor->shadowB.z = 0.0f;
-        actor->shadowA.x = 0.0f;
-        actor->shadowA.y = 0.0f;
+        actor->clipPlaneB.y = actor->rotation.y;
+        actor->clipPlaneA.z = speed;
+        actor->clipPlaneA.w = 1.0f;
+        actor->clipPlaneB.x = 0.0f;
+        actor->clipPlaneB.z = 0.0f;
+        actor->clipPlaneA.x = 0.0f;
+        actor->clipPlaneA.y = 0.0f;
         xglMatrixStackUnit();
         xglMatrixStackRotY(actor->rotation.y);
-        xglMatrixStackMulVector(&actor->shadowA, &actor->shadowA);
+        xglMatrixStackMulVector(&actor->clipPlaneA, &actor->clipPlaneA);
         break;
     case 1:
         if (speed < 0.0f) {
@@ -804,85 +812,85 @@ void XenoActorUpdateClipSweep(XenoActor *actor) {
         } else {
             speed = (1.0f - actor->sweepPhase) * scale - scale * 0.5f;
         }
-        actor->shadowB.y = actor->rotation.y + 3.1415920f;
-        actor->shadowA.z = speed;
-        actor->shadowA.w = 1.0f;
-        actor->shadowB.x = 0.0f;
-        actor->shadowB.z = 0.0f;
-        actor->shadowA.x = 0.0f;
-        actor->shadowA.y = 0.0f;
+        actor->clipPlaneB.y = actor->rotation.y + 3.1415920f;
+        actor->clipPlaneA.z = speed;
+        actor->clipPlaneA.w = 1.0f;
+        actor->clipPlaneB.x = 0.0f;
+        actor->clipPlaneB.z = 0.0f;
+        actor->clipPlaneA.x = 0.0f;
+        actor->clipPlaneA.y = 0.0f;
         xglMatrixStackUnit();
         xglMatrixStackRotY(actor->rotation.y + 3.1415920f);
-        xglMatrixStackMulVector(&actor->shadowA, &actor->shadowA);
+        xglMatrixStackMulVector(&actor->clipPlaneA, &actor->clipPlaneA);
         break;
     case 2:
         t = (speed < 0.0f ? actor->sweepPhase : 1.0f - actor->sweepPhase) * scale * 2.0f;
-        actor->shadowB.x = -1.5707960f;
-        actor->shadowB.y = 0.0f;
-        actor->shadowA.y = t;
-        actor->shadowA.w = 1.0f;
-        actor->shadowB.z = 0.0f;
-        actor->shadowA.x = 0.0f;
-        actor->shadowA.z = 0.0f;
+        actor->clipPlaneB.x = -1.5707960f;
+        actor->clipPlaneB.y = 0.0f;
+        actor->clipPlaneA.y = t;
+        actor->clipPlaneA.w = 1.0f;
+        actor->clipPlaneB.z = 0.0f;
+        actor->clipPlaneA.x = 0.0f;
+        actor->clipPlaneA.z = 0.0f;
         break;
     case 3:
         t = (speed < 0.0f ? 1.0f - actor->sweepPhase : actor->sweepPhase) * scale * 2.0f;
-        actor->shadowB.x = 1.5707960f;
-        actor->shadowB.y = 0.0f;
-        actor->shadowA.y = t;
-        actor->shadowA.w = 1.0f;
-        actor->shadowB.z = 0.0f;
-        actor->shadowA.x = 0.0f;
-        actor->shadowA.z = 0.0f;
+        actor->clipPlaneB.x = 1.5707960f;
+        actor->clipPlaneB.y = 0.0f;
+        actor->clipPlaneA.y = t;
+        actor->clipPlaneA.w = 1.0f;
+        actor->clipPlaneB.z = 0.0f;
+        actor->clipPlaneA.x = 0.0f;
+        actor->clipPlaneA.z = 0.0f;
         break;
     case 4:
         t = (speed < 0.0f ? actor->sweepPhase : 1.0f - actor->sweepPhase) * scale * 2.0f;
-        actor->shadowB.x = -0.7853980f;
-        actor->shadowB.y = -1.5707960f;
-        actor->shadowA.y = t;
-        actor->shadowA.w = 1.0f;
-        actor->shadowB.z = 0.0f;
-        actor->shadowA.x = 0.0f;
-        actor->shadowA.z = 0.0f;
+        actor->clipPlaneB.x = -0.7853980f;
+        actor->clipPlaneB.y = -1.5707960f;
+        actor->clipPlaneA.y = t;
+        actor->clipPlaneA.w = 1.0f;
+        actor->clipPlaneB.z = 0.0f;
+        actor->clipPlaneA.x = 0.0f;
+        actor->clipPlaneA.z = 0.0f;
         break;
     case 5:
         t = (speed < 0.0f ? 1.0f - actor->sweepPhase : actor->sweepPhase) * scale * 2.0f;
-        actor->shadowB.x = 0.7853980f;
-        actor->shadowB.y = 1.5707960f;
-        actor->shadowA.y = t;
-        actor->shadowA.w = 1.0f;
-        actor->shadowB.z = 0.0f;
-        actor->shadowA.x = 0.0f;
-        actor->shadowA.z = 0.0f;
+        actor->clipPlaneB.x = 0.7853980f;
+        actor->clipPlaneB.y = 1.5707960f;
+        actor->clipPlaneA.y = t;
+        actor->clipPlaneA.w = 1.0f;
+        actor->clipPlaneB.z = 0.0f;
+        actor->clipPlaneA.x = 0.0f;
+        actor->clipPlaneA.z = 0.0f;
         break;
     case 6:
         t = (speed < 0.0f ? actor->sweepPhase : 1.0f - actor->sweepPhase) * scale * 2.0f;
-        actor->shadowB.x = -2.3561940f;
-        actor->shadowB.y = -1.5707960f;
-        actor->shadowA.y = t;
-        actor->shadowA.w = 1.0f;
-        actor->shadowB.z = 0.0f;
-        actor->shadowA.x = 0.0f;
-        actor->shadowA.z = 0.0f;
+        actor->clipPlaneB.x = -2.3561940f;
+        actor->clipPlaneB.y = -1.5707960f;
+        actor->clipPlaneA.y = t;
+        actor->clipPlaneA.w = 1.0f;
+        actor->clipPlaneB.z = 0.0f;
+        actor->clipPlaneA.x = 0.0f;
+        actor->clipPlaneA.z = 0.0f;
         break;
     case 7:
         t = (speed < 0.0f ? 1.0f - actor->sweepPhase : actor->sweepPhase) * scale * 2.0f;
-        actor->shadowB.x = 0.7853980f;
-        actor->shadowB.y = -1.5707960f;
-        actor->shadowA.y = t;
-        actor->shadowA.w = 1.0f;
-        actor->shadowB.z = 0.0f;
-        actor->shadowA.x = 0.0f;
-        actor->shadowA.z = 0.0f;
+        actor->clipPlaneB.x = 0.7853980f;
+        actor->clipPlaneB.y = -1.5707960f;
+        actor->clipPlaneA.y = t;
+        actor->clipPlaneA.w = 1.0f;
+        actor->clipPlaneB.z = 0.0f;
+        actor->clipPlaneA.x = 0.0f;
+        actor->clipPlaneA.z = 0.0f;
         break;
     default:
         break;
     }
-    actor->shadowB.y += actor->rotation.y;
-    Vu0AddVectorXYZ(&actor->shadowA, &actor->shadowA, &actor->vector80);
-    Vu0AddVectorXYZ(&actor->shadowA, &actor->shadowA, &actor->localMatrix.m[3]);
+    actor->clipPlaneB.y += actor->rotation.y;
+    Vu0AddVectorXYZ(&actor->clipPlaneA, &actor->clipPlaneA, &actor->vector80);
+    Vu0AddVectorXYZ(&actor->clipPlaneA, &actor->clipPlaneA, &actor->localMatrix.m[3]);
 }
-#define XENO_DRAW_PARENT_FADE 0x4000000   /* fade by alphaScale */
+#define XENO_DRAW_CAMERA_FADE 0x4000000   /* camera-distance fade by alphaScale (root actors; children follow their parent) */
 
 /* XenoActorUpdateCameraFade: fades the actor at +0x188 by its distance to the active camera. */
 /* XenoActorUpdateCameraFade: fades the actor at +0x188 by its distance to the active camera. */
@@ -897,7 +905,7 @@ void XenoActorUpdateCameraFade(XenoActor *actor) {
 
     camera = xglStudioSelectGetActiveCamera(0);
     actor->alphaScale = 1.0f;
-    if ((actor->drawFlags & XENO_DRAW_PARENT_FADE) && camera != 0 && actor->parent == 0 && (pack = XenoActorPack(actor)) != 0 &&
+    if ((actor->drawFlags & XENO_DRAW_CAMERA_FADE) && camera != 0 && actor->parent == 0 && (pack = XenoActorPack(actor)) != 0 &&
         pack->magic[0] == 'p' && pack->magic[1] == 'x' && pack->magic[2] == 'y' && (pack->flags & 0x81) == 0) {
         radius = pack->sphere.w;
         target = actor->position;
@@ -950,7 +958,7 @@ void XenoActorUpdateTree(XenoActor *actor) {
         XenoActorUpdateLinkMatrix(actor);
         if (actor->pLocalMat != 0) {
             XenoActorPushMatrix(actor);
-            if (actor->pHrcData->jointRecordCount != 0 && (actor->flags & XENO_FLAG_SKIP_DELTA) == 0) {
+            if (actor->pHrcData->dynamicsCount != 0 && (actor->flags & XENO_FLAG_SKIP_DELTA) == 0) {
                 /* XenoMatrix is the actor's own view of the 4x4 matrix that xgl_2.h declares as the Matrix union. */
                 xglMatrixInverse((Matrix *)&inverseMatrix, (Matrix *)&actor->localMatrix);
                 xglVectorMulMat(&delta, inverseMatrix.m, &actor->previousPosition);
@@ -973,7 +981,7 @@ void XenoActorUpdateTree(XenoActor *actor) {
                 xglCurSetRotateZ(scaled.z);
                 xglCurMulRotateY(scaled.y);
                 xglCurMulRotateX(scaled.x);
-                for (i = 0; i < actor->pHrcData->jointRecordCount; i++) {
+                for (i = 0; i < actor->pHrcData->dynamicsCount; i++) {
                     xglVectorAddXYZ_00292E38((Vector4 *)actor->jointRecords[i].rest, (Vector4 *)actor->jointRecords[i].rest, &delta);
                     xglCurApplyVector(&jointDelta, &actor->jointRecords[i].translation.vector);
                     jointDelta.x = (jointDelta.x - actor->jointRecords[i].translation.vector.x) * 0.6f;
@@ -1067,8 +1075,9 @@ void XenoActorUpdateTree(XenoActor *actor) {
     }
 }
 
-u32 XenoActorItemTextIdle[4] = { 96, 170, 96, 255 };
-u32 XenoActorItemTextActive[4] = { 204, 255, 170, 255 };
+/* RGBA colours of the collision ring of an item, idle and active (tiDrawCollisionDrawObjectRing). */
+u32 XenoActorItemRingColorIdle[4] = { 96, 170, 96, 255 };
+u32 XenoActorItemRingColorActive[4] = { 204, 255, 170, 255 };
 
 /* XenoActorRefreshItems: draws each table item; the active item uses its own text. */
 void XenoActorRefreshItems(XenoActor *actor)
@@ -1089,9 +1098,9 @@ void XenoActorRefreshItems(XenoActor *actor)
                 f32 weight = item->weight;
 
                 if (actor->activeItem == itemIndex) {
-                    tiDrawCollisionDrawObjectRing(&item->payload, XenoActorItemTextActive, weight);
+                    tiDrawCollisionDrawObjectRing(&item->payload, XenoActorItemRingColorActive, weight);
                 } else {
-                    tiDrawCollisionDrawObjectRing(&item->payload, XenoActorItemTextIdle, weight);
+                    tiDrawCollisionDrawObjectRing(&item->payload, XenoActorItemRingColorIdle, weight);
                 }
                 itemIndex++;
                 item++;
@@ -1165,8 +1174,8 @@ void XenoActorPushMatrix(XenoActor *actor) {
     }
 }
 
-void XenoActorSetFirstWord(struct XenoActor *actor, int value) {
-    tiMRPackageSetFirstWord(XenoActorMotionPack(actor), value);
+void XenoActorSetSolverPasses(struct XenoActor *actor, int value) {
+    tiMRPackageSetSolverPasses(XenoActorMotionPack(actor), value);
 }
 
 void XenoActorSetVectorUniform(XenoActor *actor, float value) {
@@ -1203,7 +1212,7 @@ const char xenoActorAssertExprMotionPackPamData[40] = "pAct->motionPack.pPamData
 #define XENO_DRAW_SOURCE 0x800000       /* the bit TiWater sets on its source actor; pxySetSourceDrawPass runs before the visibility submit */
 #define XENO_DRAW_POST_FIRST 0x2000000  /* first render-state call (pxySetShadowFirstPass) of the shadow/focus block */
 #define XENO_DRAW_TRANSLUCENT 0x8000000 /* draws the actor translucent (xenoActor.h); pxySetFogWhite in the shadow/focus block */
-#define XENO_DRAW_DREW 0x10000000         /* set when the pack drew something */
+#define XENO_DRAW_MODEL_HIDDEN 0x10000000 /* set when pxyIsModelHidden() reports the pack's model hidden */
 /* Any of these (or a shadow count) enters the shadow/focus block. */
 #define XENO_DRAW_POST_MASK 0xA0C01C0
 #define XENO_RENDER_FLAG_2 2
@@ -1234,7 +1243,7 @@ void XenoActorDrawMotion(XenoActor *actor)
         assertFailed(xenoActorAssertExpr, xenoActorAssertFile, 0x5BB);
     }
     /* original keeps this redundant actor != 0 test below; removing it moves code */
-    actor->drawFlags &= ~XENO_DRAW_DREW;
+    actor->drawFlags &= ~XENO_DRAW_MODEL_HIDDEN;
     if (actor->drawFlags & (XENO_DRAW_SKIP_ONCE | XENO_DRAW_HIDDEN)) {
         actor->drawFlags &= ~XENO_DRAW_SKIP_ONCE;
         return;
@@ -1266,7 +1275,7 @@ void XenoActorDrawMotion(XenoActor *actor)
         }
         if (actor->parent != 0) {
             nmlModelSetParent(XenoActorPack(actor->parent));
-            if ((actor->parent->drawFlags & XENO_DRAW_PARENT_FADE) && actor->parent->alphaScale < 1.0f) {
+            if ((actor->parent->drawFlags & XENO_DRAW_CAMERA_FADE) && actor->parent->alphaScale < 1.0f) {
                 nmlModelSetStencil(1);
                 nmlModelSetZwrite(1);
                 nmlModelSetTransparency(actor->parent->alpha * actor->parent->alphaScale);
@@ -1295,7 +1304,7 @@ void XenoActorDrawMotion(XenoActor *actor)
             if (actor->drawFlags & XENO_DRAW_AFTER_LIGHT) {
                 nmlModelSetDropPass();
             }
-            if ((actor->drawFlags & XENO_DRAW_PARENT_FADE) && actor->alphaScale < 1.0f) {
+            if ((actor->drawFlags & XENO_DRAW_CAMERA_FADE) && actor->alphaScale < 1.0f) {
                 nmlModelSetStencil(1);
                 nmlModelSetZwrite(1);
                 nmlModelSetTransparency(actor->alpha * actor->alphaScale);
@@ -1306,13 +1315,13 @@ void XenoActorDrawMotion(XenoActor *actor)
             }
         }
         if (actor->drawFlags & XENO_DRAW_COLOR) {
-            nmlModelSetFogCol(&actor->colorBlock);
-            nmlModelSetFogDist(actor->color.x, actor->color.y, actor->color.z, actor->color.w);
+            nmlModelSetFogCol(&actor->fogColor);
+            nmlModelSetFogDist(actor->fogDist.x, actor->fogDist.y, actor->fogDist.z, actor->fogDist.w);
         }
         if (actor->drawFlags & XENO_DRAW_ALPHA) {
             range = (PxyRange *) ((char *) pack + pack->rangeOffset);
             nmlModelSetStencil(1);
-            if (range->zwrite != 0) {
+            if (range->count != 0) {
                 nmlModelSetZwrite(1);
             }
             nmlModelSetTransparency(actor->alpha);
@@ -1339,17 +1348,17 @@ void XenoActorDrawMotion(XenoActor *actor)
         if (actor->drawFlags & XENO_DRAW_AFTER_POSITION) {
             pxyRequestForcedVisibility();
         }
-        switch (actor->drawMode) {
+        switch (actor->shadowType) {
         case 1:
             pxySetShadowMode(1, actor->drawParam, actor->modeValue2, actor->modeValue4);
-            if (actor->fogA != 0.0f || actor->fogB != 0.0f) {
-                pxySetShadowHeightRange(actor->fogA, actor->fogB);
+            if (actor->shadowHeightA != 0.0f || actor->shadowHeightB != 0.0f) {
+                pxySetShadowHeightRange(actor->shadowHeightA, actor->shadowHeightB);
             } else {
                 scale = 1.0f;
                 if (pack->sphere.w >= 3.0f) {
                     scale = 5.0f;
                 }
-                pxySetShadowHeightRange(actor->fogC * scale, actor->fogD * scale);
+                pxySetShadowHeightRange(actor->shadowHeightC * scale, actor->shadowHeightD * scale);
             }
             break;
         case 9:
@@ -1357,7 +1366,7 @@ void XenoActorDrawMotion(XenoActor *actor)
             break;
         case 8:
             pxySetShadowMode(4, actor->drawParam, actor->modeValue2, actor->modeValue4);
-            pxySetShadowHeightRange(actor->fogA, actor->fogB);
+            pxySetShadowHeightRange(actor->shadowHeightA, actor->shadowHeightB);
             break;
         case 2:
             pxySetShadowMode(2, actor->drawParam, actor->modeValue2, actor->modeValue4);
@@ -1389,8 +1398,8 @@ void XenoActorDrawMotion(XenoActor *actor)
             flags = actor->drawFlags;
             if (!(flags & XENO_DRAW_FOCUS_LOCKED)) {
                 hrc = actor->pHrcData;
-                if (hrc->focus != 0 && (hrc->flags & 4)) {
-                    focus = &actor->matrices[hrc->leadCountA + hrc->leadCountB + hrc->leadCountC];
+                if (hrc->skipCount != 0 && (hrc->flags & 4)) {
+                    focus = &actor->matrices[hrc->jointCount + hrc->joint2Count + hrc->joint3Count];
                     actor->drawFlags = flags | XENO_DRAW_FOCUS_PENDING;
                     actor->focusX = focus->m[3][2];
                     actor->focusY = focus->m[3][1];
@@ -1408,7 +1417,7 @@ void XenoActorDrawMotion(XenoActor *actor)
         if (actor->rsrc[XAct_Rsrc_TEX] != 0) {
             nmlModelSetTexture(XenoActorTexture(actor));
         }
-        if ((actor->drawFlags & XENO_DRAW_POST_MASK) || actor->shadowCount != 0) {
+        if ((actor->drawFlags & XENO_DRAW_POST_MASK) || actor->clipPlaneCount != 0) {
             if (actor->drawFlags & XENO_DRAW_POST_FIRST) {
                 pxySetShadowFirstPass();
             }
@@ -1424,13 +1433,13 @@ void XenoActorDrawMotion(XenoActor *actor)
                 nmlModelSetStencil(1);
                 nmlModelSetZwrite(1);
                 nmlModelSetTransparency(actor->alpha);
-                pxySetClipPlaneWithAngle((Vector4Elements *) &actor->shadowA, (Vector4Elements *) &actor->shadowB, (PxyAngle *) actor->shadowC);
+                pxySetClipPlaneWithAngle((Vector4Elements *) &actor->clipPlaneA, (Vector4Elements *) &actor->clipPlaneB, (PxyAngle *) actor->clipPlaneC);
             } else if (actor->drawFlags & XENO_DRAW_SHADOW_STENCIL) {
-                pxyAddClipPlanePair((PxyRowBits *) &actor->shadowA, (PxyRowBits *) &actor->shadowB);
-                pxyAddClipPlanePair((PxyRowBits *) actor->shadowA2, (PxyRowBits *) actor->shadowB2);
+                pxyAddClipPlanePair((PxyRowBits *) &actor->clipPlaneA, (PxyRowBits *) &actor->clipPlaneB);
+                pxyAddClipPlanePair((PxyRowBits *) actor->clipPlaneA2, (PxyRowBits *) actor->clipPlaneB2);
                 actor->drawFlags &= ~XENO_DRAW_SHADOW_STENCIL;
             }
-            if (actor->shadowCount != 0) {
+            if (actor->clipPlaneCount != 0) {
                 if (pack->flags & 0x2000) {
                     geometry = (PxyGeometry *) ((char *) pack + pack->geometryOffset);
                     memset(actor->geometryMask, 0, sizeof(actor->geometryMask));
@@ -1441,8 +1450,8 @@ void XenoActorDrawMotion(XenoActor *actor)
                         geometry++;
                     }
                 }
-                pxySetClipPlaneMasked((PxyRowBits *) &actor->shadowA, (PxyRowBits *) &actor->shadowB, actor->shadowCount, actor->shadowValue,
-                              actor->shadowValue2, actor->shadowValue3, actor->geometryMask);
+                pxySetClipPlaneMasked((PxyRowBits *) &actor->clipPlaneA, (PxyRowBits *) &actor->clipPlaneB, actor->clipPlaneCount, actor->clipPlaneValue,
+                              actor->clipPlaneValue2, actor->clipPlaneValue3, actor->geometryMask);
             }
             if (actor->drawFlags & XENO_DRAW_TRANSLUCENT) {
                 pxySetFogWhite();
@@ -1457,14 +1466,14 @@ void XenoActorDrawMotion(XenoActor *actor)
         nmlModelSetRenderLevel(renderFlags);
         pxySubmitModel(subPack);
         if (pxyIsModelHidden() != 0) {
-            actor->drawFlags |= XENO_DRAW_DREW;
+            actor->drawFlags |= XENO_DRAW_MODEL_HIDDEN;
         }
         if (subPack->subPackOffset != 0) {
             nmlModelSetParent(subPack);
             nmlModelSetDrawMatrix(localMatrix->m);
             if (actor->drawFlags & XENO_DRAW_COLOR) {
-                nmlModelSetFogCol(&actor->colorBlock);
-                nmlModelSetFogDist(actor->color.x, actor->color.y, actor->color.z, actor->color.w);
+                nmlModelSetFogCol(&actor->fogColor);
+                nmlModelSetFogDist(actor->fogDist.x, actor->fogDist.y, actor->fogDist.z, actor->fogDist.w);
             }
             if (actor->drawFlags & XENO_DRAW_LIGHT) {
                 pxySetLightPtr((XglLightSet *) &actor->light);
@@ -1530,7 +1539,7 @@ void XenoActorDisp(void) {
         if (actor != 0 && actor->parent == 0) {
             XenoActorDrawMotion(actor);
             actor = (XenoActor *)XenoActorActiveTable[i];
-            if (actor->drawMode == 6 || actor->drawMode == 7) {
+            if (actor->shadowType == 6 || actor->shadowType == 7) {
                 drawShadows = 1;
             }
         }
@@ -1641,13 +1650,13 @@ void XenoActorShiftJoints(XenoActor *actor, int sign, int x, int y, int z) {
 
     if (table != 0) {
         if (sign > 0) {
-            for (i = 0; i < table->jointRecordCount; i++) {
+            for (i = 0; i < table->dynamicsCount; i++) {
                 if (x) { actor->jointRecords[i].translation.vector.x += actor->vector80.x; }
                 if (y) { actor->jointRecords[i].translation.vector.y += actor->vector80.y; }
                 if (z) { actor->jointRecords[i].translation.vector.z += actor->vector80.z; }
             }
         } else {
-            for (i = 0; i < table->jointRecordCount; i++) {
+            for (i = 0; i < table->dynamicsCount; i++) {
                 if (x) { actor->jointRecords[i].translation.vector.x -= actor->vector80.x; }
                 if (y) { actor->jointRecords[i].translation.vector.y -= actor->vector80.y; }
                 if (z) { actor->jointRecords[i].translation.vector.z -= actor->vector80.z; }
@@ -1690,7 +1699,7 @@ void XenoActorApplyRootOffset(XenoActor *actor, int moveX, int moveY, int moveZ)
     if (moveZ) {
         actor->position.z = point.z;
     }
-    for (i = 0; i < table->jointRecordCount; i++) {
+    for (i = 0; i < table->dynamicsCount; i++) {
         if (moveX) {
             actor->jointRecords[i].translation.vector.x -= actor->vector80.x;
         }
@@ -1757,6 +1766,7 @@ void XenoActorTransformOffset(struct XenoActor *actor, int id) {
     xglCurApplyVector((Vector4 *)id, &actor->vector80);
 }
 
+/* Quad index table of the drop-shadow contact circle; act_3.c (DrawDropShadowSub) reads it. Defined here. */
 const u8 dropShadowContactQuadIndices[56] = {
     4, 0, 1, 6, 1, 6, 7, 2,
     7, 2, 3, 5, 12, 9, 8, 15,

@@ -23,7 +23,7 @@ typedef struct TiWatSimItem {
     float wave_speed;           /* +0x54 (tiWatSimAdvance) */
     float drop_amount;
     u8 unmodeled_5C[0x04];
-    float drawPair[2];          /* +0x60: sent by tiWaterDrawItem (tiWaterSendItemPair) */
+    float drawPair[2];          /* +0x60: sent by tiWaterDrawItem (tiWaterSendBrightnessPair) */
     float *height_buffer_a;
     float *height_buffer_b;
     u32 height_offset_a;        /* +0x70: height_buffer_a as an offset from the table (tiWaterRegisterSub) */

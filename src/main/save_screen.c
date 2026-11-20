@@ -71,11 +71,12 @@ enum {
     CONFIG_STATE_CLOSE_LIST = 25,
 };
 
-/* Bits of the notice byte configNoticePending (set by configOldDataCallback, moved to configNoticeShown by configScreenUpdate). */
+/* Bits of the notice byte configNoticePending (set by configOldDataCallback, moved to configNoticeShown by configScreenUpdate).
+ * EP1 and EP1RE: an Episode I save (callback code 0) or an Episode I Reloaded save (code 1) was found; EP_SAVES is both. */
 enum {
-    CONFIG_NOTICE_CARD_A = 0x01,
-    CONFIG_NOTICE_CARD_B = 0x02,
-    CONFIG_NOTICE_CARDS = 0x03,
+    CONFIG_NOTICE_EP1 = 0x01,
+    CONFIG_NOTICE_EP1RE = 0x02,
+    CONFIG_NOTICE_EP_SAVES = 0x03,
     CONFIG_NOTICE_FLAG = 0x04,
     CONFIG_NOTICE_KIND_1 = 0x08,
     CONFIG_NOTICE_KIND_2 = 0x10,
@@ -131,7 +132,8 @@ void saveProgressDraw(void)
 #include "shared.h"
 
 typedef struct SaveSlot {
-    int active;
+    int active;                 /* offset 0: the decoded thumbnail. saveSlotsDeactivateAll and saveSlotsActivateAll write the
+                                 * state field of the records through this offset (see there). */
     unsigned char unmodeled_04[0x7900 - 0x04];
     int state;
     unsigned char member_id;
@@ -145,10 +147,12 @@ typedef struct SaveSlot {
     void *subtitle_text;
 } SaveSlot;
 
-/* Values of SaveSlot.state: 0 is an unscanned slot, LOADED a slot read from the card, EMPTY a free slot a save can
+/* Values of SaveSlot.state: 0 is an unscanned slot, PENDING (1) a slot saveSlotsActivateAll marked and
+ * saveSlotsPendingToEmpty turns EMPTY, LOADED a slot read from the card, EMPTY a free slot a save can
  * create, BAD an unreadable image (states 4 and 5 are drawn alike). */
 enum {
     SAVE_SLOT_NONE = 0,
+    SAVE_SLOT_PENDING = 1,
     SAVE_SLOT_LOADED = 2,
     SAVE_SLOT_EMPTY = 3,
     SAVE_SLOT_BAD = 4,
@@ -176,6 +180,8 @@ static unsigned char configFadeStep;
 static signed short configCardNoticeResults[2];
 
 
+/* The loop starts at table + 0x97660 and steps back one record per pass, so record->active is the field at
+ * offset 0x7900 (state) of records 19 down to 0. */
 void saveSlotsDeactivateAll(void) {
     SaveSlot *record;
     int index;
@@ -187,6 +193,7 @@ void saveSlotsDeactivateAll(void) {
     }
 }
 
+/* The same walk as saveSlotsDeactivateAll: it writes SAVE_SLOT_PENDING to the state field of each record. */
 void saveSlotsActivateAll(void) {
     SaveSlot *record;
     int index;
@@ -204,8 +211,8 @@ void saveSlotsPendingToEmpty(void) {
 
     record = saveSlotTable;
     for (index = 0; index < 20; index++) {
-        if (record->state == 1) {
-            record->state = 3;
+        if (record->state == SAVE_SLOT_PENDING) {
+            record->state = SAVE_SLOT_EMPTY;
         }
         record++;
     }
@@ -254,7 +261,7 @@ void saveSlotSetTexts(int slot, int value)
 extern unsigned char *saveLabelSeparator;
 static unsigned char saveLabelBuffer[0x40];
 
-/* Label text buffer size: the bytes written to saveLabelBuffer are capped at this count (an SJIS lead byte copies its
+/* Label text buffer size: the bytes written to saveLabelBuffer are capped at this count (an EUC-JP lead byte copies its
  * trail byte too). */
 #define SAVE_LABEL_MAX_BYTES 64
 
@@ -353,13 +360,13 @@ unsigned char *saveLabelBuild(int labelId)
     return saveLabelBuffer;
 }
 
-/* Empties the SJIS string at text (its first byte becomes the terminator). Callers clear saveHeaderText before
+/* Empties the EUC-JP string at text (its first byte becomes the terminator). Callers clear saveHeaderText before
    eucStrcat appends to it. */
 void eucStrClear(signed char *text) {
     *text = 0;
 }
 
-/* Appends the SJIS string src to dst and terminates the result. A lead byte (0x80 and up) takes the next byte
+/* Appends the EUC-JP string src to dst and terminates the result. A lead byte (0x80 and up) takes the next byte
  * with it, so both the scan for the end of dst and the copy step over whole characters. */
 void eucStrcat(unsigned char *dst, unsigned char *src)
 {
@@ -401,7 +408,7 @@ void eucStrcat(unsigned char *dst, unsigned char *src)
     *dst = 0;
 }
 
-/* Counts the bytes of the SJIS string text before its terminator. A lead byte (sign bit set) takes its trail
+/* Counts the bytes of the EUC-JP string text before its terminator. A lead byte (sign bit set) takes its trail
  * byte with it, so each two-byte character counts two. */
 int eucStrLength(unsigned char *text)
 {
@@ -488,7 +495,8 @@ void saveOptionItemFadeOut(SaveItem *item) {
     item->flag = -7;
 }
 
-/* Four 2-byte SJIS marks, each in an 8-byte slot. */
+/* Four 2-byte marks, each in an 8-byte slot: a full-width zero in Shift-JIS (82 4F) and in EUC-JP (A3 B0), two ASCII
+ * '#' and the ASCII digits '1' and '2'. */
 extern unsigned char saveChoiceMarkSjisZero[8];
 extern unsigned char saveChoiceMarkEucZero[8];
 extern unsigned char saveChoiceMarkHashText[8];
@@ -1320,8 +1328,8 @@ enum {
 };
 
 
-/* Slot request handler: -2 sets saveUiState to 0x12, -1 returns saveCursor.list.cursor + 1, -3 clears the state of the
- * record before slot 1. For slots 1..20 the image in data is checked: a matching checksum and marker load the
+/* Slot request handler: -2 sets saveUiState to 0x12, -1 returns saveCursor.list.cursor + 1, -3 writes state 0 to record
+ * slot - 1 = -4, four records before the table (an original bug: no real record is cleared). For slots 1..20 the image in data is checked: a matching checksum and marker load the
  * record (state 2, then saveSlotFromData), anything else sets state 4. Returns slot + 1, or -1 when nothing ran. */
 int saveSlotScanCallback(int slot, unsigned char *data)
 {
@@ -1790,7 +1798,7 @@ int MenuFileMain(int entryMode)
         XenoActorDoit();
         XenoActorDisp();
         xglSleep();
-        grCopyFrame(frame->vram.flip_base, frame->draw_buffer_base);
+        grCopyFrame(frame->vram.work_buffer_base, frame->draw_buffer_base);
         pxySkipOverlayDraw();
     }
 
@@ -1839,7 +1847,7 @@ int MenuFileMain(int entryMode)
         do {
             sceGsSyncV(0);
             grFillFrame();
-            grCopyFrame(sRender.display_buffer_base, sRender.vram.flip_base);
+            grCopyFrame(sRender.display_buffer_base, sRender.vram.work_buffer_base);
             xglTickAdvance();
             xglSleep();
         } while (xglCdGetServicePending() != 0);
@@ -1890,11 +1898,11 @@ int MenuFileMain(int entryMode)
     xglCdBufferClear();
     xglCdArenaClose();
     if ((gameWork.control & 0x10000000) == 0) {
-        grCopyFrame(sRender.vram.flip_base, sRender.draw_buffer_base);
+        grCopyFrame(sRender.vram.work_buffer_base, sRender.draw_buffer_base);
         for (i = 0; i < 16; i++) {
             sceGsSyncV(0);
             grFillFrame();
-            grCopyFrame(sRender.display_buffer_base, sRender.vram.flip_base);
+            grCopyFrame(sRender.display_buffer_base, sRender.vram.work_buffer_base);
             xglTickAdvance();
             xglSleep();
         }
@@ -2087,7 +2095,7 @@ int configOldDataCallback(int slot, unsigned char *data)
         break;
     case 0:
         if (data[0] == 1) {
-            configNoticePending |= CONFIG_NOTICE_CARD_A | CONFIG_NOTICE_FLAG | CONFIG_NOTICE_KINDS;
+            configNoticePending |= CONFIG_NOTICE_EP1 | CONFIG_NOTICE_FLAG | CONFIG_NOTICE_KINDS;
             oldDataMaximaRaise(data);
             configOldDataKind = 2;
         }
@@ -2095,7 +2103,7 @@ int configOldDataCallback(int slot, unsigned char *data)
     case 1:
         entryResult = data[0];
         if (entryResult == 1) {
-            configNoticePending |= CONFIG_NOTICE_CARD_B | CONFIG_NOTICE_FLAG | CONFIG_NOTICE_KINDS;
+            configNoticePending |= CONFIG_NOTICE_EP1RE | CONFIG_NOTICE_FLAG | CONFIG_NOTICE_KINDS;
             oldDataMaximaRaise(data);
             configOldDataKind = entryResult;
         }
@@ -2117,7 +2125,7 @@ int configOldDataCallback(int slot, unsigned char *data)
 
 extern short mcPortResultB;
 
-/* One step of the save menu: the state byte configState selects the step and returns 1 only after the
+/* One step of the new game configuration screen (configScreenRun): the state byte configState selects the step and returns 1 only after the
  * cross/circle-with-zero path of the option item. */
 int configScreenUpdate(void)
 {
@@ -2232,16 +2240,16 @@ int configScreenUpdate(void)
         saveCardBusy = 0;
         configNoticeShown |= (signed char) configNoticePending & CONFIG_NOTICE_KINDS;
         configNoticePending = (signed char) configNoticePending & ~CONFIG_NOTICE_KINDS;
-        if ((configNoticeShown & CONFIG_NOTICE_CARDS) != 0 && (configNoticeShown & CONFIG_NOTICE_FLAG) != 0) {
+        if ((configNoticeShown & CONFIG_NOTICE_EP_SAVES) != 0 && (configNoticeShown & CONFIG_NOTICE_FLAG) != 0) {
             configState = CONFIG_STATE_OPEN_LIST;
             configCursor = 0;
             break;
         }
-        if (((signed char) configNoticePending & CONFIG_NOTICE_CARDS) != 0 && (configNoticeShown & CONFIG_NOTICE_CARDS) != 0 && (((signed char) configNoticePending & CONFIG_NOTICE_FLAG) == 0 || (configNoticeShown & CONFIG_NOTICE_FLAG) != 0)) {
+        if (((signed char) configNoticePending & CONFIG_NOTICE_EP_SAVES) != 0 && (configNoticeShown & CONFIG_NOTICE_EP_SAVES) != 0 && (((signed char) configNoticePending & CONFIG_NOTICE_FLAG) == 0 || (configNoticeShown & CONFIG_NOTICE_FLAG) != 0)) {
             configState = 17;
             break;
         }
-        if (((signed char) configNoticePending & CONFIG_NOTICE_FLAG) != 0 && (configNoticeShown & CONFIG_NOTICE_FLAG) != 0 && (((signed char) configNoticePending & CONFIG_NOTICE_CARDS) == 0 || (configNoticeShown & CONFIG_NOTICE_CARDS) != 0)) {
+        if (((signed char) configNoticePending & CONFIG_NOTICE_FLAG) != 0 && (configNoticeShown & CONFIG_NOTICE_FLAG) != 0 && (((signed char) configNoticePending & CONFIG_NOTICE_EP_SAVES) == 0 || (configNoticeShown & CONFIG_NOTICE_EP_SAVES) != 0)) {
             configState = 18;
             break;
         }
@@ -2254,9 +2262,9 @@ int configScreenUpdate(void)
             } while (mcPortResult[1] == 255);
         }
         if ((signed char) configState == CONFIG_STATE_RESOLVE || (signed char) configState == 19) {
-            if (((signed char) configNoticePending & CONFIG_NOTICE_CARDS) != 0) {
-                configNoticeShown |= (signed char) configNoticePending & CONFIG_NOTICE_CARDS;
-                configNoticePending = (signed char) configNoticePending & ~CONFIG_NOTICE_CARDS;
+            if (((signed char) configNoticePending & CONFIG_NOTICE_EP_SAVES) != 0) {
+                configNoticeShown |= (signed char) configNoticePending & CONFIG_NOTICE_EP_SAVES;
+                configNoticePending = (signed char) configNoticePending & ~CONFIG_NOTICE_EP_SAVES;
                 configState = 15;
             } else if (((signed char) configNoticePending & CONFIG_NOTICE_FLAG) != 0) {
                 configNoticeShown |= (signed char) configNoticePending & CONFIG_NOTICE_FLAG;
@@ -2511,13 +2519,13 @@ void configScreenRun(void)
     xglCdArenaClose();
     {
         if ((gameWork.control & 0x10000000) == 0) {
-            grCopyFrame(sRender.vram.flip_base, sRender.draw_buffer_base);
+            grCopyFrame(sRender.vram.work_buffer_base, sRender.draw_buffer_base);
             countdown = 15;
             do {
                 sceGsSyncV(0);
                 countdown = countdown - 1;
                 grFillFrame();
-                grCopyFrame(sRender.display_buffer_base, sRender.vram.flip_base);
+                grCopyFrame(sRender.display_buffer_base, sRender.vram.work_buffer_base);
                 xglTickAdvance();
                 xglSleep();
             } while (countdown >= 0);

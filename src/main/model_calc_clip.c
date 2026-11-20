@@ -5,7 +5,7 @@
 
 /*
  * Transforms in by the current matrix (vf27..vf30) and writes it to out with w
- * replaced by the fog value: fog.z * (1 / w) + fog.w, clamped to [fog.x, fog.y].
+ * replaced by the fog value: fog.z + fog.w * (1 / w), clamped to [fog.x, fog.y].
  */
 void _CurRotTransPersFog(Vector4 *out, const Vector4 *in, const Vector4 *fog)
 {

@@ -193,7 +193,8 @@ volatile int xglDmaSlotMap[XGL_DMAC_CHANNELS] = {
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
 };
 
-/* INTC handler table: {handle, count, cause, handler}; the last record has cause -1. */
+/* INTC handler table: {handle, count, cause, handler}; the last record has cause -1. Index 10 repeats the GS handler of
+ * index 0 (cause 0): the original table has it twice. */
 XglIntrRecord xglIntcRecords[12] = {
     { -1, 0, 0, xglIntcHandlerGs },
     { -1, 0, 2, xglIntcHandlerVblankStart },

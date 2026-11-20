@@ -15,13 +15,13 @@ extern unsigned char seSongNumber[];
 void korgEvagFreeBank(int slot);
 int korgEvagLoadVsfCdSector(int slot, unsigned int lbn, int record_byte_27);
 void korgEvagLoadPrjCdSector(int slot, unsigned int lbn, int record_byte_27);
-int korgEvagLoadVsfCdSector2(int slot, unsigned int lbn, int record_byte_27, int bank_size);
+int korgEvagLoadVsfCdSector2(int slot, unsigned int lbn, int record_byte_27, int bank_address);
 
 /* Loads the bank `name` of `directory` into `slot`: clears the slot, gives the driver the position
- * of <directory><name>.vsf (korgEvagLoadVsfCdSector2 with `bank_size` when it is set, else korgEvagLoadVsfCdSector) and then of
+ * of <directory><name>.vsf (korgEvagLoadVsfCdSector2 with `bank_address` when it is set, else korgEvagLoadVsfCdSector) and then of
  * the .prj file. Returns the size of the .vsf file, 0 for a slot out of range or no name, or the
  * negative result of the failing step. */
-int seBankLoadFile(int slot, const char *name, const char *directory, int bank_size)
+int seBankLoadFile(int slot, const char *name, const char *directory, int bank_address)
 {
     CdFilePosition record;
     char path[SE_PATH_MAX];
@@ -60,8 +60,8 @@ int seBankLoadFile(int slot, const char *name, const char *directory, int bank_s
         return result;
     }
     size = record.size_bytes;
-    if (bank_size != 0) {
-        result = korgEvagLoadVsfCdSector2(slot, record.lbn, record.unmodeled_27, bank_size);
+    if (bank_address != 0) {
+        result = korgEvagLoadVsfCdSector2(slot, record.lbn, record.unmodeled_27, bank_address);
     } else {
         result = korgEvagLoadVsfCdSector(slot, record.lbn, record.unmodeled_27);
     }
@@ -79,10 +79,10 @@ int seBankLoadFile(int slot, const char *name, const char *directory, int bank_s
 const char *seBankDirectory = "sound\\vsf\\";
 
 /* Loads the bank `name` into `slot`, its files taken from the global directory seBankDirectory.
- * `bank_size` is the room the sound driver keeps for the bank (res_get_path.c's per-slot table:
- * 0x19000, 0x5000 for the system sound effects, ...); 0 loads without one. */
-int seBankLoad(int slot, const char *name, int bank_size) {
-    return seBankLoadFile(slot, name, seBankDirectory, bank_size);
+ * `bank_address` is the bank's start address in sound memory (seBankAddressTable in res_get_path.c
+ * gives one per slot); 0 loads without an address. */
+int seBankLoad(int slot, const char *name, int bank_address) {
+    return seBankLoadFile(slot, name, seBankDirectory, bank_address);
 }
 
 /* Loads the bank `name` into `slot` with no bank size. */
@@ -92,10 +92,10 @@ int seBankLoadDefault(int slot, const char *name) {
 
 int korgEvagLoadVsfFromEe(int slot, void *vsf);
 int korgEvagLoadPrjFromEe(int slot, void *prj);
-int korgEvagLoadVsfFromEe2(int slot, void *vsf, int bank_size);
+int korgEvagLoadVsfFromEe2(int slot, void *vsf, int bank_address);
 
 /* The memory form of seBankLoadFile: `vsf` and `prj` are the two bank files already in memory. */
-int seBankLoadMemory(int slot, void *vsf, void *prj, int bank_size)
+int seBankLoadMemory(int slot, void *vsf, void *prj, int bank_address)
 {
     int result;
 
@@ -109,8 +109,8 @@ int seBankLoadMemory(int slot, void *vsf, void *prj, int bank_size)
     if (prj == 0) {
         return 0;
     }
-    if (bank_size != 0) {
-        result = korgEvagLoadVsfFromEe2(slot, vsf, bank_size);
+    if (bank_address != 0) {
+        result = korgEvagLoadVsfFromEe2(slot, vsf, bank_address);
     } else {
         result = korgEvagLoadVsfFromEe(slot, vsf);
     }
@@ -135,7 +135,7 @@ int korgEvagLoadSmfCdSector(int packed, unsigned int lbn, int record_byte_27);
 /* Loads the song `name` (three digits) from seMidiDirectory: its bank into slot 0, then, for a
  * `packed` id up to SE_BGM_ID_MAX, the .mid file, and records the song number (SE_SONG_NONE when
  * the name does not start with three digits). With no name it returns what the bank load returned. */
-int seBgmLoad(int packed, const char *name, int bank_size)
+int seBgmLoad(int packed, const char *name, int bank_address)
 {
     CdFilePosition record;
     char path[SE_PATH_MAX];
@@ -148,7 +148,7 @@ int seBgmLoad(int packed, const char *name, int bank_size)
     if (!bank_only) {
         korgEvagFreeSeq(packed);
     }
-    result = seBankLoadFile(0, name, seMidiDirectory, bank_size);
+    result = seBankLoadFile(0, name, seMidiDirectory, bank_address);
     if (name == 0) {
         return result;
     }
@@ -194,9 +194,9 @@ void korgEvagLoadSmfFromEe(int, int);
 
 /* The memory form of seBgmLoad: selects song `first`, loads its bank from the files `vsf` and `prj`
  * already in memory into slot 0 and, when `second` is set, passes it on with the song. */
-void seBgmLoadMemory(int first, int second, void *vsf, void *prj, int bank_size) {
+void seBgmLoadMemory(int first, int second, void *vsf, void *prj, int bank_address) {
     korgEvagFreeSeq(first);
-    seBankLoadMemory(0, vsf, prj, bank_size);
+    seBankLoadMemory(0, vsf, prj, bank_address);
     if (second != 0) {
         korgEvagLoadSmfFromEe(first, second);
     }
@@ -209,8 +209,8 @@ typedef struct SeSongLevel {
 
 void korgEvagSetFxVolume(int, int);
 
-/* Sets the level of channel 1 to the level the table gives for the current song; songs that are
- * not listed keep the level they have. */
+/* Sets the effect depth (korgEvagSetFxVolume(1, level)) to the level the table gives for the current
+ * song; songs that are not listed keep the level they have. */
 void seBgmSetSongLevel(void)
 {
     SeSongLevel table[] = {
@@ -243,7 +243,7 @@ void korgEvagStopSeq(int, int);
 /* Above SE_BGM_ID_MAX: seBgmLoad loads the bank only. */
 #define SE_BGM_BANK_ONLY 0x10000
 #define SE_BGM_FADE_STEP 16
-void seBgmPlay(int packed, const char *name, int bank_size) {
+void seBgmPlay(int packed, const char *name, int bank_address) {
     int *mode_ref;
     int mode;
     int id;
@@ -259,7 +259,7 @@ void seBgmPlay(int packed, const char *name, int bank_size) {
         korgEvagStopSeq(0, id);
         korgEvagSetFxVolume(1, 0);
         mode_ref = &mode;
-        seBgmLoad(next_id, name, bank_size);
+        seBgmLoad(next_id, name, bank_address);
         if (name != 0) {
             seBgmStart(id, next_id);
             /* the address taken here makes this test reload mode */
@@ -271,7 +271,7 @@ void seBgmPlay(int packed, const char *name, int bank_size) {
         return;
 
     case SE_BGM_BANK:
-        seBgmLoad(SE_BGM_BANK_ONLY + SE_BGM_LOAD_OFFSET + id, name, bank_size);
+        seBgmLoad(SE_BGM_BANK_ONLY + SE_BGM_LOAD_OFFSET + id, name, bank_address);
         if (name != 0) {
             seVolumeSet(0, 0);
             seSetMuted(id, 0);
@@ -301,14 +301,14 @@ void seBgmPlay(int packed, const char *name, int bank_size) {
 #define SE_CONTROLLER_EXPRESSION 0x0B
 #define SE_CONTROLLER_REVERB 0x5B
 #define SE_PAN_CENTRE 0x40
-/* A packed voice id: kind in bits 24..30, MIDI channel in bits 0..3, note in bits 0..6. */
-#define SE_VOICE_KIND(packed) (((packed) >> 24) & 0x7F)
+/* A packed voice id: slot in bits 24..30, MIDI channel in bits 0..3, note in bits 0..6. */
+#define SE_VOICE_SLOT(packed) (((packed) >> 24) & 0x7F)
 #define SE_VOICE_CHANNEL(packed) ((packed) & 0xF)
 #define SE_VOICE_NOTE(packed) ((packed) & 0x7F)
-/* Default volume by kind in seVoiceStart: kinds 1 and 2 (below SE_VOICE_KIND_LEVELLED) play at
- * SOUND_LEVEL_MAX, SE_VOICE_KIND_MASTER_LEVEL at the default master level. */
-#define SE_VOICE_KIND_LEVELLED 3
-#define SE_VOICE_KIND_MASTER_LEVEL 7
+/* Default volume by slot in seVoiceStart: slots 1 and 2 (below SE_VOICE_SLOT_LEVELLED) play at
+ * SOUND_LEVEL_MAX, SE_VOICE_SLOT_MASTER_LEVEL at the default master level. */
+#define SE_VOICE_SLOT_LEVELLED 3
+#define SE_VOICE_SLOT_MASTER_LEVEL 7
 /* seTonePlay: a value above SE_TONE_PLAIN_MAX also carries a volume and a pan. */
 #define SE_TONE_PLAIN_MAX 0xFFFFFF
 #define SE_TONE_BANK(packed) ((packed) & 0x7F)
@@ -357,8 +357,8 @@ void seBgmStop(void) {
 
 void korgEvagPauseSeq(int, int);
 
-void seSetMuted(int first, int flag) {
-    korgEvagPauseSeq(first, flag);
+void seSetMuted(int player_id, int flag) {
+    korgEvagPauseSeq(player_id, flag);
     soundSetMuted(flag);
     if (flag != 0) {
         korgEvagSetFxVolume(1, 0);
@@ -367,7 +367,7 @@ void seSetMuted(int first, int flag) {
     seBgmSetSongLevel();
 }
 
-int korgEvagSetUnitVolume(int channel, int level);
+int korgEvagSetUnitVolume(int unit, int level);
 
 /* Starts the master volume ramp toward level (negative: the default level), scaled by the master
  * volume and clamped to SOUND_LEVEL_MAX; applies the level at once when the ramp returns one. */
@@ -390,26 +390,26 @@ void seVoiceStartDefault(int voice) {
     seVoiceStart(voice, SE_VOLUME_DEFAULT, SE_PAN_CENTRE);
 }
 
-/* The channel group a voice kind plays on: kinds 3 and 4 have their own group, every other kind
- * shares SE_GROUP_VOICE. */
-#define SE_VOICE_KIND_3 3
-#define SE_VOICE_KIND_4 4
-#define SE_GROUP_OF_KIND_3 2
-#define SE_GROUP_OF_KIND_4 3
+/* The KORG unit a voice slot plays on: slots 3 and 4 have their own units (SE_GROUP_OF_SLOT_3 and
+ * SE_GROUP_OF_SLOT_4), every other slot shares unit SE_GROUP_VOICE. */
+#define SE_VOICE_SLOT_3 3
+#define SE_VOICE_SLOT_4 4
+#define SE_GROUP_OF_SLOT_3 2
+#define SE_GROUP_OF_SLOT_4 3
 #define SE_GROUP_VOICE 4
-/* seTonePlay's channel group. */
+/* seTonePlay's unit. */
 #define SE_GROUP_TONE 1
 
-int seVoiceKindGroup(int kind)
+int seVoiceSlotUnit(int slot)
 {
     int group;
 
-    switch (kind) {
-    case SE_VOICE_KIND_3:
-        group = SE_GROUP_OF_KIND_3;
+    switch (slot) {
+    case SE_VOICE_SLOT_3:
+        group = SE_GROUP_OF_SLOT_3;
         break;
-    case SE_VOICE_KIND_4:
-        group = SE_GROUP_OF_KIND_4;
+    case SE_VOICE_SLOT_4:
+        group = SE_GROUP_OF_SLOT_4;
         break;
     default:
         group = SE_GROUP_VOICE;
@@ -418,27 +418,27 @@ int seVoiceKindGroup(int kind)
     return group;
 }
 
-/* Queues one packed message for a channel group. It returns 0, or -1 when the queue is busy or
+/* Queues one packed message for a unit. It returns 0, or -1 when the queue is busy or
  * full (move $2,$16 at 0x13A9BC and 0x13A9C4); the callers here do not use the result. */
 int korgEvagMidiProcBatchAdd(int group, int message, int value);
 
-/* Starts `voice` (bits 24..30: kind, bits 0..3: channel, bits 0..6: note) on the
- * kind's channel group: bank select (the kind), pan, expression, program 0, note on. A negative
- * volume takes the default of the kind (kinds 1 and 2: SOUND_LEVEL_MAX, kind 7: the default
- * master level, every other kind: the default voice level); the volume is then scaled by the
+/* Starts `voice` (bits 24..30: slot, bits 0..3: channel, bits 0..6: note) on the
+ * slot's unit: bank select (the slot), pan, expression, program 0, note on. A negative
+ * volume takes the default of the slot (slots 1 and 2: SOUND_LEVEL_MAX, slot 7: the default
+ * master level, every other slot: the default voice level); the volume is then scaled by the
  * master volume. */
 void seVoiceStart(int voice, int volume, int pan)
 {
-    int kind = SE_VOICE_KIND(voice);
+    int slot = SE_VOICE_SLOT(voice);
     int channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(voice));
     int note = SE_VOICE_NOTE(voice);
-    int group = seVoiceKindGroup(kind);
+    int group = seVoiceSlotUnit(slot);
 
     if (volume < 0) {
         volume = soundCtrl.voice_level;
-        if (kind != 0) {
-            if (kind >= SE_VOICE_KIND_LEVELLED) {
-                if (kind == SE_VOICE_KIND_MASTER_LEVEL) {
+        if (slot != 0) {
+            if (slot >= SE_VOICE_SLOT_LEVELLED) {
+                if (slot == SE_VOICE_SLOT_MASTER_LEVEL) {
                     volume = soundCtrl.master_level;
                 }
             } else {
@@ -450,7 +450,7 @@ void seVoiceStart(int voice, int volume, int pan)
     if (volume > SOUND_LEVEL_MAX) {
         volume = SOUND_LEVEL_MAX;
     }
-    korgEvagMidiProcBatchAdd(group, channel | SE_MSG_CONTROL(SE_CONTROLLER_BANK, kind), 0);
+    korgEvagMidiProcBatchAdd(group, channel | SE_MSG_CONTROL(SE_CONTROLLER_BANK, slot), 0);
     korgEvagMidiProcBatchAdd(group, channel | SE_MSG_DATA2(pan)
                   | SE_MSG_CONTROL_CHANGE | SE_MSG_DATA1(SE_CONTROLLER_PAN), 0);
     korgEvagMidiProcBatchAdd(group, channel | SE_MSG_DATA2(volume)
@@ -464,7 +464,7 @@ void seVoiceStart(int voice, int volume, int pan)
 void seVoiceSetPanVolume(int voice, int volume, int pan)
 {
     int channel = SE_MSG_CHANNEL(SE_VOICE_CHANNEL(voice));
-    int group = seVoiceKindGroup(SE_VOICE_KIND(voice));
+    int group = seVoiceSlotUnit(SE_VOICE_SLOT(voice));
 
     if (volume < 0) {
         volume = soundCtrl.voice_level;
@@ -479,11 +479,11 @@ void seVoiceSetPanVolume(int voice, int volume, int pan)
                   | SE_MSG_CONTROL_CHANGE | SE_MSG_DATA1(SE_CONTROLLER_EXPRESSION), 0);
 }
 
-/* For `voice` (bits 24..30: kind, bits 0..3: channel, bits 0..6: note), sends an expression
- * control change, a program change and a note off to the kind's channel group. */
+/* For `voice` (bits 24..30: slot, bits 0..3: channel, bits 0..6: note), sends an expression
+ * control change, a program change and a note off to the slot's unit. */
 void seVoiceStop(int voice)
 {
-    int group = seVoiceKindGroup(SE_VOICE_KIND(voice));
+    int group = seVoiceSlotUnit(SE_VOICE_SLOT(voice));
     int channel = SE_VOICE_CHANNEL(voice);
 
     /* shifted in a second step: the one-step form takes other registers */
@@ -501,7 +501,7 @@ void seVoiceStop(int voice)
 static unsigned char seBendDisabled;
 static unsigned char seNextChannel;
 
-/* Plays bank `packed & 0x7F` on channel group 1, on the next channel in turn, with a random pitch
+/* Plays bank `packed & 0x7F` on unit 1, on the next channel in turn, with a random pitch
  * bend and one of two notes. A value above 0xFFFFFF also carries the volume (bits 16..22) and the
  * pan (bits 8..14). A negative value only sets seBendDisabled (to packed + 1). */
 void seTonePlay(int packed)

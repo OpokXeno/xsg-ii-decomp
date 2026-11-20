@@ -10,10 +10,9 @@
 typedef struct XglPacket XglPacket;
 
 /*
- * The VIF1 direct-mode packet builder object. xglPacketInit constructs two
- * of them back to back inside asPacketSource, 0x28 bytes apart (main
- * 0x0022c458-0x0022c4b4 writes both entries' +0x20 and +0x24 at that
- * stride), so sizeof(XglPacket) is 0x28. Only the members the functions of
+ * The VIF1 direct-mode packet builder object. xglPacketInit sets up two of
+ * them, packetSourceFirst and packetSourceSecond (xgl_packet.c). The record is 0x30 bytes: buffer and bufferSize
+ * at +0x28 and +0x2c are part of it. Only the members the functions of
  * this TU touch are named; everything the sceVif1Pk* library alone reads or
  * writes stays unmodeled.
  */

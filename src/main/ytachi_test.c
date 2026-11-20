@@ -9,7 +9,7 @@
 #include "ov01/sb_vm.h"
 #include "main/uwamono_objx.h"
 #include "main/uwamono_record.h"
-#include "main/ladder_table.h"
+#include "main/get_ladder.h"
 #include "main/init_uwamono_sys.h"
 #include "main/xgl_cd.h"
 #include "main/res_get_path.h"
@@ -148,7 +148,7 @@ void uwamonoResetRecords(int index, signed char mode)
         record->kind = MAP_KIND_FREE;
         record->type = -1;
         record->parent = -1;
-        record->tiltStep = -1;
+        record->moveTicks = -1;
         record->eventTimer = -1;
         record->transparencyStep = -1;
         record->scaleStep = -1;
@@ -180,7 +180,7 @@ void uwamonoResetRecords(int index, signed char mode)
         record->unmodeled_630 = -1;
         record->transform = NULL;
         record->motionKind = 0;
-        record->lookLink = -1;
+        record->partnerLink = -1;
         record->eventRow = -1;
         if (mode == 1 && record->body.actor != NULL) {
             XenoActorRelease(record->body.actor);
@@ -198,8 +198,8 @@ void uwamonoResetRecords(int index, signed char mode)
         record->focusOffset.w = 1.0f;
         uwamonoClearMoveResetWord(i);
         uwamonoClearRotateResetWord(i);
-        record->linkB = -1;
-        record->linkA = -1;
+        record->itemLink = -1;
+        record->enemyLink = -1;
         record->lightArea = -1;
         xglMatrixStackUnit();
         xglMatrixStackSave(record->savedMatrix.matrix);
@@ -221,16 +221,16 @@ void uwamonoResetRecords(int index, signed char mode)
         state->area.x = state->area.y = state->area.z = state->areaSize = 0.0f;
         state->noticeRange = state->fanLength = state->fanWidth = state->pursuitSpeed =
             state->moveSpeed = state->leashRange = state->wanderStep = 0.0f;
-        state->wanderTime = 0;
-        state->pickCountA = 0;
-        state->waitTime = 0;
-        state->pickCountB = 0;
+        state->pauseTime = 0;
+        state->pauseCycle = 0;
+        state->threatTime = 0;
+        state->threatCycle = 0;
         state->trailStep = 0;
         state->timer = 0;
         state->timerLimit = 0;
         state->alert = 0;
         state->mode = 0;
-        state->cooldown = 0;
+        state->stunTime = 0;
         for (j = 0; j < 2; j++) {
             for (k = 0; k < 8; k++) {
                 state->pickRow[j][k] = 0;
@@ -251,16 +251,16 @@ void uwamonoResetRecords(int index, signed char mode)
                 state->points[j].coords[2] = 0.0f;
             state->points[j].coords[3] = 1.0f;
             for (k = 0; k < 4; k++) {
-                state->pointLinks[j][k] = 0;
-                state->pointLinkValues[j][k] = 0;
+                state->actionMotions[j][k] = 0;
+                state->actionLengths[j][k] = 0;
             }
         }
         state->pointCount = 0;
         state->routeNodeCount = 0;
         for (j = 0; j < 64; j++) {
-            state->routeNodes[j].coords[0] = state->routeNodes[j].coords[1] =
-                state->routeNodes[j].coords[2] = 0.0f;
-            state->routeNodes[j].coords[3] = 1.0f;
+            state->homeNodes[j].coords[0] = state->homeNodes[j].coords[1] =
+                state->homeNodes[j].coords[2] = 0.0f;
+            state->homeNodes[j].coords[3] = 1.0f;
             state->routeLinkCounts[j] = 0;
             state->routeParents[j] = 0;
             for (k = 0; k < 4; k++) {
@@ -268,7 +268,7 @@ void uwamonoResetRecords(int index, signed char mode)
             }
         }
         for (j = 0; j < 8; j++) {
-            state->groups[j] = -1;
+            state->setNumbers[j] = -1;
         }
         for (j = 0; j < 4; j++) {
             state->together[j] = -1;
@@ -293,7 +293,7 @@ void uwamonoResetRecords(int index, signed char mode)
         state->unmodeled_3fd8[1] = 0;
         state->probe.x = state->probe.y = state->probe.z = 0.0f;
         state->unmodeled_3ff4 = -1;
-        state->homePoint.x = 0.0f;
+        state->chaseTarget.x = 0.0f;
         state->noticeCooldown = 0;
         state->id = 0;
         state->groundId = -1;
@@ -305,7 +305,7 @@ void uwamonoResetRecords(int index, signed char mode)
         state->seIds[2] = -1;
         state->seIds[1] = -1;
         state->seIds[0] = -1;
-        state->battle = 0;
+        state->cfEventBits = 0;
         state->scanState = 99;
         for (j = 0; j < 16; j++) {
             state->walk[j] = j;
@@ -337,7 +337,7 @@ const char mapSceneLanguagePathFormat[16] = "cf\\xx\\%sl";
 /* 32 UwamonoState blocks of 0x40C0 bytes (enemy_1.c and set_motion.c read them). */
 UwamonoState uwamonoStates[32] = { 0 };
 
-/* Nine Vector4 entries; runtime_motion_face.c and game_camera.c read them (as float[][4] and Vector4[]). */
+/* Nine Vector4 entries; runtime_enepc.c and game_camera.c read them (as float[][4] and Vector4[]). */
 float enepcLookAtPointTable[9][4] = { 0 };
 
 /* Ten radii of enepcLookAtReachTable are cleared here; the 12th float is padding in this layout. */

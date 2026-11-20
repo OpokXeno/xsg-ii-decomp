@@ -4,7 +4,7 @@
 #include "main/msg_window_close.h"
 #include "main/interp_update.h"
 #include "main/text_tag.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/msg_window_update.h"
 #include "main/timecode_window.h"
 
@@ -32,20 +32,20 @@ void msgSlotRun(MsgSlot *slot) {
     if (!(slot->flags & MSG_SLOT_ACTIVE)) {
         return;
     }
-    switch (slot->state) {
-    case MSG_SLOT_STATE_TEXT:
+    switch (slot->slot_type) {
+    case MSG_SLOT_TYPE_TEXT:
         interpUpdate(slot);
         interpDrawTextSlot(slot);
         break;
-    case MSG_SLOT_STATE_WINDOW:
+    case MSG_SLOT_TYPE_WINDOW:
         msgWindowUpdate(slot);
         msgWindowDraw(slot);
         break;
-    case MSG_SLOT_STATE_TIMECODE:
+    case MSG_SLOT_TYPE_TIMECODE:
         timecodeUpdate(slot);
         timecodeSlotDraw(slot);
         break;
-    case MSG_SLOT_STATE_ITEM:
+    case MSG_SLOT_TYPE_ITEM:
         msgSlotItemTick(slot);
         msgSlotDraw(slot);
         break;
@@ -54,5 +54,5 @@ void msgSlotRun(MsgSlot *slot) {
 
 void talkEnd(void) {
     msgWindowUnloadBotanXtx();
-    talkEndScript();
+    talkEndTexture();
 }

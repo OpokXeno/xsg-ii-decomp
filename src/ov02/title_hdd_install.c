@@ -150,8 +150,9 @@ extern const char hddInstallCompleteText[];
 int printf(const char *fmt, ...);
 long long __udivdi3(long long percent, int count);
 
-/* Installer status callback: prints the step text for `event`, draws the
- * progress gauge for event 6, then waits on the pad once the install is done. */
+/* Installer status callback: prints the step text for `event` and draws the progress gauge for event 6. A nonzero
+ * *param makes it sync and return that status. It does not wait on the pad; the wait is in
+ * TitleHddInstallSubInstall. */
 /* Text of the install screen, in the order the code draws it. */
 const char installScreenFontText[8] = "\017D\000\200\015\003";
 /* JP: インストール中です。“ＰｌａｙＳｔａｔｉｏｎ２”本体の\n\n電源を切らないでください。

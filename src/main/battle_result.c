@@ -64,7 +64,7 @@ void battleResultDrawRow(int x, int y, int index, int tally)
     struct BattleResultRow *row;
     PartyMember *record;
     PartyMemberStatus *label;
-    PartyMemberLimits *valueRecord;
+    PartyMemberExpPoints *valueRecord;
     StatBlock *stats;
     int wideOffset;
     int subFrameY;
@@ -162,7 +162,7 @@ void battleResultDrawRow(int x, int y, int index, int tally)
     menuDrawStatIcon(2, markerFillX, y + 54, 0xFE00ULL << 46);
     menuDrawStatIcon(3, markerFillX, y + 72, 0xFE00ULL << 46);
     fontObjResetColor();
-    total = row->gainFirst;
+    total = row->expGain;
     total = __udivdi3(total * tally, battleResultScoreMax);
     total += battleResultStats[3][index];
     if (total > BATTLE_RESULT_SCORE_CAP) {
@@ -177,28 +177,28 @@ void battleResultDrawRow(int x, int y, int index, int tally)
     } else {
         unsigned long long part;
 
-        part = row->gainThird;
+        part = row->classPointsGain;
         part = __udivdi3(part * tally, battleResultScoreMax) + battleResultStats[1][index];
         if (part > BATTLE_RESULT_PART_CAP) {
             part = BATTLE_RESULT_PART_CAP;
         }
         textDrawDecimalShadow(cardX + 238, adjust, (int)part, 5, 0xFE00ULL << 46);
-        part = row->gainThird;
+        part = row->classPointsGain;
         part = part * (battleResultScoreMax - tally);
         part = __udivdi3(part, battleResultScoreMax);
         textDrawSignedDecimalShadow(cardX + 300, adjust, (int)part, 5, 0xFE00ULL << 46);
-        part = row->gainSecond;
+        part = row->skillPointsGain;
         part = __udivdi3(part * tally, battleResultScoreMax) + battleResultStats[2][index];
         if (part > BATTLE_RESULT_PART_CAP) {
             part = BATTLE_RESULT_PART_CAP;
         }
         textDrawDecimalShadow(cardX + 238, lowerRowY, (int)part, 5, 0xFE00ULL << 46);
-        part = row->gainSecond;
+        part = row->skillPointsGain;
         part = part * (battleResultScoreMax - tally);
         part = __udivdi3(part, battleResultScoreMax);
         textDrawSignedDecimalShadow(cardX + 300, lowerRowY, (int)part, 5, 0xFE00ULL << 46);
     }
-    rest = row->gainFirst;
+    rest = row->expGain;
     rest = rest * (battleResultScoreMax - tally);
     rest = __udivdi3(rest, battleResultScoreMax);
     textDrawSignedDecimalShadow(x + wideOffset + 300, scoreRowY, (int)rest, 5, 0xFE00ULL << 46);
@@ -471,16 +471,16 @@ void battleResultScene(int mode)
             i = battleResultMemberCount;
             do {
                 bonusTotal += rec->levelGain;
-                if (battleResultScoreMax < rec->gainFirst) {
-                    battleResultScoreMax = rec->gainFirst;
+                if (battleResultScoreMax < rec->expGain) {
+                    battleResultScoreMax = rec->expGain;
                 }
-                if (battleResultScoreMax < rec->gainSecond) {
-                    battleResultScoreMax = rec->gainSecond;
+                if (battleResultScoreMax < rec->skillPointsGain) {
+                    battleResultScoreMax = rec->skillPointsGain;
                 }
-                if (battleResultScoreMax < rec->gainThird) {
-                    battleResultScoreMax = rec->gainThird;
+                if (battleResultScoreMax < rec->classPointsGain) {
+                    battleResultScoreMax = rec->classPointsGain;
                 }
-                scoreTotal += rec->gainFirst + rec->gainSecond + rec->gainThird;
+                scoreTotal += rec->expGain + rec->skillPointsGain + rec->classPointsGain;
                 rec++;
                 i--;
             } while (i != 0);

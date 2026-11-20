@@ -14,7 +14,7 @@
 #define ICON_ENTRY_COUNTER_MAX 4
 /* A list holds at most this many entries (ICON_LIST_COUNT). */
 #define ICON_LIST_MAX_ENTRIES 8
-/* The close countdown (close.timer) runs up to this value, then the list is freed. */
+/* The close countdown (close.motionIndex) runs up to this value, then the list is freed. */
 #define ICON_LIST_CLOSE_TIME 16
 /* close.request 1 asks the step to count the timer down and close the list. */
 #define ICON_LIST_CLOSE_ASKED 1
@@ -242,13 +242,13 @@ void menuIconListAppend(BattleUnit *unit)
 
     body = unit->stats;
     panel = menuIconListPanel;
-    if (body->entryCount <= 0 || body->state70 == 2 || body->state70 == 3) {
+    if (body->hitZoneCount <= 0 || body->breakState == 2 || body->breakState == 3) {
         menuIconListClose();
         return;
     }
     count = panel->cell[ICON_LIST_COUNT].value;
-    kind = body->entryKind[count];
-    if (body->entryMark[count] != 0) {
+    kind = body->hitZoneKind[count];
+    if (body->hitZoneMark[count] != 0) {
         kind |= ICON_ENTRY_MARK;
     }
     if (count >= 4) {
@@ -290,7 +290,7 @@ void menuIconListShow(BattleUnit *unit)
     int row;
 
     panel = menuIconListPanel;
-    if (unit->stats->entryCount <= 0 || unit->stats->state70 != 0) {
+    if (unit->stats->hitZoneCount <= 0 || unit->stats->breakState != 0) {
         menuIconListClose();
         panel->cell[ICON_LIST_CLOSE].close.timer = ICON_LIST_CLOSE_TIME;
         return;
@@ -298,9 +298,9 @@ void menuIconListShow(BattleUnit *unit)
     if (panel->cell[ICON_LIST_OWNER].owner != 0) {
         menuPanelRowFree(panel->slide.position.y);
     }
-    for (i = 0; i < unit->stats->entryCount; i++) {
-        kind = unit->stats->entryKind[i];
-        kind = unit->stats->entryMark[i] != 0 ? (kind | ICON_ENTRY_MARK) : kind;
+    for (i = 0; i < unit->stats->hitZoneCount; i++) {
+        kind = unit->stats->hitZoneKind[i];
+        kind = unit->stats->hitZoneMark[i] != 0 ? (kind | ICON_ENTRY_MARK) : kind;
         if (i >= 4) {
             panel->cell[ICON_LIST_KIND1].kind[i % 4] = kind;
             panel->cell[ICON_LIST_COUNTER1].counter[i % 4] = ICON_ENTRY_COUNTER_MAX;
@@ -311,7 +311,7 @@ void menuIconListShow(BattleUnit *unit)
     }
     panel->cell[ICON_LIST_OWNER].owner = unit;
     panel->cell[ICON_LIST_STATE].value = ICON_LIST_IDLE;
-    panel->cell[ICON_LIST_COUNT].value = unit->stats->entryCount;
+    panel->cell[ICON_LIST_COUNT].value = unit->stats->hitZoneCount;
     panel->cell[ICON_LIST_CLOSE].close.timer = ICON_LIST_CLOSE_TIME;
     panel->cell[ICON_LIST_CLOSE].close.request = 0;
     row = menuPanelRowAlloc();

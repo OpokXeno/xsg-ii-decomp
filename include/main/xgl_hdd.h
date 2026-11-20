@@ -16,10 +16,10 @@ struct HddTransferInfo {
 
 struct HddSaveImage;
 
-/* The card save request: xglHddMcCheck/xglHddMcCreate read it through
+/* The save request: xglHddMcCheck/xglHddMcCreate read it through
  * `transfer`, which file.c fills with its card data buffer. */
 struct HddCheckState {
-    int status;
+    int saveNumber;   /* the save number (-1 for none) */
     union {
         unsigned char *bytes; /* file.c: the card data buffer it hands in */
         unsigned char **files; /* yajima_test: its table of card file buffers */
@@ -30,18 +30,18 @@ struct HddCheckState {
 };
 
 struct HddExistRequest {
-    int card;
+    int saveNumber;
     unsigned char *found;
 };
 
 struct HddLoadRequest {
-    int card;
+    int saveNumber;
     void *data;
     int size;
 };
 
 struct HddSaveRequest {
-    int card;
+    int saveNumber;
     const void *data;
     int size;
 };

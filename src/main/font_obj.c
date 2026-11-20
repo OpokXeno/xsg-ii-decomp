@@ -324,7 +324,7 @@ struct FontCell {
     unsigned short w;
     unsigned short h;
     unsigned char unmodeled_0a[2];
-    unsigned int uv;
+    unsigned int clut_block; /* colour table block address; shifted into the TEX0 CBP field */
 };
 
 extern struct FontCell fontObjCellTable[];
@@ -419,16 +419,16 @@ void fontObjDraw(struct FontDrawItem *item)
 
     if (cell->kind == 0) {
         if (item->flags & 0x40) {
-            packet_gs_entry64(GS_TEX0_1, ((unsigned long long)cell->uv << 37) | 0x2000000665423800ULL);
+            packet_gs_entry64(GS_TEX0_1, ((unsigned long long)cell->clut_block << 37) | 0x2000000665423800ULL);
         } else {
-            packet_gs_entry64(GS_TEX0_1, ((unsigned long long)cell->uv << 37) | 0x2000000665323800ULL);
+            packet_gs_entry64(GS_TEX0_1, ((unsigned long long)cell->clut_block << 37) | 0x2000000665323800ULL);
         }
     } else if (item->flags & 0x40) {
-        packet_gs_entry64(GS_TEX0_1, ((unsigned long long)cell->uv << 37) | 0x2000000665423C00ULL);
+        packet_gs_entry64(GS_TEX0_1, ((unsigned long long)cell->clut_block << 37) | 0x2000000665423C00ULL);
     } else if (item->flags & 0x10000) {
-        packet_gs_entry64(GS_TEX0_1, ((unsigned long long)cell->uv << 37) | 0x2000000621343C00ULL);
+        packet_gs_entry64(GS_TEX0_1, ((unsigned long long)cell->clut_block << 37) | 0x2000000621343C00ULL);
     } else {
-        packet_gs_entry64(GS_TEX0_1, ((unsigned long long)cell->uv << 37) | 0x2000000665323C00ULL);
+        packet_gs_entry64(GS_TEX0_1, ((unsigned long long)cell->clut_block << 37) | 0x2000000665323C00ULL);
     }
 
     if (item->flags & 0x8000) {
@@ -1261,6 +1261,7 @@ void cursorBufferUpdateEntry(struct FontCursorEntry *entry)
     }
 }
 
+/* The bg00.xtx entry names a file that is not on the disc. */
 char fontObjTexturePathTable[264] = "yosikawa\\font.xtx\000\000\000\000\000\000\000yosikawa\\bg00.xtx\000\000\000\000\000\000\000yosikawa\\bg01.xtx\000\000\000\000\000\000\000yosikawa\\obj01.xtx\000\000\000\000\000\000yosikawa\\g2_00.xtx\000\000\000\000\000\000yosikawa\\g2_01.xtx\000\000\000\000\000\000yosikawa\\seg01.xtx\000\000\000\000\000\000yosikawa\\battle01.xtx\000\000\000yosikawa\\ctrl_pic.xtx\000\000\000yosikawa\\ctrl01.xtx\000\000\000\000\000yosikawa\\g2_02.xtx";
 
 signed char fontObjTextureSlot[24] = { 0, -1, 2, 1, 3, 4, 3, 5, 3, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };

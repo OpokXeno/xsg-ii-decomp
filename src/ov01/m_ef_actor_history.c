@@ -28,6 +28,8 @@
 #define MEF_HISTORY_STATUS_END_STEP 0x14
 
 /*
+ * Fire type 13: a ribbon spiral that follows the actor history.
+ *
  * Partial view of the pooled effect object that the callbacks of this TU
  * receive. Its three per-frame callbacks sit in the prefix (+0x08, +0x10 and
  * +0x14, stored by the creator MEfCreateActorHistory). The work record starts at +0x20.

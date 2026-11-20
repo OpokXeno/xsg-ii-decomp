@@ -443,9 +443,9 @@ void textEntryRemove(TextEntry *entry)
 }
 
 
-/* Returns the atLastPage byte of a text entry; in page-advance state 1, with the option bit 0x20 of PadData[0].pressed
- * set, it starts the default voice cue 0x01000002 once and counts it in count. */
-u8 textEntryPlayVoice(TextEntry *entry)
+/* Returns the atLastPage byte of a text entry. It is the poll for CIRCLE (PAD_CIRCLE, 0x20) in page-advance state 1: when
+ * CIRCLE is pressed it plays the default confirm sound 0x01000002 once and counts it in count (not a voice). */
+u8 textEntryConfirmPoll(TextEntry *entry)
 {
     if (entry == 0) {
         return 0;

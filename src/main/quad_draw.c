@@ -83,8 +83,9 @@ void quadDrawRepeated(XglPacket *packet, Vector4 *corners, GsQueueContext *batch
 
 void *memset(void *dest, int value, unsigned int count);
 
-/* Scales a point's squared distance from the centre into a fraction, lerps three channels by it and
- * returns 0, 1 or 2 when the channels pass their limits (cleared on 0 and 2). */
+/* Scales a point's squared distance from the centre into a fraction and lerps three angles by it. Returns 1 when
+ * the x angle is inside its limits; returns 0 with the output cleared when it is below minAngle, and 2 with the
+ * output cleared and x set to 90.0f when it is above maxAngle. */
 int pointRadialAngles(Vector4 *out, f32 x, f32 y, const GsQueueContext *params) {
     int centerY = params->u.grid.centerY;
     int radius = params->u.grid.radius;

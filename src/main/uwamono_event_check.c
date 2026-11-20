@@ -303,7 +303,7 @@ void uwamonoSearchFacingHit(int index, int other, int third)
     if ((gameWork.control & 0x20000000) != 0) {
         return;
     }
-    if ((PadData[0].pressed & 0x20) == 0) {
+    if ((PadData[0].pressed & PAD_CIRCLE) == 0) {
         return;
     }
     if (Check_InsideID(index, other, third) == 0) {
@@ -397,7 +397,7 @@ void uwamonoSearchPlainHit(int index, int other, int third) {
     }
 }
 
-void EventCheck_Square_Button_Center_00207D58(int index, int other, int third) {
+void EventCheck_Circle_Button_Center_Unused(int index, int other, int third) {
     struct XenoActor *actor = uwamonoRecords[index].body.actor;
 
     if ((gameWork.control & 0x20000000) == 0) {
@@ -473,7 +473,7 @@ void Check_Locater(int index) {
     if (gameWork.loadStage != 0) {
         return;
     }
-    if ((gameWork.control & CONTROL_TOP_EXIT) != 0) {
+    if ((gameWork.control & CONTROL_MAP_LOADED) != 0) {
         if (gameWork.entryKey != -1) {
             return;
         }
@@ -496,7 +496,7 @@ void Check_Locater(int index) {
         if (centerY + halfHeight < actor->position.y) {
             continue;
         }
-        linkedIndex = uwamonoRecords[candidate].lookLink;
+        linkedIndex = uwamonoRecords[candidate].partnerLink;
         if (Check_InsideID(index, candidate, linkedIndex) == 1) {
             break;
         }
@@ -639,6 +639,8 @@ FloatWord footStepEffectLevelTable[20] = {
     { 0xC47A0000u }
 };
 
+/* Script id of each event kind (uwamonoSendEvent); -1 sends nothing. Kind 8 (uwamono_record.c) is read one entry past
+ * these eight in the original. */
 int uwamonoEventIds[8] = { 0 };
 
 /* Two endpoints of the sector at angle +/- half its width, both one unit out from source. */

@@ -1,7 +1,7 @@
 #include "common.h"
 #include "main/msg_list_slot.h"
 #include "main/msg_window_layout.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/ease_step.h"
 
 
@@ -13,23 +13,23 @@
 #define BODY_PULSE_STEP 3
 
 /*
- * Initialises the slot as a list window (state 2): msgSlotInit clears it and stores the state
- * (main/msg_window_move.c calls msgListSlotSetGeometry for state 2), then starts the highlight pulse at its
+ * Initialises the slot as a list window (slot type 2): msgSlotInit clears it and stores the slot type
+ * (main/msg_window_move.c calls msgListSlotSetGeometry for slot type 2), then starts the highlight pulse at its
  * minimum, rising (BODY_PULSE_START, BODY_PULSE_STEP: MSG_PULSE_MIN and MSG_PULSE_STEP of main/msg_window_update.c).
  */
 void msgListSlotInit(MsgSlot *slot) {
-    msgSlotInit(slot, MSG_SLOT_STATE_WINDOW);
+    msgSlotInit(slot, MSG_SLOT_TYPE_WINDOW);
     slot->u.list.pulse_value = BODY_PULSE_START;
     slot->u.list.pulse_step = BODY_PULSE_STEP;
 }
 
 /*
- * List window (state 2) update: re-applies the slot geometry, raises the width to at least BODY_MIN_WIDTH, then
+ * List window (slot type 2) update: re-applies the slot geometry, raises the width to at least BODY_MIN_WIDTH, then
  * stores in visible_rows the rows msgListRowsBetween fits below y (inset BODY_MARGIN, or BODY_HEADER_INSET when
  * the item list is bound and adds its header band).
  */
 void msgListSlotSetGeometry(MsgSlot *slot, int x, int y, int width, int height) {
-    if (slot->state == MSG_SLOT_STATE_WINDOW) {
+    if (slot->slot_type == MSG_SLOT_TYPE_WINDOW) {
         msgSlotSetGeometry(slot, x, y, width, height);
         if (slot->extent_x < BODY_MIN_WIDTH) {
             slot->extent_x = BODY_MIN_WIDTH;

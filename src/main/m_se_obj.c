@@ -278,5 +278,5 @@ short dataBoxQuantityTable1[0x100] = { 0 };
 short dataBoxQuantityTable2[0x100] = { 0 };
 short dataBoxQuantityTable3[0x100] = { 0 };
 short dataBoxQuantityTable4[0x100] = { 0 };
-int sdvSpecialBuf[0xC00] = { 0 };
+int brokenEnemyBuf[0xC00] = { 0 };
 unsigned char unusedWorkBuffer[0x11140] = { 0 };

@@ -6,7 +6,7 @@
 #include "main/m_math.h"
 #include "ov01/m_ef.h"
 #include "ov01/m_ef_thunder25.h"
-#include "ov01/m_ef_path_debug.h"
+#include "ov01/m_ef_path.h"
 
 #include "quadword.h"
 

@@ -394,8 +394,8 @@ extern unsigned char ysegfAddressTitleText[];
 extern unsigned char ysegfDecoderTitleText[];
 extern void *ysegfNoDataText;
 
-/* Draws the treasure detail page for the record at index of ysegfTreasureTable. */
-void ysegfDrawTreasureDetail(int x, int y, int index, int selected, int alpha)
+/* Draws one segment card (a row of the list, or the header of the detail page) for the record at index of ysegfTreasureTable. */
+void ysegfDrawTreasureCard(int x, int y, int index, int selected, int alpha)
 {
     int frameX;
     int displayNumber;
@@ -509,7 +509,7 @@ void ysegfDrawTreasureList(void)
             if (rawSlide >= 31) {
                 fontObjSetOpacity(alpha);
             }
-            ysegfDrawTreasureDetail(x, y, row, ysegfSelectedIndex, alpha);
+            ysegfDrawTreasureCard(x, y, row, ysegfSelectedIndex, alpha);
             fontObjResetOpacity();
         }
     }
@@ -636,7 +636,7 @@ void ysegfDrawItemPage(void)
 extern const unsigned char ysegfBgmName[];
 
 
-/* Scene loop of the 201_menu screen: init, poll pad, run frames until the exit flag is set. */
+/* Scene loop of the segment address screen (its music is 201_menu): init, poll pad, run frames until the exit flag is set. */
 void ysegfRunMenu(void)
 {
     int exitFrames;
@@ -808,13 +808,13 @@ void ysegfStartFadeIn(void) {
 /* Detail page draw: treasure detail, item explanation, footer, list object. */
 void ysegfDrawDetail(void) {
     fontObjResetAndBuild();
-    ysegfDrawTreasureDetail(0xC, 0xF, ysegfSelectedIndex, ysegfSelectedIndex, 0x80);
+    ysegfDrawTreasureCard(0xC, 0xF, ysegfSelectedIndex, ysegfSelectedIndex, 0x80);
     ysegfDrawItemPage();
     ysegfDrawFooter();
     msgRangeDrawRevealed(&ysegfMenu, 0x18, 0x175);
 }
 
-/* Returns the nearest entry below the given index whose flag (0x1C1 + i) is set, wrapping. */
+/* Returns the previous entry (the next lower index) whose flag (0x1C1 + i) is set, wrapping. */
 int ysegfFindPrevEntry(signed char index) {
     signed char candidate = index;
 
@@ -846,7 +846,7 @@ test1:
     }
 }
 
-/* Returns the nearest entry above the given index whose flag (0x1C1 + i) is set, wrapping. */
+/* Returns the next entry (the next higher index) whose flag (0x1C1 + i) is set, wrapping. */
 int ysegfFindNextEntry(int index)
 {
     int candidate;

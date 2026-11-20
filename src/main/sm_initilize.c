@@ -25,8 +25,9 @@ typedef union SmUnit {
 
 /*
  * A pool, as the global object is laid out: first_cell at 0x00, total_units at
- * 0x04. Bytes 0x08..0x17 are allocation counters filled by smInitMemInfo:
- * allocated_units, total_bytes, allocated_bytes, largest_free_block.
+ * 0x04. Bytes 0x08..0x17 are counters: smInitMemInfo sets them for an empty pool
+ * (allocated_units, total_bytes, allocated_bytes, largest_free_block); nothing in this file updates
+ * allocated_units, allocated_bytes or largest_free_block after that.
  */
 typedef struct SmPool {
   SmCell *first_cell;

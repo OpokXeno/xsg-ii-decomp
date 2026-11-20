@@ -2,7 +2,7 @@
 #define INCLUDE_MAIN_TIMECODE_WINDOW_H
 
 #include "shared.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
 /* Functions of src/main/timecode_window.c that other files call. */
 
@@ -10,15 +10,15 @@
 #define TIMECODE_ANGLE_END 180      /* the cursor and roll angles run 0..180 degrees */
 #define TIMECODE_COUNTER_WRAP 20
 #define TIMECODE_COLOR_INIT 0xA8A8A8
-/* Modes of the stepper (same numbering as the TextEntry kinds of main/debt_box.c). */
-/* Field codes of MsgSlotTimecode.selected: see TIMECODE_PHASE_* in timecode_counter.h. */
+/* Modes of the stepper (same numbering as the TextEntry kinds of main/msg_text_draw.c). */
+/* Field codes of MsgSlotTimecode.selected: see TIMECODE_PHASE_* in msg_slot_core.h. */
 #define TIMECODE_INDEX_MAX 9        /* digits runs 1..9 */
 #define TIMECODE_FIELD_PIXELS 75    /* pixels per field step in modes 1 and 2 */
 #define TIMECODE_WIDTH_BASE 0x54 /* mode 0 box width: base plus TIMECODE_PHASE_PIXELS per digit after the first */
 #define TIMECODE_WIDTH_MIN 0xAA
 #define TIMECODE_WIDTH_TIME 150  /* box width of modes 1 and 2 */
 
-/* Each function takes a timecode slot (MsgSlot of timecode_counter.h, state 3; its body is MsgSlotTimecode). */
+/* Each function takes a timecode slot (MsgSlot of msg_slot_core.h, state 3; its body is MsgSlotTimecode). */
 void timecodeInit(MsgSlot *slot);
 void timecodeSetGeometry(MsgSlot *slot, int first_value, int second_value, int third_value, int fourth_value);
 void timecodeStartOpening(MsgSlot *slot);

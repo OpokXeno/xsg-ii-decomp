@@ -58,17 +58,18 @@ typedef struct SbSlot {
 /* Slots in a thread's slot table (sbSlotFind and sbSlotStore scan 8). */
 #define SB_SLOT_COUNT 8
 
-/* Messages in a thread's queue (sbChainReset: first 0, last 0xF). */
+/* Messages in a thread's queue (sbQueueReset: first 0, last 0xF). */
 #define SB_QUEUE_LAST 0xF
 
-/* A thread's message queue (sbChainGet, 0x114 bytes): a ring of message indices from
- * first to last, the read index head, the write index tail and the count used;
- * sbThreadEnqueue writes messages[tail], sbThreadDequeue reads messages[head]. */
+/* A thread's message queue (sbQueueGet, 0x114 bytes): a ring of message indices from
+ * first to last, the index of the last message read (head), the index of the last message written (tail)
+ * and the count used; sbThreadEnqueue writes the message at the new tail, sbThreadDequeue reads the one at the
+ * new head. */
 typedef struct SbQueue {
     int first;                          /* +0x00 */
     int last;                           /* +0x04 */
-    int head;                           /* +0x08: read index (sbCursorPop) */
-    int tail;                           /* +0x0C: write index (sbCursorPush) */
+    int head;                           /* +0x08: last message read (sbQueuePop advances it first) */
+    int tail;                           /* +0x0C: last message written (sbQueuePush advances it first) */
     int used;                           /* +0x10 */
     SbMessage messages[SB_QUEUE_LAST + 1]; /* +0x14 */
 } SbQueue;
@@ -85,7 +86,7 @@ typedef struct SbQueue {
 typedef struct SbThread {
     int pc;                             /* +0x00 */
     int sp;                             /* +0x04: stack words in use */
-    int frame;                          /* +0x08: stack index of the local frame (3 at start; sbOpCall saves it) */
+    int frame;                          /* +0x08: stack index of the local frame (3 at start; sbOpEnterFrame saves it in the frame header) */
     int jumpKey;                        /* +0x0C: pending slot jump (sbSlotJump) */
     int jumpPosition;                   /* +0x10 */
     struct SbImageHeader *image;        /* +0x14 */

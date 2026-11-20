@@ -3,7 +3,7 @@
 
 /* Functions of src/main/msg_window_bind.c that other files call. */
 
-int msgPurchaseUpdate(void);
+int msgSaleUpdate(void);
 void msgWindowBindTables(void);
 void msgSetMode(int mode);
 void msgSetItemName(int index, char *name);

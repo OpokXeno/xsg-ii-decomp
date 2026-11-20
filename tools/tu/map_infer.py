@@ -65,7 +65,7 @@ MAIN_ZONES = (
          evidence='CRI ADX and Sofdec: mwPly, SFH and ADXRT strings, no calls into game code'),
     dict(start=0x194638, end=0x29f000, cls='game', stem='game', evidence='from InitializeSystem to the last caller of game code'),
     dict(start=0x29f000, end=0x2a1578, cls='sce_sdk', stem='sce_sdk_high', evidence='Sony libraries by earlier study; no calls into game code'),
-    dict(start=0x2a1578, end=0x2b3740, cls='runtime_library', stem='runtime', evidence='C runtime by earlier study; no calls into game code'),
+    dict(start=0x2a1578, end=0x2b3740, cls='runtime_library', stem='c_runtime', evidence='C runtime by earlier study; no calls into game code'),
 )
 # Code built without optimization: every function opens a $fp frame, functions are not aligned
 # to 8, and C compiled with -O0 reproduces its bytes (reports/x2-compiler-calibration.md).
@@ -1522,9 +1522,6 @@ DATA_RANGE_OWNERS = [
      'msgStyleReset (msgRangeDraw)'),
     (0x0069D768, 0x0069D770, 0x00228520, 'tu108.c: D_0069D768 (tu110 ptEnterSplit reads it at index-11), '
      'menuLoadPending and the selection counts'),
-    (0x0069D770, 0x0069D778, 0x0022A560, 'tu110.c: mapActiveObject and talkResult (before tu111 in .sdata)'),
-    (0x0069D778, 0x0069D7B8, 0x0022D1D8, 'tu111.c: "NULL" and its native names'),
-    (0x0069D7B8, 0x0069D7D0, 0x0022DD20, 'tu114.c: the module names of scriptRegisterNatives'),
     (0x0069D7D0, 0x0069D888, 0x0022E9C0, 'yg2path.c: its globals, renderOriginX/Y (read by tu115) and its names'),
     (0x006ABBC0, 0x006ABC18, 0x0022A560, 'tu110.c: selectionFlagTable after its .bss (tu108 < tu110 in .data and .bss, '
      'so tu109 cannot follow tu110)'),
@@ -1539,14 +1536,42 @@ DATA_RANGE_OWNERS = [
     (0x0069B9B8, 0x0069CEE0, 0x001DF120, 'res_get_path.c: the CD file names of up to 8 bytes (.sdata literals of a -G8 '
      'file) of its name tables, emitted in reverse order per table'),
     (0x0069D1F0, 0x0069D218, 0x001EF600, 'tu067.c: the short native names of objxNatives (.sdata literals of the table)'),
-    (0x00689960, 0x006899D0, 0x001F8138, 'tu075.c: the native names of uwamonoNativeTable (.rodata literals of the table)'),
-    (0x00689A60, 0x00689CD0, 0x001F9CC0, 'tu077.c: the native names of ladderNatives and cameraNatives (.rodata literals; '
+    (0x00689960, 0x006899D0, 0x001F8138, 'runtime_uwamono_door.c (uwamonoRegisterNatives): the native names of uwamonoNativeTable (.rodata literals of the table)'),
+    (0x00689A80, 0x00689CD0, 0x001F9CE8, 'runtime_camera.c: the native names of cameraNatives (.rodata literals; '
      'the short ones are already in its .sdata)'),
-    (0x0069D398, 0x0069D3C0, 0x001FC558, 'tu079.c: the short names of mathNativeTable (.sdata literals, reverse order), '
+    (0x0069D398, 0x0069D3C0, 0x001FC558, 'runtime_math.c (mathRegisterNatives): the short names of mathNativeTable (.sdata literals, reverse order), '
      'then its "math"'),
-    (0x00689CD0, 0x00689D60, 0x001FCBD0, 'tu082.c: the long names of menuNativeTable (.rodata literals, reverse order), '
-     '"PartsNames" (read by nothing), then its own .rodata'),
-    (0x0069D3C0, 0x0069D420, 0x001FCBD0, 'tu082.c: the short names of menuNativeTable (.sdata literals), then its own .sdata'),
+    (0x00689CD0, 0x00689D20, 0x001FCBD0, 'runtime_menu.c (menuRegisterNatives): the long names of menuNativeTable '
+     '(.rodata literals, reverse order)'),
+    (0x00689D20, 0x00689D60, 0x001FCC00, 'uwamono_record_init.c: "PartsNames" (read by nothing; a resource name next to '
+     'the object name rows uwamonoInitRecord scans), then the jump table of uwamonoInitRecord'),
+    (0x0069D3C0, 0x0069D3F8, 0x001FCBD0, 'runtime_menu.c: the short names of menuNativeTable (.sdata literals) and its '
+     'module name "menu"'),
+    (0x0069D3F8, 0x0069D420, 0x001FCC00, 'uwamono_record_init.c: the short name literals uwamonoInitRecord compares'),
+    (0x00689870, 0x00689940, 0x001F4F28, 'runtime_enepc.c: the long names of enepcNativeTable (.rodata literals, reverse '
+     'order: "disableDrawFlags" .. "setParams"), right after the long names of runtimeNativeTable (0x689790-0x689870)'),
+    (0x00689A60, 0x00689A80, 0x001F9CC0, 'get_ladder.c: the names of ladderNatives ("setEntrance", "setLadder", .rodata '
+     'literals in reverse order)'),
+    (0x0069D318, 0x0069D328, 0x001F9CC0, 'get_ladder.c: its module name "ladder" and uwamonoLadderState; the camera '
+     'file reads neither'),
+    (0x003E7020, 0x003E7040, 0x001F9CC0, 'get_ladder.c: ladderNatives (4 entries); the 16-aligned cameraRefAngOffset '
+     'at 0x3E7040 opens the .data of runtime_camera.c'),
+    (0x0069D328, 0x0069D398, 0x001F9CE8, 'runtime_camera.c: the short names of cameraNatives (.sdata literals, reverse '
+     'order: "SetPers" .. "reset") and its module name "camera"'),
+    (0x0069D770, 0x0069D7D0, 0x0022D170, 'talk_natives.c: mapActiveObject, talkResult, "NULL", the short names of '
+     'talkNativeTable and segNativeTable (.sdata literals, reverse order) and the module names "talk", "g2path", "seg"'),
+    (0x0069D1A0, 0x0069D1D0, 0x001EDCA0, 'elevator.c: the short names of elvNativeTable ("preload", "preren", "keepoff", '
+     '"elvMove": .sdata literals, reverse order; .data 0x2BD480-0x2BD4A8 points at them and no code of yajima_test.c '
+     'reads them) and its module name "id"'),
+    (0x0068D270, 0x0068D2B0, 0x002733C0, 'fade_ctrl.c: the long names of fadeCommandTable ("Colorfade2", "Colorfade", '
+     '"ColorSet": .rodata literals, reverse order; .data 0x63CEF8-0x63CF18 points at them, no code of cfeEvaluate.c '
+     'reads them, whose last .rodata is the grid table read at 0x68D260) and the module name "Samplefade"'),
+    (0x0069DC88, 0x0069DCA0, 0x002733C0, 'fade_ctrl.c: fadeSuppressFlags and the short names "Fadeout", "Fadein" of '
+     'fadeCommandTable'),
+    (0x0069DC7C, 0x0069DC88, 0x00272F38, 'm_se_obj.c piece, unchanged: the word 0x69DC7C (saveWriteImage and saveReadImage '
+     'of pt_member.c read it through $gp) and "%s" at 0x69DC80 (read by tu150) lie between the .sdata of m_se_obj.c and '
+     'fade_ctrl.c; pt_member.o comes much earlier in link order and cannot define them, and its only other .sdata '
+     '(0x69D770) went to talk_natives.c, so without this entry the scan would hand the range to pt_member.c'),
     (0x0068A000, 0x0068A3F0, 0x00210268, 'tu100.c: the file names of its tables (.rodata literals; tu099 reads none)'),
     (0x003EB210, 0x003EBA58, 0x0021A520, 'tu101.c: also yg2PathFrameImage.. (yg2path) and D_003EB70C (tu109); those '
      'objects follow tu108 in link order, so their .data cannot lie before tu108\'s; tu100 reads D_003EB240, D_003EB268'),
@@ -1767,6 +1792,47 @@ JOINED_CUTS = [
     (0x002723F0, 'm_math: tu193 (MMathVectorInterpolation #34 -> MMathRotateMatrixX #36)'),
     (0x00272928, 'm_math: tu194 (MMathRotateMatrixYXZ #42 -> MMathApplyMatrix #43)'),
     (0x00272A20, 'm_math: tu195 (MMathScaleMatrix #45 -> MMathScaleMatrixS #46)'),
+    # Script native modules (2026-11-20, see MOVED_CUTS 0x1F2DF8): the functions of one native table are one file.
+    (0x001F34A8, 'runtime.c: old tu069 joins. runtimeNativeTable lists functions on both sides (runtimeItem .. '
+     'runtimeGetAnalogR of old tu068, runtimeProgEffect .. runtimeSystem of old tu069), its short names are the '
+     '.sdata literals 0x69D220-0x69D2C8 that sat in old tu068 and its long names the .rodata literals 0x689790.. '
+     'that sat in old tu069'),
+    (0x001F48F8, 'runtime.c: old tu070 joins (mpeg2, adx, adxLoad, adxPlay are entries of runtimeNativeTable; they '
+     'touch no small data, which is why the flag inference had read -G0)'),
+    (0x001F4A20, 'runtime.c: old tu071 joins (runtimeSe .. runtimeBgm are entries of runtimeNativeTable)'),
+    (0x001F5E08, 'runtime_enepc.c: old tu073 joins. enepcNativeTable (.data 0x3E6F58) lists functions on both sides '
+     '(enepcSetParams, enepcSetParamsAll, enepcMotion of old tu072; motionFace .. enepcEnableDrawFlags of old tu073), '
+     'and its short names are the .sdata literals 0x69D2D0-0x69D300 of old tu073'),
+    (0x001F9928, 'get_ladder.c: old tu076 joins. ladderInitTable .. ladderSetEntrance lie between the X1 get_ladder.c '
+     'functions (Fly_to_Ladder .. Ladder_Main) and ladderRegisterNatives; ladderSetLadder and ladderSetEntrance are the '
+     'entries of ladderNatives (.data 0x3E7020), and uwamonoLadderState (.sdata 0x69D320, after the module name '
+     '"ladder") is written by ladderInitTable and the Ladder functions and read by no camera function'),
+    (0x001FC620, 'runtime_menu.c: old tu080 joins. menuNativeTable (.data 0x3E7210) lists ptInit, ptClear (old tu079), '
+     'ptJoin .. ptSet (old tu080) and ptSetPilot .. ptTent (old tu081); its names are the literals 0x689CD0-0x689D20 '
+     'and 0x69D3C0-0x69D3F0, followed by the module name "menu" of menuRegisterNatives'),
+    (0x001FC888, 'runtime_menu.c: old tu081 joins (ptSetPilot, ptGetLeader, umnReturn, ptSetArray, ptTent are entries of '
+     'menuNativeTable; they touch no small data, which is why the flag inference had read -G0)'),
+    (0x0022D4F0, 'talk_natives.c: old tu112 joins. talkNativeTable (.data 0x3EC868) lists talkCheck, talkReset (tail of old '
+     'tu110), talkSmsg, talkMsgDtl (old tu111), talkWinClose .. talkWait (old tu112), menuAddItem .. slotWinOpen (old '
+     'tu113) and slotWinGetResult (old tu114); its names are the .sdata literals 0x69D780-0x69D7B0 and the .rodata '
+     'literals 0x68AD10-0x68ADC0. Old tu112 touches no small data, which is why the flag inference had read -G0'),
+    (0x0022D5A0, 'talk_natives.c: old tu113 joins (segAddrOnMessage, segAddrOnGetFlag = segNativeTable 0x3EC918; setQuestFlag .. '
+     'getCitizenFlag = g2pathNativeTable 0x3EC8F0; menuAddItem .. slotWinOpen = talkNativeTable). The name "addrOn" of '
+     'segNativeTable is the .sdata literal 0x69D7B0 next to the talk names, so the file is -G8; old tu113 compiles '
+     'byte-identical under -G8 (it touches no small data)'),
+    (0x0022DD20, 'talk_natives.c: old tu114 joins (slotWinGetResult, scriptRegisterNatives and the three tables). '
+     'mapObjectSetActive .. talkSetResult (0x22DDF8-0x22DEF8) read mapActiveObject and talkResult (0x69D770, 0x69D774), '
+     'the first .sdata of this object, so the file runs past scriptRegisterNatives to talkSetResult'),
+    (0x001EDA58, 'yajima_test.c: old tu063 joins. yajimaTestRows (.data 0x2BD3E8) points at the labels "EDGE" .. "FONT" '
+     '(.sdata 0x69D150-0x69D198, reverse order, the .sdata literals of the table) and "RESOURCE" (.rodata 0x689480), '
+     'which sit before "SELECT" (0x69D198) and the clock format (0x689490) YajimaTest reads: old tu063 has .sdata, so '
+     'it is -G8 and not -G0 (it compiles byte-identical under -G8), and in X1 YajimaTest is the last function of '
+     'yajima_test.c, after the static tests its table lists'),
+    (0x00273A20, 'fade_ctrl.c: old tu199 (fade_commands.c) joins. fadeCommandTable (.data 0x63CEF8, right after fadeState '
+     '0x63CE98) has its short names "Fadeout"/"Fadein" as .sdata literals at 0x69DC90, right after fadeSuppressFlags '
+     '(0x69DC88) of the fade functions, and its long names at .rodata 0x68D270 before the module name "Samplefade"; '
+     'a file with .sdata literals is -G8, and old tu199 touches no small data (compiles byte-identical under -G8), '
+     'which is why the flag inference had read -G0. The file ends with fadeRegisterCommands'),
     (0x00272D38, 'm_math: tu196 (MMathRotTransPers #51 -> MMathRotTransPersClip #52); the joined .bss/.lit4/.rodata/.sdata pieces are contiguous'),
     (0x00296688, 'xrg_rand_int: XrgScaleVector (X1 xrg_rand_int.c#15) and XrgInnerVector (#23) are one X1 file, same contract, no data'),
     (0x00A84430, 'ov01 unit_cmd: tu011 joins tu010 (unitEnCreate, X1 unit_cmd.c#10 -> unitRemove #14); tu010-tu016 data pieces are contiguous'),
@@ -1818,6 +1884,40 @@ MOVED_CUTS = [
     (0x00AB1890, 0x00AB14E0, 'ov01 MEf: MEfSetStepFlags30, MEfDrawFlagWindow, MEfAdvanceFlagWindow are func_00AB14E0\'s'),
     (0x00AB2040, 0x00AB2750, 'ov01 MEf: MEfDrawWaveEffect, MEfAdvanceHistoryTrail are MEfCreateWaveEffect\'s; the spray file opens at MEfCreateSpray'),
     (0x00AB3668, 0x00AB3CC8, 'ov01 MEf: MEfDrawPathTrail, MEfAdvancePathStep are MEfCreateActorPath\'s; next file opens at func_00AB3CC8'),
+    # Script native modules (2026-11-20, .work/x2-natives-bounds-20261120): a native table `SbNativeMethod xNatives[]`,
+    # the string literals of its names and the functions it lists are one object, and each module file ends with its
+    # `xRegisterNatives` (objxRegisterNatives ends uwamono_objx, cameraRegisterNatives runtime_camera). The inferred
+    # cuts fell one or two functions late or early: each file starts right after the previous module's RegisterNatives.
+    (0x001F2DF8, 0x001F18F0,
+     'runtime.c opens at runtimeSetNumber (0x1F18F0), the first function listed in runtimeNativeTable (.data 0x3E6E40) '
+     'and the one after objxRegisterNatives, which ends uwamono_objx.c; X1 runtime.c is the homolog file'),
+    (0x001F4E20, 0x001F4F28,
+     'runtimeVibration (last entry of runtimeNativeTable) and runtimeRegisterNatives (0x1F4F00) end runtime.c; the '
+     'enepc file opens at enepcSetParams, the first function listed in enepcNativeTable'),
+    (0x001F6D90, 0x001F6F10,
+     'disableDrawFlags (last entry of enepcNativeTable) and enepcRegisterNatives (0x1F6EE8) end the enepc file; the '
+     'uwamono natives open at uwamonoSetDoorAll, the first function listed in uwamonoNativeTable'),
+    (0x001F8138, 0x001F8160,
+     'uwamonoRegisterNatives (0x1F8138) ends the uwamono natives file (uwamonoSetDoorAll .. setCollisionScale are the '
+     'entries of uwamonoNativeTable, .data 0x3E6FF0); the ladder file opens at uwamonoCompassSector, a helper called '
+     'only by On_Ladder'),
+    (0x001F9CC0, 0x001F9CE8,
+     'ladderRegisterNatives (0x1F9CC0) ends the ladder file get_ladder.c; runtime_camera.c opens at cameraCentiToFloat '
+     'and ends with cameraRegisterNatives'),
+    (0x001FC558, 0x001FC580,
+     'mathRegisterNatives (0x1FC558) ends runtime_math.c (mathAtan, mathSin, mathCos, mathRandom are the entries of '
+     'mathNativeTable, .data 0x3E71E8); the menu natives open at ptInit, the first function listed in menuNativeTable'),
+    (0x001FCBD0, 0x001FCBF8,
+     'menuRegisterNatives (0x1FCBD0) ends the menu natives file runtime_menu.c; menuSceneSetupHook and '
+     'uwamonoInitRecord stay a file of their own (uwamono_record_init.c): the 8 zero bytes at 0x689D58 between the jump '
+     'tables of uwamonoInitRecord (0x689D30, 10 words) and uwamonoReleaseRecord (0x689D60) are the 16-byte .rodata '
+     'alignment of a new object (a second jump table of one object would start 8-aligned at 0x689D58), so they do not '
+     'join uwamono_record.c either'),
+    (0x0022D1D8, 0x0022D170,
+     'talkCheck (0x22D170) opens the talk natives file talk_natives.c: it is the first entry of talkNativeTable, and '
+     'talkCheck/talkReset read talkResult (.sdata 0x69D774), which no function of pt_member.c (ptGetMenuMember .. '
+     'ptGetStatusBlock) reads; mapActiveObject and talkResult (0x69D770-0x69D778) lie right before "NULL" and the '
+     'native names of the same object'),
     (0x0020CE30, 0x0020CE40,
      'func_0020CE30 as C earlier in the file turns bnel into bne in func_0020DDC8; defined after the caller '
      'it matches, so the original did not see that definition first (docs/bulk-match.md, user 2026-11-05)'),
@@ -1882,8 +1982,13 @@ X1_FILE_NAMES = [
     ('main', 0x001D7250, 'game_pause_disp.c'),  # main/tu049
     ('main', 0x001D9280, 'game_camera.c'),  # main/tu051
     ('main', 0x001E9740, 'yajima_test.c'),  # main/tu060
-    ('main', 0x001EDA58, 'tya_display_setting.c'),  # main/tu063
-    ('main', 0x001F8138, 'get_ladder.c'),  # main/tu075
+    # YajimaTest and its helpers (old main/tu063) are part of yajima_test.c (JOINED_CUTS 0x1EDA58); the X1 file
+    # tya_display_setting.c (DrawImage, tyaDisplaySetting) is main/tu065, and X1 game_over.c is main/tu059 (2026-11-20)
+    ('main', 0x001EE618, 'tya_display_setting.c'),  # main/tu065
+    ('main', 0x001E8430, 'game_over.c'),  # main/tu059
+    ('main', 0x0020C9A0, 'game_over_095.c'),  # main/tu095: picture helpers of the menu, kept under its old name
+    ('main', 0x001F8160, 'get_ladder.c'),  # main/tu075
+    ('main', 0x001F18F0, 'runtime.c'),  # main/tu068: X1 runtime.c (the runtime natives)
     ('main', 0x00203118, 'enemy_1.c'),  # main/tu085
     ('main', 0x00206D08, 'enemy_system_init.c'),  # main/tu087
     ('ov01', 0x00A83D28, 'data_unit_org_get.c'),  # ov01/tu009
@@ -1919,20 +2024,12 @@ ROLE_FILE_NAMES = [
     ('main', 0x001D74E0, 'game_map_object.c'),  # main/tu050
     ('main', 0x001DEAE8, 'uwamono_light_blend.c'),  # main/tu052
     ('main', 0x001EF600, 'uwamono_objx.c'),  # main/tu067
-    ('main', 0x001F2DF8, 'runtime_item.c'),  # main/tu068
-    ('main', 0x001F34A8, 'runtime_prog_effect.c'),  # main/tu069
-    ('main', 0x001F48F8, 'runtime_adx.c'),  # main/tu070
-    ('main', 0x001F4A20, 'runtime_se.c'),  # main/tu071
-    ('main', 0x001F4E20, 'runtime_enepc.c'),  # main/tu072
-    ('main', 0x001F5E08, 'runtime_motion_face.c'),  # main/tu073
-    ('main', 0x001F6D90, 'runtime_uwamono_door.c'),  # main/tu074
-    ('main', 0x001F9928, 'ladder_table.c'),  # main/tu076
-    ('main', 0x001F9CC0, 'runtime_camera.c'),  # main/tu077
+    ('main', 0x001F4F28, 'runtime_enepc.c'),  # main/tu072
+    ('main', 0x001F6F10, 'runtime_uwamono_door.c'),  # main/tu074
+    ('main', 0x001F9CE8, 'runtime_camera.c'),  # main/tu077
     ('main', 0x001FC2D8, 'runtime_math.c'),  # main/tu078
-    ('main', 0x001FC558, 'runtime_pt_init.c'),  # main/tu079
-    ('main', 0x001FC620, 'runtime_pt_member.c'),  # main/tu080
-    ('main', 0x001FC888, 'runtime_pt_pilot.c'),  # main/tu081
-    ('main', 0x001FCBD0, 'runtime_menu.c'),  # main/tu082
+    ('main', 0x001FC580, 'runtime_menu.c'),  # main/tu079: the natives of the "menu" module (ptInit .. menuRegisterNatives)
+    ('main', 0x001FCBF8, 'uwamono_record_init.c'),  # main/tu082: menuSceneSetupHook, uwamonoInitRecord
     ('main', 0x001FD348, 'uwamono_record.c'),  # main/tu083
     ('main', 0x0020B5C0, 'xgl_cd_arena.c'),  # main/tu092
     ('main', 0x0020BB30, 'gr_screen.c'),  # main/tu093
@@ -1946,10 +2043,7 @@ ROLE_FILE_NAMES = [
     ('main', 0x00228520, 'save_party_init.c'),  # main/tu108
     ('main', 0x00228B88, 'menu_selection.c'),  # main/tu109
     ('main', 0x0022A560, 'pt_member.c'),  # main/tu110
-    ('main', 0x0022D1D8, 'talk_msg.c'),  # main/tu111
-    ('main', 0x0022D4F0, 'talk_window_ctrl.c'),  # main/tu112
-    ('main', 0x0022D5A0, 'quest_flag.c'),  # main/tu113
-    ('main', 0x0022DD20, 'script_register_natives.c'),  # main/tu114
+    ('main', 0x0022D170, 'talk_natives.c'),  # main/tu111: the natives of the "talk", "g2path" and "seg" modules (talkCheck .. talkSetResult)
     ('main', 0x0022DEF8, 'render_sprite.c'),  # main/tu115
     ('main', 0x0022E940, 'quest_flag_set.c'),  # main/tu116
     ('main', 0x00233D50, 'txd_table_entry.c'),  # main/tu121
@@ -1965,7 +2059,7 @@ ROLE_FILE_NAMES = [
     ('main', 0x0023F8E8, 'ti_wat_sim_update.c'),  # main/tu133
     ('main', 0x00247518, 'cfe_entry.c'),  # main/tu138
     ('main', 0x0024E9A0, 'cfe_init.c'),  # main/tu141
-    ('main', 0x0024F3B8, 'cfe_text.c'),  # main/tu143
+    ('main', 0x0024F3B8, 'yg2_text.c'),  # main/tu143
     ('main', 0x0024F4F0, 'cfe_list.c'),  # main/tu144
     ('main', 0x0024FA48, 'cfe_track.c'),  # main/tu145
     ('main', 0x00250FD8, 'cfe_node_pool.c'),  # main/tu146
@@ -1983,7 +2077,6 @@ ROLE_FILE_NAMES = [
     ('main', 0x002669F0, 'srs_file.c'),  # main/tu179
     ('main', 0x00272F38, 'm_se_obj.c'),  # main/tu197
     ('main', 0x002733C0, 'fade_ctrl.c'),  # main/tu198
-    ('main', 0x00273A20, 'fade_commands.c'),  # main/tu199
     ('main', 0x00273D28, 'script_load.c'),  # main/tu200
     ('main', 0x00274368, 'gs_make_tex0.c'),  # main/tu204
     ('main', 0x00274650, 'gs_make_frame.c'),  # main/tu205
@@ -2006,7 +2099,7 @@ ROLE_FILE_NAMES = [
     ('main', 0x0027D438, 'msg_window_scroll.c'),  # main/tu222
     ('main', 0x0027D918, 'timecode_choice.c'),  # main/tu223
     ('main', 0x0027DA20, 'timecode_hms.c'),  # main/tu224
-    ('main', 0x0027DCB0, 'timecode_forward.c'),  # main/tu225
+    ('main', 0x0027DCB0, 'msg_slot_start.c'),  # main/tu225
     ('main', 0x0027E148, 'interp_text.c'),  # main/tu226
     ('main', 0x0027E1B8, 'interp_update.c'),  # main/tu227
     ('main', 0x0027E600, 'talk_scan.c'),  # main/tu228
@@ -2015,7 +2108,7 @@ ROLE_FILE_NAMES = [
     ('main', 0x00280728, 'talk_draw_fade.c'),  # main/tu231
     ('main', 0x00281A90, 'talk_text_box.c'),  # main/tu232
     ('main', 0x00281BE0, 'talk_speaker_name.c'),  # main/tu233
-    ('main', 0x00281CA0, 'debt_box.c'),  # main/tu234
+    ('main', 0x00281CA0, 'msg_text_draw.c'),  # main/tu234
     ('main', 0x00284300, 'msg_list_slot.c'),  # main/tu235
     ('main', 0x002843D0, 'msg_window_layout.c'),  # main/tu236
     ('main', 0x00284590, 'msg_window_center.c'),  # main/tu237
@@ -2023,7 +2116,7 @@ ROLE_FILE_NAMES = [
     ('main', 0x00285048, 'msg_window_size.c'),  # main/tu239
     ('main', 0x002850B8, 'timecode_window.c'),  # main/tu240
     ('main', 0x00285910, 'timecode_frames.c'),  # main/tu241
-    ('main', 0x002860D0, 'timecode_counter.c'),  # main/tu242
+    ('main', 0x002860D0, 'msg_slot_core.c'),  # main/tu242
     ('main', 0x00286ED0, 'ease_step.c'),  # main/tu243
     ('main', 0x00286F50, 'msg_slot_center.c'),  # main/tu244
     ('main', 0x00287120, 'text_tag.c'),  # main/tu245
@@ -2079,7 +2172,7 @@ ROLE_FILE_NAMES = [
     ('ov01', 0x00AA8EA0, 'handle_table.c'),  # ov01/tu069
     ('ov01', 0x00AA9058, 'handle_state.c'),  # ov01/tu070
     ('ov01', 0x00AA90C8, 'snd_play.c'),  # ov01/tu071
-    ('ov01', 0x00AAB010, 'm_ef_path_debug.c'),  # ov01/tu076
+    ('ov01', 0x00AAB010, 'm_ef_path.c'),  # ov01/tu076
     ('ov01', 0x00AADBE0, 'm_ef_sway.c'),  # ov01/tu078
     ('ov01', 0x00AAE748, 'm_ef_missile_trail.c'),  # ov01/tu079
     ('ov01', 0x00AAEEE8, 'm_ef_spiral.c'),  # ov01/tu080

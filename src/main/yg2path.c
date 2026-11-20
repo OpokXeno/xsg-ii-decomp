@@ -12,7 +12,7 @@
 #include "main/xgl_cd.h"
 #include "main/yg2path.h"
 #include "main/cfeFileControl.h"
-#include "main/cfe_text.h"
+#include "main/yg2_text.h"
 #include "main/pad.h"
 #include "main/xgl_camera.h"
 #include "main/xgl_studio.h"
@@ -36,11 +36,11 @@ enum YgPathPage {
 };
 
 /* Quest status: the low nibble of a questFlags byte (YG2PATH_STATUS_MASK); each value selects the message
-   text of the matching YgQuestRecord field: message, messageState2, messageState3. */
+   text of the matching YgQuestRecord field: message, messageSuccess, messageFailed. */
 enum YgPathStatus {
-    YG2PATH_STATUS_MESSAGE = 1,
-    YG2PATH_STATUS_MESSAGE2 = 2,
-    YG2PATH_STATUS_MESSAGE3 = 3
+    YG2PATH_STATUS_IN_PROGRESS = 1,
+    YG2PATH_STATUS_SUCCESS = 2,
+    YG2PATH_STATUS_FAILED = 3
 };
 
 /* Sound ids passed to seVoiceStartDefault: cursor moves, confirm opens a page or record, cancel backs out. */
@@ -70,10 +70,10 @@ typedef struct YgQuestRecord {
     char location[0x11];
     char client[0x11];
     char message[0x101];
-    char messageState2[0x101];
-    char messageState3[0x101];
-    char detailState2[0x401];
-    char detailState3[0x401];
+    char messageSuccess[0x101];
+    char messageFailed[0x101];
+    char reportSuccess[0x401];
+    char reportFailed[0x401];
 } YgQuestRecord;
 
 /* One citizen record (0xD7 bytes per citizen): the text fields of Citizen.txt. */
@@ -96,8 +96,8 @@ typedef struct YgPathRenderState {
 } YgPathRenderState;
 
 /* citizenFlags: one byte per citizen (0x32 of them) and questFlags: one byte
-   per path (0x24 of them); the low nibble of a path byte says whether the
-   path is available. yg2PathModelHandles.actor is the loaded model. */
+   per path (0x24 of them); the low nibble of a path byte is its status
+   (YG2PATH_STATUS_*, 0 leaves the path without a message). yg2PathModelHandles.actor is the loaded model. */
 extern u8 citizenFlags[];
 extern u8 questFlags[];
 /* The path scene's model state: the actor of the loaded citizen model and a random delay stored at load time. */
@@ -181,8 +181,8 @@ void yg2PathInit(void) {
 /* Sets the mode of the loaded yg2path model (yg2PathModelHandles.actor), when one is loaded. */
 void yg2PathSetModelMode(int mode) {
     if (yg2PathModelHandles.actor != 0) {
-        XenoActorSetChannelValue(yg2PathModelHandles.actor, 7.0f);
-        XenoActorEnableChannel(yg2PathModelHandles.actor);
+        XenoActorSetBlendFrames(yg2PathModelHandles.actor, 7.0f);
+        XenoActorSetBlendLocal(yg2PathModelHandles.actor);
         XenoActorSetMode(yg2PathModelHandles.actor, mode);
     }
 }
@@ -198,7 +198,7 @@ char *yg2PathReadTaggedText(char *text, const char *pattern, char *out)
     char *outPos;
     int quoteCh;
 
-    while (*text != (char) *pattern || cfeTextCompareLine(pattern, text) != 0) {
+    while (*text != (char) *pattern || yg2TextCompareLine(pattern, text) != 0) {
         text++;
     }
     while (*text != '"') {
@@ -274,10 +274,10 @@ void yg2PathLoadQuestMessages(void)
     const char *tagLocation = yg2PathLocationTagFormat;
     const char *tagClient = yg2PathClientTagFormat;
     const char *tagMessage = yg2PathMesIpgTagFormat;
-    const char *tagMessageState2 = yg2PathMesScdTagFormat;
-    const char *tagMessageState3 = yg2PathMesFldTagFormat;
-    const char *tagDetailState2 = yg2PathUkunScdTagFormat;
-    const char *tagDetailState3 = yg2PathUkunFldTagFormat;
+    const char *tagMessageSuccess = yg2PathMesScdTagFormat;
+    const char *tagMessageFailed = yg2PathMesFldTagFormat;
+    const char *tagReportSuccess = yg2PathUkunScdTagFormat;
+    const char *tagReportFailed = yg2PathUkunFldTagFormat;
 
     yg2PathQuestMessages = (YgQuestRecord *) xglCdBufferReserve(reserveSize);
     memset(yg2PathQuestMessages, 0, reserveSize);
@@ -291,10 +291,10 @@ void yg2PathLoadQuestMessages(void)
         text = yg2PathReadTaggedText(text, tagLocation, yg2PathQuestMessages[i].location);
         text = yg2PathReadTaggedText(text, tagClient, yg2PathQuestMessages[i].client);
         text = yg2PathReadTaggedText(text, tagMessage, yg2PathQuestMessages[i].message);
-        text = yg2PathReadTaggedText(text, tagMessageState2, yg2PathQuestMessages[i].messageState2);
-        text = yg2PathReadTaggedText(text, tagMessageState3, yg2PathQuestMessages[i].messageState3);
-        text = yg2PathReadTaggedText(text, tagDetailState2, yg2PathQuestMessages[i].detailState2);
-        text = yg2PathReadTaggedText(text, tagDetailState3, yg2PathQuestMessages[i].detailState3);
+        text = yg2PathReadTaggedText(text, tagMessageSuccess, yg2PathQuestMessages[i].messageSuccess);
+        text = yg2PathReadTaggedText(text, tagMessageFailed, yg2PathQuestMessages[i].messageFailed);
+        text = yg2PathReadTaggedText(text, tagReportSuccess, yg2PathQuestMessages[i].reportSuccess);
+        text = yg2PathReadTaggedText(text, tagReportFailed, yg2PathQuestMessages[i].reportFailed);
     }
 }
 
@@ -421,14 +421,14 @@ void yg2PathLoadScene(void) {
     }
     actor = XenoActorAlloc();
     actor->rsrc[XAct_Rsrc_MDL] = modelFiles[0];
-    actor->drawMode = 0;
+    actor->shadowType = 0;
     yg2PathModelHandles.actor = actor;
     actor->rsrc[XAct_Rsrc_TEX] = modelFiles[1];
     actor->rsrc[XAct_Rsrc_XHR] = modelFiles[2];
     actor->rsrc[XAct_Rsrc_XAP] = modelFiles[3];
     XenoActorAllocMatrices(actor);
-    XenoActorSetChannelValue(yg2PathModelHandles.actor, 0.0f);
-    XenoActorEnableChannel(yg2PathModelHandles.actor);
+    XenoActorSetBlendFrames(yg2PathModelHandles.actor, 0.0f);
+    XenoActorSetBlendLocal(yg2PathModelHandles.actor);
     XenoActorSetMode(yg2PathModelHandles.actor, 0);
     ((YgPathActor *) yg2PathModelHandles.actor)->position.vector.x = yg2PathModelStartX[0];
     ((YgPathActor *) yg2PathModelHandles.actor)->position.vector.y = 29.4f;
@@ -639,7 +639,8 @@ void yg2PathDrawPathGrid(int opacity)
     fontObjResetOpacity();
 }
 
-void yg2PathDrawNewMarker(int x, int y, int newFlag) {
+/* Draws the details prompt of a path; the new badge is drawn only when newFlag is set. */
+void yg2PathDrawDetailPrompt(int x, int y, int newFlag) {
     fontObjSetColor(0x80000000ULL);
     if (newFlag != 0) {
         menuDrawCell(0x2D8, x, y, 0x10004);
@@ -742,11 +743,11 @@ void yg2PathDrawMessagePage(int scroll)
 
   questState = questFlags[yg2PathCurrentPath] & YG2PATH_STATUS_MASK;
   switch (questState) {
-  case YG2PATH_STATUS_MESSAGE3:
+  case YG2PATH_STATUS_FAILED:
     menuDrawCell(512, 229, 303, 0);
     menuDrawCell(513, 222, 295, 1);
     break;
-  case YG2PATH_STATUS_MESSAGE2:
+  case YG2PATH_STATUS_SUCCESS:
     menuDrawCell(507, 229, 303, 0);
     menuDrawCell(508, 222, 295, 1);
     break;
@@ -768,19 +769,19 @@ void yg2PathDrawMessagePage(int scroll)
 
   questState = questFlags[yg2PathCurrentPath] & YG2PATH_STATUS_MASK;
   switch (questState) {
-  case YG2PATH_STATUS_MESSAGE:
+  case YG2PATH_STATUS_IN_PROGRESS:
     menuDrawCell(723, 290, 294, 0x10001);
     textDrawSegment(221, 169, yg2PathQuestMessages[yg2PathCurrentPath].message, 0);
     break;
-  case YG2PATH_STATUS_MESSAGE3:
+  case YG2PATH_STATUS_FAILED:
     menuDrawCell(722, 293, 294, 0x10001);
-    textDrawSegment(221, 169, yg2PathQuestMessages[yg2PathCurrentPath].messageState3, 0);
-    yg2PathDrawNewMarker(340, 114, questFlags[yg2PathCurrentPath] & YG2PATH_FLAG_NEW);
+    textDrawSegment(221, 169, yg2PathQuestMessages[yg2PathCurrentPath].messageFailed, 0);
+    yg2PathDrawDetailPrompt(340, 114, questFlags[yg2PathCurrentPath] & YG2PATH_FLAG_NEW);
     break;
-  case YG2PATH_STATUS_MESSAGE2:
+  case YG2PATH_STATUS_SUCCESS:
     menuDrawCell(725, 292, 294, 0x10001);
-    textDrawSegment(221, 169, yg2PathQuestMessages[yg2PathCurrentPath].messageState2, 0);
-    yg2PathDrawNewMarker(340, 114, questFlags[yg2PathCurrentPath] & YG2PATH_FLAG_NEW);
+    textDrawSegment(221, 169, yg2PathQuestMessages[yg2PathCurrentPath].messageSuccess, 0);
+    yg2PathDrawDetailPrompt(340, 114, questFlags[yg2PathCurrentPath] & YG2PATH_FLAG_NEW);
     break;
   }
 
@@ -922,13 +923,13 @@ void yg2PathDrawPathDetail(void)
   menuDrawCell(0x209, 0x18B, 0x189, 1);
   textDrawSegment(0, 0, yg2PathDetailTextHeader, 0);
   questStatus = questFlags[yg2PathDetailIndex];
-  if (questStatus == YG2PATH_STATUS_MESSAGE3)
+  if (questStatus == YG2PATH_STATUS_FAILED)
   {
-    textDrawSegment(0x1E, 0x3C, yg2PathQuestMessages[yg2PathDetailIndex].detailState3, 0);
+    textDrawSegment(0x1E, 0x3C, yg2PathQuestMessages[yg2PathDetailIndex].reportFailed, 0);
   }
-  else if (questStatus == YG2PATH_STATUS_MESSAGE2)
+  else if (questStatus == YG2PATH_STATUS_SUCCESS)
   {
-    textDrawSegment(0x1E, 0x3C, yg2PathQuestMessages[yg2PathDetailIndex].detailState2, 0);
+    textDrawSegment(0x1E, 0x3C, yg2PathQuestMessages[yg2PathDetailIndex].reportSuccess, 0);
   }
   menuDrawKindIcon(0x1BC, 0x189, 0);
   if (yg2PathScroll >= YG2PATH_SCROLL_FULL)
@@ -1169,13 +1170,13 @@ int yg2PathHandlePathInput(void)
 
         flags = questFlags[yg2PathCurrentPath];
         mode = flags & YG2PATH_STATUS_MASK;
-        if (mode == YG2PATH_STATUS_MESSAGE2 || mode == YG2PATH_STATUS_MESSAGE3) {
+        if (mode == YG2PATH_STATUS_SUCCESS || mode == YG2PATH_STATUS_FAILED) {
             questFlags[yg2PathCurrentPath] = flags & ~YG2PATH_FLAG_NEW;
             yg2PathDetailOpen = 1;
             yg2PathDetailIndex = (unsigned char) yg2PathCurrentPath;
             seVoiceStartDefault(YG2PATH_SE_CONFIRM);
             yg2PathScroll = 0;
-            if (mode == YG2PATH_STATUS_MESSAGE3) {
+            if (mode == YG2PATH_STATUS_FAILED) {
                 yg2PathSetModelMode(0);
             } else {
                 yg2PathSetModelMode(3);
@@ -1219,7 +1220,7 @@ int yg2PathHandlePathInput(void)
     return yg2PathMode;
 }
 
-/* Pad input on the citizen page: the square button returns to the path page; the repeat buttons move the
+/* Pad input on the citizen page: the cross button returns to the path page; the repeat buttons move the
    current citizen one step back or forward through the 50 citizens, wrapping at both ends. */
 void yg2PathHandleCitizenInput(void) {
     if ((PadData[0].pressed & PAD_CROSS) != 0) {
@@ -1262,7 +1263,7 @@ typedef struct YgPathModelView {
 /* Sets the camera window to the rectangle (x, y, width, height). On the path detail page with quest state 3
    the model faces pi, otherwise it faces 0. */
 void yg2PathUpdateCamera(int x, int y, int width, int height) {
-    if (yg2PathDetailOpen != 0 && (questFlags[yg2PathCurrentPath] & YG2PATH_STATUS_MASK) == YG2PATH_STATUS_MESSAGE3) {
+    if (yg2PathDetailOpen != 0 && (questFlags[yg2PathCurrentPath] & YG2PATH_STATUS_MASK) == YG2PATH_STATUS_FAILED) {
         ((YgPathModelView *) yg2PathModelHandles.actor)->facingAngle = yg2PathPi;
     } else {
         ((YgPathModelView *) yg2PathModelHandles.actor)->facingAngle = 0.0f;

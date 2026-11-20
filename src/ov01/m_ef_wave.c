@@ -83,10 +83,10 @@ extern const AlignedVector4 mefWaveBottomOffsets[MEF_WAVE_RING_COUNT];  /* per-r
         : "memory")
 
 /*
- * The wave block at object+0x20. The code at +0x54 selects the status word
- * (flags, +0x270) and the mode (+0x272) that the tick callback writes. The
- * same bytes are the tick count (+0x54) and the 26-entry history (+0x270)
- * that MEfAdvanceHistoryTrail, the advance callback of this object, shifts.
+ * The wave block at object+0x20. The word at +0x54 is the frame counter; the
+ * tick callback writes the first two entries of the history (+0x270: flags and
+ * mode). The same bytes are the tick count (+0x54) and the 26-entry history
+ * (+0x270) that MEfAdvanceHistoryTrail, the advance callback of this object, shifts.
  */
 typedef struct WaveBlock {
     unsigned char unmodeled_00[0x04];
@@ -99,7 +99,7 @@ typedef struct WaveBlock {
     unsigned char unmodeled_38[0x40 - 0x38];
     MGsPacket gsState;                /* +0x40: passed to MGsGPInit */
     union {
-        short modeCode;                 /* +0x54: selects the mode below */
+        short frameCounter;                 /* +0x54: the frame counter of the wave */
         u16 ticks;                    /* +0x54: tick count of MEfAdvanceHistoryTrail */
     };
     unsigned char unmodeled_56[0x60 - 0x56];
@@ -119,7 +119,7 @@ typedef struct WaveBlock {
     unsigned char unmodeled_2a4[0x2b0 - 0x2a4];
     Vector4 sineSamples[MEF_WAVE_SAMPLE_COUNT];          /* +0x2b0: one vector per sample */
     Vector4 trailPoints[MEF_WAVE_SAMPLE_COUNT];          /* +0x450 */
-    Vector4 trailSpeeds[MEF_WAVE_SAMPLE_COUNT];          /* +0x5f0 */
+    Vector4 trailAngles[MEF_WAVE_SAMPLE_COUNT];          /* +0x5f0: direction angles of the trail */
 } WaveBlock;
 
 typedef struct WaveHost {
@@ -148,7 +148,7 @@ int MEfCreateWaveEffect(WaveHost *host)
 
     block = &host->block;
     startPoint = &block->startVector;
-    block->modeCode = 0;
+    block->frameCounter = 0;
     MEfGetActorCoord(&block->startVector, block->actor, block->coordinate);
     Vu0SefAddVectorXYZ(startPoint, startPoint, &block->startOffset);
     MEfGetActorCoord(&block->endVector, block->endActor, block->endCoordinate);
@@ -156,7 +156,7 @@ int MEfCreateWaveEffect(WaveHost *host)
     memset(&block->flags, 0, sizeof(block->history));
     memset(block->sineSamples, 0, sizeof(block->sineSamples));
     memset(block->trailPoints, 0, sizeof(block->trailPoints));
-    memset(block->trailSpeeds, 0, sizeof(block->trailSpeeds));
+    memset(block->trailAngles, 0, sizeof(block->trailAngles));
     distance = MMathCalcDist(&block->startVector, &block->endVector);
     block->sampleScale = distance * 0.375f;
     startPoint = &block->startVector;
@@ -234,19 +234,19 @@ void MEfBuildSineSamples(WaveBlock *block)
 void MEfSetWaveMode(WaveHost *host)
 {
     WaveBlock *block;
-    short modeCode;
+    short frameCounter;
 
     block = &host->block;
     if (ov01EffectPauseGet() == 0) {
-        modeCode = block->modeCode;
+        frameCounter = block->frameCounter;
         block->flags = 0;
-        if (modeCode < 0x15) {
+        if (frameCounter < 0x15) {
             block->flags = 1;
             block->mode = 1;
-            if (modeCode == 0) {
+            if (frameCounter == 0) {
                 block->mode = 0x11;
             }
-            if (modeCode == 0x14) {
+            if (frameCounter == 0x14) {
                 block->flags |= 0x20;
             }
         }
@@ -301,9 +301,9 @@ void MEfDrawWaveEffect(WaveHost *host)
             MMathApplyMatrix(&block->trailPoints[sample], &matrix, &block->sineSamples[sample]);
         }
         for (sample = 0; sample < MEF_WAVE_SAMPLE_COUNT - 1; sample++) {
-            MMathCalcAngle(&block->trailSpeeds[sample], &block->trailPoints[sample], &block->trailPoints[sample + 1]);
+            MMathCalcAngle(&block->trailAngles[sample], &block->trailPoints[sample], &block->trailPoints[sample + 1]);
         }
-        QuadwordCopyT0(&block->trailSpeeds[25], &block->trailSpeeds[24]);
+        QuadwordCopyT0(&block->trailAngles[25], &block->trailAngles[24]);
 
         for (ring = 0; ring < MEF_WAVE_RING_COUNT; ring++) {
             qword = OpenTag(&block->gsState,1, MEF_GS_STRIP_PRIM, 4, MEF_GS_RGBAQ_XYZ2_PAIR_REGS);
@@ -318,7 +318,7 @@ void MEfDrawWaveEffect(WaveHost *host)
                     QuadwordCopyT0Dst(&point0, &block->trailPoints[sample]);
                     QuadwordCopyT0Dst(&point1, &block->trailPoints[sample]);
                 } else {
-                    MMathRotateMatrixYXZ(&matrix, 0, &block->trailSpeeds[sample]);
+                    MMathRotateMatrixYXZ(&matrix, 0, &block->trailAngles[sample]);
                     Vu0MMathCopyPointDst(matrix[3], &block->trailPoints[sample]);
                     MMathApplyMatrix(&point0, &matrix, &mefWaveTopOffsets[ring]);
                     MMathApplyMatrix(&point1, &matrix, &mefWaveBottomOffsets[ring]);

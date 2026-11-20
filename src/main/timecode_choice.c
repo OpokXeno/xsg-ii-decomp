@@ -5,7 +5,7 @@
 #include "main/timecode_frames.h"
 #include "main/msg_slot_center.h"
 
-/* Starts the timeline at a frame count (30 per second); returns 0 while the busy bit is set. */
+/* Starts a 4-digit number entry in a timecode slot at a frame count (30 per second); returns 0 while the slot is active. */
 int timecodeStartAtFrame(MsgSlot *state, int frame) {
     if (state->flags & MSG_SLOT_ACTIVE) {
         return 0;

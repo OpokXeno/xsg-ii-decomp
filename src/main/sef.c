@@ -85,7 +85,7 @@ typedef struct SefLocalData {
     Vector4 position;                                /* +0x0b0 */
     Vector4 drift;                                   /* +0x0c0: added to the attached points' positions */
     unsigned char unmodeled_0d0[0xd8 - 0xd0];
-    float scaleTime;                                 /* +0x0d8: the header value of the scale keys */
+    float scaleTime;                                 /* +0x0d8: the header value of the size keys */
     unsigned char unmodeled_0dc[0xe0 - 0xdc];
     Vector4 positionValue;                           /* +0x0e0: constant value of the position keys */
     unsigned char unmodeled_0f0[0xf8 - 0xf0];
@@ -106,24 +106,24 @@ typedef struct SefLocalData {
     unsigned short imageFlags;                       /* +0x1cc: flags of the first image packet */
     short imageKind;                                 /* +0x1ce */
     unsigned char unmodeled_1d0[0x670 - 0x1d0];
-    struct SefTrackKey16 *colorKeys;                 /* +0x670 */
-    struct SefTrackKey16 *directionKeys;             /* +0x674: its direction vector is two keys before */
-    struct SefTrackKey16 *alphaKeys;                 /* +0x678 */
-    struct SefTrackKey *sizeKeys;                    /* +0x67c */
-    void *table680;                                  /* +0x680 */
-    void *table684;                                  /* +0x684 */
-    struct SefTrackKey *scaleKeys;                   /* +0x688 */
-    short lineMode;                                  /* +0x68c */
-    short lineParameter;                             /* +0x68e */
+    struct SefTrackKey16 *scaleKeys;                 /* +0x670 */
+    struct SefTrackKey16 *angleKeys;             /* +0x674: its header shorts sit before the first key */
+    struct SefTrackKey16 *colorKeys;                 /* +0x678 */
+    struct SefTrackKey *alphaKeys;                    /* +0x67c */
+    void *spinKeys;                                  /* +0x680 */
+    void *partKeys;                                  /* +0x684 */
+    struct SefTrackKey *sizeKeys;                   /* +0x688 */
+    short pointLife;                                  /* +0x68c: point life in frames */
+    short speedVariation;                             /* +0x68e: speed variation of the points */
     float gravity;                                   /* +0x690 */
     float height;                                    /* +0x694 */
     float startFrame;                                /* +0x698 */
     int frame;                                       /* +0x69c */
     short pointHandles[SEF_LINE_PARTICLE_COUNT];     /* +0x6a0 */
-    short angle;                                     /* +0x8a0 */
+    short emitFrame;                                     /* +0x8a0: frame of the last emission */
     short cursor;                                    /* +0x8a2 */
     short in_use;                                    /* +0x8a4 */
-    short time;                                      /* +0x8a6 */
+    short pointCount;                                      /* +0x8a6: live point count, returned by sefExecLineLocalData */
     short collision;                                 /* +0x8a8 */
     short count;                                     /* +0x8aa */
     unsigned char link;                              /* +0x8ac */
@@ -176,27 +176,27 @@ typedef union SefScratchWord {
     int i;
 } SefScratchWord;
 
-/* The 2D draw flag word: sefDrawEffect2D reads it before its camera and end-of-3D-mode calls. */
-extern int sefDraw2DFlag[];
+/* The 2D draw flag: the grand total word of effect entry 57 (sefSumEntryCounts), read by sefDrawEffect2D before its camera call. */
+extern int sefEntry57Total[];
 
-int sefGetDraw2DFlag(void) {
-    return sefDraw2DFlag[0];
+int sefGetEntry57Total(void) {
+    return sefEntry57Total[0];
 }
 
-/* The 3D draw flag word: sefDrawEffect3D draws the 3D scene only while it is non-zero. */
-extern int sefDraw3DFlag[];
+/* The 3D draw flag: the screen sprite count word of effect entry 57; sefDrawEffect3D draws only while it is non-zero. */
+extern int sefEntry57ScreenSprites[];
 
-int sefGetDraw3DFlag(void) {
-    return sefDraw3DFlag[0];
+int sefGetEntry57ScreenSprites(void) {
+    return sefEntry57ScreenSprites[0];
 }
 
 void sefSumEntryCounts(void)
 {
     unsigned int *counts;
     unsigned int *base;
-    unsigned int *upper;
-    unsigned int *lower;
-    unsigned int *plain;
+    unsigned int *worldSprites;
+    unsigned int *screenSprites;
+    unsigned int *modelPoints;
     unsigned int *total;
     int entry;
 
@@ -208,15 +208,15 @@ void sefSumEntryCounts(void)
     base = counts;
     counts = counts + 285;
     total = base + 3;
-    lower = base + 1;
-    plain = base + 2;
-    upper = base;
+    screenSprites = base + 1;
+    modelPoints = base + 2;
+    worldSprites = base;
     entry = 0;
     do {
-        total[entry * 5] = upper[entry * 5] + lower[entry * 5] + plain[entry * 5];
-        base[285] += upper[entry * 5];
-        base[286] += lower[entry * 5];
-        base[287] += plain[entry * 5];
+        total[entry * 5] = worldSprites[entry * 5] + screenSprites[entry * 5] + modelPoints[entry * 5];
+        base[285] += worldSprites[entry * 5];
+        base[286] += screenSprites[entry * 5];
+        base[287] += modelPoints[entry * 5];
         base[288] += total[entry * 5];
         entry++;
     } while (entry < 57);
@@ -687,11 +687,11 @@ typedef struct SefTransformState {
     Vector4 origin;                                  /* +0x0b0: the start position at creation */
     Matrix4 cached_matrix;                           /* +0x0c0 */
     Matrix4 part_matrix;                             /* +0x100 */
-    Vector4 rotation_aux;                            /* +0x140 */
-    Vector4 rotation_direction;                      /* +0x150 */
+    Vector4 position;                            /* +0x140 */
+    Vector4 targetPosition;                      /* +0x150 */
     Vector4 scale;                                   /* +0x160 */
-    Vector4 slot_source;                             /* +0x170 */
-    Vector4 slot_offset;                             /* +0x180 */
+    Vector4 pointVelocity;                             /* +0x170 */
+    Vector4 lastDisplacement;                             /* +0x180 */
     unsigned char unmodeled_190[0x1a0 - 0x190];
     Vector4 sizeScale;                               /* +0x1a0 */
     Vector4 colorScale;                              /* +0x1b0 */
@@ -708,7 +708,7 @@ typedef struct SefTransformState {
     Vector4 angles;                                  /* +0x230 */
     unsigned char unmodeled_240[0x24c - 0x240];
     SefWord frame;                                   /* +0x24c */
-    Vector4 tint;                                    /* +0x250 */
+    Vector4 direction;                               /* +0x250: the direction vector */
     unsigned char unmodeled_260[0x268 - 0x260];
     short keyFrame;                                  /* +0x268 */
     short kind;                                      /* +0x26a */
@@ -789,8 +789,8 @@ static inline void sefClearVector(Vector4 *vector)
         : "r"(destination), "r"(source) : "$8", "memory")
 
 /* Computes this frame's displacement of a slot into displacement and
- * state->slot_offset. With a motion curve the Hermite keys give the point and
- * the step, and the result is relative to rotation_aux (returns 0); otherwise
+ * state->lastDisplacement. With a motion curve the Hermite keys give the point and
+ * the step, and the result is relative to position (returns 0); otherwise
  * the position, blended toward the unit z axis, is moved through the matrix the
  * mode selects and scaled by the step (returns 1). */
 int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float blend)
@@ -800,7 +800,7 @@ int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float
     unsigned char *scratchpad = (unsigned char *)0x70000000;
     SefMotionCurve *curve = (SefMotionCurve *) &sefPointMotion;
     SefRequestMatrices *request = (SefRequestMatrices *)sefRequestBuffer;
-    Vector4 *position = &state->tint;
+    Vector4 *position = &state->direction;
     float step;
 
     step = (state->spinSpeed + state->spin) * ((SefScratchWord *)(scratchpad + 0xE4))->f;
@@ -810,9 +810,9 @@ int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float
 
         if (!(state->flags & 2)) {
             state->flags |= 2;
-            vu0SetRotationFromDirection(state->cached_matrix, &state->rotation_direction, &state->origin);
+            vu0SetRotationFromDirection(state->cached_matrix, &state->targetPosition, &state->origin);
         }
-        length = vu0CopyMatrixWithTranslationDist((Vector4 *)0x70000000, state->cached_matrix, &state->origin, &state->rotation_direction);
+        length = vu0CopyMatrixWithTranslationDist((Vector4 *)0x70000000, state->cached_matrix, &state->origin, &state->targetPosition);
         MMathEvalHermiteKeys((Vector4 *)0x70000040, curve->keys, state->time);
         __asm__ __volatile__(
             "lqc2 $vf26, 0(%0)\n\t"
@@ -840,9 +840,9 @@ int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float
             : "r"((Vector4 *)0x70000040));
         point = (Vector4 *)0x70000040;
         __asm__ __volatile__("sqc2 $vf20, 0(%0)" : : "r"(point) : "memory");
-        SefSubVectorXYZ4(displacement, point, &state->rotation_aux);
-        SefCopyVector4(&state->slot_offset, displacement);
-        QuadwordCopyT0(&state->rotation_aux, point);
+        SefSubVectorXYZ4(displacement, point, &state->position);
+        SefCopyVector4(&state->lastDisplacement, displacement);
+        QuadwordCopyT0(&state->position, point);
         return 0;
     }
     if (step == 0.0f) {
@@ -873,10 +873,10 @@ int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float
             int flags = ((SefScratchWord *)0x70000138)->i;
 
             if (flags != 0) {
-                sefNormalizeDifference((Vector4 *)0x70000090, &state->rotation_direction, &state->rotation_aux, flags);
+                sefNormalizeDifference((Vector4 *)0x70000090, &state->targetPosition, &state->position, flags);
             } else {
                 matrix = &state->cached_matrix;
-                if (vu0SetRotationFromDirection(*matrix, &state->rotation_direction, &state->rotation_aux) == 0) {
+                if (vu0SetRotationFromDirection(*matrix, &state->targetPosition, &state->position) == 0) {
                     matrix = 0;
                     sefClearVector((Vector4 *)0x70000090);
                 }
@@ -888,10 +888,10 @@ int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float
                 int flags = ((SefScratchWord *)0x70000138)->i;
 
                 if (flags != 0) {
-                    sefNormalizeDifference((Vector4 *)0x70000090, &linkedPoint->slot_offset, &sefDefaultOffset, flags);
+                    sefNormalizeDifference((Vector4 *)0x70000090, &linkedPoint->lastDisplacement, &sefDefaultOffset, flags);
                 } else {
                     matrix = &state->cached_matrix;
-                    if ((short)sefGetDirMatrix(matrix, &linkedPoint->slot_offset, sefDirectionAxes) != 0) {
+                    if ((short)sefGetDirMatrix(matrix, &linkedPoint->lastDisplacement, sefDirectionAxes) != 0) {
                         matrix = 0;
                         sefClearVector((Vector4 *)0x70000090);
                     }
@@ -904,7 +904,7 @@ int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float
         }
     } else {
         if (((SefScratchWord *)0x70000138)->i != 0) {
-            MMathNormalizeVector2((Vector4 *)0x70000090, &state->slot_offset);
+            MMathNormalizeVector2((Vector4 *)0x70000090, &state->lastDisplacement);
         } else if (mode >= 9) {
             matrix = &state->cached_matrix;
         }
@@ -941,13 +941,13 @@ int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float
             : "f"(step)
             : "$8", "memory");
     }
-    SefStoreVf20(&state->slot_offset);
+    SefStoreVf20(&state->lastDisplacement);
     SefStoreVf20(displacement);
     return 1;
 }
 
 /* Advances a slot's motion by one frame: the step from sefGetSpeed is added
- * to rotation_aux (the position), gravity is taken off slot_source.y (the
+ * to position (the position), gravity is taken off pointVelocity.y (the
  * velocity) once per whole time unit, and on reaching the floor the velocity
  * is scaled by the bounce factor and made to point up. */
 void sefMoveParticle(SefTransformState *state, int mode, int life, float blend)
@@ -966,18 +966,18 @@ void sefMoveParticle(SefTransformState *state, int mode, int life, float blend)
             "vadd.xyz vf1, vf1, vf2\n"
             "sqc2 vf1, 0(%0)\n"
             :
-            : "r"(&state->rotation_aux), "r"(displacement), "m"(*displacement), "m"(displacement->w)
+            : "r"(&state->position), "r"(displacement), "m"(*displacement), "m"(displacement->w)
             : "memory");
     } else {
         Vu0SetOrigin((Vector4 *)0x70000050);
     }
     if (((SefScratchWord *)0x700000F4)->i != 0) {
-        state->rotation_aux.y -= ((SefScratchWord *)0x700000E8)->f;
+        state->position.y -= ((SefScratchWord *)0x700000E8)->f;
     } else {
         int frame = (int)state->time;
 
         if (frame != state->keyFrame) {
-            state->slot_source.y -= ((SefScratchWord *)0x700000E8)->f;
+            state->pointVelocity.y -= ((SefScratchWord *)0x700000E8)->f;
         }
         state->keyFrame = frame;
     }
@@ -986,18 +986,18 @@ void sefMoveParticle(SefTransformState *state, int mode, int life, float blend)
         "lqc2 vf2, 0(%2)\n"
         "vadd.xyz vf1, vf1, vf2\n"
         "sqc2 vf1, 0(%1)\n"
-        : "+m"(state->rotation_aux)
-        : "r"(&state->rotation_aux), "r"(&state->slot_source), "m"(state->slot_source)
+        : "+m"(state->position)
+        : "r"(&state->position), "r"(&state->pointVelocity), "m"(state->pointVelocity)
         : "memory");
-    if (((SefScratchWord *)0x700000EC)->f != 0.0f && state->rotation_aux.y <= ((SefScratchWord *)0x700000F0)->f) {
+    if (((SefScratchWord *)0x700000EC)->f != 0.0f && state->position.y <= ((SefScratchWord *)0x700000F0)->f) {
         if (!(state->flags & 1)) {
-            Vu0SefAddVectorXYZ(&state->slot_source, (Vector4 *)0x70000050, &state->slot_source);
+            Vu0SefAddVectorXYZ(&state->pointVelocity, (Vector4 *)0x70000050, &state->pointVelocity);
         }
         state->flags |= 1;
-        state->rotation_aux.y = ((SefScratchWord *)0x700000F0)->f;
-        Vu0SefScaleVectorXYZNI(&state->slot_source, &state->slot_source, ((SefScratchWord *)0x700000EC)->f);
-        if (state->slot_source.y < 0.0f) {
-            state->slot_source.y = -state->slot_source.y;
+        state->position.y = ((SefScratchWord *)0x700000F0)->f;
+        Vu0SefScaleVectorXYZNI(&state->pointVelocity, &state->pointVelocity, ((SefScratchWord *)0x700000EC)->f);
+        if (state->pointVelocity.y < 0.0f) {
+            state->pointVelocity.y = -state->pointVelocity.y;
         }
     }
 }
@@ -1086,7 +1086,7 @@ void sefCalcLocalMatrix(SefTransformState *state, int kind, int mode, int flags)
         if (mode == 0x2000) {
             Vector4 *scratch = (Vector4 *) 0x70000050;
 
-            __asm__ __volatile__("lq $8, 0(%2)\nsq $8, 0(%1)\n" : "=m"(*scratch) : "r"(scratch), "r"(&state->slot_source), "m"(state->slot_source) : "$8", "memory");
+            __asm__ __volatile__("lq $8, 0(%2)\nsq $8, 0(%1)\n" : "=m"(*scratch) : "r"(scratch), "r"(&state->pointVelocity), "m"(state->pointVelocity) : "$8", "memory");
             if (!(state->flags & 1)) {
                 __asm__ __volatile__(
                     "lqc2 vf1, 0(%1)\n"
@@ -1094,7 +1094,7 @@ void sefCalcLocalMatrix(SefTransformState *state, int kind, int mode, int flags)
                     "vadd.xyz vf1, vf1, vf2\n"
                     "sqc2 vf1, 0(%1)\n"
                     :
-                    : "r"(&state->slot_offset), "r"(scratch)
+                    : "r"(&state->lastDisplacement), "r"(scratch)
                     : "memory");
             }
             sefGetDirMatrix(&state->part_matrix, scratch, sefDirectionAxes);
@@ -1107,7 +1107,7 @@ void sefCalcLocalMatrix(SefTransformState *state, int kind, int mode, int flags)
                 if (flags & 1) {
                     QuadwordCopyMatrixT0(&state->part_matrix, &state->cached_matrix);
                 } else {
-                    sefGetDirMatrix(&state->part_matrix, &sefLinkedPoint->slot_offset, sefDirectionAxes);
+                    sefGetDirMatrix(&state->part_matrix, &sefLinkedPoint->lastDisplacement, sefDirectionAxes);
                 }
             }
         } else if (kind == 0x40 && mode == kind) {
@@ -1119,7 +1119,7 @@ void sefCalcLocalMatrix(SefTransformState *state, int kind, int mode, int flags)
         } else if (kind == 161 && mode == kind) {
             sefCopyRowsUnitW(&state->part_matrix, &request->kind161Matrix);
         } else if (kind > 31) {
-            Vector4 *aux = &state->rotation_aux;
+            Vector4 *aux = &state->position;
 
             if (special == 0) {
                 aux = (Vector4 *) 0x700000A0;
@@ -1127,11 +1127,11 @@ void sefCalcLocalMatrix(SefTransformState *state, int kind, int mode, int flags)
             if (mode == 0x10) {
                 SefTransformState *linkedPoint = sefLinkedPoint;
                 if (linkedPoint != 0) {
-                    aux = &linkedPoint->rotation_aux;
+                    aux = &linkedPoint->position;
                 }
             }
             if (kind == 0x21) {
-                vu0SetRotationFromDirection(state->part_matrix, &state->rotation_direction, aux);
+                vu0SetRotationFromDirection(state->part_matrix, &state->targetPosition, aux);
             } else {
                 vu0SetRotationFromDirection(state->part_matrix, (Vector4 *) 0x700000B0, aux);
             }
@@ -1541,7 +1541,7 @@ int sefExecLineLocalData(SefLocalData *data, int frame)
     int directionBits;
 
     scratch = SEF_LINE_SCRATCH;
-    keys = (SefLineKeySet *) &data->colorKeys;
+    keys = (SefLineKeySet *) &data->scaleKeys;
     count = 0;
     imageOffset = &data->imageOffset;
     scratch->scaleKeys = keys->scaleKeys;
@@ -1710,12 +1710,12 @@ int sefExecLineLocalData(SefLocalData *data, int frame)
         }
         countWeight *= count;
         if (useLower) {
-            sefEntryCounts[scratch->entryId].lower += countWeight;
+            sefEntryCounts[scratch->entryId].screenSprites += countWeight;
         } else {
-            sefEntryCounts[scratch->entryId].upper += countWeight;
+            sefEntryCounts[scratch->entryId].worldSprites += countWeight;
         }
     } else {
-        sefEntryCounts[scratch->entryId].plain += count;
+        sefEntryCounts[scratch->entryId].modelPoints += count;
     }
     requestBytes = sefRequestBuffer;
     if ((*(long *) (requestBytes + 0x308) & 0x880) == 0x80) {
@@ -1844,7 +1844,7 @@ void sefInitLineData(SefLocalData *line, int startTime, int frame, SefLineScript
     sefMemFillWords(line->pointHandles, -1, sizeof(line->pointHandles));
     line->cursor = 0;
     line->link = link;
-    line->time = 0;
+    line->pointCount = 0;
     line->frame = 0;
     line->mode = count == 0;
     if (frame == 0) {
@@ -1853,7 +1853,7 @@ void sefInitLineData(SefLocalData *line, int startTime, int frame, SefLineScript
     line->gravity = gravity;
     line->collision = collision;
     line->height = height;
-    line->angle = -0x800;
+    line->emitFrame = -0x800;
     line->in_use = line->in_use | flags | 0x20;
     line->count = 0;
     if (frame != 0) {
@@ -1886,15 +1886,15 @@ void sefInitLineData(SefLocalData *line, int startTime, int frame, SefLineScript
     if ((short)lineTable[0] == 0x800) {
         sefCurrentRecord->flags |= 0x4000000;
     }
-    line->lineMode = lineTable[0];
-    line->lineParameter = lineTable[2];
-    line->colorKeys = (SefTrackKey16 *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 4);
-    line->directionKeys = (SefTrackKey16 *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 5);
-    line->alphaKeys = (SefTrackKey16 *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 6);
-    line->sizeKeys = (SefTrackKey *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 7);
-    line->table684 = (void *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 8);
-    line->table680 = (void *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 9);
-    line->scaleKeys = (SefTrackKey *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 11);
+    line->pointLife = lineTable[0];
+    line->speedVariation = lineTable[2];
+    line->scaleKeys = (SefTrackKey16 *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 4);
+    line->angleKeys = (SefTrackKey16 *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 5);
+    line->colorKeys = (SefTrackKey16 *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 6);
+    line->alphaKeys = (SefTrackKey *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 7);
+    line->partKeys = (void *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 8);
+    line->spinKeys = (void *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 9);
+    line->sizeKeys = (SefTrackKey *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 11);
     line->images = (SefTrackKey16 *)scGetImmAdrImmIdx2(sefCurrentLoadTag, lineTable, 10);
     __asm__ __volatile__(
         "lqc2 $vf1, 32(%1)\n"
@@ -1907,8 +1907,8 @@ void sefInitLineData(SefLocalData *line, int startTime, int frame, SefLineScript
         :
         : "r" (&line->matrix), "r" (MMathUnitMatrix)
         : "memory");
-    if (line->directionKeys != 0) {
-        origin = (Vector4 *)&line->directionKeys[-2];
+    if (line->angleKeys != 0) {
+        origin = (Vector4 *)&line->angleKeys[-2];
         hasDirection = (*(int *)&origin->z | *(u64 *)origin) != 0;
         if (hasDirection) {
             if (MMathIsVectorEqual(origin, &sefDiagonalPositiveDirection)) {
@@ -1917,28 +1917,28 @@ void sefInitLineData(SefLocalData *line, int startTime, int frame, SefLineScript
             } else if (MMathIsVectorEqual(origin, &sefDiagonalNegativeDirection)) {
                 line->in_use |= 0x40;
                 MMathRotateMatrixZ(&line->matrix, 0, -SEF_QUARTER_PI);
-            } else if ((short)sefGetDirMatrix(&line->matrix, (Vector4 *)&line->directionKeys[-2],
+            } else if ((short)sefGetDirMatrix(&line->matrix, (Vector4 *)&line->angleKeys[-2],
                                                   sefDirectionAxes) != 0) {
                 line->in_use |= 0x40;
             }
         }
-        if (line->directionKeys[1].key == SEF_TRACK_END_KEY) {
+        if (line->angleKeys[1].key == SEF_TRACK_END_KEY) {
             line->constantKeys |= 1;
         }
     }
-    if (line->scaleKeys != 0) {
-        if (line->scaleKeys[1].key == SEF_TRACK_END_KEY) {
+    if (line->sizeKeys != 0) {
+        if (line->sizeKeys[1].key == SEF_TRACK_END_KEY) {
             line->constantKeys |= 0x20;
         }
-        line->scaleTime = line->scaleKeys[-1].value;
-    }
-    if (line->sizeKeys != 0 && line->sizeKeys[1].key == SEF_TRACK_END_KEY) {
-        line->constantKeys |= 0x40;
-    }
-    if (line->colorKeys != 0 && line->colorKeys[1].key == SEF_TRACK_END_KEY) {
-        line->constantKeys |= 0x10;
+        line->scaleTime = line->sizeKeys[-1].value;
     }
     if (line->alphaKeys != 0 && line->alphaKeys[1].key == SEF_TRACK_END_KEY) {
+        line->constantKeys |= 0x40;
+    }
+    if (line->scaleKeys != 0 && line->scaleKeys[1].key == SEF_TRACK_END_KEY) {
+        line->constantKeys |= 0x10;
+    }
+    if (line->colorKeys != 0 && line->colorKeys[1].key == SEF_TRACK_END_KEY) {
         line->constantKeys |= 8;
     }
     keys = line->keys[4];
@@ -2231,8 +2231,8 @@ typedef struct SefLineSpawnData {
     unsigned char unmodeled_1e8[0x670 - 0x1e8];
     union SefKeyRecord *keys[6];                     /* +0x670: scale, rotation, color, texture, -, point */
     union SefKeyRecord *spinKey;                     /* +0x688 */
-    short frameBase;                                 /* +0x68c */
-    short frameJitter;                               /* +0x68e */
+    short pointLife;                                 /* +0x68c */
+    short speedVariation;                               /* +0x68e */
     unsigned char unmodeled_690[SEF_LOCAL_DATA_POINT_HANDLES - 0x690];
     short pointHandles[SEF_LINE_PARTICLE_COUNT];                         /* +0x6a0 */
     unsigned char unmodeled_8a0[0x8a2 - 0x8a0];
@@ -2269,16 +2269,16 @@ int sefCreateParticle(SefLineSpawnData *data, int kind)
         if (particle != 0) {
             sefMemZero(particle, 0x2C0);
             particle->kind = kind;
-            sefGetStartPos(&particle->rotation_aux, (struct SefLaneObject *) data);
+            sefGetStartPos(&particle->position, (struct SefLaneObject *) data);
             rotationKeyMode = 0;
-            sefGetTargetPos(&particle->rotation_direction, (struct SefLaneObject *) data);
+            sefGetTargetPos(&particle->targetPosition, (struct SefLaneObject *) data);
             QuadwordCopyT0(&particle->colorBase, &sefLinkedPositionVector);
             origin = &particle->origin;
-            __asm__ __volatile__("lq $8, 0(%2)\nsq $8, 0(%1)\n" : "=m"(*origin) : "r"(origin), "r"(&particle->rotation_aux) : "$8", "memory");
+            __asm__ __volatile__("lq $8, 0(%2)\nsq $8, 0(%1)\n" : "=m"(*origin) : "r"(origin), "r"(&particle->position) : "$8", "memory");
             particle->speed = 1.0f;
-            particle->frame.f = data->frameBase;
-            if (data->frameJitter != 0) {
-                particle->speed += sefNoiseNext() * (data->frameJitter * sefFrameJitterScale);
+            particle->frame.f = data->pointLife;
+            if (data->speedVariation != 0) {
+                particle->speed += sefNoiseNext() * (data->speedVariation * sefFrameJitterScale);
             }
             sefStepCurveTrack((SefCurveState *) data, (SefCurveTrack *) particle, -1, 1.0f);
             if (keys[1] != 0) {
@@ -2322,10 +2322,10 @@ int sefCreateParticle(SefLineSpawnData *data, int kind)
                     __asm__ __volatile__("sqc2 vf20, 0(%0)" : : "r"(&particle->velocity));
                 }
                 if (data->flags & 2) {
-                    QuadwordCopyT0(&particle->tint, &data->tint);
+                    QuadwordCopyT0(&particle->direction, &data->tint);
                 }
             } else {
-                particle->tint.w = 1.0f;
+                particle->direction.w = 1.0f;
             }
             if (keys[5] != 0 && keys[5][1].header.kind == SEF_TRACK_END_KEY) {
                 SefCopyKeyPoint(&particle->point, keys[5]);
@@ -2501,7 +2501,7 @@ typedef struct SefLineEmitData {
     short *color_keys;                               /* +0x1e0 */
     short *uniform_scale_keys;                       /* +0x1e4 */
     unsigned char unmodeled_1e8[0x684 - 0x1e8];
-    struct SefTrackKey16 *table684;                  /* +0x684 */
+    struct SefTrackKey16 *partKeys;                  /* +0x684 */
     unsigned char unmodeled_688[SEF_LOCAL_DATA_POINT_HANDLES - 0x688];
     short pointHandles[SEF_LINE_PARTICLE_COUNT];                         /* +0x6a0 */
     short emitFrame;                                 /* +0x8a0: frame of the last emission */
@@ -2580,8 +2580,8 @@ int sefExecLineGlobalData(SefLineEmitData *data, int frame)
                     sefLinkedPoint = ((SefWordView *) &sefParentLine)->value >= 0 ? (SefTransformState *) sefPtAllocatorState[pointHandle].data : 0;
                     if (keys->position[-1].key == 0x11) {
                         sefLinkedPartIndex = -1;
-                        if (line->table684 != 0) {
-                            sefLinkedPartIndex = (signed char) line->table684->unmodeled_00f[0];
+                        if (line->partKeys != 0) {
+                            sefLinkedPartIndex = (signed char) line->partKeys->unmodeled_00f[0];
                         }
                     }
                     if (fromPoint) {
@@ -2672,7 +2672,7 @@ typedef struct SefLineStepData {
     Vector4 position;                                /* +0x0b0 */
     Vector4 velocity;                                /* +0x0c0 */
     unsigned char unmodeled_0d0[0xd8 - 0xd0];
-    float scaleTime;                                 /* +0x0d8: the header value of the scale keys */
+    float scaleTime;                                 /* +0x0d8: the header value of the size keys */
     unsigned char unmodeled_0dc[0xe0 - 0xdc];
     Vector4 positionValue;                           /* +0x0e0: constant value of the position keys */
     unsigned char unmodeled_0f0[0xf8 - 0xf0];
@@ -2693,24 +2693,24 @@ typedef struct SefLineStepData {
     unsigned short imageFlags;                       /* +0x1cc: flags of the first image packet */
     short imageKind;                                 /* +0x1ce */
     unsigned char unmodeled_1d0[0x670 - 0x1d0];
-    struct SefTrackKey16 *colorKeys;                        /* +0x670 */
-    struct SefTrackKey16 *directionKeys;                    /* +0x674: its direction vector is two keys before */
-    struct SefTrackKey16 *alphaKeys;                        /* +0x678 */
-    struct SefTrackKey *sizeKeys;                           /* +0x67c */
-    void *table680;                                  /* +0x680 */
-    void *table684;                                  /* +0x684 */
-    struct SefTrackKey *scaleKeys;                          /* +0x688 */
-    short lineMode;                                  /* +0x68c */
-    short lineParameter;                             /* +0x68e */
+    struct SefTrackKey16 *scaleKeys;                        /* +0x670 */
+    struct SefTrackKey16 *angleKeys;                    /* +0x674: its header shorts sit before the first key */
+    struct SefTrackKey16 *colorKeys;                        /* +0x678 */
+    struct SefTrackKey *alphaKeys;                           /* +0x67c */
+    void *spinKeys;                                  /* +0x680 */
+    void *partKeys;                                  /* +0x684 */
+    struct SefTrackKey *sizeKeys;                          /* +0x688 */
+    short pointLife;                                  /* +0x68c: point life in frames */
+    short speedVariation;                             /* +0x68e: speed variation of the points */
     float gravity;                                   /* +0x690 */
     float height;                                    /* +0x694 */
     float startFrame;                                /* +0x698 */
     float frame;                                     /* +0x69c */
     short pointHandles[SEF_LINE_PARTICLE_COUNT];     /* +0x6a0 */
-    short angle;                                     /* +0x8a0 */
+    short emitFrame;                                     /* +0x8a0: frame of the last emission */
     short cursor;                                    /* +0x8a2 */
     short in_use;                                    /* +0x8a4 */
-    short time;                                      /* +0x8a6 */
+    short pointCount;                                      /* +0x8a6: live point count, returned by sefExecLineLocalData */
     short collision;                                 /* +0x8a8 */
     short count;                                     /* +0x8aa */
     unsigned char link;                              /* +0x8ac */
@@ -2730,7 +2730,7 @@ int sefExecLineData(SefLineStepData *data, int slotFrame)
     int value;              /* the direction kind, later the transform's scaled flag: one variable in the original */
     unsigned char mode;
     int velocityMode;
-    short *directionKey;
+    short *angleKey;
     int frameMillis;
     int loopOffset;
     unsigned short parameter;
@@ -2750,7 +2750,7 @@ int sefExecLineData(SefLineStepData *data, int slotFrame)
         }
         data->startFrame = nextStart;
         if (nextStart < 0.0f && frame != 0) {
-            if ((unsigned char) (mode & 1) || (unsigned short) data->time == 0) {
+            if ((unsigned char) (mode & 1) || (unsigned short) data->pointCount == 0) {
                 data->startFrame = 0.0f;
                 return 0;
             }
@@ -2775,10 +2775,10 @@ int sefExecLineData(SefLineStepData *data, int slotFrame)
     sefLerpVector(data->keys[3], (SefVectorTrackCursor *) ((unsigned char *) data + 0x150));
     sefProgressInt((SefKeyframe *) data->keys[5], (SefKeyCursor *) ((unsigned char *) data + 0x170));
     sefProgressInt((SefKeyframe *) data->keys[6], (SefKeyCursor *) ((unsigned char *) data + 0x178));
-    directionKey = (short *) data->directionKeys;
+    angleKey = (short *) data->angleKeys;
     sefPointMotion.sameDirection = 0;
-    value = directionKey[-2];
-    if (value == 161 && directionKey[-9] == 161) {
+    value = angleKey[-2];
+    if (value == 161 && angleKey[-9] == 161) {
         sefPointMotion.sameDirection = 1;
     }
     if (data->startFrame >= 0.0f || started) {
@@ -2810,7 +2810,7 @@ int sefExecLineData(SefLineStepData *data, int slotFrame)
             sefPointMotion.floor += sefGlobalTransform.position.y - sefGlobalTransform.position.y / sefGlobalTransform.scale;
         }
     }
-    data->time = sefExecLineLocalData((SefLocalData *) data, frame);
+    data->pointCount = sefExecLineLocalData((SefLocalData *) data, frame);
     data->frame += sefPointTimeScale;
     frameMillis = (int) (data->frame * 1000.0f);
     if (frameMillis % 10 == 9) {
@@ -2821,11 +2821,11 @@ int sefExecLineData(SefLineStepData *data, int slotFrame)
         if (data->mode & 2) {
             /* +0x17A: the second word of the keyframe cursor sampled from keys[6] above. */
             data->frame = (int) data->frame - ((short *) data)[0x17A / 2] * 2;
-            loopOffset = frame - data->angle;
+            loopOffset = frame - data->emitFrame;
             if (data->frame <= 0.0f) {
                 data->frame = 1.0f;
             }
-            data->angle = (int) data->frame - loopOffset - 1;
+            data->emitFrame = (int) data->frame - loopOffset - 1;
         } else {
             data->frame = 1008.0f;
         }
@@ -3420,7 +3420,7 @@ int sefInitEffectTbl(SefEffectLoadEntry *table, int slotIndex, unsigned short lo
         }
         sefInitEffectData((SefEffectSlot *)slot, slotId, entry->key);
         __builtin_memcpy(&slot->flags, entry->flags, 4);
-        slot->signal = entry->signal;
+        slot->speedPercent = entry->signal;
         if (entry->link >= 0) {
             sefEffectRecords[slotIndex].linkValue = tableStart[entry->link].link;
         }
@@ -3526,8 +3526,8 @@ int sefCreateScheduler2(unsigned short *table, SefRecordRequest *request, const 
     int cameraValue;
     int specialHandle;
     int alterHandle;
-    int soundHandle;
-    int soundStateHandle;
+    int effectSeqHandle;
+    int shadowSeqHandle;
     int index;
     int selected;
     const Vector4 *source;
@@ -3539,8 +3539,8 @@ int sefCreateScheduler2(unsigned short *table, SefRecordRequest *request, const 
     cameraValue = scGetImmAdrImmIdx2(loadTag, table, 1);
     specialHandle = scGetImmAdrImmIdx2(loadTag, table, 2);
     alterHandle = scGetImmAdrImmIdx2(loadTag, table, 3);
-    soundHandle = scGetImmAdrImmIdx2(loadTag, table, 4);
-    soundStateHandle = scGetImmAdrImmIdx2(loadTag, table, -1);
+    effectSeqHandle = scGetImmAdrImmIdx2(loadTag, table, 4);
+    shadowSeqHandle = scGetImmAdrImmIdx2(loadTag, table, -1);
     table += 5;
     if (reuseIndex >= 0) {
         SefEffectRecord *reused;
@@ -3593,11 +3593,11 @@ int sefCreateScheduler2(unsigned short *table, SefRecordRequest *request, const 
     memset(&record->camera, 0, sizeof(record->camera));
     memset(&SEF_RECORD_AT(index)->special, 0, 0x10);
     memset(&SEF_RECORD_AT(index)->alter, 0, 8);
-    memset(&SEF_RECORD_AT(index)->sound, 0, 8);
-    memset(&SEF_RECORD_AT(index)->soundState, 0, 8);
+    memset(&SEF_RECORD_AT(index)->effectSeq, 0, 8);
+    memset(&SEF_RECORD_AT(index)->shadowSeq, 0, 8);
     memset(&SEF_RECORD_AT(index)->wind, 0, 8);
-    sefBindHandle(&SEF_RECORD_AT(index)->sound, soundHandle, 7);
-    sefBindHandle(&SEF_RECORD_AT(index)->soundState, soundStateHandle, 7);
+    sefBindHandle(&SEF_RECORD_AT(index)->effectSeq, effectSeqHandle, 7);
+    sefBindHandle(&SEF_RECORD_AT(index)->shadowSeq, shadowSeqHandle, 7);
     sefBindHandle(&SEF_RECORD_AT(index)->alter, alterHandle, 28);
     sefBindHandle(&SEF_RECORD_AT(index)->special.sequence, specialHandle, 2);
     sefBindHandle(&SEF_RECORD_AT(index)->wind, windHandle, 11);
@@ -3608,7 +3608,7 @@ int sefCreateScheduler2(unsigned short *table, SefRecordRequest *request, const 
     created = SEF_RECORD_AT(index);
     sefSetUnitVector(&created->scale);
     created->gate = 1;
-    created->fieldA60 = 8.0f;
+    created->cullRadius = 8.0f;
     if (sefInitEffectTbl((SefEffectLoadEntry *) table, index, request->block.spawn.loadFlags) == 0) {
         ((SefEffectRecordWords *) SEF_RECORD_AT(index))->record.flags &= ~SEF_RECORD_SLOTS_LOADED;
     }
@@ -3877,8 +3877,8 @@ void sefMatchEffectEntries(SefEffectRecord *records)
 
                 if (entry->state != 0 && key == entry->key) {
                     matched += entry->flags & 1;
-                    if (entry->signal >= 0) {
-                        SEF_SIGNAL_SCALE = (float)entry->signal * scale;
+                    if (entry->speedPercent >= 0) {
+                        SEF_SIGNAL_SCALE = (float)entry->speedPercent * scale;
                     }
                 }
             }
@@ -4055,8 +4055,8 @@ int sefExecScheduler(SefEffectRecord *only)
                 }
             }
             if (!running) {
-                sdvExecEffectSeq(&sefEffectRecords[i].sound, sefEffectRecords[i].entryId);
-                sdvExecShadowSeq(&sefEffectRecords[i].soundState);
+                sdvExecEffectSeq(&sefEffectRecords[i].effectSeq, sefEffectRecords[i].entryId);
+                sdvExecShadowSeq(&sefEffectRecords[i].shadowSeq);
                 tiWindUpdateKeyframes(&sefEffectRecords[i].wind, record->ownerKey, record->value);
             }
             sdvExecSpecial(&sefEffectRecords[i].special, sefEffectRecords[i].loadTag);
@@ -4516,8 +4516,9 @@ typedef struct SefGroupEntry {
 SefGroupEntry sefGroupTable[SEF_GROUP_ENTRY_COUNT] = { 0 };
 static SefSlotTable sefSlotTable;
 
-/* Clears the four work tables (sefSlotTable, sefRequestBuffer, sefGroupTable, sefEntryCounts), then runs the init chain of the
- * CD reader, the ambient, and the effect subsystems. */
+/* Starts the pool allocator, the CD reader, the scheduler and the line records, clears the four work tables (sefSlotTable,
+ * sefRequestBuffer, sefGroupTable, sefEntryCounts), then runs the init chain of the ambient, resource, handle and
+ * effect slot subsystems. */
 void sefInitWorkTables(void) {
     sevInitPtAllocator();
     srsInitCdRead();
@@ -4623,19 +4624,19 @@ void sefInitEffectCf(void) {
 }
 
 /* Slot table sefSlotTable: the effect number of each of eight wait slots, with its loadPending flag.
- * This claims a slot for the key among the first three entries when the key is absent, sets its flag, then calls
- * sefSetupEffect. sefSetupEnemy claims among entries 3..7 the same way, for a positive key only. */
-void sefSetupPlayer(int key) {
+ * This claims a slot for the effect number among the first three entries when it is absent, sets its flag, then calls
+ * sefSetupEffect. sefSetupEnemy claims among entries 3..7 the same way, for a positive effect number only. */
+void sefSetupPlayer(int effectNo) {
     int i;
 
     for (i = 0; i < 3; i++) {
-        if (sefSlotTable.effectNo[i] == key) {
+        if (sefSlotTable.effectNo[i] == effectNo) {
             return;
         }
     }
     for (i = 0; i < 3; i++) {
         if (sefSlotTable.effectNo[i] == 0) {
-            sefSlotTable.effectNo[i] = key;
+            sefSlotTable.effectNo[i] = effectNo;
             sefSlotTable.loadPending[i] = 1;
             sefSetupEffect();
             return;
@@ -4922,7 +4923,7 @@ Matrix4 sefCameraMatrix[1] = { 0 };
 void sefDrawEffect2D(void) {
     if (sefInitialized != 0) {
         if (!(gameWork.control & SEF_DRAW_FLAG_PENDING)) {
-            if (sefGetDraw2DFlag() != 0 || sefGetActiveCount() != 0) {
+            if (sefGetEntry57Total() != 0 || sefGetActiveCount() != 0) {
                 sefCalcInvView(sefCameraMatrix);
                 svDrawScene2D();
             }
@@ -4958,13 +4959,13 @@ void sefDrawEffect(void) {
 }
 
 
-/* Draw pass guarded like sefDrawEffect2D (initialized flag sefInitialized, pending bit 0x04000000). When
- * sefGetDraw3DFlag reports yes, enters 3D mode with svDrawScene3D (sets _draw3D = 1, then draws). */
+/* Sprite draw pass guarded like sefDrawEffect2D (initialized flag sefInitialized, pending bit 0x04000000). When
+ * sefGetEntry57ScreenSprites reports yes, svDrawScene3D draws with _draw3D = 1 (SV_RENDER_2D_SPRITE). */
 void sefDrawEffect3D(void)
 {
     if (sefInitialized != 0) {
         if ((gameWork.control & SEF_DRAW_FLAG_PENDING) == 0) {
-            if (sefGetDraw3DFlag() != 0) {
+            if (sefGetEntry57ScreenSprites() != 0) {
                 svDrawScene3D();
             }
         }
@@ -5084,8 +5085,8 @@ void sefCreateEffect(void *object) {
     sefStartEffect(object, 0);
 }
 
-/* Starts the effect with the given value. */
-void sefStartEffectWithValue(void *object, const Vector4 *position) {
+/* Starts the effect at the given position. */
+void sefStartEffectAtPosition(void *object, const Vector4 *position) {
     sefStartEffect(object, position);
 }
 
@@ -6223,7 +6224,7 @@ void sefTransformPartPoint(SefTransformState *part, Vector4 *out, int mode, cons
         "lqc2 vf28, 32(%0)\n"
         "lqc2 vf29, 0(%1)\n"
         :
-        : "r"(part), "r"(&part->rotation_aux)
+        : "r"(part), "r"(&part->position)
         : "memory");
     if (mode != 0) {
         __asm__ __volatile__(
@@ -6418,7 +6419,7 @@ Matrix4 *sefGetPoint(Vector4 *dest, const Vector4 *source, int kind)
         }
     } else if (kind == 16) {
         if (sefLinkedPoint != 0) {
-            sefCopyQuadword(dest, &sefLinkedPoint->rotation_aux);
+            sefCopyQuadword(dest, &sefLinkedPoint->position);
         }
     } else if (kind == 17) {
         if (sefLinkedPoint != 0) {
@@ -7571,13 +7572,13 @@ void sefPauseControl(int selector) {
  * Returns 1 when a record among the first sefEffectRecordCount has its in_use word set
  * and its owner equal to owner, otherwise 0.
  */
-int sefOwnerInUse(int owner) {
+int sefOwnerInUse(int effectKey) {
     int recordIndex;
     SefEffectRecord *records;
 
     records = sefGetScheduler();
     for (recordIndex = 0; recordIndex < sefEffectRecordCount; recordIndex += 1) {
-        if (records[recordIndex].inUse != 0 && records[recordIndex].ownerKey == owner) {
+        if (records[recordIndex].inUse != 0 && records[recordIndex].ownerKey == effectKey) {
             return 1;
         }
     }
@@ -7611,7 +7612,7 @@ int sefOwnerGroupInUse(int owner, unsigned short value) {
     return 0;
 }
 
-int sefCountOwnerGroupRecords(int owner, unsigned short value) {
+int sefCountOwnerGroupRecords(int effectKey, unsigned short value) {
     SefEffectRecord *cursor;
     int recordIndex;
     int count;
@@ -7619,7 +7620,7 @@ int sefCountOwnerGroupRecords(int owner, unsigned short value) {
     count = 0;
     cursor = sefGetScheduler();
     for (recordIndex = 0; recordIndex < sefEffectRecordCount; recordIndex += 1) {
-        if (cursor->inUse != 0 && cursor->ownerKey == owner && cursor->value == value) {
+        if (cursor->inUse != 0 && cursor->ownerKey == effectKey && cursor->value == value) {
             if ((cursor->flags & SEF_RECORD_EXCLUDE_FLAG) == 0) {
                 count += 1;
             }
@@ -7629,7 +7630,7 @@ int sefCountOwnerGroupRecords(int owner, unsigned short value) {
     return count;
 }
 
-void sefClearOwnerGroupFlags(int owner, unsigned short value, int mask) {
+void sefClearOwnerGroupFlags(int effectKey, unsigned short value, int mask) {
     SefEffectRecord *cursor;
     int slot;
     int scanLimit;
@@ -7644,7 +7645,7 @@ void sefClearOwnerGroupFlags(int owner, unsigned short value, int mask) {
         keepBit = SEF_RECORD_EXCLUDE_FLAG;
         recordCount = scanLimit;
         do {
-            if (cursor->inUse != 0 && cursor->ownerKey == owner && cursor->value == value) {
+            if (cursor->inUse != 0 && cursor->ownerKey == effectKey && cursor->value == value) {
                 flags = cursor->flags;
                 if ((flags & keepBit) == 0) {
                     cursor->flags = flags & ~mask;
@@ -7657,7 +7658,7 @@ void sefClearOwnerGroupFlags(int owner, unsigned short value, int mask) {
     }
 }
 
-int sefIsFinishEffect(int owner) {
+int sefIsFinishEffect(int effectKey) {
     SefEffectRecord *table;
     SefEffectRecord *cursor;
     int slot;
@@ -7666,7 +7667,7 @@ int sefIsFinishEffect(int owner) {
 
     table = sefGetScheduler();
     count = 0;
-    if (owner == 0) {
+    if (effectKey == 0) {
         return 1;
     }
     if (sefEffectRecordCount > 0) {
@@ -7676,7 +7677,7 @@ int sefIsFinishEffect(int owner) {
                 flags = cursor->flags;
                 if ((flags & 0x40) == 0) {
                     if ((flags & 0x02000000) != 0) {
-                        if (owner == 0 || cursor->ownerKey == owner) {
+                        if (effectKey == 0 || cursor->ownerKey == effectKey) {
                             count += 1;
                         }
                     }
@@ -7688,7 +7689,7 @@ int sefIsFinishEffect(int owner) {
     return count == 0;
 }
 
-int sefIsFinishEffect2(int owner) {
+int sefIsFinishEffect2(int effectKey) {
     SefEffectRecord *table;
     SefEffectRecord *cursor;
     int slot;
@@ -7696,13 +7697,13 @@ int sefIsFinishEffect2(int owner) {
 
     table = sefGetScheduler();
     count = 0;
-    if (owner <= 0) {
+    if (effectKey <= 0) {
         return 1;
     }
     if (sefEffectRecordCount > 0) {
         cursor = table;
         for (slot = 0; slot < sefEffectRecordCount; slot += 1) {
-            if (cursor->inUse != 0 && cursor->ownerKey == owner) {
+            if (cursor->inUse != 0 && cursor->ownerKey == effectKey) {
                 count += 1;
             }
             cursor += 1;
@@ -7716,27 +7717,27 @@ int sefIsFinishEffect2(int owner) {
  * and whose owner matches owner (every record when owner is negative), clears
  * sefEffectRecordHead when owner is negative, then calls sefReleaseByKey with owner.
  */
-void sefKillEffect(int owner) {
+void sefKillEffect(int effectKey) {
     int slot;
     SefEffectRecord *table;
     SefEffectRecord *cursor;
 
     slot = 0;
     table = sefGetScheduler();
-    if (owner < 0) {
+    if (effectKey < 0) {
         sefEffectRecordHead = 0;
     }
     if (sefEffectRecordCount > 0) {
         cursor = table;
         do {
-            if (cursor->inUse != 0 && (owner < 0 || cursor->ownerKey == owner)) {
+            if (cursor->inUse != 0 && (effectKey < 0 || cursor->ownerKey == effectKey)) {
                 sefFreeScheduler(slot);
             }
             slot += 1;
             cursor += 1;
         } while (slot < sefEffectRecordCount);
     }
-    sefReleaseByKey(owner);
+    sefReleaseByKey(effectKey);
 }
 
 int sefCountMarkedEntries(SefEffectRecord *record) {
@@ -7798,7 +7799,7 @@ void sefApplyRecordMode(void *owner, int ownerKey, int mode)
     }
 }
 
-void sefSetOwnerFlags(int owner, int flags) {
+void sefSetOwnerFlags(int effectKey, int flags) {
     SefEffectRecord *records;
     SefEffectRecord *cursor;
     int count;
@@ -7813,7 +7814,7 @@ void sefSetOwnerFlags(int owner, int flags) {
         savedCount = count;
         do {
             if (cursor->inUse != 0) {
-                if (owner < 0 || cursor->ownerKey == owner) {
+                if (effectKey < 0 || cursor->ownerKey == effectKey) {
                     cursor->flags |= flags;
                     count = savedCount;
                 }
@@ -7822,12 +7823,12 @@ void sefSetOwnerFlags(int owner, int flags) {
             cursor++;
         } while (i < count);
     }
-    sefSetSlotFlags(owner, flags);
+    sefSetSlotFlags(effectKey, flags);
 }
 
 /* Clears the mask bits of every in-use record whose owner matches (any record when owner is negative), then calls
  * sefClearSlotFlags with the same owner and mask. */
-void sefClearOwnerFlags(int owner, int mask)
+void sefClearOwnerFlags(int effectKey, int mask)
 {
     SefEffectRecord *table;
     SefEffectRecord *record;
@@ -7840,7 +7841,7 @@ void sefClearOwnerFlags(int owner, int mask)
     if (count > 0) {
         record = table;
         do {
-            if (record->inUse != 0 && (owner < 0 || record->ownerKey == owner)) {
+            if (record->inUse != 0 && (effectKey < 0 || record->ownerKey == effectKey)) {
                 record->flags &= ~mask;
                 count = sefEffectRecordCount;
             }
@@ -7848,7 +7849,7 @@ void sefClearOwnerFlags(int owner, int mask)
             record += 1;
         } while (i < count);
     }
-    sefClearSlotFlags(owner, mask);
+    sefClearSlotFlags(effectKey, mask);
 }
 
 typedef struct GateChunk112 {
@@ -8023,9 +8024,9 @@ const char sefSclLogLabel[8] = "scl";
 const char sefSizeLogLabel[8] = "size";
 
 /* Changes the current owner: releases every effect record, then stores owner in sefCurrentOwner. */
-void sefSetCurrentOwner(int owner) {
+void sefSetCurrentOwner(int effectKey) {
     sefKillEffect(-1);
-    sefCurrentOwner = owner;
+    sefCurrentOwner = effectKey;
 }
 
 /* Returns the current owner set by sefSetCurrentOwner. */

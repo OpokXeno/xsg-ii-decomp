@@ -258,6 +258,8 @@ extern void SyncDCache(void *start, void *end);
 int xglRenderVSyncCallback(int unused);
 extern void sceGsPutDrawEnv(GsDrawEnv *env);
 /* xgl_render's .sdata, 0x69E084-0x69E0AC, in address order. */
+/* Read by xglRenderSyncMove: 1 selects the wait mode without vsync pacing (mwPlyExecServer, then one path sync). pxy_profile.c
+   also sets it, to change the profiler tick scale. */
 signed char pxyTickScaleDouble = 0;
 int xglRenderGlobalFadeColor = 0; /* packed fade colour 0xAABBGGRR, written by xglRenderGlobalFadeSet */
 int xglRenderCpUDispFlag = 0;     /* 0 by xglRenderCpUDispOff, 1 by xglRenderCpUDispOn */
@@ -423,7 +425,7 @@ void xglRenderDrawFlipPk(XglPacket *packet)
     scratch[count++].reg = 0x3F;
     scratch[count].data = (u64) ((sRender.draw_buffer_base << 5) | 0x80000)
         | ((u64) sRender.reso.frame_psm << 24)
-        | ((u64) (sRender.vram.flip_base << 5) << 32)
+        | ((u64) (sRender.vram.work_buffer_base << 5) << 32)
         | ((u64) sRender.reso.frame_psm << 56)
         | 0x0008000000000000ULL;
     scratch[count++].reg = 0x50;
@@ -554,7 +556,7 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.gif_tag.flg = 0;
     DrawEnv.value.gif_tag.nreg = 1;
     DrawEnv.value.gif_registers.regs0 = GIF_REG_AD;
-    DrawEnv.value.frame1.fbp = sRender.vram.height;
+    DrawEnv.value.frame1.fbp = sRender.vram.draw_page;
     DrawEnv.value.frame1.fbw = sRender.reso.frame_width / 64;
     DrawEnv.value.frame1.psm = sRender.reso.frame_psm;
     DrawEnv.value.frame1.fbmsk = 0;
@@ -580,7 +582,7 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.test1.zte = 1;
     DrawEnv.value.test1.ztst = GS_ZTST_GEQUAL;
     DrawEnv.value.test1_address = SCE_GS_TEST_1;
-    DrawEnv.value.frame2.fbp = sRender.vram.height;
+    DrawEnv.value.frame2.fbp = sRender.vram.draw_page;
     DrawEnv.value.frame2.fbw = sRender.reso.frame_width / 64;
     DrawEnv.value.frame2.psm = sRender.reso.frame_psm;
     DrawEnv.value.frame2.fbmsk = 0;
@@ -637,8 +639,8 @@ static void xglRenderDrawEnvInit(void)
 
 void xglRenderDrawEnvMove(void)
 {
-    DrawEnv.value.frame1.fbp = sRender.vram.height;
-    DrawEnv.value.frame2.fbp = sRender.vram.height;
+    DrawEnv.value.frame1.fbp = sRender.vram.draw_page;
+    DrawEnv.value.frame2.fbp = sRender.vram.draw_page;
     DrawEnv.value.zbuf1.zbp = sRender.vram.depth_base;
     DrawEnv.value.zbuf2.zbp = sRender.vram.depth_base;
     SyncDCache(&DrawEnv.value, &DrawEnv.value + 1);
@@ -752,8 +754,8 @@ void xglRenderSetReso(int resolution)
 {
     sRender.reso = asDispReso[resolution];
     sRender.vram = asVramBase[resolution];
-    sRender.display_buffer_base = sRender.vram.width;
-    sRender.draw_buffer_base = sRender.vram.height;
+    sRender.display_buffer_base = sRender.vram.display_page;
+    sRender.draw_buffer_base = sRender.vram.draw_page;
     xglRenderDrawEnvInit();
     xglRenderDispEnvInit();
     xglRenderClearEnvInit();
@@ -801,7 +803,7 @@ void xglRenderClearSkipOff(void) {
 
 extern int sceGsResetGraph(int, int, int, int);
 extern int xglRenderSkippedFrameCount[];
-extern unsigned char pxyGlyphDigitTable[252];
+extern unsigned char pxyDigitStrokeTable[252];
 void sceGsResetPath(void);
 void sceGsSyncV(int);
 
@@ -826,7 +828,7 @@ void xglRenderInit(void)
     xglRenderPathBusyFlag[0] = 0;
     xglRenderVSyncTickCount[0] = 0;
     xglRenderSkippedFrameCount[0] = 0;
-    pxyGlyphDigitTable[0] = 0;
+    pxyDigitStrokeTable[0] = 0; /* the skip-this-frame flag */
     for (i = 0; i < 17; i++) {
         sRender.final_packet_callback[i] = 0;
     }
@@ -906,7 +908,7 @@ void xglRenderGlobalFade(void)
     alpha = (int) (((unsigned int) xglRenderGlobalFadeColor >> 24) & 0xff);
     packet = xglPacketGetCurrent();
     if (xglRenderGlobalFadeCallback[0] != 0) {
-        ((XglRenderFadeCallback) xglRenderGlobalFadeCallback[0])(packet);
+        ((XglRenderPacketCallback) xglRenderGlobalFadeCallback[0])(packet);
     }
     if (alpha != 0 && xglRenderGlobalFadeColor != 0) {
         GsAdPair *scratch;
@@ -987,23 +989,23 @@ void xglRenderMove(void)
     extern int LoopCount;
 
     xglRenderFrameBeginFlushEIrq();
-    if (pxyGlyphDigitTable[0] == 0) {
+    if (pxyDigitStrokeTable[0] == 0) {
         sefDrawEffect();
     }
-    if (pxyGlyphDigitTable[0] == 0) {
+    if (pxyDigitStrokeTable[0] == 0) {
         pxyFlush();
     } else {
         nmlModelFlushClear();
     }
     gifStateUpdateDrawHook();
-    if (pxyGlyphDigitTable[0] == 0) {
+    if (pxyDigitStrokeTable[0] == 0) {
         xglRenderFinalPacket();
     }
     xglFontFlush();
-    if (pxyGlyphDigitTable[0] == 0) {
+    if (pxyDigitStrokeTable[0] == 0) {
         xglRenderGlobalFade();
     }
-    if (ScanLineInterpolate == 2 && pxyGlyphDigitTable[0] == 0) {
+    if (ScanLineInterpolate == 2 && pxyDigitStrokeTable[0] == 0) {
         xglPacketInterpolate();
     }
     xglRenderFrameEndFlushEIrq();
@@ -1035,6 +1037,7 @@ void xglRenderAndMovieInit(void) {
 
 void xglRenderMove(void);
 
+/* One frame step of the main loop (xgl_thread.c, control_entry.c): the render move, the sound settings and the pad read. */
 void xglRenderFrame(void) {
     xglRenderMove();
     soundApplySettings();
@@ -1090,7 +1093,9 @@ int xglRenderVSyncTickCount[] = { 0 };
 
 int xglRenderSkippedFrameCount[] = { 0 };
 
-unsigned char pxyGlyphDigitTable[252] = {
+/* Byte 0 is the render module's scene-disable flag (sRender+0x84): xglRenderMove reads it, xglRenderInit clears it, and
+ * xglHddErrorScreen sets it. The digit glyph strokes start at byte 4. */
+unsigned char pxyDigitStrokeTable[252] = {
     0x00, 0x00, 0x00, 0x00, 0x07, 0x01, 0x02, 0x01, 0x06, 0x02, 0x07, 0x04,
     0x07, 0x05, 0x06, 0x05, 0x02, 0x04, 0x01, 0x02, 0x01, 0x01, 0x02, 0xfe,
     0xfe, 0x05, 0x02, 0x01, 0x06, 0x05, 0x02, 0xff, 0x00, 0x00, 0x00, 0x00,

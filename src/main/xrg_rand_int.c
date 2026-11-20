@@ -103,6 +103,7 @@ void XrgQuaternionToEuler(Vector4 *euler, Vector4 *quaternion)
     matrix[2][0] = 2.0f * quaternion->x * quaternion->z - 2.0f * quaternion->w * quaternion->y;
     sine.y = -matrix[2][0];
     matrix[2][1] = 2.0f * quaternion->y * quaternion->z + 2.0f * quaternion->w * quaternion->x;
+    /* The original has a plus before 2yy here, a sign error kept as it is; no caller uses this function. */
     matrix[2][2] = 1.0f - 2.0f * quaternion->x * quaternion->x + 2.0f * quaternion->y * quaternion->y;
     cosine.y = dptofp(sqrt(fptodp(1.0f - sine.y * sine.y)));
     euler->y = XrgArcTangent2(sine.y, cosine.y);

@@ -4,9 +4,10 @@
 #include "main/sound_driver.h"
 #include "main/sef_light_set.h"
 #include "main/xgl_light.h"
-#include "main/tya_display_setting.h"
+#include "main/yajima_test.h"
+#include "main/get_ladder.h"
 #include "main/runtime_camera.h"
-#include "main/runtime_pt_init.h"
+#include "main/runtime_math.h"
 #include "main/game_camera.h"
 #include "main/pad.h"
 #include "main/sef.h"
@@ -108,7 +109,7 @@ static DoublewordVector4 runtimeDir;
 #define VM_FIXED_SCALE 100.0f
 
 /* Script command: fills the runtime position and direction vectors from arguments 2 to 8, then copies them to units as flags ask. */
-int runtimeSetFog(SbThread *call)
+int batSetFog(SbThread *call)
 {
     int flags;
 
@@ -144,13 +145,13 @@ void unitBodySetFog(DoublewordVector4 *pos, DoublewordVector4 *dir)
     monsActiveSlotsGet(&slots);
     actor = slots[0]->actor;
     actor->drawFlags |= ACTOR_STATE_UNBOUND;
-    actor->color.x = pos->vector.x;
-    actor->color.y = pos->vector.y;
-    actor->color.z = pos->vector.z;
-    actor->color.w = pos->vector.w;
-    actor->colorBlock.x = dir->vector.x;
-    actor->colorBlock.y = dir->vector.y;
-    actor->colorBlock.z = dir->vector.z;
+    actor->fogDist.x = pos->vector.x;
+    actor->fogDist.y = pos->vector.y;
+    actor->fogDist.z = pos->vector.z;
+    actor->fogDist.w = pos->vector.w;
+    actor->fogColor.x = dir->vector.x;
+    actor->fogColor.y = dir->vector.y;
+    actor->fogColor.z = dir->vector.z;
 }
 
 
@@ -168,13 +169,13 @@ void unitTblBodySetFog(DoublewordVector4 *pos, DoublewordVector4 *dir)
         unit = units[i];
         if (unit != 0) {
             actor = unit->unit;
-            actor->color.x = pos->vector.x;
-            actor->color.y = pos->vector.y;
-            actor->color.z = pos->vector.z;
-            actor->color.w = pos->vector.w;
-            actor->colorBlock.x = dir->vector.x;
-            actor->colorBlock.y = dir->vector.y;
-            actor->colorBlock.z = dir->vector.z;
+            actor->fogDist.x = pos->vector.x;
+            actor->fogDist.y = pos->vector.y;
+            actor->fogDist.z = pos->vector.z;
+            actor->fogDist.w = pos->vector.w;
+            actor->fogColor.x = dir->vector.x;
+            actor->fogColor.y = dir->vector.y;
+            actor->fogColor.z = dir->vector.z;
         }
     }
 }
@@ -217,12 +218,12 @@ int initLight(void)
 
 static XenoLight lightBlock;
 
-/* Returns the light block that initLight and runtime.setLight start from. */
+/* Returns the light block that initLight and bat.setLight start from. */
 XenoLight *lightBlockGet(void) {
     return &lightBlock;
 }
 
-/* runtime.setLight kinds: 0-2 the directional lights (sDir/sCol 0-2), 3 the view light (sDir 6, sCol 6), 4 the
+/* bat.setLight kinds: 0-2 the directional lights (sDir/sCol 0-2), 3 the view light (sDir 6, sCol 6), 4 the
  * lower ambient colour (sCol 7), 5-7 the shadow directions (sSha 0-2). */
 #define LIGHT_KIND_VIEW 3
 #define LIGHT_KIND_AMBIENT_LOWER 4
@@ -240,9 +241,9 @@ static inline void lightCopy(Vector4 *destination, AlignedVector4 *source)
     QuadwordCopyT0(destination, source);
 }
 
-/* Native runtime.setLight(kind, red, green, blue, x, y, z): writes a colour and a direction into light KIND of the
+/* Native bat.setLight(kind, red, green, blue, x, y, z): writes a colour and a direction into light KIND of the
  * light block (grey and +z without arguments) and makes the block the default light set again. */
-int runtimeSetLight(SbThread *call)
+int batSetLight(SbThread *call)
 {
     XglLightSet *lights;
     AlignedVector4 color;
@@ -367,10 +368,10 @@ int pari(SbThread *thread)
         value3 = vmArgGet(thread, 7) / VM_FIXED_SCALE;
     }
     actor->sweepPhase = angle;
-    actor->shadowValue = value;
+    actor->clipPlaneValue = value;
     actor->sweepSpeed = velocity;
-    actor->shadowCount = vmArgGet(thread, 2);
-    actor->shadowValue3 = value3;
+    actor->clipPlaneCount = vmArgGet(thread, 2);
+    actor->clipPlaneValue3 = value3;
     actor->moveState = vmArgGet(thread, 3);
     return 1;
 }
@@ -387,7 +388,7 @@ int partyDataGet(SbThread *call)
     }
     partyIndex = vmArgGet(call, 1);
     slot = vmArgGet(call, 2);
-    return partyDataGetSlot(partyIndex, slot);
+    return boostGaugeGetSlot(partyIndex, slot);
 }
 
 
@@ -404,7 +405,7 @@ int partyDataSet(SbThread *call)
     partyIndex = vmArgGet(call, 1);
     slot = vmArgGet(call, 2);
     value = vmArgGet(call, 3);
-    partyDataSetSlot(partyIndex, slot, value);
+    boostGaugeSetSlot(partyIndex, slot, value);
     return 1;
 }
 
@@ -483,7 +484,7 @@ int unitLoad(SbThread *call)
     }
     unitIndex = vmArgGet(call, 1);
     dataUnitFileLoad(unitIndex);
-    unitEffectSlotAcquire(unitIndex);
+    unitEffectFilesSetup(unitIndex);
     return 1;
 }
 
@@ -723,7 +724,7 @@ int namePut(SbThread *call)
  * through this union view, each store reloads the actor pointer as the original does.
  */
 
-/* Native objx: sets the scale of unit argument 1 to argument 2 percent on all three axes. */
+/* Native bat.scale: sets the scale of unit argument 1 to argument 2 percent on all three axes. */
 int batScale(SbThread *call)
 {
     BattleUnit *unit;
@@ -807,7 +808,7 @@ int cfFlagSet(SbThread *call)
 
 
 /* Script command: code 0x5A starts the BGM fade through bgmSlotLevelSet; any other code goes to soundSlotSetVolume with its value. */
-int runtimeBgmFade(SbThread *call)
+int batBgmFade(SbThread *call)
 {
     int code;
     int value;
@@ -969,7 +970,7 @@ int sampFontPut(SbThread *call)
     return 1;
 }
 
-/* Native method tables of the three owners registered by runtimeInit. */
+/* Native method tables of the samp, deb and bat owners registered at runtime start-up. */
 SbNativeMethod sampMethods[] = {
     { "fontPut", sampFontPut },
     { "padRead", sampPadRead },
@@ -1008,10 +1009,10 @@ SbNativeMethod batMethods[] = {
     { "VPadSet", VPadSet },
     { "msgPut", msgPut },
     { "msgPutWait", msgPutWait },
-    { "setFog", runtimeSetFog },
+    { "setFog", batSetFog },
     { "setMoveCmd", setMoveCmd },
     { "initLight", initLight },
-    { "setLight", runtimeSetLight },
+    { "setLight", batSetLight },
     { "pari", pari },
     { "partyDataGet", partyDataGet },
     { "partyDataSet", partyDataSet },
@@ -1039,7 +1040,7 @@ SbNativeMethod batMethods[] = {
     { "unitDirGet", unitDirGet },
     { "unitDefAreaGet", unitDefAreaGet },
     { "cfFlagSet", cfFlagSet },
-    { "bgmFade", runtimeBgmFade },
+    { "bgmFade", batBgmFade },
     { "unitFade", unitFade },
     { "stockGet", stockGet },
     { "unitMotWait", unitMotWait },
@@ -1064,7 +1065,8 @@ void runtimeInitState(void)
 }
 
 
-/* Runtime start-up: resets the state, registers a third command table, then runs the two start calls. */
+/* Runtime start-up: resets the native counts and the state, registers the bat command table, then runs the math
+ * and camera registration calls. */
 void runtimeInit(void)
 {
     sbResetNativeCounts();

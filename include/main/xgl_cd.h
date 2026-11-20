@@ -29,6 +29,8 @@ typedef struct CdFilePosition {
     unsigned char unmodeled_08[0x1c];
     unsigned char source;
     unsigned char unmodeled_25;
+    /* Set to 1 for every loose ISO file too, so it does not mean "is packed" there: the read takes the extract path
+     * and checks the ARX signature. */
     unsigned char packed;
     unsigned char unmodeled_27;
     int descriptor;

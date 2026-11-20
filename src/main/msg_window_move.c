@@ -1,7 +1,7 @@
 #include "common.h"
 #include "main/msg_window_run.h"
 #include "main/msg_window_move.h"
-#include "main/timecode_forward.h"
+#include "main/msg_slot_start.h"
 #include "main/msg_list_slot.h"
 #include "main/timecode_window.h"
 /* Grid step and origin used by msgWindowResizeCurrentCells (the 20, 30 and 64 of its
@@ -24,16 +24,16 @@ void msgWindowMoveCurrent(MsgWindow *window, int x, int y)
     if (slot->flags == 0) {
         return;
     }
-    switch (slot->state) {
-    case MSG_SLOT_STATE_TEXT:
+    switch (slot->slot_type) {
+    case MSG_SLOT_TYPE_TEXT:
         msgTextSlotFit(slot, x, y, slot->extent_x, slot->extent_y);
         break;
 
-    case MSG_SLOT_STATE_WINDOW:
+    case MSG_SLOT_TYPE_WINDOW:
         msgListSlotSetGeometry(slot, x, y, slot->extent_x, slot->extent_y);
         break;
 
-    case MSG_SLOT_STATE_TIMECODE:
+    case MSG_SLOT_TYPE_TIMECODE:
         timecodeSetGeometry(slot, x, y, slot->extent_x, slot->extent_y);
         break;
     }
@@ -52,16 +52,16 @@ void msgWindowResizeCurrent(MsgWindow *window, int x, int y)
     if (slot->flags == 0) {
         return;
     }
-    switch (slot->state) {
-    case MSG_SLOT_STATE_TEXT:
+    switch (slot->slot_type) {
+    case MSG_SLOT_TYPE_TEXT:
         msgTextSlotFit(slot, slot->x, slot->y, x, y);
         break;
 
-    case MSG_SLOT_STATE_WINDOW:
+    case MSG_SLOT_TYPE_WINDOW:
         msgListSlotSetGeometry(slot, slot->x, slot->y, x, y);
         break;
 
-    case MSG_SLOT_STATE_TIMECODE:
+    case MSG_SLOT_TYPE_TIMECODE:
         timecodeSetGeometry(slot, slot->x, slot->y, x, y);
         break;
     }

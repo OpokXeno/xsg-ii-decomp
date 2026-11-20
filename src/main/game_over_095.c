@@ -1,7 +1,7 @@
 #include "common.h"
 #include "main/xgl_camera.h"
 #include "shared.h"
-#include "main/game_over_059.h"
+#include "main/game_over.h"
 #include "main/game_over_095.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_jpeg.h"
@@ -37,7 +37,7 @@ int bgLayerReady(int index)
 
 
 /* Draws the full-screen fade quad (the 512x448 sprite at the origin); the low byte of fade_value becomes the RGBAQ alpha. */
-void gameOverDrawOverlay(u64 fade_value)
+void screenFadeQuadDraw(u64 fade_value)
 {
     nmlPacketGsInit();
     packet_gs_entry64(GS_TEST_1, GS_TEST_ZTE_ALWAYS);

@@ -108,11 +108,11 @@ extern int strncmp(const char *left, const char *right, unsigned int length);
 extern int sceWrite(int descriptor, const void *buffer, int size);
 extern int sceChstat(const char *path, const struct HddIoStat *stat, int flags);
 int Judge_MakeNewFolder(void);
-extern int Judge_MakeNewSavedata(int descriptor, int card);
+extern int Judge_MakeNewSavedata(int descriptor, int saveNumber);
 static int xglHddMcCheckYourSaves(int);
 int xglHddMcCheckCore(struct HddCheckState *state);
 extern int xglHddMcCheck(struct HddCheckState *state);
-int create_file(int card, int slot, const void *data, int size);
+int create_file(int saveNumber, int slot, const void *data, int size);
 
 /* sceOpen flags and permission modes (0666, 0555, 0777). */
 #define HDD_OPEN_READ 1
@@ -303,7 +303,7 @@ int xglHddMcUmount(void)
     return result < 0 ? -2 : 0;
 }
 
-char *make_fullpath(char *destination, int card, int slot)
+char *make_fullpath(char *destination, int saveNumber, int slot)
 {
     const char *source = yoursaves;
 
@@ -312,7 +312,7 @@ char *make_fullpath(char *destination, int card, int slot)
         destination++;
     }
 
-    source = xglMcSetFullPath(card, slot);
+    source = xglMcSetFullPath(saveNumber, slot);
     while ((*destination = *source) != 0) {
         source++;
         destination++;
@@ -343,8 +343,8 @@ int xglHddMcExist(struct HddExistRequest *request)
     if (result < 0)
         return result;
 
-    if (request->card >= 0) {
-        make_fullpath(filePath, request->card, 0);
+    if (request->saveNumber >= 0) {
+        make_fullpath(filePath, request->saveNumber, 0);
         descriptor = sceOpen(filePath, HDD_OPEN_READ, HDD_MODE_RW);
         if (descriptor >= 0) {
             result = sceClose(descriptor) < 0 ? -3 : 1;
@@ -366,7 +366,7 @@ int xglHddMcExist(struct HddExistRequest *request)
                 *destination = *source;
             } while (((unsigned int)*destination << 24) != 0);
         }
-        /* The -1 card path ends in a wildcard; compare its directory stem. */
+        /* The -1 save number path ends in a wildcard; compare its directory stem. */
         destination[-1] = 0;
 
         count = 100;
@@ -382,6 +382,9 @@ int xglHddMcExist(struct HddExistRequest *request)
         while (descriptor >= 0 && sceDread(descriptor, &entry) > 0) {
             if (strncmp(name, entry.name, 16) != 0)
                 continue;
+            /* The save number is the two characters after the 16-character stem. This release's stem
+             * (BASLUS-20892Xeno2) is 17 characters, so the digits sit at 17 and 18 and this read is wrong:
+             * an original leftover from Episode I's 16-character stem. */
             save = entry.name[16] * 10 + entry.name[17] - (10 * '0' + '0');
             make_fullpath(savePath, save, 0);
             if (sceGetstat(savePath, &entry.stat) < 0)
@@ -417,7 +420,7 @@ int xglHddMcLoadCore(void *save)
     int descriptor;
     int result;
 
-    make_fullpath(path, request->card, 0);
+    make_fullpath(path, request->saveNumber, 0);
     descriptor = sceOpen(path, HDD_OPEN_READ, HDD_MODE_RW);
     if (descriptor < 0) {
         result = descriptor == HDD_ERR_NOENT ? 1 : HDD_LOAD_ERR_OPEN;
@@ -491,7 +494,7 @@ int Judge_MakeNewFolder(void)
     return directoryCount < HDD_MAX_FOLDERS;
 }
 
-int Judge_MakeNewSavedata(int descriptor, int card)
+int Judge_MakeNewSavedata(int descriptor, int saveNumber)
 {
     extern unsigned int strlen(const char *string);
     extern char *strchr(const char *string, int character);
@@ -506,8 +509,8 @@ int Judge_MakeNewSavedata(int descriptor, int card)
 
     directoryCount = 0;
     result = 0;
-    path = xglMcSetFullPath(card, -1) + 1;
-    if (card < 0) {
+    path = xglMcSetFullPath(saveNumber, -1) + 1;
+    if (saveNumber < 0) {
         char *end = path;
 
         if (*path != '\0') {
@@ -555,18 +558,18 @@ int Judge_MakeNewSavedata(int descriptor, int card)
     return directoryCount < HDD_FOLDER_ENTRY_LIMIT;
 }
 
-static int xglHddMcCheckYourSaves(int card)
+static int xglHddMcCheckYourSaves(int saveNumber)
 {
     int descriptor = sceDopen(yoursaves);
 
     if (descriptor < 0)
         return Judge_MakeNewFolder() == 1 ? 1 : HDD_CHECK_TOO_MANY_FOLDERS;
-    return Judge_MakeNewSavedata(descriptor, card) == 1 ? 0 : HDD_CHECK_TOO_MANY_SAVES;
+    return Judge_MakeNewSavedata(descriptor, saveNumber) == 1 ? 0 : HDD_CHECK_TOO_MANY_SAVES;
 }
 
 int xglHddMcCheckCore(struct HddCheckState *state)
 {
-    int result = xglHddMcCheckYourSaves(state->status);
+    int result = xglHddMcCheckYourSaves(state->saveNumber);
 
     if (result < 0)
         return result;
@@ -603,10 +606,10 @@ int xglHddMcCheck(struct HddCheckState *state)
     if (sceMount(hdd_mc_path, commonname, HDD_MOUNT_READ_WRITE, 0, 0) < 0)
         return -1;
 
-    previous = state->status;
-    state->status = -1;
+    previous = state->saveNumber;
+    state->saveNumber = -1;
     result = xglHddMcCheckCore(state);
-    state->status = previous;
+    state->saveNumber = previous;
     xglHddMcUmount();
     return result;
 }
@@ -638,14 +641,14 @@ int xglHddMcGetFree(void)
     return result;
 }
 
-int create_file(int card, int slot, const void *data, int size)
+int create_file(int saveNumber, int slot, const void *data, int size)
 {
     char path[HDD_PATH_MAX];
     struct HddIoStat stat;
     int descriptor;
     int result;
 
-    make_fullpath(path, card, slot);
+    make_fullpath(path, saveNumber, slot);
     descriptor = sceOpen(path, HDD_OPEN_WRITE_CREATE_TRUNC, HDD_MODE_RW);
     if (descriptor < 0)
         return -1;
@@ -662,7 +665,7 @@ int create_file(int card, int slot, const void *data, int size)
 }
 
 /*
- * Creates the save folder for state->status and writes its icon and payload files.
+ * Creates the save folder for state->saveNumber and writes its icon and payload files.
  * Returns 0 or a negative failure code.
  */
 int xglHddMcCreate(struct HddCheckState *state)
@@ -682,8 +685,8 @@ int xglHddMcCreate(struct HddCheckState *state)
         return -1;
     }
 
-    make_fullpath(path, state->status, -1);
-    if (state->status >= 0 && (descriptor = sceDopen(path)) >= 0) {
+    make_fullpath(path, state->saveNumber, -1);
+    if (state->saveNumber >= 0 && (descriptor = sceDopen(path)) >= 0) {
         if (sceDclose(descriptor) < 0) {
             result = HDD_CREATE_ERR_SAVE_DIR_CLOSE;
             goto unmount_card;
@@ -733,7 +736,7 @@ int xglHddMcCreate(struct HddCheckState *state)
             goto unmount_card;
         }
 
-        if (state->status < 0) {
+        if (state->saveNumber < 0) {
             xglHddMcUmount();
             return result;
         }
@@ -764,9 +767,9 @@ int xglHddMcCreate(struct HddCheckState *state)
 
     result = HDD_CREATE_ERR_WRITE_ICON;
     transfer = state->transfer.image;
-    if (create_file(state->status, 1, transfer->iconSystem, MC_ICON_SYS_SIZE) >= 0) {
+    if (create_file(state->saveNumber, 1, transfer->iconSystem, MC_ICON_SYS_SIZE) >= 0) {
         result = HDD_CREATE_ERR_WRITE_PAYLOAD;
-        if (create_file(state->status, 2, &transfer->payloadStart,
+        if (create_file(state->saveNumber, 2, &transfer->payloadStart,
                         transfer->header.end - transfer->header.begin) >= 0) {
             result = 0;
         }
@@ -792,7 +795,7 @@ int xglHddMcSave(const struct HddSaveRequest *save)
     if (sceMount(hdd_mc_path, commonname, HDD_MOUNT_READ_WRITE, 0, 0) < 0)
         return -1;
 
-    result = create_file(save->card, 0, save->data, save->size) < 0 ? HDD_SAVE_ERR_WRITE : 0;
+    result = create_file(save->saveNumber, 0, save->data, save->size) < 0 ? HDD_SAVE_ERR_WRITE : 0;
     xglHddMcUmount();
     return result;
 }
@@ -1198,7 +1201,7 @@ int xglHddMount(void)
     return 1;
 }
 
-/* Read-only error text (encoded, 160 bytes; the code shows no reader for its layout). */
+/* Read-only error text (160 bytes of EUC-JP with control bytes), printed by xglHddErrorScreen. */
 const char hddLoadErrorText[160] = {
     0x0b, 0x0e, 0x01, 0x01, 0x00, 0x00, 0x00, 0x0d, 0x03, 0xa5, 0xcf, 0xa1, 0xbc, 0xa5, 0xc9, 0xa5,
     0xc7, 0xa5, 0xa3, 0xa5, 0xb9, 0xa5, 0xaf, 0xa5, 0xc9, 0xa5, 0xe9, 0xa5, 0xa4, 0xa5, 0xd6, 0xa4,
@@ -1214,7 +1217,7 @@ const char hddLoadErrorText[160] = {
 const char partitionSpecFormat[16] = "%s,256M,PFS";
 const char cd_filename[16] = "xenosaga.00";
 
-/* Partition and file names of the HDD mount (56 bytes: encoded text, not decoded here). */
+/* Partition and file names of the HDD mount (56 bytes, XORed with 0x80 by decrypt() at mount time). */
 char partitionname[56] = {
     0xe8, 0xe4, 0xe4, 0xb0, 0xba, 0xd0, 0xd0, 0xae, 0xd3, 0xcc, 0xd0, 0xd3,
     0xad, 0xb2, 0xb9, 0xb0, 0xb0, 0xb2, 0xae, 0xd8, 0xc5, 0xce, 0xcf, 0xd3,

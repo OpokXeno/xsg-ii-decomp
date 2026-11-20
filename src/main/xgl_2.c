@@ -1402,13 +1402,13 @@ void xglRandSeedInit(void)
     iRandSeed = 0x12345678ULL;
 }
 
-extern char xglGeometryInitDmaChain[];
+extern char xglVu0ResidentMicroprogram[];
 
 void xglGeometryInit(void)
 {
     xglFSrand(0.1f);
     iRandSeed = 0x12345678ULL;
-    xglDmaDirectSrcChain(0, (u32)&xglGeometryInitDmaChain);
+    xglDmaDirectSrcChain(0, (u32)&xglVu0ResidentMicroprogram);
 }
 
 void xglMatrixCopy()

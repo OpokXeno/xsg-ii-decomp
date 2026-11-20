@@ -6,6 +6,6 @@
 /* The logo screens and the memory card check that follows them. */
 void LogoFirst(void);
 /* The credit roll: loads credit.bin and draws it in bands. */
-void logoShowCredits(void);
+void logoShowSlides(void);
 
 #endif /* INCLUDE_OV02_LOGO_H */

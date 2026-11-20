@@ -1,12 +1,12 @@
 #include "common.h"
-#include "main/debt_box.h"
+#include "main/msg_text_draw.h"
 #include "main/msg_window_layout.h"
 #include "main/msg_window_center.h"
 
 /* Stores a new text for an active window, its line count, then sizes and centres the window. */
 void msgWindowSetText(MsgSlot *window, char *text)
 {
-    if (window->state == MSG_SLOT_STATE_WINDOW) {
+    if (window->slot_type == MSG_SLOT_TYPE_WINDOW) {
         window->u.list.text = text;
         window->u.list.capacity = textCountLinesOf(text);
         msgWindowLayoutSize(window);
@@ -21,7 +21,7 @@ void msgWindowBindItems(MsgSlot *window, char **source, int *costs, int *counts,
 {
     MsgSlotList *list = &window->u.list;
 
-    if (window->state == MSG_SLOT_STATE_WINDOW) {
+    if (window->slot_type == MSG_SLOT_TYPE_WINDOW) {
         window->u.list.list_source = source;
         window->u.list.item_costs = costs;
         window->u.list.counts = counts;

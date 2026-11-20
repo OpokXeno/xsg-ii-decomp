@@ -3,9 +3,9 @@
 
 /* Functions of src/main/msg_window_layout.c that other files use. */
 
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
-/* Layout of the item list window (slot state 2) and of its empty-list variant. */
+/* Layout of the item list window (slot type 2) and of its empty-list variant. */
 #define MSG_LIST_X 0x40                /* x of the list window */
 #define MSG_LIST_Y_FILLED 0x51         /* y when the list holds items */
 #define MSG_LIST_Y_EMPTY 0x79          /* y when the list is empty */

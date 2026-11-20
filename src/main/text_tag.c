@@ -4,7 +4,7 @@
 #include "main/xgl_packet_scratch.h"
 #include "main/talk_script.h"
 #include "main/msg_window_layout.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/text_tag.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_packet.h"
@@ -24,14 +24,14 @@ extern unsigned int strlen(const char *string);
 #define GLYPH_ICON_Y 0x152
 #define RGBAQ_GRAY 0x80808080           /* RGBAQ with every channel 0x80 */
 #define RGBAQ_GRAY_DIM 0x80404040       /* the dimmed icon: colour channels 0x40 */
-#define FRAME_SCISSOR_TOP_INSET 0x21    /* the text window scissor starts this far below the slot y (as talkBoxScissorCallback in debt_box.c) */
+#define FRAME_SCISSOR_TOP_INSET 0x21    /* the text window scissor starts this far below the slot y (as talkBoxScissorCallback in msg_text_draw.c) */
 #define FRAME_SCISSOR_BOTTOM_INSET 0x20
 #define FRAME_SCISSOR_WINDOW_RIGHT 0x200 /* right edge of the window scissor, one pixel wider than the screen scissor */
 #define FRAME_SPRITE_PRIM 0x15E         /* PRIM: sprite (6), IIP, TME, ABE and FST bits */
 #define FRAME_ZBUF_VALUE 0x131000000ULL /* ZBUF_1: ZMSK 1, 24-bit format 1; the original constant also has bits 28-29 set */
 #define FRAME_FRAME_BUFFER_WIDTH 8      /* FRAME_1 FBW in 64-pixel units */
-#define FONT_TEXTURE_WIDTH 16           /* TEX0 TBW of the font texture */
-#define FONT_TEXTURE_CLUT_OFFSET 0x10   /* CLUT sits this many words after the texture */
+#define BOTAN_TEXTURE_WIDTH 16          /* TEX0 TBW of the botan.xtx texture */
+#define BOTAN_TEXTURE_CLUT_OFFSET 0x10  /* CLUT sits this many words after the botan.xtx texture */
 
 /*
  * One entry of the 20-entry text tag table. `kind` is the glyph index (1..5) drawn by
@@ -138,7 +138,7 @@ int textTagIsActive(struct TextTag *tag, const char *pos)
     return tag->position < pos;
 }
 
-/* GS state shared by both frame setups: blend and test registers, frame buffer, font texture, sprite PRIM and white RGBAQ. */
+/* GS state shared by both frame setups: blend and test registers, frame buffer, botan.xtx texture, sprite PRIM and white RGBAQ. */
 #define GRSETUP_COMMON_STATE() \
     { \
         xglPacketScratchAddQuad(GS_COLCLAMP, 1); \
@@ -149,7 +149,7 @@ int textTagIsActive(struct TextTag *tag, const char *pos)
         xglPacketScratchAddQuad(GS_TEXA, 0); \
         xglPacketScratchAddQuad(GS_ALPHA_1, gsMakeAlpha(0)); \
         xglPacketScratchAddQuad(GS_FRAME_1, GS_SET_FRAME(sRender.display_buffer_base, FRAME_FRAME_BUFFER_WIDTH, GS_PSMCT32, 0)); \
-        xglPacketScratchAddQuad(GS_TEX0_1, GS_SET_TEX0(sRender.vram.second_base << 5, FONT_TEXTURE_WIDTH, GS_PSMT8, 6, 6, 1, 0, (sRender.vram.second_base << 5) + FONT_TEXTURE_CLUT_OFFSET, 0, 0, 0, 1)); \
+        xglPacketScratchAddQuad(GS_TEX0_1, GS_SET_TEX0(sRender.vram.texture_base << 5, BOTAN_TEXTURE_WIDTH, GS_PSMT8, 6, 6, 1, 0, (sRender.vram.texture_base << 5) + BOTAN_TEXTURE_CLUT_OFFSET, 0, 0, 0, 1)); \
         xglPacketScratchAddQuad(GS_PRIM, FRAME_SPRITE_PRIM); \
         xglPacketScratchAddQuad(GS_RGBAQ, RGBAQ_GRAY); \
     }

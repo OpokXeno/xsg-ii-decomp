@@ -5,7 +5,7 @@
 
 void Vibration_Stop(void);
 void Vibration_Set_Weak(int value);
-void Vibration_Set_Strong(unsigned char targetValue, unsigned char currentValue, int framesTotal);
+void Vibration_Set_Strong(unsigned char startValue, unsigned char endValue, int framesTotal);
 void VibrationEngine(void);
 
 #endif /* INCLUDE_MAIN_VIBRATION_H */

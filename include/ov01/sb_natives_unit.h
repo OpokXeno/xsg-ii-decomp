@@ -6,7 +6,7 @@
 struct XenoLight;
 union DoublewordVector4;
 
-/* Registers the bat, math and menu native tables after resetting the native counts and the runtime state. */
+/* Registers the samp, deb, bat, math and camera native tables after resetting the native counts and the runtime state. */
 void runtimeInit(void);
 void runtimeInitState(void);
 /* Hands out the effect group and record the running script selected. */

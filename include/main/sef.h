@@ -68,7 +68,7 @@ typedef struct SefEffectEntry {
     int flags;
     short key;
     unsigned char unmodeled_04a[1];
-    signed char signal;
+    signed char speedPercent;   /* the speed percentage of the entry */
 } SefEffectEntry;
 
 typedef struct SefEffectRecord {
@@ -96,14 +96,14 @@ typedef struct SefEffectRecord {
     unsigned char unmodeled_080[0x82 - 0x80];
     unsigned short loadFlags;   /* +0x82: the third argument of sefInitEffectTbl */
     SefEffectEntry entries[32]; /* +0x84 */
-    SdvSequence sound;          /* +0xa04 (script address, kind byte as the stride) */
-    SdvSequence soundState;     /* +0xa0c */
+    SdvSequence effectSeq;      /* +0xa04: the effect sequence that sdvExecEffectSeq steps */
+    SdvSequence shadowSeq;      /* +0xa0c: the shadow sequence that sdvExecShadowSeq steps */
     SdvSequence alter;          /* +0xa14 */
     SdvCameraSchedule camera;   /* +0xa1c: the camera block (0x28 bytes) that sdvSelectCamera fills */
     SdvSpecial special;         /* +0xa44 */
     SdvSequence wind;           /* +0xa54 */
     float fieldA5C;             /* +0xa5c: zeroed by sefCreateScheduler2, copied to the request +0x314 */
-    float fieldA60;             /* +0xa60: set to 8.0 by sefCreateScheduler2 */
+    float cullRadius;            /* +0xa60: set to 8.0 by sefCreateScheduler2 */
     unsigned short value;       /* +0xa64 */
     short remaining;            /* +0xa66 */
     short slotIndex;            /* +0xa68: the second argument of sefInitEffectTbl; negative skips the load */
@@ -133,7 +133,7 @@ void sefProgressEffect(SefEffectRecord *record, float frames);
 void sefExecEffectSteps(SefEffectRecord *record, float frames, float step);
 
 void sefCreateEffect(void *object);
-void sefStartEffectWithValue(void *object, const Vector4 *position);
+void sefStartEffectAtPosition(void *object, const Vector4 *position);
 
 int sefStartEffectKeyDefault(void *buffer, int effectKey);
 void sefLoadEffectCfName(void *buffer, signed char *text);
@@ -230,12 +230,13 @@ int sefEntryHasFlag2(struct XenoActor *actor);
 void sefPruneHandleSlots(void);
 void sefRegisterHandle(int handle, void *value);
 
-/* Four counters per effect entry, 0x14 bytes each (sefEntryCounts, cleared by the sef init chain). */
+/* Five words per effect entry, 0x14 bytes each (sefEntryCounts, cleared by the sef init chain). */
 typedef struct SefEntryCounts {
-    int upper;                                       /* +0x00 */
-    int lower;                                       /* +0x04 */
-    int plain;                                       /* +0x08 */
-    int unmodeled_0c[2];
+    int worldSprites;                                /* +0x00: packet space of the world sprites */
+    int screenSprites;                               /* +0x04: packet space of the screen sprites */
+    int modelPoints;                                 /* +0x08: point count of the models */
+    int total;                                       /* +0x0c: the sum of the three counts (sefSumEntryCounts) */
+    int unmodeled_10;
 } SefEntryCounts;
 
 extern SefEntryCounts sefEntryCounts[];

@@ -35,7 +35,7 @@
 #include "main/xgl_pad.h"
 #include "main/xgl_jpeg.h"
 #include "main/fade_ctrl.h"
-#include "main/game_over_065.h"
+#include "main/tya_display_setting.h"
 #include "main/game_over_095.h"
 #include "ov01/calc.h"
 #include "main/xgl_packet.h"
@@ -76,11 +76,11 @@ static FontTrack extraPanelTrack;
 static FontTrack equipPanelTrack[1];
 static ListCursor windowListCursor[1];
 static ListCursor recordItemCursor[1];
-static ListCursor learnedSkillCursor[1];
+static ListCursor learnedEtherCursor[1];
 static ListCursor commandPageCursor[1];
 static ListCursor equipSlotCursor[1];
 static ListCursor equipItemCursor[1];
-static ListCursor licenseCursorTable[3];
+static ListCursor skillBoardCursorTable[3];
 static ListCursor menuConfigCursor[1];
 static ListCursor mapChoiceCursor[1];
 static MsgRange menuMessageRangeState[1];
@@ -104,8 +104,8 @@ int menuSceneFlags = 0;
 unsigned char menuCopilotModeFlag = 0;
 int menuChoiceOpenFlag = 0;
 int countdownActive = 0;
-signed char menuConfigFlag46 = 0;
-signed char menuConfigFlag47 = 0;
+signed char menuCursorMemory = 0;
+signed char menuCursorMemoryAlt = 0;
 signed char menuConfigButtonIndexTable[] = { 0, 2, 0, 0, 0, 0, 0, 0 };
 signed char menuMapChoiceDefaultTable[8] = { 2, 0, 0, 0, 1, 1, 0, 2 };
 signed char menuMapChoice = 0;
@@ -124,7 +124,7 @@ static signed char menuSavedSlotState;
 static signed char menuSkillModelsReady;
 static float menuRingTilt;
 static float menuRingTiltPrev;
-static unsigned char learnedSkillList[4];
+static unsigned char learnedEtherList[4];
 static int equipItemCount;
 static signed char mainCommandKindTable[8];
 static unsigned char menuTutorialSavedHeader[4];
@@ -147,7 +147,7 @@ static void *menuUmnImageSourceBuffer;
 #define CONTROL_SLOT_FLAG_ACTIVE 0x02
 /* ControlSlot flags bit 0: the mark of the slot that is current (set and cleared by the menuFocus and menuScene functions). */
 #define CONTROL_SLOT_FLAG_MARK 0x01
-/* Menu item list (menuMapListDraw): row pitch, the text id of row 0 for menuMainTxdEntry, and the right edge of
+/* U.M.N. destination list (menuMapListDraw): row pitch, the text id of row 0 for menuMainTxdEntry, and the right edge of
    the row text. */
 #define MENU_ITEM_ROW_HEIGHT 0x20
 #define MENU_ITEM_TXD_BASE 0x1E0
@@ -187,22 +187,22 @@ void cursorBufferTablesInit(void) {
     cursorBufferInit(&mainCommandCursors[1], 4, 4, 0);
     cursorBufferInit(windowListCursor, selectionWindowCount, 0xA, 0);
     cursorBufferInit(recordItemCursor, 0x6B, 0x12, 0);
-    cursorBufferInit(learnedSkillCursor, 3, 4, 0);
+    cursorBufferInit(learnedEtherCursor, 3, 4, 0);
     cursorBufferInit(commandPageCursor, 7, 7, 0);
     cursorBufferInit(equipSlotCursor, menuEquipRowCount, 4, 0);
     cursorBufferInit(equipItemCursor, 8, 8, 0);
-    cursorBufferInit(licenseCursorTable, 4, 4, 0);
-    cursorBufferInit(&licenseCursorTable[1], 8, 8, 0);
-    cursorBufferInit(&licenseCursorTable[2], 4, 4, 0);
+    cursorBufferInit(skillBoardCursorTable, 4, 4, 0);
+    cursorBufferInit(&skillBoardCursorTable[1], 8, 8, 0);
+    cursorBufferInit(&skillBoardCursorTable[2], 4, 4, 0);
     cursorBufferInit(mapChoiceCursor, 8, 8, 0);
     cursorBufferInit(menuConfigCursor, 0xA, 0xA, 0);
     menuSavedSlotState = 0;
     menuKeyCheckPending = 0;
 }
 
-/* Refreshes a cursor buffer: while menuConfigFlag46 is set only the unit size and capacity change, otherwise a full init. */
+/* Refreshes a cursor buffer: while menuCursorMemory is set only the unit size and capacity change, otherwise a full init. */
 void cursorBufferSetOrInit(ListCursor *buffer, int capacity, int unit_size, int mode_flags) {
-    if (menuConfigFlag46 != 0) {
+    if (menuCursorMemory != 0) {
         buffer->unit_size = unit_size;
         cursorBufferSetCapacity(buffer, capacity);
     } else {
@@ -228,15 +228,15 @@ void cursorBuffersRewind(void) {
     *flag = 0;
     recordItemCursor[0].previous_cursor = 0;
     recordItemCursor[0].cursor = 0;
-    learnedSkillCursor[0].previous_cursor = 0;
-    learnedSkillCursor[0].cursor = 0;
+    learnedEtherCursor[0].previous_cursor = 0;
+    learnedEtherCursor[0].cursor = 0;
     commandPageCursor[0].previous_cursor = 0;
     commandPageCursor[0].cursor = 0;
     equipSlotCursor[0].previous_cursor = 0;
     equipSlotCursor[0].cursor = 0;
     equipItemCursor[0].previous_cursor = 0;
     equipItemCursor[0].cursor = 0;
-    entries = licenseCursorTable;
+    entries = skillBoardCursorTable;
     entries[0].previous_cursor = 0;
     entries[0].cursor = 0;
     entries[1].previous_cursor = 0;
@@ -389,7 +389,7 @@ extern int itemListOddRowScale[];
 extern int itemListEvenRowTarget[];
 extern int itemListOddRowTarget[];
 
-/* Draws the item list panel with one row per item. Row i's track lane (i & 1) takes the highlight target, 128 on the selected item and 0 otherwise, and the packet scale is that lane's current value. */
+/* Draws the U.M.N. destination list (title "  Map") with one row per destination. Row i's track lane (i & 1) takes the highlight target, 128 on the selected item and 0 otherwise, and the packet scale is that lane's current value. */
 void menuMapListDraw(ListCursor *list) {
     int *target;
     int panelTop;
@@ -444,7 +444,7 @@ extern void *menuSkillModelPxyBuffers[];
 extern void *menuSkillModelTxyBuffers[];
 extern unsigned char menuSkillModelLoadTally[];
 
-/* Sets up the two 11-entry tables (menuSkillModelPxyBuffers and menuSkillModelTxyBuffers) from the size pairs at menuSkillModelSizes: the first
+/* Sets up the two 11-entry tables (menuSkillModelPxyBuffers and menuSkillModelTxyBuffers) from the .pxy and .txy size pairs at menuSkillModelSizes: the first
    four entries use the sector allocator, the rest the buffer reserve; then clears menuSkillModelLoadTally and menuSkillModelsReady. */
 void menuSkillModelBuffersAlloc(void) {
     int index;
@@ -599,7 +599,7 @@ void menuMessageTextUpdate(void) {
                 }
             } else {
                 if (windowListCursor[0].capacity != 0) {
-                    nextText = hitActionTextGet(selectionWindowList[windowListCursor[0].cursor], 1);
+                    nextText = hitActionTextGet(selectionUsableItemList[windowListCursor[0].cursor], 1);
                 } else {
                     nextText = menuMainTxdEntry(402);
                 }
@@ -616,7 +616,7 @@ void menuMessageTextUpdate(void) {
                     break;
                 }
             } else {
-                if (selectionBlockTestBit(recordItemCursor[0].cursor + 1) != 0) {
+                if (selectionKeyItemBitTest(recordItemCursor[0].cursor + 1) != 0) {
                     nextText = dataBoxCategory3TextGet(recordItemCursor[0].cursor + 1, 1);
                 } else {
                     nextText = menuMainTxdEntry(400);
@@ -624,8 +624,8 @@ void menuMessageTextUpdate(void) {
             }
             break;
         case 2: {
-            if (learnedSkillCursor[0].capacity != 0) {
-                nextText = battleLookupTextGet(learnedSkillList[learnedSkillCursor[0].cursor], 1);
+            if (learnedEtherCursor[0].capacity != 0) {
+                nextText = battleLookupTextGet(learnedEtherList[learnedEtherCursor[0].cursor], 1);
             } else {
                 nextText = menuMainTxdEntry(411);
             }
@@ -633,7 +633,7 @@ void menuMessageTextUpdate(void) {
         }
         case 3: {
             if ((u8) menuSlots[currentSlot].state == 6) {
-                ListCursor *cursors = licenseCursorTable;
+                ListCursor *cursors = skillBoardCursorTable;
 
                 if (selectionEntryBitOutsideMask(cursors[0].cursor, cursors[1].cursor, cursors[2].cursor, menuItemCategoryMask) != 0) {
                     nextText = menuMainTxdEntry(400);
@@ -647,7 +647,7 @@ void menuMessageTextUpdate(void) {
                     nextText = menuMainTxdEntry(435);
                 }
             } else {
-                ListCursor *cursors = licenseCursorTable;
+                ListCursor *cursors = skillBoardCursorTable;
 
                 if (ptGetMenuMember()->buffer->openGroup < cursors[0].cursor) {
                     nextText = menuMainTxdEntry(436);
@@ -694,7 +694,7 @@ void menuMessageTextUpdate(void) {
                 } else if (menuCopilotModeFlag != 0) {
                     if (menuTabCursor[0].cursor == 0) {
                         if (selectionPlainCount != 0) {
-                            nextText = itemTextGet(selectionPlainList[equipItemCursor[0].cursor], 1);
+                            nextText = itemTextGet(selectionAccessoryList[equipItemCursor[0].cursor], 1);
                         } else {
                             nextText = menuMainTxdEntry(434);
                         }
@@ -773,20 +773,20 @@ void menuRebuildCursorBuffers(void) {
         cursorBufferSetCapacity(commandPageCursor, capacity);
         return;
     case 2:
-        learnedSkillList[0] = learnedSkillList[1] = learnedSkillList[2] = learnedSkillList[3] = 0;
+        learnedEtherList[0] = learnedEtherList[1] = learnedEtherList[2] = learnedEtherList[3] = 0;
         count = 0;
         for (i = 1; i < 4; i++) {
             if (menuCopilotModeFlag != 0) {
                 if (ptGetMenuMember()->id == 12 && dataSkillLearnGet(6, i) != 0) {
-                    learnedSkillList[count] = i;
+                    learnedEtherList[count] = i;
                     count++;
                 }
             } else if (dataSkillLearnGet(ptGetMenuMember()->id, i) != 0) {
-                learnedSkillList[count] = i;
+                learnedEtherList[count] = i;
                 count++;
             }
         }
-        cursorBufferSetCapacity(learnedSkillCursor, count);
+        cursorBufferSetCapacity(learnedEtherCursor, count);
         return;
     case 5:
         cursorBufferSetOrInit(equipSlotCursor, ptGetMenuMember()->buffer->entry_count, 4, 0);
@@ -1006,7 +1006,7 @@ void menuSceneSetState(int menuState) {
     if (menuPendingSelection == -1) {
         savedCursor = menuCursorLatch.word = menuPendingSelection;
     }
-    if (!menuConfigFlag46 && menuState != menuCurrentSlot) {
+    if (!menuCursorMemory && menuState != menuCurrentSlot) {
         cursorBuffersRewind();
     }
     switch (menuState) {
@@ -1016,7 +1016,7 @@ void menuSceneSetState(int menuState) {
         menuSetMode(&mainMenuBlock, 9);
         mainMenuBlock.flags &= ~1;
         cursorBufferInit(menuTabCursor, 2, 2, 0);
-        if (!menuConfigFlag47 && menuCurrentSlot == 8) {
+        if (!menuCursorMemoryAlt && menuCurrentSlot == 8) {
             menuFocusSlot(menuState, 0);
             menuSlots[menuState].state = 7;
         } else {
@@ -1026,11 +1026,11 @@ void menuSceneSetState(int menuState) {
     case 8:
         seVoiceStartDefault(0x01000006);
         menuSceneFlags &= ~1;
-        selectionBlockFill();
+        selectionKeyItemBitsFill();
         menuFocusSlot(menuState, 0);
         break;
     case 2:
-        if (menuConfigFlag47 != 0 && menuCopilotModeFlag != 0 && ptFindRecord(12) && ptFindRecord(6)) {
+        if (menuCursorMemoryAlt != 0 && menuCopilotModeFlag != 0 && ptFindRecord(12) && ptFindRecord(6)) {
             menuSetCursor(&mainMenuBlock, ptFindSlot(12) - 7);
             seVoiceStartDefault(0x01000006);
             menuSceneFlags |= 1;
@@ -1204,7 +1204,7 @@ void menuSceneCameraSetup(void) {
 }
 
 void menuUmnImageReset(void);
-/* Sets up the two 11-entry tables (menuSkillModelPxyBuffers and menuSkillModelTxyBuffers) from the size pairs at menuSkillModelSizes: the first four entries use the sector allocator, the rest the buffer reserve; then clears menuSkillModelLoadTally and menuSkillModelsReady. */
+/* Sets up the two 11-entry tables (menuSkillModelPxyBuffers and menuSkillModelTxyBuffers) from the .pxy and .txy size pairs at menuSkillModelSizes: the first four entries use the sector allocator, the rest the buffer reserve; then clears menuSkillModelLoadTally and menuSkillModelsReady. */
 void menuSkillModelBuffersAlloc(void);
 
 void menuSceneLoadAssets(void) {
@@ -1235,20 +1235,20 @@ int menuMainCommandStep(ControlSlot *slot);
 void menuDrawMainCards(ControlSlot *slot);
 int menuItemListStep(ControlSlot *slot);
 void menuDrawSlotItems(ControlSlot *slot);
-int menuLayoutPlaceStep(ControlSlot *slot);
-void menuDrawLayoutPage(ControlSlot *slot);
-int menuLicenseChargeStep(ControlSlot *slot);
-void menuDrawLicensePage(ControlSlot *slot);
-int menuCommandPageStep(ControlSlot *slot);
+int menuEtherPlaceStep(ControlSlot *slot);
+void menuDrawEtherPage(ControlSlot *slot);
+int menuSkillChargeStep(ControlSlot *slot);
+void menuDrawSkillPage(ControlSlot *slot);
+int menuTechPageStep(ControlSlot *slot);
 void menuDrawCommandPage(ControlSlot *slot);
 int menuEquipAssignStep(ControlSlot *slot);
 void menuDrawEquipPage(ControlSlot *slot);
 int menuPartyFormationStep(ControlSlot *slot);
 void menuPartyFormationDrawNone(ControlSlot *slot);
-int menuButtonGridStep(ControlSlot *slot);
-void menuDrawExtraPage(ControlSlot *slot);
-int menuRecordItemStep(ControlSlot *slot);
-void menuDrawRecordItemDetail(ControlSlot *slot);
+int menuPartyChoiceStep(ControlSlot *slot);
+void menuDrawPartyPage(ControlSlot *slot);
+int menuKeyItemStep(ControlSlot *slot);
+void menuDrawKeyItemDetail(ControlSlot *slot);
 int menuConfigSlotStep(ControlSlot *slot);
 void menuDrawConfigPage(ControlSlot *slot);
 int menuMapChoiceStep(ControlSlot *slot);
@@ -1275,11 +1275,11 @@ void menuSceneInit(void) {
     ListCursor **slotLink;
 
     ptRefresh();
-    ptState.nearbySearchType = uwamonoGetNearbySearchType();
+    ptState.nearbySearchType = uwamonoGetNearbyUnitType();
     menuSceneLoadAssets();
 
-    menuConfigFlag46 = SaveData.cursor_memory;
-    menuConfigFlag47 = SaveData.cursor_memory_alt;
+    menuCursorMemory = SaveData.cursor_memory;
+    menuCursorMemoryAlt = SaveData.cursor_memory_alt;
     menuCardAvailabilityBits = 24;
     menuCurrentSlot = 0;
     menuPendingSelection = -1;
@@ -1369,13 +1369,13 @@ void menuSceneInit(void) {
 
     cursorBufferSetOrInit(windowListCursor, selectionWindowCount, 10, 0);
     cursorBufferSetOrInit(recordItemCursor, 107, 18, 0);
-    cursorBufferSetOrInit(learnedSkillCursor, 3, 4, 0);
+    cursorBufferSetOrInit(learnedEtherCursor, 3, 4, 0);
     cursorBufferSetOrInit(commandPageCursor, 7, 7, 0);
     cursorBufferSetOrInit(equipSlotCursor, menuEquipRowCount, 4, 0);
     cursorBufferSetOrInit(equipItemCursor, 8, 8, 0);
-    cursorBufferSetOrInit(licenseCursorTable, 4, 4, 0);
-    cursorBufferSetOrInit(&licenseCursorTable[1], 8, 8, 0);
-    cursorBufferSetOrInit(&licenseCursorTable[2], 4, 4, 0);
+    cursorBufferSetOrInit(skillBoardCursorTable, 4, 4, 0);
+    cursorBufferSetOrInit(&skillBoardCursorTable[1], 8, 8, 0);
+    cursorBufferSetOrInit(&skillBoardCursorTable[2], 4, 4, 0);
     cursorBufferSetOrInit(mapChoiceCursor, 8, 8, 0);
 
     menuCurrentLink = 0;
@@ -1416,34 +1416,34 @@ void menuSceneInit(void) {
     slot->callback = menuDrawMainCards;
     *slotLink = mainCommandCursors;
     menuSlotSetDirection(slot, 1, 128);
-    if (menuConfigFlag46 != 0) {
+    if (menuCursorMemory != 0) {
         slot->state = menuSavedSlotState;
     }
 
     slot[1].step = menuItemListStep;
     slot[1].callback = menuDrawSlotItems;
     slot[1].link = windowListCursor;
-    slot[2].step = menuLayoutPlaceStep;
-    slot[2].callback = menuDrawLayoutPage;
-    slot[3].step = menuLicenseChargeStep;
-    slot[3].callback = menuDrawLicensePage;
-    slot[4].step = menuCommandPageStep;
+    slot[2].step = menuEtherPlaceStep;
+    slot[2].callback = menuDrawEtherPage;
+    slot[3].step = menuSkillChargeStep;
+    slot[3].callback = menuDrawSkillPage;
+    slot[4].step = menuTechPageStep;
     slot[4].callback = menuDrawCommandPage;
     slot[5].step = menuEquipAssignStep;
     slot[5].callback = menuDrawEquipPage;
     slot[6].step = menuPartyFormationStep;
     slot[6].callback = menuPartyFormationDrawNone;
-    slot[7].step = menuButtonGridStep;
+    slot[7].step = menuPartyChoiceStep;
     slot7 = &slot[7];
-    slot[2].link = learnedSkillCursor;
-    slot7->callback = menuDrawExtraPage;
-    slot[3].link = licenseCursorTable;
+    slot[2].link = learnedEtherCursor;
+    slot7->callback = menuDrawPartyPage;
+    slot[3].link = skillBoardCursorTable;
     slot[4].link = commandPageCursor;
     slot[5].link = equipItemCursor;
     menuSlotSetDirection(slot7, 1, 128);
 
-    slot[8].step = menuRecordItemStep;
-    slot[8].callback = menuDrawRecordItemDetail;
+    slot[8].step = menuKeyItemStep;
+    slot[8].callback = menuDrawKeyItemDetail;
     slot[8].link = recordItemCursor;
     slot[9].step = menuConfigSlotStep;
     slot[9].callback = menuDrawConfigPage;
@@ -1631,7 +1631,7 @@ void menuSelectionRingDraw(int mode) {
                 nmlModelSetTransparency(f22);
                 menuModelDraw(10, 0.0f, 0.0f, 0.0f, menuRingTilt, f21, 0.2f, 0);
                 nmlModelSetTransparency(pulse * zoom);
-                menuModelDraw(10 - licenseCursorTable[0].cursor, 0.0f, 0.0f, 0.0f, menuRingTilt, f21, 0.2f, 0);
+                menuModelDraw(10 - skillBoardCursorTable[0].cursor, 0.0f, 0.0f, 0.0f, menuRingTilt, f21, 0.2f, 0);
             }
         }
         columnSpeed[0] = columnSpeed[1] = columnSpeed[2] = columnSpeed[3] = 0.0210000016f;
@@ -1662,7 +1662,7 @@ void menuSelectionRingDraw(int mode) {
                     k = passCount;
                     do {
                         if ((unsigned char) menuSlots[3].state != 4 && (unsigned char) menuSlots[3].state != 1 &&
-                            (licenseCursorTable[0].cursor * 8 + licenseCursorTable[1].cursor) == i) {
+                            (skillBoardCursorTable[0].cursor * 8 + skillBoardCursorTable[1].cursor) == i) {
                             highlight = 1;
                             nmlModelSetTransparency(pulse * zoom);
                         } else {
@@ -1742,7 +1742,7 @@ void menuSceneDrawOverlays(void) {
         mainMenuBlock.position.target_pair.y = 0;
     }
     if (menuTutorialActive != 0) {
-        gameOverDrawOverlay(0x40);
+        screenFadeQuadDraw(0x40);
     }
     fontObjResetAndBuild();
     if (menuChoiceOpenFlag != 0) {
@@ -1920,8 +1920,8 @@ void menuDrawSlotItems(ControlSlot *slot) {
 
 
 /* Submits the four layout packets; menuCopilotModeFlag picks one of two coordinate sets. */
-void menuDrawLayoutPage(ControlSlot *slot) {
-    menuDrawMemberItemList(0xD, 0xD4, learnedSkillCursor, learnedSkillList);
+void menuDrawEtherPage(ControlSlot *slot) {
+    menuDrawMemberItemList(0xD, 0xD4, learnedEtherCursor, learnedEtherList);
     if (menuCopilotModeFlag != 0) {
         menuDrawCell(0x161, 0x11, 0xB7, 1);
         menuDrawCell(0x163, 0xAF, 0xB7, 1);
@@ -1939,7 +1939,7 @@ void menuDrawLayoutPage(ControlSlot *slot) {
 extern int menuLicenseState;
 extern signed char menuTutorialToggleFlags;
 
-void menuDrawLicensePage(ControlSlot *slot) {
+void menuDrawSkillPage(ControlSlot *slot) {
     int baseY = mainMenuBlock.position.current_pair.y;
     int show;
 
@@ -1978,7 +1978,7 @@ void menuDrawLicensePage(ControlSlot *slot) {
         show = 1;
     }
     if (show) {
-        menuDrawLicenseBoard(254, baseY + 95, licenseCursorTable, &licenseCursorTable[1], &licenseCursorTable[2], menuLicenseState - 4, menuItemCategoryMask);
+        menuDrawSkillBoard(254, baseY + 95, skillBoardCursorTable, &skillBoardCursorTable[1], &skillBoardCursorTable[2], menuLicenseState - 4, menuItemCategoryMask);
     }
 
     if (menuCursorLatch.word != -1 && (slot->flags & CONTROL_SLOT_FLAG_MARK) == 0) {
@@ -2058,8 +2058,8 @@ void menuDrawEquipPage(ControlSlot *slot) {
                 highlight = -1;
             } else {
                 ctx = ptGetMenuMember();
-                if (selectionFindIndex(ctx, selectionPlainList[cursor->cursor]) == -1) {
-                    listEntry = selectionPlainList[cursor->cursor];
+                if (selectionFindIndex(ctx, selectionAccessoryList[cursor->cursor]) == -1) {
+                    listEntry = selectionAccessoryList[cursor->cursor];
                 } else {
                     highlight = -1;
                 }
@@ -2148,7 +2148,7 @@ void menuPartyFormationDrawNone(ControlSlot *slot) {
 
 
 /* Draws the detail panel of the record's value through menuDrawItemListDetail. */
-void menuDrawRecordItemDetail(ControlSlot *slot) {
+void menuDrawKeyItemDetail(ControlSlot *slot) {
     menuDrawItemListDetail(0x1F, 0x5F, slot->link);
 }
 
@@ -2164,7 +2164,7 @@ void menuDrawConfigPage(ControlSlot *slot) {
     }
 }
 
-/* Draws the item list panel with one row per item. Row i's track lane (i & 1) takes the highlight target, 128 on the selected item and 0 otherwise, and the packet scale is that lane's current value. */
+/* Draws the U.M.N. destination list (title "  Map") with one row per destination. Row i's track lane (i & 1) takes the highlight target, 128 on the selected item and 0 otherwise, and the packet scale is that lane's current value. */
 void menuMapListDraw(ListCursor *list);
 
 void menuMapDraw(ControlSlot *slot) {
@@ -2176,7 +2176,7 @@ void menuMapDraw(ControlSlot *slot) {
 extern u8 extraTitleText[];
 
 /* Draws the scene's font track, panels and text, then the item list when the state is 5. */
-void menuDrawExtraPage(ControlSlot *slot) {
+void menuDrawPartyPage(ControlSlot *slot) {
     int rosterCount;
     int i;
     int x;
@@ -2344,7 +2344,7 @@ void menuSceneDraw(void) {
 
 extern SelectionRecord selectionRecordTable[];
 
-void selectionPlaceKey(PartyMember *context, int key, int count) {
+void menuPlaceKey(PartyMember *context, int key, int count) {
     SelectionRecord *record;
     int index;
 
@@ -2360,15 +2360,15 @@ void selectionPlaceKey(PartyMember *context, int key, int count) {
 }
 
 
-void selectionTakePlainEntry(PartyMember *context, int plainIndex, int row) {
-    context->buffer->entries[row] = selectionPlainList[plainIndex];
-    calcAccEquipOrg(context->id, row, selectionPlainList[plainIndex]);
+void menuTakePlainEntry(PartyMember *context, int plainIndex, int row) {
+    context->buffer->entries[row] = selectionAccessoryList[plainIndex];
+    calcAccEquipOrg(context->id, row, selectionAccessoryList[plainIndex]);
     selectionListDropAt(plainIndex);
     cursorBufferSetCapacity(equipItemCursor, selectionPlainCount);
 }
 
 /* Advances the back or front slot cursor of ptState until the chosen slot is filled, and starts voice 0x01000001 when the cursor moved. */
-void ptAdvanceSlotCursor(void) {
+void menuAdvanceSlotCursor(void) {
     unsigned char previous;
 
     if (menuCopilotModeFlag != 0) {
@@ -2395,7 +2395,7 @@ void ptAdvanceSlotCursor(void) {
 extern u8 menuNewlineText[];
 
 /* Loads the two message buffers, starts the voice cue 0x01000003 and sets countdownActive (countdownActive). */
-void countdownStart(void) {
+void menuCountdownStart(void) {
     void *firstBuffer;
     void *secondBuffer;
 
@@ -2429,7 +2429,7 @@ void menuPromptSet(u32 mode) {
         countdownInit((void *) 0, 0);
         break;
     case 1: {
-        ListCursor *links = licenseCursorTable;
+        ListCursor *links = skillBoardCursorTable;
 
         choiceInit(menuMainTxdEntry(links[0].cursor + 0x36), -1);
         msgBufferAppend(" ");
@@ -2442,7 +2442,7 @@ void menuPromptSet(u32 mode) {
         break;
     }
     case 2: {
-        ListCursor *links = licenseCursorTable;
+        ListCursor *links = skillBoardCursorTable;
 
         choiceInit(selectionSubTextGet(links[0].cursor, links[1].cursor, links[2].cursor, 0), -1);
         msgBufferAppend(menuNewlineText);
@@ -2453,7 +2453,7 @@ void menuPromptSet(u32 mode) {
         break;
     }
     case 3: {
-        ListCursor *links = licenseCursorTable;
+        ListCursor *links = skillBoardCursorTable;
 
         countdownInit(menuMainTxdEntry(links[0].cursor + 0x36), -2);
         msgBufferAppend(" ");
@@ -2468,7 +2468,7 @@ void menuPromptSet(u32 mode) {
         break;
     }
     case 4: {
-        ListCursor *links = licenseCursorTable;
+        ListCursor *links = skillBoardCursorTable;
 
         countdownInit(menuMainTxdEntry(links[0].cursor + 0x36), -2);
         msgBufferAppend(" ");
@@ -2499,9 +2499,9 @@ void menuTutorialSaveState(void) {
     cursorBufferSetOffset(mainCommandCursors, 2);
     menuPendingSelection = 0;
     if (menuCurrentSlot == 3) {
-        menuTutorialSavedCursors[0] = ((u8 *) licenseCursorTable)[0x00];
-        menuTutorialSavedCursors[1] = ((u8 *) licenseCursorTable)[0x14];
-        menuTutorialSavedCursors[2] = ((u8 *) licenseCursorTable)[0x28];
+        menuTutorialSavedCursors[0] = ((u8 *) skillBoardCursorTable)[0x00];
+        menuTutorialSavedCursors[1] = ((u8 *) skillBoardCursorTable)[0x14];
+        menuTutorialSavedCursors[2] = ((u8 *) skillBoardCursorTable)[0x28];
         menuTutorialSavedLicenseState = menuSlots[3].state;
     } else {
         menuTutorialSavedLicenseState = 0;
@@ -2511,7 +2511,7 @@ void menuTutorialSaveState(void) {
     savedHeader = menuTutorialSavedHeader;
     menuPlaceCursor(0, 0, 0, 0);
     menuSlots[3].state = 4;
-    menuLinkSetCurrent(licenseCursorTable);
+    menuLinkSetCurrent(skillBoardCursorTable);
     cursorBufferSetOffset(menuTabCursor, 1);
     menuTutorialIndex = 0;
     menuTutorialToggleFlags = 0;
@@ -2550,9 +2550,9 @@ void menuTutorialSaveState(void) {
     menuTutorialSavedClassPoints = ptGetMenuMember()->limits->classPoints;
     ptGetMenuMember()->limits->classPoints = 1000;
     menuTutorialPanelFlag = 1;
-    cursorBufferSetOffset(licenseCursorTable, 0);
-    cursorBufferSetOffset(&licenseCursorTable[1], 0);
-    cursorBufferSetOffset(&licenseCursorTable[2], 0);
+    cursorBufferSetOffset(skillBoardCursorTable, 0);
+    cursorBufferSetOffset(&skillBoardCursorTable[1], 0);
+    cursorBufferSetOffset(&skillBoardCursorTable[2], 0);
 }
 
 void menuTutorialRestoreState(void) {
@@ -2577,7 +2577,7 @@ void menuTutorialRestoreState(void) {
     ptGetMenuMember()->limits->skillPoints = menuTutorialSavedSkillPoints;
     ptGetMenuMember()->limits->classPoints = menuTutorialSavedClassPoints;
     if (menuTutorialSavedLicenseState != 0) {
-        ListCursor *records = licenseCursorTable;
+        ListCursor *records = skillBoardCursorTable;
 
         records[0].cursor = menuTutorialSavedCursors[0];
         records[1].cursor = menuTutorialSavedCursors[1];
@@ -2587,7 +2587,7 @@ void menuTutorialRestoreState(void) {
             records[1].capacity = 8;
         }
         {
-            ListCursor *tail = licenseCursorTable;
+            ListCursor *tail = skillBoardCursorTable;
 
             tail[2].cursor = menuTutorialSavedThirdCursor;
         }
@@ -2647,11 +2647,11 @@ void menuTutorialPageReset(void) {
     ptGetMenuMember()->buffer->takenCount = 0;
     ptGetMenuMember()->limits->skillPoints = 1000;
     ptGetMenuMember()->limits->classPoints = 1000;
-    cursorBufferSetOffset(licenseCursorTable, 0);
-    cursorBufferSetOffset(&licenseCursorTable[1], 0);
-    cursorBufferSetOffset(&licenseCursorTable[2], 0);
+    cursorBufferSetOffset(skillBoardCursorTable, 0);
+    cursorBufferSetOffset(&skillBoardCursorTable[1], 0);
+    cursorBufferSetOffset(&skillBoardCursorTable[2], 0);
     licenseSlotState[0] = 4;
-    menuLinkSetCurrent(licenseCursorTable);
+    menuLinkSetCurrent(skillBoardCursorTable);
 }
 
 extern u8 menuTutorialTimer;
@@ -2775,14 +2775,14 @@ void menuTutorialStep(void) {
             switch (arg) {
             case '0':
                 seVoiceStartDefault(MENU_SE_CURSOR);
-                menuLinkSetCurrent(licenseCursorTable);
+                menuLinkSetCurrent(skillBoardCursorTable);
                 licenseSlotState[0] = 4;
                 break;
             case '1':
-                if (licenseCursorTable[0].cursor == 3) {
-                    cursorBufferSetCapacity(&licenseCursorTable[1], 4);
+                if (skillBoardCursorTable[0].cursor == 3) {
+                    cursorBufferSetCapacity(&skillBoardCursorTable[1], 4);
                 } else {
-                    cursorBufferSetCapacity(&licenseCursorTable[1], 8);
+                    cursorBufferSetCapacity(&skillBoardCursorTable[1], 8);
                 }
                 menuLinkSetCurrent(licenseSecondCursor);
                 licenseSlotState[0] = 5;
@@ -2902,11 +2902,11 @@ void menuTutorialStep(void) {
                 switch (licenseSlotState[0]) {
                 case 5:
                     ctx = ptGetMenuMember();
-                    selectionSlotOpen(ctx, licenseCursorTable[0].cursor, licenseCursorTable[1].cursor);
+                    selectionSlotOpen(ctx, skillBoardCursorTable[0].cursor, skillBoardCursorTable[1].cursor);
                     break;
                 case 6:
                     ctx = ptGetMenuMember();
-                    links = licenseCursorTable;
+                    links = skillBoardCursorTable;
                     if (selectionTakeSub(ctx, links[0].cursor, links[1].cursor, links[2].cursor)) {
                         ctx = ptGetMenuMember();
                         ctx->limits->classPoints += selectionSlotRewardTable[links[0].cursor * 8 + links[1].cursor];
@@ -2936,11 +2936,11 @@ void menuTutorialStep(void) {
                     switch (licenseSlotState[0]) {
                     case 5:
                         ctx = ptGetMenuMember();
-                        selectionSlotOpen(ctx, licenseCursorTable[0].cursor, licenseCursorTable[1].cursor);
+                        selectionSlotOpen(ctx, skillBoardCursorTable[0].cursor, skillBoardCursorTable[1].cursor);
                         break;
                     case 6:
                         ctx = ptGetMenuMember();
-                        links = licenseCursorTable;
+                        links = skillBoardCursorTable;
                         if (selectionTakeSub(ctx, links[0].cursor, links[1].cursor, links[2].cursor)) {
                             menuPromptSet(3);
                             ctx = ptGetMenuMember();
@@ -3022,7 +3022,7 @@ int menuMainCommandStep(ControlSlot *slot) {
         cursorBufferMoveBy(slot->link + slot->state, 1);
     }
     if ((PadData[0].directionPressed & PAD_START) != 0) {
-        ptAdvanceSlotCursor();
+        menuAdvanceSlotCursor();
     }
     result = padCrossPressedAlone() ? 1 : 0;
     activeState = 1;
@@ -3101,7 +3101,7 @@ int menuItemListStep(ControlSlot *slot) {
     }
     switch (slot->state) {
     case 0:
-        if (!menuConfigFlag47) {
+        if (!menuCursorMemoryAlt) {
             goto resetState1; /* goto kept: one shared reset block; a second copy of it grows the function by two instructions */
         }
     case 7:
@@ -3152,14 +3152,14 @@ int menuItemListStep(ControlSlot *slot) {
                 goto soundFail; /* goto kept: the three refusals share one block; inlined copies are not cross-jumped */
             }
             seVoiceStartDefault(MENU_SE_CONFIRM);
-            if (selectionWindowList[slot->link->cursor] >= 0x25) {
+            if (selectionUsableItemList[slot->link->cursor] >= 0x25) {
                 signed char map[4] = {0x08, 0x07, 0x10, 0x0C};
 
-                countdownInit(menuMainTxdEntry(selectionWindowList[slot->link->cursor] + 0x193), 0x12C);
+                countdownInit(menuMainTxdEntry(selectionUsableItemList[slot->link->cursor] + 0x193), 0x12C);
                 countdownActive = 1;
                 entry = menuItemMemberEntry(&itemMenuBlock.items[itemMenuBlock.cursor]);
-                calcUseItemMenu(entry->id, selectionWindowList[slot->link->cursor]);
-                slotPairSet(map[selectionWindowList[slot->link->cursor] - 0x25]);
+                calcUseItemMenu(entry->id, selectionUsableItemList[slot->link->cursor]);
+                slotPairSet(map[selectionUsableItemList[slot->link->cursor] - 0x25]);
                 if (!menuCopilotModeFlag) {
                     menuPartnerMask = 1;
                     for (i = 0; i < 16; i++) {
@@ -3211,7 +3211,7 @@ int menuItemListStep(ControlSlot *slot) {
                 }
                 seVoiceStartDefault(MENU_SE_CONFIRM);
                 entry = menuItemMemberEntry(&itemMenuBlock.items[itemMenuBlock.cursor]);
-                calcUseItemMenu(entry->id, selectionWindowList[slot->link->cursor]);
+                calcUseItemMenu(entry->id, selectionUsableItemList[slot->link->cursor]);
                 if (selectionWindowListDropAt(slot->link->cursor) > 0) {
                     return 0;
                 }
@@ -3229,7 +3229,7 @@ int menuItemListStep(ControlSlot *slot) {
             }
             seVoiceStartDefault(MENU_SE_CONFIRM);
             entry = menuItemMemberEntry(&itemMenuBlock.items[itemMenuBlock.cursor]);
-            calcUseItemMenu(entry->id, selectionWindowList[slot->link->cursor]);
+            calcUseItemMenu(entry->id, selectionUsableItemList[slot->link->cursor]);
             if (selectionWindowListDropAt(slot->link->cursor) > 0) {
                 return 0;
             }
@@ -3260,7 +3260,7 @@ int menuItemListStep(ControlSlot *slot) {
 /* Clears the mark bit of the current slot, then sets menuPendingSelection to -1 before the tail call. */
 void menuCancelToMainSlot(void);
 
-int menuLayoutPlaceStep(ControlSlot *slot) {
+int menuEtherPlaceStep(ControlSlot *slot) {
     unsigned char state;
     PartyMember *ctx;
     PartyMember *ctx2;
@@ -3278,19 +3278,19 @@ int menuLayoutPlaceStep(ControlSlot *slot) {
     case 4:
         if (padCrossPressedAlone()) {
             seVoiceStartDefault(MENU_SE_BACK);
-            if (menuConfigFlag47) {
+            if (menuCursorMemoryAlt) {
                 menuFocusRootSlot();
             } else {
                 menuCancelToMainSlot();
             }
         } else if (padCirclePressedAlone()) {
-            if (learnedSkillList[slot->link->cursor] != 0) {
+            if (learnedEtherList[slot->link->cursor] != 0) {
                 PartyMember *ctxS4;
                 int limit;
                 int index = slot->link->cursor;
                 limit = (int) ptGetMenuMemberState()->ep;
                 ctxS4 = ptGetMenuMember();
-                if (calcTakeEpGetMenu(ctxS4->id, learnedSkillList[slot->link->cursor]) > limit) {
+                if (calcTakeEpGetMenu(ctxS4->id, learnedEtherList[slot->link->cursor]) > limit) {
                     seVoiceStartDefault(MENU_SE_REFUSE);
                 } else {
                     seVoiceStartDefault(MENU_SE_CONFIRM);
@@ -3298,12 +3298,12 @@ int menuLayoutPlaceStep(ControlSlot *slot) {
                     slot->state = 2;
                     itemMenuBlock.flags = itemMenuBlock.flags | 1;
                     menuLinkSetCurrent(0);
-                    if (learnedSkillList[slot->link->cursor] == 3) {
+                    if (learnedEtherList[slot->link->cursor] == 3) {
                         itemMenuBlock.flags = itemMenuBlock.flags | 4;
                     }
                 }
             }
-        } else if (menuConfigFlag47 != 0 && (PadData[0].directionRepeated & (PAD_LEFT | PAD_RIGHT))) {
+        } else if (menuCursorMemoryAlt != 0 && (PadData[0].directionRepeated & (PAD_LEFT | PAD_RIGHT))) {
             if (PadData[0].directionRepeated & PAD_LEFT) {
                 menuMoveCursor(&mainMenuBlock, -1);
             } else {
@@ -3333,13 +3333,13 @@ int menuLayoutPlaceStep(ControlSlot *slot) {
             rec2 = calcTotalParaMenu(ctx->id);
             menu = &itemMenuBlock;
             if (rec16->hp != rec2->maxHp
-                || (learnedSkillList[slot->link->cursor] == 3 && selectionActiveMemberNeedsHp() != 0)) {
+                || (learnedEtherList[slot->link->cursor] == 3 && selectionActiveMemberNeedsHp() != 0)) {
                 seVoiceStartDefault(MENU_SE_CONFIRM);
                 ctx = ptGetMenuMember();
-                calcUseEtherMenu(ctx->id, id20, learnedSkillList[slot->link->cursor]);
+                calcUseEtherMenu(ctx->id, id20, learnedEtherList[slot->link->cursor]);
                 t16 = (short) ptGetMenuMemberState()->ep;
                 ctx = ptGetMenuMember();
-                if (!(t16 >= calcTakeEpGetMenu(ctx->id, learnedSkillList[slot->link->cursor]))) {
+                if (!(t16 >= calcTakeEpGetMenu(ctx->id, learnedEtherList[slot->link->cursor]))) {
                     menuSceneFlags = menuSceneFlags | 1;
                     menu->flags = menu->flags & ~1;
                     slot->state = 4;
@@ -3364,17 +3364,17 @@ int menuLayoutPlaceStep(ControlSlot *slot) {
 
 
 /* The menu-slot state machine: idle, cursor, confirm and selection states, one step per call. */
-int menuLicenseChargeStep(ControlSlot *slot) {
+int menuSkillChargeStep(ControlSlot *slot) {
     unsigned char state;
     PartyMember *ctx;
-    PartyMemberLimits *limits;
+    PartyMemberExpPoints *limits;
     unsigned char flagsBefore;
 
     if ((slot->flags & 1) == 0) {
         return 0;
     }
     if (slot->state == 0) {
-        if (menuConfigFlag47 != 0) {
+        if (menuCursorMemoryAlt != 0) {
             slot->state = 4;
         } else {
             menuLinkSetCurrent(0);
@@ -3390,7 +3390,7 @@ int menuLicenseChargeStep(ControlSlot *slot) {
     if (menuChoiceOpenFlag == 0 && padCrossPressedAlone() != 0) {
         if (slot->state == 1) {
             seVoiceStartDefault(MENU_SE_BACK);
-            if (menuConfigFlag47 != 0) {
+            if (menuCursorMemoryAlt != 0) {
                 menuFocusRootSlot();
             } else {
                 menuCancelToMainSlot();
@@ -3428,10 +3428,10 @@ int menuLicenseChargeStep(ControlSlot *slot) {
         break;
     case 4:
         if ((PadData[0].directionState & 0x200000005000ULL) == 0x200000000000ULL) {
-            if (licenseCursorTable[0].cursor == 3) {
-                cursorBufferSetCapacity(&licenseCursorTable[1], 4);
+            if (skillBoardCursorTable[0].cursor == 3) {
+                cursorBufferSetCapacity(&skillBoardCursorTable[1], 4);
             } else {
-                cursorBufferSetCapacity(&licenseCursorTable[1], 8);
+                cursorBufferSetCapacity(&skillBoardCursorTable[1], 8);
             }
             menuLinkSetCurrent(licenseSecondCursor);
             slot->state = 5;
@@ -3441,7 +3441,7 @@ int menuLicenseChargeStep(ControlSlot *slot) {
     case 5:
         if (menuChoiceOpenFlag != 0) {
             if (choiceGetResult() == 0) {
-                selectionSlotOpen(ptGetMenuMember(), licenseCursorTable[0].cursor, licenseCursorTable[1].cursor);
+                selectionSlotOpen(ptGetMenuMember(), skillBoardCursorTable[0].cursor, skillBoardCursorTable[1].cursor);
             }
             menuChoiceOpenFlag = 0;
         } else if ((PadData[0].directionState & 0x200000005000ULL) == 0x200000000000ULL) {
@@ -3450,18 +3450,18 @@ int menuLicenseChargeStep(ControlSlot *slot) {
             slot->state = 6;
         } else if ((PadData[0].directionState & 0x800000005000ULL) == 0x800000000000ULL) {
             seVoiceStartDefault(MENU_SE_CURSOR);
-            menuLinkSetCurrent(licenseCursorTable);
+            menuLinkSetCurrent(skillBoardCursorTable);
             slot->state = 4;
         } else if (padCirclePressedAlone() != 0) {
-            int found = selectionCanOpenSlot(ptGetMenuMember(), licenseCursorTable[0].cursor, licenseCursorTable[1].cursor);
+            int found = selectionCanOpenSlot(ptGetMenuMember(), skillBoardCursorTable[0].cursor, skillBoardCursorTable[1].cursor);
             if (found != 0) {
                 seVoiceStartDefault(MENU_SE_CONFIRM);
-                choiceInit(menuMainTxdEntry(licenseCursorTable[0].cursor + 0x36), 1);
+                choiceInit(menuMainTxdEntry(skillBoardCursorTable[0].cursor + 0x36), 1);
                 msgBufferAppend(" ");
-                msgBufferAppend(menuMainTxdEntry(licenseCursorTable[1].cursor + 0x3A));
+                msgBufferAppend(menuMainTxdEntry(skillBoardCursorTable[1].cursor + 0x3A));
                 msgBufferAppend(menuNewlineText);
                 msgBufferAppend(menuMainTxdEntry(0x42));
-                msgBufferAppend(menuFormatNumber5(selectionSlotOpenCostTable[licenseCursorTable[0].cursor * 8 + licenseCursorTable[1].cursor]));
+                msgBufferAppend(menuFormatNumber5(selectionSlotOpenCostTable[skillBoardCursorTable[0].cursor * 8 + skillBoardCursorTable[1].cursor]));
                 msgBufferAppend(menuNewlineText);
                 msgBufferAppend(menuMainTxdEntry(0x44));
                 menuChoiceOpenFlag = 1;
@@ -3475,15 +3475,15 @@ int menuLicenseChargeStep(ControlSlot *slot) {
             if (choiceGetResult() == 0) {
                 flagsBefore = ptGetMenuMember()->buffer->openGroup;
                 ctx = ptGetMenuMember();
-                if (selectionApplyEntry(ctx, licenseCursorTable[0].cursor, licenseCursorTable[1].cursor, licenseCursorTable[2].cursor) != 0) {
-                    countdownInit(menuMainTxdEntry(licenseCursorTable[0].cursor + 0x36), 300);
+                if (selectionApplyEntry(ctx, skillBoardCursorTable[0].cursor, skillBoardCursorTable[1].cursor, skillBoardCursorTable[2].cursor) != 0) {
+                    countdownInit(menuMainTxdEntry(skillBoardCursorTable[0].cursor + 0x36), 300);
                     msgBufferAppend(" ");
-                    msgBufferAppend(menuMainTxdEntry(licenseCursorTable[1].cursor + 0x3A));
+                    msgBufferAppend(menuMainTxdEntry(skillBoardCursorTable[1].cursor + 0x3A));
                     msgBufferAppend(" ");
                     msgBufferAppend(menuMainTxdEntry(0x47));
                     msgBufferAppend(menuNewlineText);
                     msgBufferAppend(menuMainTxdEntry(0x4B));
-                    msgBufferAppend(menuFormatNumber5(selectionSlotRewardTable[licenseCursorTable[0].cursor * 8 + licenseCursorTable[1].cursor]));
+                    msgBufferAppend(menuFormatNumber5(selectionSlotRewardTable[skillBoardCursorTable[0].cursor * 8 + skillBoardCursorTable[1].cursor]));
                     msgBufferAppend(" ");
                     msgBufferAppend(menuMainTxdEntry(0x4C));
                     if (flagsBefore != ptGetMenuMember()->buffer->openGroup) {
@@ -3492,7 +3492,7 @@ int menuLicenseChargeStep(ControlSlot *slot) {
                         countdownActive = 2;
                     }
                     limits = ptGetMenuMember()->limits;
-                    limits->classPoints += selectionSlotRewardTable[licenseCursorTable[0].cursor * 8 + licenseCursorTable[1].cursor];
+                    limits->classPoints += selectionSlotRewardTable[skillBoardCursorTable[0].cursor * 8 + skillBoardCursorTable[1].cursor];
                     if (ptGetMenuMember()->limits->classPoints > 99999) {
                         ptGetMenuMember()->limits->classPoints = 99999;
                     }
@@ -3504,15 +3504,15 @@ int menuLicenseChargeStep(ControlSlot *slot) {
             menuLinkSetCurrent(licenseSecondCursor);
             slot->state = 5;
         } else if (padCirclePressedAlone() != 0) {
-            if (selectionEntryBitOutsideMask(licenseCursorTable[0].cursor, licenseCursorTable[1].cursor, licenseCursorTable[2].cursor, menuItemCategoryMask) == 0
-                && selectionCanTakeSub(ptGetMenuMember(), licenseCursorTable[0].cursor, licenseCursorTable[1].cursor, licenseCursorTable[2].cursor) != 0) {
+            if (selectionEntryBitOutsideMask(skillBoardCursorTable[0].cursor, skillBoardCursorTable[1].cursor, skillBoardCursorTable[2].cursor, menuItemCategoryMask) == 0
+                && selectionCanTakeSub(ptGetMenuMember(), skillBoardCursorTable[0].cursor, skillBoardCursorTable[1].cursor, skillBoardCursorTable[2].cursor) != 0) {
                 int value;
 
                 seVoiceStartDefault(MENU_SE_CONFIRM);
-                choiceInit(selectionSubTextGet(licenseCursorTable[0].cursor, licenseCursorTable[1].cursor, licenseCursorTable[2].cursor, 0), 1);
+                choiceInit(selectionSubTextGet(skillBoardCursorTable[0].cursor, skillBoardCursorTable[1].cursor, skillBoardCursorTable[2].cursor, 0), 1);
                 msgBufferAppend(menuNewlineText);
                 msgBufferAppend(menuMainTxdEntry(0x43));
-                value = selectionSubCostGet(licenseCursorTable[0].cursor, licenseCursorTable[1].cursor, licenseCursorTable[2].cursor);
+                value = selectionSubCostGet(skillBoardCursorTable[0].cursor, skillBoardCursorTable[1].cursor, skillBoardCursorTable[2].cursor);
                 msgBufferAppend(menuFormatNumber5(value));
                 msgBufferAppend(menuNewlineText);
                 msgBufferAppend(menuMainTxdEntry(0x44));
@@ -3531,7 +3531,7 @@ int menuLicenseChargeStep(ControlSlot *slot) {
 
 /* Per-slot step of a ControlSlot: once its flag bit 0 is set, the state moves 0 -> 4 -> 5 and the cursor offset
    is set for a left or right press; always returns 0. */
-int menuCommandPageStep(ControlSlot *slot) {
+int menuTechPageStep(ControlSlot *slot) {
     PadRecord *pad;
 
     if ((slot->flags & 1) == 0) {
@@ -3543,7 +3543,7 @@ int menuCommandPageStep(ControlSlot *slot) {
     }
     if (padCrossPressedAlone() != 0) {
         seVoiceStartDefault(MENU_SE_BACK);
-        if (menuConfigFlag47 != 0) {
+        if (menuCursorMemoryAlt != 0) {
             menuFocusRootSlot();
         } else {
             menuCancelToMainSlot();
@@ -3566,8 +3566,8 @@ int menuCommandPageStep(ControlSlot *slot) {
     return 0;
 }
 
-void selectionTakePlainEntry(PartyMember *context, int index, int n);
-void selectionPlaceKey(PartyMember *context, int value, int count);
+void menuTakePlainEntry(PartyMember *context, int index, int n);
+void menuPlaceKey(PartyMember *context, int value, int count);
 
 int menuEquipAssignStep(ControlSlot *slot) {
     PadRecord *pad;
@@ -3580,7 +3580,7 @@ int menuEquipAssignStep(ControlSlot *slot) {
     }
     switch ((u8) slot->state) {
     case 0:
-        if (menuConfigFlag47 == 0 && menuCopilotModeFlag == 0) {
+        if (menuCursorMemoryAlt == 0 && menuCopilotModeFlag == 0) {
             menuLinkSetCurrent(0);
             slot->state = 1;
         } else {
@@ -3607,7 +3607,7 @@ int menuEquipAssignStep(ControlSlot *slot) {
             break;
         }
         seVoiceStartDefault(MENU_SE_BACK);
-        if (menuConfigFlag47 != 0) {
+        if (menuCursorMemoryAlt != 0) {
             menuFocusRootSlot();
         } else {
             menuCancelToMainSlot();
@@ -3617,7 +3617,7 @@ int menuEquipAssignStep(ControlSlot *slot) {
         if (padCrossPressedAlone() != 0) {
             if (menuCopilotModeFlag != 0) {
                 seVoiceStartDefault(MENU_SE_BACK);
-                if (menuConfigFlag47 != 0) {
+                if (menuCursorMemoryAlt != 0) {
                     menuFocusRootSlot();
                 } else {
                     menuCancelToMainSlot();
@@ -3638,8 +3638,8 @@ int menuEquipAssignStep(ControlSlot *slot) {
             }
             if (ptGetMenuMember()->buffer->entry_count < menuEquipRowCount) {
                 if (menuCopilotModeFlag != 0) {
-                    if (selectionFindIndex(ptGetMenuMember(), selectionPlainList[equipItemCursor[0].cursor]) == -1) {
-                        selectionTakePlainEntry(ptGetMenuMember(), equipItemCursor[0].cursor,
+                    if (selectionFindIndex(ptGetMenuMember(), selectionAccessoryList[equipItemCursor[0].cursor]) == -1) {
+                        menuTakePlainEntry(ptGetMenuMember(), equipItemCursor[0].cursor,
                                                 ptGetMenuMember()->buffer->entry_count);
                     ptGetMenuMember()->buffer->entry_count++;
                     equipSlotCursor[0].capacity++;
@@ -3651,7 +3651,7 @@ int menuEquipAssignStep(ControlSlot *slot) {
                     }
                 } else {
                     if (selectionFindIndex(ptGetMenuMember(), equipItemList[equipItemCursor[0].cursor]) == -1) {
-                        selectionPlaceKey(ptGetMenuMember(),
+                        menuPlaceKey(ptGetMenuMember(),
                                           equipItemList[equipItemCursor[0].cursor], ptGetMenuMember()->buffer->entry_count);
                     ptGetMenuMember()->buffer->entry_count++;
                     equipSlotCursor[0].capacity++;
@@ -3664,7 +3664,7 @@ int menuEquipAssignStep(ControlSlot *slot) {
                 }
             }
             if (menuCopilotModeFlag != 0 && selectionFindIndex(ptGetMenuMember(),
-                                                      selectionPlainList[equipItemCursor[0].cursor]) != -1) {
+                                                      selectionAccessoryList[equipItemCursor[0].cursor]) != -1) {
                 seVoiceStartDefault(MENU_SE_REFUSE);
                 break;
             }
@@ -3715,12 +3715,12 @@ int menuEquipAssignStep(ControlSlot *slot) {
             int item;
 
             item = ptGetMenuMember()->buffer->entries[equipSlotCursor[0].cursor];
-            selectionTakePlainEntry(ptGetMenuMember(), equipItemCursor[0].cursor, equipSlotCursor[0].cursor);
+            menuTakePlainEntry(ptGetMenuMember(), equipItemCursor[0].cursor, equipSlotCursor[0].cursor);
             dataBoxIncCategory2(item);
             selectionRebuildList();
             cursorBufferSetCapacity(equipItemCursor, selectionPlainCount);
         } else {
-            selectionPlaceKey(ptGetMenuMember(), equipItemList[equipItemCursor[0].cursor],
+            menuPlaceKey(ptGetMenuMember(), equipItemList[equipItemCursor[0].cursor],
                               equipSlotCursor[0].cursor);
         }
         menuSceneFlags |= 1;
@@ -3812,7 +3812,7 @@ int menuEquipAssignStep(ControlSlot *slot) {
 
 
 /* Advances the back or front slot cursor of ptState until the chosen slot is filled, and starts voice 0x01000001 when the cursor moved. */
-void ptAdvanceSlotCursor(void);
+void menuAdvanceSlotCursor(void);
 extern int partyFormationSourceIndex;
 
 int menuPartyFormationStep(ControlSlot *slot) {
@@ -3821,7 +3821,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
     }
     switch ((u8) slot->state) {
     case CONTROL_STATE_IDLE:
-        if (menuConfigFlag47 != 0) {
+        if (menuCursorMemoryAlt != 0) {
             mainMenuBlock.flags |= 1;
             slot->state = CONTROL_STATE_RUNNING;
             menuSceneFlags |= 1;
@@ -3870,7 +3870,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
             break;
         }
         if (pad->directionPressed & PAD_START) {
-            ptAdvanceSlotCursor();
+            menuAdvanceSlotCursor();
         }
         break;
     }
@@ -3892,7 +3892,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
         ptState.menuSlot = mainMenuBlock.cursor;
         if (padCrossPressedAlone() != 0) {
             if (menuCopilotModeFlag != 0 && ptAllCopilotsAssigned() == 0) {
-                countdownStart();
+                menuCountdownStart();
             } else {
                 slot->state = CONTROL_STATE_BROWSE;
                 mainMenuBlock.flags &= ~1;
@@ -3927,7 +3927,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
             break;
         }
         if (pad->directionPressed & PAD_START) {
-            ptAdvanceSlotCursor();
+            menuAdvanceSlotCursor();
         }
         break;
     }
@@ -3986,7 +3986,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
         break;
         }
         if (pad->directionPressed & PAD_START) {
-            ptAdvanceSlotCursor();
+            menuAdvanceSlotCursor();
         }
         break;
     }
@@ -4027,7 +4027,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
             break;
         }
         if (pad->directionPressed & PAD_START) {
-            ptAdvanceSlotCursor();
+            menuAdvanceSlotCursor();
         }
         break;
     }
@@ -4038,7 +4038,7 @@ int menuPartyFormationStep(ControlSlot *slot) {
 }
 
 /* Steps one ControlSlot in state 0, 1 or 4; returns 0 on every path. */
-int menuRecordItemStep(ControlSlot *slot) {
+int menuKeyItemStep(ControlSlot *slot) {
     unsigned long long padBits;
 
     if (!(slot->flags & CONTROL_SLOT_FLAG_MARK)) {
@@ -4127,12 +4127,12 @@ int menuConfigSlotStep(ControlSlot *slot) {
             case 0:
                 seVoiceStartDefault(MENU_SE_CURSOR);
                 SaveData.cursor_memory ^= 1;
-                menuConfigFlag46 = SaveData.cursor_memory;
+                menuCursorMemory = SaveData.cursor_memory;
                 break;
             case 1:
                 seVoiceStartDefault(MENU_SE_CURSOR);
                 SaveData.cursor_memory_alt ^= 1;
-                menuConfigFlag47 = SaveData.cursor_memory_alt;
+                menuCursorMemoryAlt = SaveData.cursor_memory_alt;
                 break;
             case 2:
                 seVoiceStartDefault(MENU_SE_CURSOR);
@@ -4205,8 +4205,8 @@ int menuConfigSlotStep(ControlSlot *slot) {
             PadData[0].actuatorMode = SaveData.actuatorMode;
             soundStereoSet(SaveData.soundMode != 0);
             tyaSetDisplayOffset(SaveData.displayOffsetX, SaveData.displayOffsetY);
-            menuConfigFlag46 = SaveData.cursor_memory;
-            menuConfigFlag47 = SaveData.cursor_memory_alt;
+            menuCursorMemory = SaveData.cursor_memory;
+            menuCursorMemoryAlt = SaveData.cursor_memory_alt;
             break;
         case 8:
             slot->state = CONTROL_STATE_WAIT;
@@ -4307,7 +4307,7 @@ int menuMapChoiceStep(ControlSlot *slot) {
 }
 
 /* Runs while flags bit 0 is set; state is a countdown that is reset to 3 when it reads zero. */
-int menuButtonGridStep(ControlSlot *slot) {
+int menuPartyChoiceStep(ControlSlot *slot) {
     if ((slot->flags & 1) == 0) {
         return 0;
     }
@@ -4350,7 +4350,7 @@ int menuButtonGridStep(ControlSlot *slot) {
         return 0;
     }
     if (PadData[0].directionPressed & PAD_START) {
-        ptAdvanceSlotCursor();
+        menuAdvanceSlotCursor();
     }
     return 0;
 }
@@ -4365,7 +4365,7 @@ void menuSceneEnter(void) {
     do {
         sceGsSyncV(0);
         grFillFrame();
-        grCopyFrame(sRender.display_buffer_base, sRender.vram.flip_base);
+        grCopyFrame(sRender.display_buffer_base, sRender.vram.work_buffer_base);
         xglTickAdvance();
         xglSleep();
     } while (!(bgLayerReady(0) && bgLayerReady(1) && bgLayerReady(2)));
@@ -4452,7 +4452,7 @@ int menuSceneRunLoop(void) {
     {
         XglRenderState *frame = &sRender;
 
-        grCopyFrame(frame->vram.flip_base, frame->draw_buffer_base);
+        grCopyFrame(frame->vram.work_buffer_base, frame->draw_buffer_base);
     }
     pxySkipOverlayDraw();
     gameWork.control |= 0x04000000;
@@ -4467,7 +4467,7 @@ int menuSceneRunLoop(void) {
                 if (ptAllCopilotsAssigned() != 0) {
                     sceneResult = 1;
                 } else {
-                    countdownStart();
+                    menuCountdownStart();
                 }
             } else {
                 sceneResult = 1;
@@ -4513,7 +4513,7 @@ int menuSceneRunLoop(void) {
 
         if ((menuSceneFlags & 2) != 0) {
             if (menuPreviousCardCursor != mainCommandCursors[0].cursor) {
-                if (menuConfigFlag47 == 0) {
+                if (menuCursorMemoryAlt == 0) {
                     menuPendingSelection = -1;
                 }
                 menuSceneSetState(mainCommandCursors[0].cursor + 1);
@@ -4527,7 +4527,7 @@ int menuSceneRunLoop(void) {
                 if (menuCurrentSlot < 8 && (padPort0->directionRepeated & 3) != 0
                     && ptGetMenuMember() != 0 && countdownActive == 0 && menuChoiceOpenFlag == 0) {
                     if (menuCopilotModeFlag != 0 && menuCurrentSlot == 6 && ptAllCopilotsAssigned() == 0) {
-                        countdownStart();
+                        menuCountdownStart();
                     } else {
                         menuPreviousCardCursor = mainCommandCursors[0].cursor;
                         if ((padPort0->directionRepeated & 1) != 0) {
@@ -4548,7 +4548,7 @@ int menuSceneRunLoop(void) {
             if (menuSlots[i].value != 0) {
                 if (opening != 0) {
                     decrement = 32;
-                } else if (menuConfigFlag47 != 0) {
+                } else if (menuCursorMemoryAlt != 0) {
                     decrement = 128;
                 } else if (menuSlots[i].flag == 1 || menuSlots[i].flag == 2) {
                     decrement = 12;
@@ -4583,13 +4583,13 @@ int menuSceneRunLoop(void) {
         if (countdownActive != 0) {
             if (countdownTick() == 0) {
                 if (countdownActive == 3) {
-                    countdownInit(menuMainTxdEntry(licenseCursorTable[0].cursor + 54), 300);
+                    countdownInit(menuMainTxdEntry(skillBoardCursorTable[0].cursor + 54), 300);
                     msgBufferAppend(" ");
-                    msgBufferAppend(menuMainTxdEntry(licenseCursorTable[1].cursor + 58));
+                    msgBufferAppend(menuMainTxdEntry(skillBoardCursorTable[1].cursor + 58));
                     msgBufferAppend(" ");
                     msgBufferAppend(menuMainTxdEntry(71));
                     msgBufferAppend(menuNewlineText);
-                    msgBufferAppend(menuMainTxdEntry(licenseCursorTable[0].cursor + 55));
+                    msgBufferAppend(menuMainTxdEntry(skillBoardCursorTable[0].cursor + 55));
                     msgBufferAppend(" ");
                     msgBufferAppend(menuMainTxdEntry(72));
                     countdownActive = 4;
@@ -4671,7 +4671,7 @@ finish:
             seVoiceStartDefault(MENU_SE_CANCEL);
         }
         renderBases = &sRender;
-        grCopyFrame(renderBases->vram.flip_base, renderBases->draw_buffer_base);
+        grCopyFrame(renderBases->vram.work_buffer_base, renderBases->draw_buffer_base);
         for (i = 15; i >= 0; i--) {
             /* Re-taken every step: the original copies the loop-invariant
                address into its own register. */
@@ -4679,7 +4679,7 @@ finish:
 
             sceGsSyncV(0);
             grFillFrame();
-            grCopyFrame(frame->display_buffer_base, frame->vram.flip_base);
+            grCopyFrame(frame->display_buffer_base, frame->vram.work_buffer_base);
             xglTickAdvance();
             xglSleep();
         }
@@ -4773,8 +4773,8 @@ const char *menuSkillModelFileNames[22] = {
     "yosikawa\134skillmdl\134skilplate05.txy"
 };
 
-/* Size pairs read by menuSkillModelSizes users (menu_scene.c): compressed-size and buffer-size words of the model
- * sets. */
+/* Size pairs of the model sets: each pair is the .pxy and the .txy buffer size of one model. Models 0 and 1 are the
+ * party models atk and rsv, not skill models. */
 unsigned int menuSkillModelSizes[22] = { 0x4800, 0x8800, 0x4800, 0x8800, 0xd800, 0x9000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x1000, 0x11000, 0x1000, 0x11000, 0x1000, 0x11000, 0x1000, 0x11000 };
 
 const char *menuUmnImageFileNames[10] = { "yosikawa\134umn1.jpg", "yosikawa\134umn2.jpg", "yosikawa\134umn3.jpg", "yosikawa\134umn4.jpg", "yosikawa\134umn5.jpg", "yosikawa\134umn6.jpg", "yosikawa\134umn7.jpg", "yosikawa\134umn8.jpg", 0, 0 };

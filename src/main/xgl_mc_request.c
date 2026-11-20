@@ -91,8 +91,8 @@ typedef struct XglMcState {
     int formatted;                  /* +0x14: sceMcGetInfo format flag */
     int create_index;               /* +0x18: progress of the create request */
     unsigned char unmodeled_1c[1];
-    unsigned char selector;         /* +0x1D: selector for the card search */
-    unsigned char card;             /* +0x1E: card index chosen by the search */
+    unsigned char selector;         /* +0x1D: selector for the save search */
+    unsigned char saveNumber;      /* +0x1E: save number (the folder suffix) chosen by the search */
     unsigned char status;           /* +0x1F */
     char full_path[0x60];           /* +0x20: full path of the current request (xglMcBuildPath) */
     McQueueEntry request;           /* +0x80: the request being worked on; the card search reuses its
@@ -164,9 +164,9 @@ void xglMcSetEntryNumbers(unsigned char *object, int value, const XglClock *sour
     }
 }
 
-/* Card numbers xglMcBuildPath does not print as digits. */
-#define MC_CARD_NONE (-2)
-#define MC_CARD_ANY (-1)
+/* Save numbers xglMcBuildPath does not print as digits. */
+#define MC_SAVE_NONE (-2)
+#define MC_SAVE_ANY (-1)
 /* Selectors of xglMcBuildPath; other values point to a file name. */
 #define MC_PATH_REPEAT 0
 #define MC_PATH_END (-1)
@@ -175,10 +175,10 @@ void xglMcSetEntryNumbers(unsigned char *object, int value, const XglClock *sour
 /* File names of selectors 1..5: /icon.sys, /system.ico, /copy.ico, /delete.ico, /dummy.bin. */
 extern const char *xglMcFileNames[9];
 
-/* Builds the full path in xglMcState.full_path: base, then the card number as two digits ("*" for
- * MC_CARD_ANY, nothing for MC_CARD_NONE), then by selector the path so far once more, one of the
+/* Builds the full path in xglMcState.full_path: base, then the save number as two digits ("*" for
+ * MC_SAVE_ANY, nothing for MC_SAVE_NONE), then by selector the path so far once more, one of the
  * file names 1..5, nothing, or "/" and the name selector points to. Returns the path. */
-char *xglMcBuildPath(const char *base, int card, int selector)
+char *xglMcBuildPath(const char *base, int saveNumber, int selector)
 {
     char *dest;
     const char *source;
@@ -190,16 +190,16 @@ char *xglMcBuildPath(const char *base, int card, int selector)
         dest++;
         source++;
     }
-    switch (card) {
-    case MC_CARD_NONE:
+    switch (saveNumber) {
+    case MC_SAVE_NONE:
         break;
-    case MC_CARD_ANY:
+    case MC_SAVE_ANY:
         *dest = '*';
         dest++;
         break;
     default:
-        dest[1] = '0' + card % 10;
-        dest[0] = '0' + (card / 10) % 10;
+        dest[1] = '0' + saveNumber % 10;
+        dest[0] = '0' + (saveNumber / 10) % 10;
         dest += 2;
         break;
     }
@@ -240,10 +240,10 @@ char *xglMcBuildPath(const char *base, int card, int selector)
 }
 
 
-/* Full path for card `card` (or -1 for the wildcard) with the suffix path, built on the base path xglMcBasePath. */
-char *xglMcSetFullPath(int card, int selector)
+/* Full path for save number `saveNumber` (or -1 for the wildcard) with the suffix path, built on the base path xglMcBasePath. */
+char *xglMcSetFullPath(int saveNumber, int selector)
 {
-    return xglMcBuildPath(xglMcBasePath, card, selector);
+    return xglMcBuildPath(xglMcBasePath, saveNumber, selector);
 }
 
 /* xglMcState.state while a request runs (set by xglMcExecute). */
@@ -452,7 +452,7 @@ int xglMcCreateStep(int result)
 }
 
 #define MC_SLOT_WANTED 1 /* the value the search looks for */
-/* McListWork.latest: the card number with the newest time stamp, behind the slot table (X1). */
+/* McListWork.latest: the save number with the newest time stamp, behind the slot table (X1). */
 #define MC_LATEST_SLOT_INDEX MC_SLOT_COUNT
 
 /* Returns the index of the entry with value 1 in the 100-entry table nearest to index, searching
@@ -486,34 +486,34 @@ int xglMcFindNearestSlot(unsigned char *table, int index)
 }
 
 
-/* Picks a card for the request, then starts a directory scan of 16 entries on it. Returns 1 when no card fits. */
+/* Picks a save number for the request, then starts a directory scan of 16 entries on it. Returns 1 when no save number fits. */
 int xglMcStartDirectoryScan(void)
 {
-    int card;
+    int saveNumber;
 
-    card = xglMcFindNearestSlot((unsigned char *)xglMcState.request.data, xglMcState.selector);
-    if (card < 0)
+    saveNumber = xglMcFindNearestSlot((unsigned char *)xglMcState.request.data, xglMcState.selector);
+    if (saveNumber < 0)
     {
         return 1;
     }
-    xglMcState.card = (signed char) card;
+    xglMcState.saveNumber = (signed char) saveNumber;
     xglMcState.status = 0;
     /* selector values outside the small codes are name pointers (xglMcBuildPath); this one is "*", every save folder */
-    xglMcSetFullPath(card, (int)xglMcWildcardName);
+    xglMcSetFullPath(saveNumber, (int)xglMcWildcardName);
     sceMcGetDir(xglMcState.request.port, 0, xglMcState.full_path, 0, 0x10, MC_DIRECTORY_TABLE(xglMcState.request.data));
     return 0;
 }
 
-/* Opens the save file on the card nearest to the selector; when none fits, moves on to the next
+/* Opens the save file on the save number nearest to the selector; when none fits, moves on to the next
  * search mode: mode 0 starts a directory read of up to 100 entries on the second base path
  * (returns -1), mode 1 opens the third base path, mode 2 gives up (returns 1). Returns 0 when a
  * file open was started. */
 int xglMcOpenNearestSave(void)
 {
-    int card;
+    int saveNumber;
 
-    card = xglMcFindNearestSlot((unsigned char *)xglMcState.request.data, xglMcState.selector);
-    if (card < 0) {
+    saveNumber = xglMcFindNearestSlot((unsigned char *)xglMcState.request.data, xglMcState.selector);
+    if (saveNumber < 0) {
         /* The search mode is tested unsigned (beqz for mode 0 after the test for 1). */
         switch ((unsigned int)xglMcState.request.file) {
         case 0:
@@ -531,9 +531,9 @@ int xglMcOpenNearestSave(void)
             return 1;
         }
     }
-    xglMcState.card = card;
+    xglMcState.saveNumber = saveNumber;
     xglMcState.status = 0;
-    xglMcBuildPath(xglMcBasePaths[xglMcState.request.file], card, 0);
+    xglMcBuildPath(xglMcBasePaths[xglMcState.request.file], saveNumber, 0);
     sceMcOpen(xglMcState.request.port, 0, xglMcState.full_path, 1);
     return 0;
 }
@@ -562,7 +562,7 @@ int xglMcOpenNearestSave(void)
 /* McListWork.status values. */
 #define MC_LIST_FOUND 1
 #define MC_LIST_FAILED 2
-/* Codes the scan callback gets instead of a card number. */
+/* Codes the scan callback gets instead of a save number. */
 #define MC_CALLBACK_DIRECTORY (-1)
 #define MC_CALLBACK_NO_DATA (-2)
 #define MC_CALLBACK_ERROR (-3)
@@ -584,8 +584,8 @@ int xglMcOpenNearestSave(void)
 
 /* The work buffer of a list / check-old request (request.data). */
 typedef struct McListWork {
-    unsigned char slot[100];   /* +0x00: per card number: 1 present, 2 read */
-    unsigned char latest;      /* +0x64: card number with the newest time stamp */
+    unsigned char slot[100];   /* +0x00: per save number: 1 present, 2 read */
+    unsigned char latest;      /* +0x64: save number with the newest time stamp */
     unsigned char status;      /* +0x65 */
     unsigned char has_icon;    /* +0x66: the card's folder holds a full icon.sys */
     unsigned char unmodeled_67[0x2000 - 0x67];
@@ -807,12 +807,12 @@ int xglMcMain(void)
             if (xglMcState.descriptor >= 0) {
                 sceMcClose(xglMcState.descriptor);
             }
-            list->slot[xglMcState.card] = 2;
+            list->slot[xglMcState.saveNumber] = 2;
             if (xglMcState.state == MC_STATE_LIST) {
                 if (list->has_icon != 1) {
                     memset(list->data, 0, xglMcState.request.size);
                 }
-                selected = callback(xglMcState.card, list->data);
+                selected = callback(xglMcState.saveNumber, list->data);
             } else {
                 data = list->data;
                 switch ((unsigned int)xglMcState.request.file) {
@@ -886,7 +886,7 @@ int xglMcMain(void)
                     }
                 }
             }
-            xglMcSetFullPath(xglMcState.card, 0);
+            xglMcSetFullPath(xglMcState.saveNumber, 0);
             sceMcOpen(xglMcState.request.port, 0, xglMcState.full_path, MC_OPEN_READ);
             xglMcState.substate = MC_SCAN_READ;
             return MC_STATUS_BUSY_BOTH;

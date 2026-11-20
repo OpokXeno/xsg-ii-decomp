@@ -18,7 +18,7 @@ typedef struct XglLightSet {
     XglFVector colors[6];   /* 0x070: sCol 0-5 */
     Vector4 ambientColor;       /* 0x0D0: sCol 6 */
     Vector4 ambientColorLower;   /* 0x0E0: sCol 7 */
-    /* 0x0F0: sSha 0-2. One array (was forward + reserved[2]): ov01 sb_natives_unit.c runtimeSetLight
+    /* 0x0F0: sSha 0-2. One array (was forward + reserved[2]): ov01 sb_natives_unit.c batSetLight
      * indexes it with kind - 5;
      * xglLightPackBuildLightSet builds shadows[0] from light keys 10 and 11. */
     Vector4 shadows[3];

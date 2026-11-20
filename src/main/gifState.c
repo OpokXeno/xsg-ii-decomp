@@ -49,7 +49,7 @@ void gifStateSetupContext(XglPacket *packet, signed char alphaFix)
 {
     unsigned int page;
 
-    gifStateSetupPacket[6].pair[0] = GS_SET_FRAME(sRender.vram.flip_base, 8, GS_PSMCT32, 0);
+    gifStateSetupPacket[6].pair[0] = GS_SET_FRAME(sRender.vram.work_buffer_base, 8, GS_PSMCT32, 0);
     switch (gifStatus.fbp) {
     case 0:
         gifStateSetupPacket[7].pair[0] = GS_SET_TEX0(sRender.display_buffer_base << 5, 8, GS_PSMCT32, 9, 9, 1, 0, 0, 0, 0, 0, 0);
@@ -101,7 +101,7 @@ void gifStateSetupContext(XglPacket *packet, signed char alphaFix)
     }
     gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(2, 2, 0, GIF_STATE_WIDTH - 1, 0, GIF_STATE_HEIGHT - 1));
     gifStateAddReg(GS_TEX1_1, GS_SET_TEX1(0, 0, 1, 1, 0, 0, 0));
-    gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.flip_base << 5, 8, GS_PSMCT32, 9, 9, 0, 0, 0, 0, 0, 0, 0));
+    gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.work_buffer_base << 5, 8, GS_PSMCT32, 9, 9, 0, 0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
     gifStateAddReg(GS_TEXFLUSH, 0);
     gifStateAddReg(GS_ZBUF_1, GS_SET_ZBUF(0, 0x31, 1));
@@ -825,8 +825,8 @@ void gifStateCopyDisplayToWork(XglPacket *packet)
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     gifStateReset();
-    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.second_base));
-    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.flip_base));
+    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.texture_base));
+    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.work_buffer_base));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x7F, 0x7F, 0x7F, 0x7F, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 0, 0, 1, 0, 0));
     gifStateAddReg(GS_UV, GS_SET_UV(0, 0));
@@ -845,8 +845,8 @@ void gifStateFlushEmptyPacket(XglPacket *packet) {
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-/* Draws the work page as a textured sprite of width x height texels at (offsetX, offsetY), 256 x 224
- * pixels in size, blended with the fixed alpha into the shown page. */
+/* Draws a sprite of width x height texels at (offsetX, offsetY), textured from the second page and added with the
+ * fixed alpha into the work page (FRAME_1 is work_buffer_base). */
 void gifStateDrawQuad(XglPacket *packet, unsigned int width, unsigned int height, int offsetX, int offsetY, int alpha)
 {
     sceVif1PkCnt(packet, 0);
@@ -854,8 +854,8 @@ void gifStateDrawQuad(XglPacket *packet, unsigned int width, unsigned int height
     gifStateReset();
     gifStateAddReg(GS_TEXFLUSH, 0);
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 2, 2, 1, alpha));
-    gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.vram.flip_base, 8, GS_PSMCT32, 0));
-    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.second_base));
+    gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.vram.work_buffer_base, 8, GS_PSMCT32, 0));
+    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.texture_base));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x7F, 0x7F, 0x7F, 0x7F, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 1, 0, 1, 0, 0));
     gifStateAddReg(GS_UV, GS_SET_UV(0, 0));
@@ -884,7 +884,7 @@ void gifStateDrawBlurFrame(XglPacket *packet)
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 2, 2, 1, 0x7F));
     gifStateAddReg(GS_TEX1_1, GS_SET_TEX1(0, 0, 1, 1, 0, 0, 0));
     gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.display_buffer_base));
-    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.flip_base));
+    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.work_buffer_base));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x7F, 0x7F, 0x7F, 0x7F, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 1, 0, 1, 0, 0));
     gifStateAddReg(GS_UV, GS_SET_UV(0, 0));
@@ -898,8 +898,8 @@ void gifStateDrawBlurFrame(XglPacket *packet)
     sceVif1PkOpenDirectHLCode(packet, 0);
     gifStateReset();
     gifStateAddReg(GS_TEXFLUSH, 0);
-    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.second_base));
-    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.flip_base));
+    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.texture_base));
+    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.work_buffer_base));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x7F, 0x7F, 0x7F, 0x7F, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 0, 0, 1, 0, 0));
     gifStateAddReg(GS_UV, GS_SET_UV(0, 0));
@@ -913,8 +913,8 @@ void gifStateDrawBlurFrame(XglPacket *packet)
     sceVif1PkOpenDirectHLCode(packet, 0);
     gifStateReset();
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 2, 2, 1, 0x28 / gifStateBlurDivisor));
-    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.flip_base));
-    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.second_base));
+    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.work_buffer_base));
+    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.texture_base));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 0, 0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0, 0, 0, 0, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_XYZF2, GIF_STATE_XY(0, 0));
@@ -934,7 +934,7 @@ void gifStateDrawBlurFrame(XglPacket *packet)
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     gifStateReset();
-    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.second_base));
+    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.texture_base));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 0, 0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0, 0, 0, 0, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_XYZF2, GIF_STATE_XY(0, 0));
@@ -947,8 +947,8 @@ void gifStateDrawBlurFrame(XglPacket *packet)
     gifStateReset();
     gifStateAddReg(GS_TEXFLUSH, 0);
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 2, 2, 1, 0x80));
-    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.second_base));
-    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.flip_base));
+    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.texture_base));
+    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.work_buffer_base));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x7F, 0x7F, 0x7F, 0x7F, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 0, 0, 1, 0, 0));
     gifStateAddReg(GS_UV, GS_SET_UV(0, 0));
@@ -971,7 +971,7 @@ void gifStateDrawBlurFrame(XglPacket *packet)
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     gifStateReset();
-    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.second_base));
+    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.texture_base));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 0, 0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0, 0, 0, 0, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_XYZF2, GIF_STATE_XY(0, 0));
@@ -984,8 +984,8 @@ void gifStateDrawBlurFrame(XglPacket *packet)
     gifStateReset();
     gifStateAddReg(GS_TEXFLUSH, 0);
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 2, 2, 1, 0x80));
-    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.second_base));
-    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.flip_base));
+    gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.vram.texture_base));
+    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.work_buffer_base));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x7F, 0x7F, 0x7F, 0x7F, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 0, 0, 1, 0, 0));
     gifStateAddReg(GS_UV, GS_SET_UV(0, 0));
@@ -1006,7 +1006,7 @@ void gifStateDrawBlurFrame(XglPacket *packet)
     gifStateReset();
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 2, 2, 1, 0x7F));
     gifStateAddReg(GS_FRAME_1, GIF_STATE_FRAME(sRender.display_buffer_base));
-    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.flip_base));
+    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.work_buffer_base));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x7F, 0x7F, 0x7F, 0x7F, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 1, 0, 1, 0, 0));
     gifStateAddReg(GS_UV, GS_SET_UV(0, 0));
@@ -1396,7 +1396,7 @@ void gifStateDrawBreakShards(XglPacket *packet)
             gifStateAddReg(GS_ZBUF_1, GS_SET_ZBUF(0, 0x31, 1));
             gifStateAddReg(GS_TEST_1, 0);
             gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(1, 1, 0, 0, 0, 0));
-            gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.vram.flip_base, 8, GS_PSMCT32, 0));
+            gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.vram.work_buffer_base, 8, GS_PSMCT32, 0));
             gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.display_buffer_base));
             gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, 0x80, GIF_STATE_ONE_BITS));
             gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 0, 0, 1, 0, 0));
@@ -1432,7 +1432,7 @@ void gifStateDrawBreakShards(XglPacket *packet)
     gifStateAddReg(GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
     gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(1, 1, 0, 0, 0, 0));
     gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_buffer_base, 8, GS_PSMCT32, 0));
-    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.flip_base));
+    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.work_buffer_base));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, 0x80, GIF_STATE_ONE_BITS));
     {
         u32 address = (u32) &gifStatus;
@@ -1504,7 +1504,7 @@ void gifStateDrawBreakShards(XglPacket *packet)
     gifStateAddReg(GS_ZBUF_1, GS_SET_ZBUF(0, 0x31, 1));
     gifStateAddReg(GS_TEST_1, 0);
     gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(1, 1, 0, 0, 0, 0));
-    gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.vram.second_base, 8, GS_PSMCT32, 0));
+    gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.vram.texture_base, 8, GS_PSMCT32, 0));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0, 0, 0, 0, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 0, 0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_XYZF2, GS_SET_XYZ(GIF_X(0), GIF_Y(0), 0xFFFFFF));
@@ -1520,7 +1520,7 @@ void gifStateDrawBreakShards(XglPacket *packet)
     gifStateAddReg(GS_TEST_1, GS_SET_TEST(1, 3, 1, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(GS_REGION_CLAMP, GS_REGION_CLAMP, 0, 511, 0, 447));
     gifStateAddReg(GS_TEX1_1, GS_SET_TEX1(0, 0, 1, 1, 0, 0, 0));
-    gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.vram.second_base, 8, GS_PSMCT32, 0));
+    gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.vram.texture_base, 8, GS_PSMCT32, 0));
     gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.display_buffer_base));
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 2, 2, 1, 0x80));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, 0x80, GIF_STATE_ONE_BITS));
@@ -1561,7 +1561,7 @@ void gifStateDrawBreakShards(XglPacket *packet)
     gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(1, 1, 0, 0, 0, 0));
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 2, 2, 1, 0x80));
     gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_buffer_base, 8, GS_PSMCT32, 0));
-    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.second_base));
+    gifStateAddReg(GS_TEX0_1, GIF_STATE_TEX0(sRender.vram.texture_base));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, 0x80, GIF_STATE_ONE_BITS));
     gifStateAddReg(GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 1, 0, 1, 0, 0));
     gifStateAddReg(GS_UV, GS_SET_UV(0x10, 0x10));
@@ -1698,7 +1698,7 @@ void gifStateSetZBufFormat(void) {
     gifStateAddReg(GS_ZBUF_1, GS_SET_ZBUF(0, 0x31, 0));
 }
 
-/* Sets the model multiply colour (a quadword copy). */
+/* Sets the direction vector of the camera quad effect (a quadword copy into gifStatus.mulColor). */
 void nmlModelSetMulColor(Vector4 *color)
 {
     QuadwordCopy(&gifStatus.mulColor, color);
@@ -1726,7 +1726,7 @@ void gifStateSetDepth(int value) {
     gifStatus.depth = value;
 }
 
-/* Stores the frame buffer base of the effect. */
+/* Selects the source page of the effect texture: 0 is the display page, 1 the draw page (gifStateSetupContext). */
 void gifStateSetFbp(int fbp) {
     gifStatus.fbp = fbp;
 }
@@ -1772,9 +1772,9 @@ void gifStateClearScreenAndMessages(void) {
     msgStateReset();
 }
 
-/* Starts the screen effect: full effect alpha, the decrease rate, frame buffer 1, the sub window off, the
- * effect frame hook, state GIF_EFFECT_FRAME and ratio 1, then shows panel entry 0x151 in mode 0x4E (msg_state.c's
- * msgPanelShowDefault shows the same entry in mode 8; what the two numbers select is not recovered). */
+/* Starts the screen effect: full effect alpha, the decrease rate, source page 1 (draw page), the sub window off,
+ * the break shard hook, state GIF_EFFECT_BREAK_SHARDS and ratio 1, then shows panel entry 0x151 at x 0x151, y 0x4E
+ * (msg_state.c's msgPanelShowDefault shows the same entry at y 8). */
 void gifStateEnableEffect(void)
 {
     pxySkipOverlayDraw();
@@ -1782,7 +1782,7 @@ void gifStateEnableEffect(void)
     gifStateSetDecrease(0.01334f);
     gifStateSetFbp(1);
     nmlModelUseSubWindow(0, 0);
-    gifStatus.state = GIF_EFFECT_FRAME;
+    gifStatus.state = GIF_EFFECT_BREAK_SHARDS;
     gifStatus.ratio = 1.0f;
     gifStateEffectHook[0] = gifStateDrawBreakShards;
     msgPanelShow(0x151, 0x4E);
@@ -1793,7 +1793,7 @@ void nmlModelEnableSubWindow0(void) {
 }
 
 int gifStateEffectReady(void) {
-    if (gifStateEffectHook[0] != 0 && gifStatus.state == GIF_EFFECT_FRAME) {
+    if (gifStateEffectHook[0] != 0 && gifStatus.state == GIF_EFFECT_BREAK_SHARDS) {
         if (!(0.5f <= gifStatus.ratio)) {
             return 1;
         }
@@ -1823,10 +1823,10 @@ void gifStateStartWhiteShake(struct XenoActor *actor)
     nmlModelUseSubWindow(1, 0);
     gifStateSetMode(GIF_EFFECT_RADIAL_BLUR);
     actor->sweepPhase = -0.6f;
-    actor->shadowValue = 3.019999f;
+    actor->clipPlaneValue = 3.019999f;
     actor->sweepSpeed = 0.6f;
-    actor->shadowCount = 4;
-    actor->shadowValue3 = 1.0f;
+    actor->clipPlaneCount = 4;
+    actor->clipPlaneValue3 = 1.0f;
     actor->moveState = 3;
 }
 

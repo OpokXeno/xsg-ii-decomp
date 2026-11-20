@@ -21,12 +21,12 @@ void cfeNodePoolInit(void) {
 void *memset(void *, int, unsigned int);
 
 
-/* Number of nodes in cfeEntries. */
+/* Number of nodes in cfeActors. */
 #define CFE_NODE_COUNT 64
 
 extern const AlignedVector4 cfeActorInitialVector;
 
-/* Clears the 64 actor entries of cfeEntries and gives each the vector cfeActorInitialVector at +0xD0 and as
+/* Clears the 64 actor entries of cfeActors and gives each the vector cfeActorInitialVector at +0xD0 and as
  * its position, no parent, both motion speeds 1 and the first word 1. */
 void cfeActorTableInit(void)
 {
@@ -34,15 +34,15 @@ void cfeActorTableInit(void)
     const AlignedVector4 *source;
     int i;
 
-    memset(cfeEntries, 0, CFE_NODE_COUNT * sizeof(CfeActor));
+    memset(cfeActors, 0, CFE_NODE_COUNT * sizeof(CfeActor));
     for (i = 0; i < CFE_NODE_COUNT; i++) {
         source = &initial;
-        QuadwordCopy(&cfeEntries[i].vectorD0, source);
-        QuadwordCopy(&cfeEntries[i].position, source);
-        cfeEntries[i].parentActId = -1;
-        cfeEntries[i].speedA = 1.0f;
-        cfeEntries[i].speedB = 1.0f;
-        cfeEntries[i].firstWord = 1;
+        QuadwordCopy(&cfeActors[i].vectorD0, source);
+        QuadwordCopy(&cfeActors[i].lookTarget, source);
+        cfeActors[i].parentActId = -1;
+        cfeActors[i].speedA = 1.0f;
+        cfeActors[i].speedB = 1.0f;
+        cfeActors[i].firstWord = 1;
     }
 }
 
@@ -68,8 +68,8 @@ void cfeCommandTableInit(void) {
     int i;
 
     cfeCommandCount = 0;
-    memset(cfeCommands, 0, 0x2000);
-    entry = &cfeCommands[63].owner;
+    memset(cfeEffects, 0, 0x2000);
+    entry = &cfeEffects[63].owner;
     for (i = 0; i < 64; i++) {
         *entry = -1;
         entry -= 0x20;
@@ -128,48 +128,48 @@ void cfeLightSetInit(XglLightSet *light)
 }
 
 
-/* Sets up the light set cfeLightSet, clears cfeDirections and points its rows at the ambient colour
+/* Sets up the light set cfeLightSet, clears cfeLights and points its rows at the ambient colour
  * and at the direction and colour of lights 0 to 2. */
 void cfeLightRowsInit(void)
 {
     cfeLightSetInit(&cfeLightSet);
-    memset(cfeDirections, 0, sizeof(cfeDirections));
-    cfeDirections[0].direction = 0;
-    cfeDirections[0].color = &cfeLightSet.ambientColor.x;
-    cfeDirections[1].direction = cfeLightSet.directions[0];
-    cfeDirections[1].color = cfeLightSet.colors[0];
-    cfeDirections[2].direction = cfeLightSet.directions[1];
-    cfeDirections[2].color = cfeLightSet.colors[1];
-    cfeDirections[3].direction = cfeLightSet.directions[2];
-    cfeDirections[3].color = cfeLightSet.colors[2];
+    memset(cfeLights, 0, sizeof(cfeLights));
+    cfeLights[0].direction = 0;
+    cfeLights[0].color = &cfeLightSet.ambientColor.x;
+    cfeLights[1].direction = cfeLightSet.directions[0];
+    cfeLights[1].color = cfeLightSet.colors[0];
+    cfeLights[2].direction = cfeLightSet.directions[1];
+    cfeLights[2].color = cfeLightSet.colors[1];
+    cfeLights[3].direction = cfeLightSet.directions[2];
+    cfeLights[3].color = cfeLightSet.colors[2];
 }
 
 
 void cfeGroupTableInit(void) {
-    memset(cfeGroups, 0, 0x300);
+    memset(cfeMaps, 0, 0x300);
     cfeGroupCount = 0;
 }
 
-extern int cfePlugInRecordCount;
+extern int cfeMessageCount;
 
 void cfeMessageCountReset(void) {
-    cfePlugInRecordCount = 0;
+    cfeMessageCount = 0;
 }
 
 
 /* Clears the global block and sets its two default vectors (255, 255, 255, 1) and (5, 20, 0, 1). */
 void cfeEvalGlobalInit(void)
 {
-    memset(&cfeEvalGlobal, 0, sizeof(cfeEvalGlobal));
-    cfeEvalGlobal.fogEnabled = 0;
-    cfeEvalGlobal.evaluated[0].x = 255.0f;
-    cfeEvalGlobal.evaluated[0].y = 255.0f;
-    cfeEvalGlobal.evaluated[0].z = 255.0f;
-    cfeEvalGlobal.evaluated[0].w = 1.0f;
-    cfeEvalGlobal.evaluated[1].x = 5.0f;
-    cfeEvalGlobal.evaluated[1].y = 20.0f;
-    cfeEvalGlobal.evaluated[1].z = 0.0f;
-    cfeEvalGlobal.evaluated[1].w = 1.0f;
+    memset(&cfeFog, 0, sizeof(cfeFog));
+    cfeFog.fogEnabled = 0;
+    cfeFog.evaluated[0].x = 255.0f;
+    cfeFog.evaluated[0].y = 255.0f;
+    cfeFog.evaluated[0].z = 255.0f;
+    cfeFog.evaluated[0].w = 1.0f;
+    cfeFog.evaluated[1].x = 5.0f;
+    cfeFog.evaluated[1].y = 20.0f;
+    cfeFog.evaluated[1].z = 0.0f;
+    cfeFog.evaluated[1].w = 1.0f;
 }
 
 
@@ -180,7 +180,7 @@ typedef struct CfeEntryCorners {
 
 extern const CfeEntryCorners cfeUnitQuad;
 
-/* Number of entries in cfeEvalEntries. */
+/* Number of entries in cfeMonitors. */
 #define CFE_EVAL_ENTRY_COUNT 16
 /* Clears the entries and starts each one with the unit quad of cfeUnitQuad, the position and angles
  * at the origin (w = 1) and unit scale. */
@@ -191,34 +191,34 @@ void cfeEvalEntriesInit(void)
     int i;
 
     cfeEvalEntryCount = 0;
-    memset(cfeEvalEntries, 0, CFE_EVAL_ENTRY_COUNT * sizeof(CfeEvalEntry));
+    memset(cfeMonitors, 0, CFE_EVAL_ENTRY_COUNT * sizeof(CfeMonitor));
     for (i = 0; i < CFE_EVAL_ENTRY_COUNT; i++) {
         source = corners.corner;
-        QuadwordCopy(&cfeEvalEntries[i].corners[0], &source[0]);
-        QuadwordCopy(&cfeEvalEntries[i].corners[1], &source[1]);
-        QuadwordCopy(&cfeEvalEntries[i].corners[2], &source[2]);
-        QuadwordCopy(&cfeEvalEntries[i].corners[3], &source[3]);
-        cfeEvalEntries[i].evaluated[0].component[0] = cfeEvalEntries[i].evaluated[0].component[1]
-            = cfeEvalEntries[i].evaluated[0].component[2] = 0.0f;
-        cfeEvalEntries[i].evaluated[0].component[3] = 1.0f;
-        cfeEvalEntries[i].evaluated[1].component[0] = cfeEvalEntries[i].evaluated[1].component[1]
-            = cfeEvalEntries[i].evaluated[1].component[2] = 0.0f;
-        cfeEvalEntries[i].evaluated[1].component[3] = 1.0f;
-        cfeEvalEntries[i].evaluated[2].component[0] = cfeEvalEntries[i].evaluated[2].component[1]
-            = cfeEvalEntries[i].evaluated[2].component[2] = 1.0f;
-        cfeEvalEntries[i].evaluated[2].component[3] = 1.0f;
+        QuadwordCopy(&cfeMonitors[i].corners[0], &source[0]);
+        QuadwordCopy(&cfeMonitors[i].corners[1], &source[1]);
+        QuadwordCopy(&cfeMonitors[i].corners[2], &source[2]);
+        QuadwordCopy(&cfeMonitors[i].corners[3], &source[3]);
+        cfeMonitors[i].evaluated[0].component[0] = cfeMonitors[i].evaluated[0].component[1]
+            = cfeMonitors[i].evaluated[0].component[2] = 0.0f;
+        cfeMonitors[i].evaluated[0].component[3] = 1.0f;
+        cfeMonitors[i].evaluated[1].component[0] = cfeMonitors[i].evaluated[1].component[1]
+            = cfeMonitors[i].evaluated[1].component[2] = 0.0f;
+        cfeMonitors[i].evaluated[1].component[3] = 1.0f;
+        cfeMonitors[i].evaluated[2].component[0] = cfeMonitors[i].evaluated[2].component[1]
+            = cfeMonitors[i].evaluated[2].component[2] = 1.0f;
+        cfeMonitors[i].evaluated[2].component[3] = 1.0f;
     }
 }
 
-/* Resets the three CfeEvalSlot entries of cfeEvalSlots (cfeEvaluate.h): result 0, sample 0x80, sample_float 1.0. */
+/* Resets the three CfeScreenEffect entries of cfeScreenEffects (cfeEvaluate.h): result 0, sample 0x80, sample_float 1.0. */
 
 void cfeEvalSlotsInit(void) {
-    CfeEvalSlot *slot;
+    CfeScreenEffect *slot;
     int i;
 
-    do { memset(cfeEvalSlots, 0, 0x48); slot = cfeEvalSlots; } while (0);
+    do { memset(cfeScreenEffects, 0, 0x48); slot = cfeScreenEffects; } while (0);
     for (i = 0; i < 3; i++) {
-        slot->result_int = 0;
+        slot->effectKind = 0;
         slot->sample_int = 0x80;
         slot->sample_float = 1.0f;
         slot++;
@@ -226,7 +226,7 @@ void cfeEvalSlotsInit(void) {
 }
 
 
-/* Empties the text table: count cfeSndRecordCount = 0 and the first 0x50-byte text record of cfeSndRecords
+/* Empties the sound record table: count cfeSndRecordCount = 0 and the first 0x50-byte sound record of cfeSndRecords
    (cfePlugIn appends records of that size and bumps the count). */
 void cfeSndRecordsReset(void) {
     int *field;
@@ -298,5 +298,5 @@ const CfeEntryCorners cfeUnitQuad = {
     },
 };
 
-/* An 8-byte constant after the quad; no function in this file reads it. */
+/* The tab string "\t" (9, 0) that cfeFileControl.c writes as the log indent (cfeFileLogIndentStr). */
 const int cfeFileLogIndentTab[2] = { 9, 0 };

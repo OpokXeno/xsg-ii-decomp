@@ -38,20 +38,20 @@ typedef struct PartyMemberStatus {
 
 /* The block behind a member's limits pointer (one 0x40-byte record of slotRecordTable): experience and
  * the two point pools. */
-typedef struct PartyMemberLimits {
+typedef struct PartyMemberExpPoints {
     int total_exp;              /* +0x00: drawn beside "Total Exp" (menuDrawCharStats) */
     int next_level_exp;         /* +0x04: drawn beside "Next Lv" */
     int skillPoints;            /* +0x08: drawn beside "S.Pt"; taking a sub costs them (selectionTakeSub) */
     int classPoints;            /* +0x0C: drawn beside "C.Pt"; opening a slot costs them (selectionSlotOpen) */
     unsigned char unmodeled_10[0x40 - 0x10];
-} PartyMemberLimits;
+} PartyMemberExpPoints;
 
 /* A member record (one of the ten ptMemberRecords): word 0 is the member id; the others point at its
  * status, its points and its taken bits (ptMemberTakenTable). */
 typedef struct PartyMember {
     int id;                     /* +0x00: character id, looked up with calcTotalParaMenu */
     PartyMemberStatus *status;  /* +0x04 */
-    PartyMemberLimits *limits;  /* +0x08 */
+    PartyMemberExpPoints *limits;  /* +0x08 */
     PartyTakenBits *buffer;     /* +0x0C */
 } PartyMember;
 
@@ -82,8 +82,8 @@ enum PartySplitState {
 };
 
 /* Party state block ptState (0x60 bytes):
- *   member slots 0-9 (slots 0-6 front, 7-9 back) and a second roster of the
- *   same kind (swapped by ptSwapRosterEntries, searched by ptFindRosterEntry);
+ *   member slots 0-9 (slots 0-6 front, 7-9 back) and a second roster (the pilot,
+ *   co-pilot and reserve plan; swapped by ptSwapRosterEntries, searched by ptFindRosterEntry);
  *   splitMode is set to 1 by ptEnterSplit and cleared by ptLeaveSplit;
  *   frontIndex is the current front slot, backIndex the current back slot - PARTY_FRONT_SLOTS;
  *   counts are the member counts (counts[1] outside split mode, counts[2] in it). */
@@ -99,7 +99,7 @@ typedef struct PartyState {
      * mode an index over back slots 7-9 followed by the second roster. */
     unsigned char menuSlot;             /* +0x5A */
     unsigned char unmodeled_5B;
-    int nearbySearchType;                     /* +0x5C: the uwamonoGetNearbySearchType value; restricted selection entries are eligible for 7..8 */
+    int nearbySearchType;                     /* +0x5C: the uwamonoGetNearbyUnitType value; restricted selection entries are eligible for 7..8 */
 } PartyState;
 
 extern PartyState ptState;
@@ -122,8 +122,6 @@ typedef struct PartyStatusBlock {
 } PartyStatusBlock;
 
 PartyStatusBlock *ptGetStatusBlock(void);
-
-struct UwamonoRecord;
 
 PartyMember *ptGetMenuMember(void);
 StatBlock *ptGetMenuMemberState(void);
@@ -154,11 +152,5 @@ void saveReadGameWork(void);
 void padApplySaveSettings(void);
 PartyState *ptGetState(void);
 PartyMember *ptGetMember(int index);
-int talkCheck(void);
-int talkReset(void);
-
-/* The active map object (.sdata of pt_member.c), also driven by the talk natives. */
-extern struct UwamonoRecord *mapActiveObject;
-extern int talkResult;
 
 #endif /* INCLUDE_MAIN_PT_MEMBER_H */

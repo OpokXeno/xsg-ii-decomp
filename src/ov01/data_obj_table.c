@@ -16,7 +16,7 @@
 static struct DataObject dataObjTable[DATA_OBJ_SLOT_COUNT];
 
 /* Releases the unit side slot of a unit (unitRemove calls it; unit side slots). */
-void unitSideRelease(struct BattleUnit *unit) {
+void unitSlotRelease(struct BattleUnit *unit) {
     ov01SlotRelease(unit);
 }
 

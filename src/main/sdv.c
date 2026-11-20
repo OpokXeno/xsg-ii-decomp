@@ -157,7 +157,7 @@ const AlignedVector4 sdvAlterOriginVector = { 0.0f, 0.0f, 0.0f, 1.0f };
 #define SDV_KEY_LINK_1 0x400        /* the request's linked actors (links[0..2]) */
 #define SDV_KEY_LINK_2 0x800
 #define SDV_KEY_LINK_3 0x1000
-#define SDV_KEY_OBJECT1 0x100       /* the request's second object (camera kinds only) */
+#define SDV_KEY_OBJECT1 0x100       /* the request's partner, the second actor of a pair technique (camera kinds only) */
 
 /* Hit signal of the current effect step; sefExecStep clears it. */
 extern short _hitSignal;
@@ -368,10 +368,10 @@ void sdvExecShadowSeq(SdvSequence *sequence)
     }
     if (actor != 0) {
         actor->sweepPhase = angle;
-        actor->shadowValue = shadowValue;
+        actor->clipPlaneValue = shadowValue;
         actor->sweepSpeed = velocity;
-        actor->shadowCount = shadowCount;
-        actor->shadowValue3 = shadowValue3;
+        actor->clipPlaneCount = shadowCount;
+        actor->clipPlaneValue3 = shadowValue3;
         actor->moveState = state;
     }
 }
@@ -1059,13 +1059,13 @@ int sdvProgressPrm(int kind, SdvScheduleChannel *channel, int keySize, int frame
                 sdvSetCameraParam(&param, key->kind, key->placement, key->scaled, key->mode);
                 camera->slot[1].duration = 0.0f;
                 camera->slot[1].progress = 0.0f;
-                camera->range.lockPosition.x = param.point.x;
-                camera->range.lockPosition.y = param.point.y;
-                camera->range.lockPosition.z = param.point.z;
+                camera->range.cameraPosition.x = param.point.x;
+                camera->range.cameraPosition.y = param.point.y;
+                camera->range.cameraPosition.z = param.point.z;
                 camera->slot[1].fraction = 0.0f;
-                sdvCameraDistance = -MMathCalcDist(&camera->range.lockPosition, &camera->range.lookAt);
+                sdvCameraDistance = -MMathCalcDist(&camera->range.cameraPosition, &camera->range.lookAt);
                 if (blend != 0) {
-                    cameraAnglesBetween(&angles, &camera->range.lookAt, &camera->range.lockPosition);
+                    cameraAnglesBetween(&angles, &camera->range.lookAt, &camera->range.cameraPosition);
                     camera->range.angles.x = angles.x;
                     camera->range.angles.y = angles.y;
                     camera->range.angles.w = angles.w;
@@ -1082,7 +1082,7 @@ int sdvProgressPrm(int kind, SdvScheduleChannel *channel, int keySize, int frame
                 camera->slot[3].duration = 0.0f;
                 camera->slot[3].progress = 0.0f;
                 camera->slot[3].fraction = 0.0f;
-                camera->range.lockPosition.w = (float)lensKey->perspective * 0.017453292f;
+                camera->range.cameraPosition.w = (float)lensKey->perspective * 0.017453292f;
                 camera->range.lookAt.w = (float)lensKey->roll * 0.017453292f;
             }
             if (remaining >= 2 && next->frame < SDV_KEY_END) {
@@ -1867,7 +1867,7 @@ typedef struct SdvAlterRequest {
     float imageTime;              /* +0x20 frames the current image has been shown */
     float imageFrames;            /* +0x24 frames each image is shown */
     float life;                   /* +0x28 frames left; 2048 never runs out */
-    float width;                  /* +0x2C */
+    float ringSpacing;            /* +0x2C: distance between the rings of a follow trail */
     float height;                 /* +0x30 */
     float minDelta;               /* +0x34 a shorter move keeps the previous delta */
     short parts[2];               /* +0x38 sefGetPosition kinds; with follow set, parts[1] is the heading turn
@@ -1906,7 +1906,7 @@ typedef struct SdvAlterEvent {
     short imageFrames;            /* +0x18 */
     short length;                 /* +0x1A */
     short images[2][2];           /* +0x1C the image and the palette index of each pair */
-    float width;                  /* +0x24 */
+    float ringSpacing;            /* +0x24 */
     float height;                 /* +0x28 */
     unsigned short spread;        /* +0x2C */
     unsigned short spin;          /* +0x2E */
@@ -1974,7 +1974,7 @@ void sdvScheduleAlter(SdvSequence *sequence, SdvSefRequest *sefRequest, int laye
         request.layer = layer;
         request.owner = recordIndex;
         request.spread = event->spread;
-        request.width = event->width;
+        request.ringSpacing = event->ringSpacing;
         request.spin = event->spin;
         request.height = event->height;
         request.timeBase = event->timeBase;
@@ -2033,7 +2033,7 @@ typedef struct SdvAlter {
     AlignedVector4 position;            /* +0xAB0 sdvCreateAlter stores the sefGetPosition result here (lq/sq) */
     AlignedVector4 previousPosition;    /* +0xAC0 */
     SdvAlterRequest request;            /* +0xAD0 */
-    float widths[64];                   /* +0xB28 */
+    float texturePhases[64];            /* +0xB28: texture phase of each sample */
     float progress;                     /* +0xC28 */
     float angles[32];                   /* +0xC2C */
     unsigned char unmodeled_CAC[0xCB0 - 0xCAC];
@@ -2121,7 +2121,7 @@ int sdvCreateAlter(SdvAlterRequest *request)
 
                     Vu0SetOrigin(anchor);
                     Vu0SetOrigin(&alter->points[1][k]);
-                    anchor->vector.z = (float) -k * alter->request.width;
+                    anchor->vector.z = (float) -k * alter->request.ringSpacing;
                     alter->angles[k] = (float) (alter->request.spread / maxSamples * k) * SDV_DEG_TO_RAD + angle;
                     alter->radii[k] = radius + (float) (alter->request.timeBase + k * alter->request.timeStep)
                                                * SDV_ALTER_RADIUS_UNIT;
@@ -2383,13 +2383,13 @@ void sdvExecAlter(SdvAlter *alter)
             alter->progress = progress + alter->request.length / (float) alter->request.maxSamples;
             if (request->mode == 3) {
                 if (alter->wrapped == 0) {
-                    alter->widths[alter->index] = progress;
+                    alter->texturePhases[alter->index] = progress;
                 } else {
-                    alter->widths[alter->index] = 4.0f;
+                    alter->texturePhases[alter->index] = 4.0f;
                 }
             }
             if (request->mode == 4) {
-                alter->widths[alter->index] = progress;
+                alter->texturePhases[alter->index] = progress;
                 if (alter->progress > 10.0f) {
                     alter->progress -= 10.0f;
                 }
@@ -2734,8 +2734,8 @@ void sdvDrawAlter(SdvAlter *alter)
             }
         }
         if (request->mode >= 3 && request->mode <= 7) {
-            progress = alter->widths[current];
-            progressStep = (alter->widths[next] - progress) * 0.25f;
+            progress = alter->texturePhases[current];
+            progressStep = (alter->texturePhases[next] - progress) * 0.25f;
         }
         for (step = 0; step < SDV_ALTER_STEPS + 1; step++) {
             color.rgba[3] = (unsigned int)alpha;

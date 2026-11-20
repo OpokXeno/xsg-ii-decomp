@@ -29,35 +29,35 @@ typedef struct TiNodeTable TiNodeTable;
  * 0x20 of it and the table selectors set bit 0x40. `speed` (+4) is the rate the
  * advance functions multiply by the global step; `position` (+8) is the value
  * they accumulate and compare with the range. The block size of 0x50 follows
- * from the second block's offset. `value` (+0xC) is stored by tiMRStateSetValue and
- * passed by XenoActorSetChannelValue (and its B variant) to the channel blocks
- * of XenoActor at +0x650 and +0x6A0; no reader of it is found in this TU.
+ * from the second block's offset. `blendFrames` (+0xC) is the blend length in frames: it is stored by
+ * tiMRStateSetBlendFrames, passed by XenoActorSetBlendFrames (and its B variant) to the channel blocks of XenoActor at
+ * +0x650 and +0x6A0, and read by the blend code of TiMtnBlend.c.
  * State A also holds the aim target of tiMotionAimTarget (flag 0x10 applies its angle): the world
- * position to aim at, the smoothing bounds and the current rotations.
+ * position to aim at, the previous frame's aim angles (aimPrevious) and the current rotations.
  */
 struct TiMRState {
     int flags;      /* +0x0: flag word (tiWordSetBits/tiWordClearBits) */
     float speed;
     float position;
-    float value;
+    float blendFrames;
     int rangeMin;   /* +0x10: the range of the advance (tiMRStateSetRange) */
     int rangeMax;   /* +0x14 */
     unsigned char unmodeled_18[0x8];
     Vector4 aimVector;   /* +0x20 */
-    float aimBounds[4];  /* +0x30 */
+    float aimPrevious[4];  /* +0x30: the previous frame's aim angles */
     float aimRotateX;    /* +0x40 */
     float aimAngle;      /* +0x44 */
     float aimRotateZ;    /* +0x48 */
     unsigned char unmodeled_4C[0x4];
 };
 
-/* One solver body (the pDynMat entry of a dynamics node, 0x40 bytes): the point, the accumulated correction and
+/* One solver body (the pDynMat entry of a dynamics node, 0x40 bytes): the point, its velocity and
  * the node. The vectors are DoublewordVector4 unions: the pair solvers copy and add them through the union, so
  * their stores carry alias set 0 (check.py). */
 struct TiSolverState {
     unsigned char previous_position[0x10];
     DoublewordVector4 position;
-    DoublewordVector4 accumulator;
+    DoublewordVector4 velocity;
     TiHrcDynamics *node;
     float gust;               /* +0x34: wind gust factor, redrawn by the wind passes */
     unsigned char unmodeled_38[0x8];
@@ -71,7 +71,7 @@ typedef struct TiSolverState TiDynamicsOut;
  * are evidenced. The memset in the initializer covers the whole 0x100 bytes.
  */
 struct TiMRPackage {
-    int first_word;
+    int solverPasses;
     int targetNode;           /* +0x04: node index that the aim solver targets (0x1D after the initializer) */
     unsigned char unmodeled_08[8];
     TiMRState state_a;
@@ -124,11 +124,11 @@ typedef struct TiXacTables2 {
     int dynamicsCount;
     unsigned int visibilityCount;
     int joint3Count;
-    int skipOffset;
+    int oldSkipOffset;
     int unmodeled_2C;
     int jointOffset;
     int joint2Offset;
-    int unmodeled_38;
+    int skipOffset;
     int dynamicsOffset;
     int visibilityOffset;
     int joint3Offset;
@@ -211,11 +211,11 @@ struct TiHrcDynamics {
             unsigned int solverFlags; /* +0x04: bit 0x2 and 0x4 zero the local z and y of the position (tiDynamicsNodeSolvePalette) */
         };
     };
-    float normalScale;        /* +0x08 */
-    float biasY;              /* +0x0C */
-    float damping;            /* +0x10: the accumulator is scaled by it after each step */
+    float boneLength;         /* +0x08: distance kept from the parent */
+    float gravity;            /* +0x0C: subtracted from the velocity y each step */
+    float damping;            /* +0x10: the velocity is scaled by it after each step */
     float pullScale;          /* +0x14: how strongly the point is pulled to its target */
-    float timeStep;           /* +0x18: multiplies the wind push (tiWindDirApply) */
+    float windMultiplier;     /* +0x18: multiplies the wind push (tiWindDirApply) */
     unsigned int sphereCount; /* +0x1C */
     unsigned int matrixCount;
     unsigned int capsuleCount;
@@ -304,11 +304,11 @@ typedef struct TiNodeKey {
     float rotation[3];
 } TiNodeKey;
 
-/* The node table at +0xD8 of the package: a threshold at +4 (below 1.1f the slots are indexed, else the keys are
+/* The node table at +0xD8 of the package: the file version at +4 (below 1.1f the slots are indexed, else the keys are
  * searched by id), the entry count at +8 and the entries from +0x10. */
 struct TiNodeTable {
     unsigned char unmodeled_00[4];
-    float threshold;
+    float version;
     unsigned int count;
     unsigned char unmodeled_0C[4];
     TiNodeSlot slots[0];
@@ -334,8 +334,8 @@ void tiMRPackageSetClampRange(TiMRPackage *pMRPackage, TiPamData *pam);
 void tiMRPackageSetEntryTableC(TiMRPackage *pMRPackage, TiNodeTable *value);
 void tiMRStateSetSpeed(TiMRState *pState, float value);
 void tiMRStateSetPosition(TiMRState *pState, float value);
-void tiMRStateSetValue(TiMRState *pState, float value);
-void tiMRPackageSetFirstWord(TiMRPackage *pMRPackage, int value);
+void tiMRStateSetBlendFrames(TiMRState *pState, float frames);
+void tiMRPackageSetSolverPasses(TiMRPackage *pMRPackage, int value);
 void tiMRPackageSetVectorUniform(TiMRPackage *pMRPackage, float value);
 void tiMRPackageSetVector(TiMRPackage *pMRPackage, float x, float y, float z);
 void tiMRPackageAdvanceAnim(TiMRPackage *pMRPackage);

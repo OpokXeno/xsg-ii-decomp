@@ -5,7 +5,7 @@
 #include "main/face_point.h"
 #include "main/game_camera.h"
 #include "main/init_uwamono_sys.h"
-#include "main/ladder_table.h"
+#include "main/get_ladder.h"
 #include "main/nml_model_set.h"
 #include "main/xgl_jpeg.h"
 #include "main/game_map_object.h"
@@ -30,7 +30,7 @@
 #include "main/game_defocus.h"
 #include "main/uwamono_event_check.h"
 #include "main/uwamono_light_blend.h"
-#include "main/script_register_natives.h"
+#include "main/talk_natives.h"
 
 /* Argument block of xglJpegDecode. */
 typedef struct JpegInfo {
@@ -43,7 +43,7 @@ typedef struct JpegInfo {
     u8 unmodeled_18[0x08];
 } JpegInfo;
 
-/* The rider markers a map object owns (UwamonoRecord.handles[1] and [2]) as sef.h SefEffectRecord, with the position and
+/* The selection markers a map object owns (UwamonoRecord.handles[1] and [2]) as sef.h SefEffectRecord, with the position and
  * scale accessed through the DoublewordVector4 union (alias set 0, which keeps the loads of the record fields behind the
  * stores); only the fields touched here. */
 typedef struct MapEffectView {
@@ -59,8 +59,9 @@ typedef struct MapEffectView {
 /* Bits of gameWork.control (CONTROL_PAUSED is GAME_PAUSE_MAP_OBJECTS here: game_camera.h cannot be included,
  * its record types clash). */
 #define GAME_PAUSE_MAP_OBJECTS 0x01
-#define GAME_HIDE_RIDERS_DELAY 0x10 /* when set, one frame passes before GAME_HIDE_RIDERS is cleared */
-#define GAME_HIDE_RIDERS 0x20
+/* Set by mapResourceLoadCallback: the selection markers of the map objects stay hidden while the bits run out (two frames). */
+#define GAME_HIDE_MARKERS_DELAY 0x10 /* when set, one frame passes before GAME_HIDE_MARKERS is cleared */
+#define GAME_HIDE_MARKERS 0x20
 /* UwamonoRecord.flags bits. */
 #define MAP_OBJ_SHOWN 0x02
 /* Bit `key` of a map flag set (an array of 32-bit words). */
@@ -176,7 +177,7 @@ void mapResourceLoadCallback(int index, void *buffer, unsigned int size, void *v
         }
     }
 
-    gameWork.control |= GAME_HIDE_RIDERS_DELAY | GAME_HIDE_RIDERS;
+    gameWork.control |= GAME_HIDE_MARKERS_DELAY | GAME_HIDE_MARKERS;
     if (gameWork.encounterReaction == -1) {
         float zeroF = 0.0f;
         gameWork.fogDist.w = zeroF;
@@ -533,7 +534,7 @@ void mapBackdropDraw(MainActive *active)
 int DispMapObject(void)
 {
     Vector4 point;
-    MapEffectView *riders[2];
+    MapEffectView *markers[2]; /* the two selection markers of a record (handles[1] and handles[2]) */
     float matrix[4][4];
     UwamonoRecord *record;
     XenoActor *actor;
@@ -546,11 +547,11 @@ int DispMapObject(void)
     int j;
     int k;
 
-    if (gameWork.control & GAME_HIDE_RIDERS) {
-        if (gameWork.control & GAME_HIDE_RIDERS_DELAY) {
-            gameWork.control &= ~GAME_HIDE_RIDERS_DELAY;
+    if (gameWork.control & GAME_HIDE_MARKERS) {
+        if (gameWork.control & GAME_HIDE_MARKERS_DELAY) {
+            gameWork.control &= ~GAME_HIDE_MARKERS_DELAY;
         } else {
-            gameWork.control &= ~GAME_HIDE_RIDERS;
+            gameWork.control &= ~GAME_HIDE_MARKERS;
         }
     }
     xglMatrixUnit(matrix);
@@ -578,7 +579,7 @@ int DispMapObject(void)
             Sound_FootStep(i);
             if (record->flags & MAP_OBJ_SHOWN) {
                 actor->drawFlags &= ~4;
-                actor->drawMode = record->motion;
+                actor->shadowType = record->motion;
                 uwamonoStartAreaBlend(i);
             } else {
                 actor->drawFlags |= 4;
@@ -673,10 +674,10 @@ int DispMapObject(void)
             if (!(gameWork.control & GAME_PAUSE_MAP_OBJECTS)) {
                 if (record->parent == -1 || record->attached != 1) {
                     mapObjectAdvanceTweens(record);
-                    if (record->tiltStep != -1) {
-                        record->tiltStep++;
-                        if (record->tiltStep > record->tiltCount) {
-                            record->tiltStep = -1;
+                    if (record->moveTicks != -1) {
+                        record->moveTicks++;
+                        if (record->moveTicks > record->moveDuration) {
+                            record->moveTicks = -1;
                         }
                     }
                 } else {
@@ -691,7 +692,7 @@ int DispMapObject(void)
                 }
             }
             if (record->motionKind == 2) {
-                if (record->busy == 0 && record->tiltStep == -1) {
+                if (record->openState == 0 && record->moveTicks == -1) {
                     record->searchMode = 0;
                 } else {
                     record->searchMode = 1;
@@ -752,11 +753,11 @@ int DispMapObject(void)
                 header = nmlPacketSetAttributeAlloc16N(8);
                 data = mapObjectResources[MAP_MODEL_SLOT(record->type)];
                 source = (MapModelHeader *) ((u8 *) data + data->headerOffset);
-                if (record->tiltStep != -1) {
-                    Get_MiddlePoint(&record->turnFrom, &record->turnTo, record->tiltStep, record->tiltCount,
+                if (record->moveTicks != -1) {
+                    Get_MiddlePoint(&record->turnFrom, &record->turnTo, record->moveTicks, record->moveDuration,
                                     &record->tilt);
-                    if (record->tiltCount < record->tiltStep) {
-                        record->tiltStep = -1;
+                    if (record->moveDuration < record->moveTicks) {
+                        record->moveTicks = -1;
                     }
                 }
                 if (record->flags & MAP_OBJ_SHOWN) {
@@ -861,7 +862,7 @@ int DispMapObject(void)
             XenoActorPushMatrix(record->body.actor);
         }
     }
-    if (!(gameWork.control & GAME_HIDE_RIDERS)) {
+    if (!(gameWork.control & GAME_HIDE_MARKERS)) {
         for (j = 0; j < MAP_RECORD_COUNT; j++) {
             record = &uwamonoRecords[j];
             if (record->kind < MAP_KIND_ACTOR || record->kind > MAP_KIND_FLAG) {
@@ -869,39 +870,39 @@ int DispMapObject(void)
             }
             uwamonoUpdateInReach(uwamonoRecords[uwamonoCurrentIndex].body.actor, j);
             if (record->state != 0) {
-                riders[0] = record->handles[1];
-                riders[1] = record->handles[2];
+                markers[0] = record->handles[1];
+                markers[1] = record->handles[2];
                 if (record->flags & 0x80000) {
-                    riders[1]->shown = 0;
-                    riders[0]->shown = 0;
+                    markers[1]->shown = 0;
+                    markers[0]->shown = 0;
                 } else {
                     if (record->state == 1) {
-                        riders[0]->shown = 1;
-                        riders[1]->shown = 0;
-                        riders[0]->position.vector.x = record->position.x + record->focusOffset.x;
-                        riders[0]->position.vector.y = record->position.y + record->focusOffset.y + record->extent.y * 0.5f;
-                        riders[0]->position.vector.z = record->position.z + record->focusOffset.z;
-                        riders[0]->scale.vector.x = riders[0]->scale.vector.y = riders[0]->scale.vector.z
+                        markers[0]->shown = 1;
+                        markers[1]->shown = 0;
+                        markers[0]->position.vector.x = record->position.x + record->focusOffset.x;
+                        markers[0]->position.vector.y = record->position.y + record->focusOffset.y + record->extent.y * 0.5f;
+                        markers[0]->position.vector.z = record->position.z + record->focusOffset.z;
+                        markers[0]->scale.vector.x = markers[0]->scale.vector.y = markers[0]->scale.vector.z
                             = uwamonoRecords[uwamonoCurrentIndex].form;
                     } else {
-                        riders[0]->shown = 0;
-                        riders[1]->shown = 1;
-                        riders[1]->position.vector.x = record->position.x + record->focusOffset.x;
-                        riders[1]->position.vector.y = record->position.y + record->focusOffset.y + record->extent.y * 0.5f;
-                        riders[1]->position.vector.z = record->position.z + record->focusOffset.z;
-                        riders[1]->scale.vector.x = riders[1]->scale.vector.y = riders[1]->scale.vector.z
+                        markers[0]->shown = 0;
+                        markers[1]->shown = 1;
+                        markers[1]->position.vector.x = record->position.x + record->focusOffset.x;
+                        markers[1]->position.vector.y = record->position.y + record->focusOffset.y + record->extent.y * 0.5f;
+                        markers[1]->position.vector.z = record->position.z + record->focusOffset.z;
+                        markers[1]->scale.vector.x = markers[1]->scale.vector.y = markers[1]->scale.vector.z
                             = uwamonoRecords[uwamonoCurrentIndex].form;
                     }
-                    riders[0]->flags |= 4;
-                    riders[1]->flags |= 4;
+                    markers[0]->flags |= 4;
+                    markers[1]->flags |= 4;
                 }
             }
-            if (record->motionKind != 0 && record->searchState != 1 && record->busy == 0
+            if (record->motionKind != 0 && record->openerKind != 1 && record->openState == 0
                 && uwamonoCurrentIndex != -1) {
-                if (record->lookLink == -1) {
+                if (record->partnerLink == -1) {
                     point = record->closedPosition.vector;
                 } else {
-                    Get_MiddlePoint(&record->closedPosition.vector, &uwamonoRecords[record->lookLink].closedPosition.vector, 1, 2, &point);
+                    Get_MiddlePoint(&record->closedPosition.vector, &uwamonoRecords[record->partnerLink].closedPosition.vector, 1, 2, &point);
                 }
                 if (uwamonoRecords[uwamonoCurrentIndex].form * 5.0f
                     <= Get_Distance(&uwamonoRecords[uwamonoCurrentIndex].body.actor->position, &point)) {
@@ -971,7 +972,7 @@ Vector4 mapBackdropOriginVector = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 float negativeZeroFloat[1] = { -0.0f };
 
-int uwamonoSearchWaitCount = -1;
+int uwamonoSquareWaitCount = -1;
 
 /* The map resource table (one entry per name of mapObjectResourceNames), zero until mapObjectResourcesLoad fills it. */
 void *mapObjectResources[MAP_RESOURCE_COUNT] = { 0 };

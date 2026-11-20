@@ -8,7 +8,7 @@ static XglPacket *xglScratchPacket;
 static GsAdPair *xglScratchQuads;
 static int xglScratchQuadCount;
 
-/* Starts a scratchpad quadword batch (proposed name xglPacketScratchBegin): the current packet goes to
+/* Starts a scratchpad quadword batch: the current packet goes to
  * xglScratchPacket, the batch base is the EE scratchpad and the count is reset to zero. */
 void xglPacketScratchBegin(void)
 {
@@ -17,7 +17,7 @@ void xglPacketScratchBegin(void)
     xglScratchQuadCount = 0;
 }
 
-/* Appends one 128-bit quadword (high, low) to the batch (proposed name xglPacketScratchAddQuad). */
+/* Appends one 128-bit quadword (high, low) to the batch. */
 void xglPacketScratchAddQuad(long long high, long long low)
 {
     int newCount;
@@ -31,15 +31,13 @@ void xglPacketScratchAddQuad(long long high, long long low)
     xglScratchQuadCount = newCount;
 }
 
-/* Adds count - 1 to the first doubleword of the batch, the tag written at its head (proposed name
- * xglPacketScratchPatchTag). */
+/* Adds count - 1 to the first doubleword of the batch, the tag written at its head. */
 void xglPacketScratchPatchTag(void)
 {
     xglScratchQuads->data += xglScratchQuadCount - 1;
 }
 
-/* Appends the batch to the current packet as a VIF1 direct HL packet (proposed name
- * xglPacketScratchAddDirect). */
+/* Appends the batch to the current packet as a VIF1 direct HL packet. */
 void xglPacketScratchAddDirect(void)
 {
     sceVif1PkCnt(xglScratchPacket, 0);
@@ -48,7 +46,7 @@ void xglPacketScratchAddDirect(void)
     sceVif1PkCloseDirectHLCode(xglScratchPacket);
 }
 
-/* Caps value at upper, then raises it to lower (proposed name xglClampInt). */
+/* Caps value at upper, then raises it to lower. */
 int xglClampInt(int value, int lower, int upper)
 {
     int clamped = value;
@@ -60,7 +58,7 @@ int xglClampInt(int value, int lower, int upper)
 }
 
 /* Wraps value once into lower..upper: one period (upper - lower + 1) down when above upper, one up when below lower. */
-int wrapIntRange(int value, int lower, int upper)
+int xglWrapIntRange(int value, int lower, int upper)
 {
     int period = upper - lower + 1;
 

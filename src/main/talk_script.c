@@ -8,7 +8,7 @@
 #include "main/talk_window_frame.h"
 #include "main/talk_draw_fade.h"
 #include "main/xgl_cd.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/xgl_packet.h"
 #include "main/res_get_path.h"
 
@@ -17,39 +17,39 @@ int interpLineScrollY(int value) {
     return (value * 30) - 30;
 }
 
-/* value - 80; the constant's meaning is not read yet (caller msgTextSlotFit, timecode_forward.c). */
+/* value - 80; the constant's meaning is not read yet (caller msgTextSlotFit, msg_slot_start.c). */
 int textSlotWrapWidth(int value) {
     return value - 80;
 }
 
-/* Entry that loads the talk script; delegates to talkLoadOmiyaScript. */
-void talkStartScriptLoad(void) {
-    talkLoadOmiyaScript();
+/* Entry that loads the talk texture; delegates to talkLoadOmiyaTexture. */
+void talkStartTextureLoad(void) {
+    talkLoadOmiyaTexture();
 }
 
-/* Closes the loaded script, then clears the talk-active flag talkActive. */
-void talkEndScript(void) {
-    talkCloseScript();
+/* Closes the loaded talk texture, then clears the talk-active flag talkActive. */
+void talkEndTexture(void) {
+    talkCloseTexture();
     talkActive = 0;
 }
 
 
 /*
- * Starts loading "omiya\talk01.xtx" into the script handle
- * talkScriptHandle, then waits while the CD service reports work pending
+ * Starts loading the XTX texture "omiya\talk01.xtx" into the handle
+ * talkTextureHandle, then waits while the CD service reports work pending
  * (xglCdServiceIfPending, xgl_cd.c).
  */
-void talkLoadOmiyaScript(void) {
-    GameResLoadName("omiya\\talk01.xtx", &talkScriptHandle, 0, 0);
+void talkLoadOmiyaTexture(void) {
+    GameResLoadName("omiya\\talk01.xtx", &talkTextureHandle, 0, 0);
     while (xglCdServiceIfPending() != 0) {
     }
 }
 
 
-/* Releases the script handle talkScriptHandle and clears it. */
-void talkCloseScript(void) {
-    GameResBlockFreeByBuffer(talkScriptHandle);
-    talkScriptHandle = 0;
+/* Releases the texture handle talkTextureHandle and clears it. */
+void talkCloseTexture(void) {
+    GameResBlockFreeByBuffer(talkTextureHandle);
+    talkTextureHandle = 0;
 }
 
 /* Clears the talk-active flag talkActive. */
@@ -76,7 +76,7 @@ int talkTakePending(void) {
 
 /* Draws the talk window frame of a slot for each pending flag (2, 4, 8). */
 void talkDrawFramesBasic(MsgSlot *slot) {
-    xglPacketTextureTrans(talkScriptHandle);
+    xglPacketTextureTrans(talkTextureHandle);
     if (slot->flags & MSG_SLOT_CLOSING) {
         talkWindowDrawFrame(slot, TALK_FRAME_CLOSING, slot->open_counter * 0.08f);
     }
@@ -88,20 +88,20 @@ void talkDrawFramesBasic(MsgSlot *slot) {
     }
 }
 
-/* Draws the talk window frames of a slot for each pending flag (2, 4, 8), then talkDrawListHeaderWindow
- * when the item list is bound (list_active); flag 8 ends with talkDrawListCursorBar unless talkDrawListHeaderWindow ran and item_count is 0. */
+/* Draws the talk window frames of a slot for each pending flag (2, 4, 8), then talkDrawListFooterWindow
+ * when the item list is bound (list_active); flag 8 ends with talkDrawListCursorBar unless talkDrawListFooterWindow ran and item_count is 0. */
 void talkDrawFramesWithCursor(MsgSlot *slot) {
-    xglPacketTextureTrans(talkScriptHandle);
+    xglPacketTextureTrans(talkTextureHandle);
     if (slot->flags & MSG_SLOT_CLOSING) {
         talkWindowDrawFrame(slot, TALK_FRAME_CLOSING, slot->open_counter * 0.08f);
         if (slot->u.list.list_active != 0) {
-            talkDrawListHeaderWindow(slot);
+            talkDrawListFooterWindow(slot);
         }
     }
     if (slot->flags & MSG_SLOT_OPENING) {
         talkWindowDrawFrame(slot, TALK_FRAME_OPENING, slot->open_counter * 0.08f);
         if (slot->u.list.list_active != 0) {
-            talkDrawListHeaderWindow(slot);
+            talkDrawListFooterWindow(slot);
         }
     }
     if (slot->flags & MSG_SLOT_OPEN) {
@@ -110,7 +110,7 @@ void talkDrawFramesWithCursor(MsgSlot *slot) {
             talkDrawListCursorBar(slot);
         } else {
             talkWindowDrawFrame(slot, TALK_FRAME_FULL, 1.0f);
-            talkDrawListHeaderWindow(slot);
+            talkDrawListFooterWindow(slot);
             if (slot->u.list.item_count != 0) {
                 talkDrawListCursorBar(slot);
             }
@@ -120,7 +120,7 @@ void talkDrawFramesWithCursor(MsgSlot *slot) {
 
 /* Like talkDrawFramesBasic, then runs talkDrawSelectionBox when flag 0x40 is set after the 0x8 frame. */
 void talkDrawFramesWithBox(MsgSlot *slot) {
-    xglPacketTextureTrans(talkScriptHandle);
+    xglPacketTextureTrans(talkTextureHandle);
     if (slot->flags & MSG_SLOT_CLOSING) {
         talkWindowDrawFrame(slot, TALK_FRAME_CLOSING, slot->open_counter * 0.08f);
     }
@@ -129,7 +129,7 @@ void talkDrawFramesWithBox(MsgSlot *slot) {
     }
     if (slot->flags & MSG_SLOT_OPEN) {
         talkWindowDrawFrame(slot, TALK_FRAME_FULL, 1.0f);
-        if (slot->flags & TIMECODE_FLAG_PHASE) {
+        if (slot->flags & TIMECODE_FLAG_SELECT) {
             talkDrawSelectionBox(slot);
         }
     }
@@ -150,7 +150,7 @@ void talkDrawFrameRects(MsgSlot *slot) {
 
 /* Draws the talk window frames of a slot; flag 0x400 adds a fade frame driven by the item counter (MsgSlotItem.pending). */
 void talkDrawFramesWithFade(MsgSlot *slot) {
-    xglPacketTextureTrans(talkScriptHandle);
+    xglPacketTextureTrans(talkTextureHandle);
     if (slot->flags & MSG_SLOT_CLOSING) {
         talkWindowDrawFrame(slot, TALK_FRAME_CLOSING, slot->open_counter * 0.08f);
     }
@@ -166,26 +166,26 @@ void talkDrawFramesWithFade(MsgSlot *slot) {
     }
 }
 
-/* Sets the talk-active flag talkActive. */
+/* Sets the talk-active flag talkActive, which hides the page cursor for one frame. */
 void talkSetActive(void) {
     talkActive = 1;
 }
 
-/* Flags, screen rectangle, frame counter and RGBA (alpha 0x98) of the fixed window of talkDrawListHeaderWindow:
- * active and open, its counter at the open end of the 12-frame animation. */
+/* Flags, screen rectangle, frame counter and RGBA (alpha 0x98) of the fixed window of talkDrawListFooterWindow. It sits
+ * below the item list and holds the Sell and Close labels. Active and open, its counter at the open end of the 12-frame animation. */
 #define TALK_FIXED_WINDOW_FLAGS (MSG_SLOT_ACTIVE | MSG_SLOT_OPEN)
 #define TALK_FIXED_WINDOW_OPEN_FRAMES 0xC
-#define TALK_CURSOR_WINDOW_X 0x81
-#define TALK_CURSOR_WINDOW_Y 0x13B
-#define TALK_CURSOR_WINDOW_W 0xFB
-#define TALK_CURSOR_WINDOW_H 0x51
-#define TALK_CURSOR_WINDOW_COLOR 0x98808080
+#define TALK_FOOTER_WINDOW_X 0x81
+#define TALK_FOOTER_WINDOW_Y 0x13B
+#define TALK_FOOTER_WINDOW_W 0xFB
+#define TALK_FOOTER_WINDOW_H 0x51
+#define TALK_FOOTER_WINDOW_COLOR 0x98808080
 
 /* Draws a fixed window (a stack slot with state 0, so it gets no page cursor) at the slot's depth, once for
  * each pending flag (4, 8, 2) of the slot; talkDrawFramesWithCursor adds it to a list window with a bound item list. */
-void talkDrawListHeaderWindow(MsgSlot *slot) {
-    MsgSlot window = {TALK_FIXED_WINDOW_FLAGS, TALK_CURSOR_WINDOW_X, TALK_CURSOR_WINDOW_Y, slot->z,
-                      TALK_CURSOR_WINDOW_W, TALK_CURSOR_WINDOW_H, TALK_FIXED_WINDOW_OPEN_FRAMES, 0, TALK_CURSOR_WINDOW_COLOR};
+void talkDrawListFooterWindow(MsgSlot *slot) {
+    MsgSlot window = {TALK_FIXED_WINDOW_FLAGS, TALK_FOOTER_WINDOW_X, TALK_FOOTER_WINDOW_Y, slot->z,
+                      TALK_FOOTER_WINDOW_W, TALK_FOOTER_WINDOW_H, TALK_FIXED_WINDOW_OPEN_FRAMES, 0, TALK_FOOTER_WINDOW_COLOR};
     float scale;
 
     scale = slot->open_counter * 0.08f;
@@ -256,7 +256,7 @@ enum {
 };
 
 /* The font texture base, in words, plus a piece offset. */
-#define TALK_FONT_WORDS(offset) ((sRender.vram.second_base << 5) + (offset))
+#define TALK_TEXTURE_WORDS(offset) ((sRender.vram.texture_base << 5) + (offset))
 /* Scissor of the whole 512x448 screen. */
 #define TALK_SCISSOR_FULL GS_SET_SCISSOR(0, TALK_SCREEN_RIGHT, 0, TALK_SCREEN_BOTTOM)
 
@@ -332,7 +332,7 @@ void talkWindowDrawFrame(MsgSlot *window, int mode, float scale)
         middleFits = 0;
         rect[TALK_PIECE_STRIP_LEFT_INNER].right = rect[TALK_PIECE_STRIP_RIGHT_INNER].right = (left + right) >> 1;
     }
-        if (window->state == 1 && (window->flags & MSG_SLOT_OPEN) && !(window->flags & INTERP_FLAG_SCAN) && talkActive == 0) {
+        if (window->slot_type == 1 && (window->flags & MSG_SLOT_OPEN) && !(window->flags & INTERP_FLAG_SCAN) && talkActive == 0) {
         talkWindowCursorPos(&cursor_x, &cursor_y, window);
     }
     packet = xglPacketGetCurrent();
@@ -404,8 +404,8 @@ void talkWindowDrawFrame(MsgSlot *window, int mode, float scale)
                 height = TALK_ABS(dy);
 
                 pairs[pairCount].ad.reg = GS_TEX0_1;
-                pairs[pairCount].ad.data = GS_SET_TEX0(TALK_FONT_WORDS(piece->texture_offset), 8, GS_PSMT8, 5, 9, 1, 0,
-                                                  TALK_FONT_WORDS(piece->clut_offset), 0, 0, 0, 1);
+                pairs[pairCount].ad.data = GS_SET_TEX0(TALK_TEXTURE_WORDS(piece->texture_offset), 8, GS_PSMT8, 5, 9, 1, 0,
+                                                  TALK_TEXTURE_WORDS(piece->clut_offset), 0, 0, 0, 1);
                 pairCount++;
                 if (piece->repeat != 0) {
                     pairs[pairCount].ad.reg = GS_CLAMP_1;
@@ -479,8 +479,8 @@ void talkWindowDrawFrame(MsgSlot *window, int mode, float scale)
                     pairs[pairCount].ad.reg = GS_TEXFLUSH;
                     pairCount++;
                     pairs[pairCount].ad.reg = GS_TEX0_1;
-                    pairs[pairCount].ad.data = GS_SET_TEX0(TALK_FONT_WORDS(piece->texture_offset), 8, GS_PSMT8, 5, 9, 1, 0,
-                                                      TALK_FONT_WORDS(piece->clut_offset), 0, 0, 0, 1);
+                    pairs[pairCount].ad.data = GS_SET_TEX0(TALK_TEXTURE_WORDS(piece->texture_offset), 8, GS_PSMT8, 5, 9, 1, 0,
+                                                      TALK_TEXTURE_WORDS(piece->clut_offset), 0, 0, 0, 1);
                     pairCount++;
                     pairs[pairCount].ad.reg = GS_CLAMP_1;
                     pairs[pairCount].ad.data = GS_SET_CLAMP(GS_REGION_REPEAT, GS_REGION_REPEAT, piece->u_limit, 0, piece->v_limit, 0);
@@ -609,7 +609,7 @@ void talkWindowDrawFrame(MsgSlot *window, int mode, float scale)
         } while (piece->kind != TALK_PIECE_END);
     }
     /* Same merged flag test as above. */
-    if (window->state == 1 && (window->flags & MSG_SLOT_OPEN) && !(window->flags & INTERP_FLAG_SCAN) && talkActive == 0) {
+    if (window->slot_type == 1 && (window->flags & MSG_SLOT_OPEN) && !(window->flags & INTERP_FLAG_SCAN) && talkActive == 0) {
         pairs[pairCount].ad.reg = GS_TEXFLUSH;
         pairs[pairCount].ad.data = 0;
         pairCount++;
@@ -620,8 +620,8 @@ void talkWindowDrawFrame(MsgSlot *window, int mode, float scale)
         pairs[pairCount].ad.data = TALK_COLOR_NEUTRAL;
         pairCount++;
         pairs[pairCount].ad.reg = GS_TEX0_1;
-        pairs[pairCount].ad.data = GS_SET_TEX0(TALK_FONT_WORDS(TALK_CURSOR_TEXTURE), 8, GS_PSMT8, 6, 5, 1, 0,
-                                              TALK_FONT_WORDS(TALK_CURSOR_CLUT), 0, 0, 0, 1);
+        pairs[pairCount].ad.data = GS_SET_TEX0(TALK_TEXTURE_WORDS(TALK_CURSOR_TEXTURE), 8, GS_PSMT8, 6, 5, 1, 0,
+                                              TALK_TEXTURE_WORDS(TALK_CURSOR_CLUT), 0, 0, 0, 1);
         pairCount++;
         pairs[pairCount].ad.reg = GS_PRIM;
         pairs[pairCount].ad.data = TALK_PRIM_TEXTURED;
@@ -645,8 +645,8 @@ void talkWindowDrawFrame(MsgSlot *window, int mode, float scale)
         pairs[pairCount].ad.data = 0;
         pairCount++;
         pairs[pairCount].ad.reg = GS_TEX0_1;
-        pairs[pairCount].ad.data = GS_SET_TEX0(TALK_FONT_WORDS(TALK_CURSOR_TEXTURE), 8, GS_PSMT8, 5, 5, 1, 0,
-                                              TALK_FONT_WORDS(TALK_CURSOR_CLUT), 0, 0, 0, 1);
+        pairs[pairCount].ad.data = GS_SET_TEX0(TALK_TEXTURE_WORDS(TALK_CURSOR_TEXTURE), 8, GS_PSMT8, 5, 5, 1, 0,
+                                              TALK_TEXTURE_WORDS(TALK_CURSOR_CLUT), 0, 0, 0, 1);
         pairCount++;
         pairs[pairCount].ad.data = TALK_PRIM_TEXTURED;
         pairs[pairCount].ad.reg = GS_PRIM;
@@ -723,5 +723,7 @@ TalkPiece talkWindowPieces[39] = {
     { 24, 0, 0, 0, 0, 0, 0, 0 },
 };
 int talkPendingValue = 0;
-void *talkScriptHandle = 0;
+/* Handle of the talk01.xtx window frame texture (despite the name, not a script). */
+void *talkTextureHandle = 0;
+/* Talk-active flag: while set, the page cursor is hidden for one frame. */
 int talkActive = 0;

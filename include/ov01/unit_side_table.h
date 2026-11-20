@@ -7,7 +7,7 @@ struct BattleUnit;
 
 /* Claims the first free unit slot and returns its unit object, or 0 when all nine slots are claimed. */
 struct BattleUnit *unitSideClaim(void);
-void monsSlotReleaseRecord(void);
+void monsSlotRecordRelease(void);
 void unitSideClearAll(void);
 void unitSideRunDraw(void);
 void unitSideRunUpdate(void);

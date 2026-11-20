@@ -4,13 +4,14 @@
 #include "main/cfePlugIn.h"
 #include "main/elevator.h"
 #include "main/gifState.h"
+#include "main/runtime.h"
 #include "main/runtime_enepc.h"
 #include "main/runtime_uwamono_door.h"
 #include "main/get_ladder.h"
 #include "main/runtime_camera.h"
-#include "main/runtime_pt_init.h"
+#include "main/runtime_math.h"
 #include "main/runtime_menu.h"
-#include "main/script_register_natives.h"
+#include "main/talk_natives.h"
 #include "main/xenoActor.h"
 #include "main/sef.h"
 #include "main/undulate.h"
@@ -28,19 +29,6 @@
 #include "main/init_uwamono_sys.h"
 #include "main/res_get_path.h"
 #include "main/srs_file.h"
-
-/* A bit of gameWork.control; game_camera.h cannot be included here, its record types clash with this file's. */
-#define CONTROL_SCRIPTED 0x8000 /* include/main/game_data.h */
-
-/* uwamonoCreateRecord stores the motion halfword of an actor record with alias set 0 (a one-member union), which orders
- * it behind the position stores before it. UwamonoRecord.motion is a plain member, so this one site reaches it through
- * a view of the record. */
-typedef struct ObjxRecordView {
-    unsigned char unmodeled_000[0x33C];
-    union {
-        short value;
-    } formSet;                              /* +0x33C */
-} ObjxRecordView;
 
 
 /* Index of the first used record (kind != MAP_KIND_FREE) whose id is key; -1 when there is none. */
@@ -108,7 +96,8 @@ void uwamonoObjectEntryAnglesGet(Vector4 *angles, int index)
 }
 
 
-/* Registers each script native module in turn: objx, enepc, runtime, ladder, camera, math, menu, uwamono, cfe, talk. */
+/* Registers each script native module in turn: objx, enepc, runtime, ladder, camera, math, menu, uwamono, cfe and
+ * elevator (elvReset), then the scriptRegisterNatives tables (talk, g2path, seg) and the runtime state (samp, deb). */
 void scriptRegisterModules(void)
 {
     objxRegisterNatives();
@@ -226,7 +215,7 @@ int objxGetParam(SbThread *thread)
     return result;
 }
 
-/* Native "move": key, frames, x, y, z (percent; an omitted component keeps the record's position),
+/* Native "move": key, frames, x, y, z (hundredths of a unit; an omitted component keeps the record's position),
  * [motion], [mode]: starts the record moving to the point. */
 int objxMove(SbThread *thread)
 {
@@ -331,7 +320,7 @@ void uwamonoStartMove(int index, Vector4Elements *destination, int frames, signe
     }
 }
 
-/* Native "rotate": key, frames, x, y, z (degrees; an omitted component keeps the record's rotation):
+/* Native "rotate": key, frames, x, y, z (hundredths of a degree; an omitted component keeps the record's rotation):
  * turns the record to the angles over frames (at once when frames is 0, also on the actor of an
  * actor record). Flag, part, mover and free records are not turned. */
 int objxRotate(SbThread *thread)
@@ -389,7 +378,7 @@ int objxRotate(SbThread *thread)
     return 1;
 }
 
-/* Native "scale": key, frames, x, y, z (percent; an omitted component keeps the record's scale). */
+/* Native "scale": key, frames, x, y, z (hundredths; 100 is 1.0, an omitted component keeps the record's scale). */
 int objxScale(SbThread *thread)
 {
     int key;
@@ -505,7 +494,7 @@ void uwamonoStartTransparency(int index, int frames, float value)
     }
 }
 
-/* Native "offsetPivot": key, x, y, z (percent): the pivot of the record; an omitted component is kept. */
+/* Native "offsetPivot": key, x, y, z (hundredths of a unit): the pivot of the record; an omitted component is kept. */
 int objxOffsetPivot(SbThread *thread)
 {
     int key;
@@ -737,8 +726,8 @@ int objxSetPair(SbThread *thread)
         sefSetRecordOwner(uwamonoRecords[index[1]].handles[0], uwamonoRecords[index[0]].body.actor);
     } else {
         record = &uwamonoRecords[index[0]];
-        record->lookLink = index[1];
-        uwamonoRecords[index[1]].lookLink = index[0];
+        record->partnerLink = index[1];
+        uwamonoRecords[index[1]].partnerLink = index[0];
     }
     return 1;
 }
@@ -845,47 +834,6 @@ void objxRegisterNatives(void)
     sbNativeOwnerAdd(objxModuleName, objxNatives);
 }
 
-/* Native "setNumber": key, [kind], [entry], [fourth], [fifth]: creates the record of key (an omitted
- * kind releases the record instead). A string entry names a table entry, or an effect for MAP_KIND_EFFECT. */
-int runtimeSetNumber(SbThread *thread)
-{
-    int key;
-    int kind;
-    int entry;
-    int fourth;
-
-    if (VM_PLUGIN_CNT_GET(thread) < 3) {
-        sbSlotJumpRequest(thread, 2);
-        return 0;
-    }
-    key = vmArgGet(thread, 1);
-    if (vmArgTagIsZero(thread, 2) != 0) {
-        uwamonoReleaseRecord(uwamonoFindIndexByShortKey((short) key));
-        return 1;
-    }
-    kind = vmArgGet(thread, 2);
-    if (vmArgTagIsZero(thread, 3) != 0) {
-        entry = -1;
-    } else if (vmArgGetHigh(thread, 3) == 3) {
-        if (kind != MAP_KIND_EFFECT) {
-            entry = pxyFindEntryIndex(mapObjectTable, vmKeyedEntryGet(thread, vmArgGet(thread, 3)));
-            if (entry == -1) {
-                return 0;
-            }
-        } else {
-            entry = srsEffectNameToID(vmKeyedEntryGet(thread, vmArgGet(thread, 3)));
-        }
-    } else {
-        entry = vmArgGet(thread, 3);
-    }
-    if (vmArgTagIsZero(thread, 4) != 0) {
-        fourth = -1;
-    } else {
-        fourth = vmArgGet(thread, 4);
-    }
-    return uwamonoCreateRecord(key, kind, entry, fourth, vmArgTagIsZero(thread, 5) != 0 ? -1 : vmArgGet(thread, 5));
-}
-
 /* .data of this file (0x3E6DC0): the objx script natives. */
 SbNativeMethod objxNatives[16] = {
     { "getParam", objxGetParam },
@@ -905,343 +853,5 @@ SbNativeMethod objxNatives[16] = {
     { "footId", objxFootId },
     { 0, 0 },
 };
-
-
-/* Creates the map object record for key, kind and entry in the first free slot and returns its index, or -1
- * when fourth names a key row that the gate bytes hide. The kind decides how the record is set up. */
-int uwamonoCreateRecord(int key, int kind, int entry, int fourth, int fifth)
-{
-    UwamonoRecord *record;
-    struct XenoActor *actor;
-    UwamonoState *state;
-    UwamonoPose *table;
-    HitAction *hitAction;
-    ItemRecord *item;
-    TextRecord8 *record8;
-    int *res = 0;
-    int *resources;
-    int index;
-    int row = -1;
-    int set;
-    int arg;
-    int i;
-    UwamonoKeyRow *keyRows;
-    Vector4 position;
-    Vector4 rotation;
-
-    if (kind == MAP_KIND_ACTOR && fourth != -1) {
-        for (i = 0; i < 512; i++) {
-            keyRows = uwamonoKeyRowTable;
-            if (keyRows[i].key == fourth) {
-                row = i;
-                break;
-            }
-        }
-        if (i == 512) {
-            return -1;
-        }
-        set = gameWork.control & 0x800;
-        if (gameWork.rowFlags[set != 0][row] == 1) {
-            if (set == 0) {
-                if (uwamonoKeyRowTable[row].gateIfClear == 0) {
-                    return -1;
-                }
-            } else {
-                if (uwamonoKeyRowTable[row].gateIfSet == 0) {
-                    return -1;
-                }
-            }
-        }
-        entry = uwamonoKeyRowTable[row].value;
-    }
-
-    index = uwamonoCountLeadingInUse();
-    record = &uwamonoRecords[index];
-    record->id = (short) key;
-    record->kind = kind;
-    record->key = entry;
-
-    switch (kind) {
-    case MAP_KIND_ACTOR:
-    case MAP_KIND_ACTOR_STATIC:
-    case MAP_KIND_PART:
-        GameResLoadID(entry, (void **) &res, 0, 0);
-        resources = res;
-        actor = XenoActorAlloc();
-        record->body.actor = actor;
-        actor->rsrc[XAct_Rsrc_MDL] = resources[0];
-        actor->rsrc[XAct_Rsrc_TEX] = resources[1];
-        actor->rsrc[XAct_Rsrc_XHR] = resources[2];
-        actor->rsrc[XAct_Rsrc_XAP] = resources[4];
-        actor->rsrc[XAct_Rsrc_EntryTableC] = resources[3];
-        while (GameResLoadID(0x30041, (void **) &res, 0, 0) == -1) {
-        }
-        actor->rsrc[XAct_Rsrc_SlotTableB] = (int) res;
-        XenoActorAllocMatrices(actor);
-        XenoActorSetChannelValue(actor, 0.0f);
-        XenoActorSetMode(actor, 0);
-        record->positionCoords[0] = actor->position.x;
-        record->positionCoords[1] = actor->position.y;
-        record->positionCoords[2] = actor->position.z;
-        record->positionCoords[3] = actor->position.w;
-        ((ObjxRecordView *) record)->formSet.value = 1;
-        actor->kind = entry;
-        actor->drawFlags |= 8;
-        actor->moved = index;
-        if (kind != MAP_KIND_PART) {
-            record->body.motions = &uwamonoStates[uwamonoStateCountLeading()];
-        }
-        if (kind == MAP_KIND_ACTOR_STATIC) {
-            record->body.motions->owner = index;
-        }
-        if (entry <= 0x6FFFF) {
-            record->extent.x = actor->radius = 0.6f;
-            record->extent.y = actor->height = 1.8f;
-            record->searchMode = 0;
-        } else {
-            record->extent.x = actor->radius = 0.0f;
-            record->searchMode = 2;
-        }
-        if ((unsigned int) (entry - 0x10000) < 0x4000) {
-            record->form = 1.0f;
-        } else {
-            record->form = 5.0f;
-        }
-        if (kind == MAP_KIND_ACTOR) {
-            state = record->body.motions;
-            state->moveSpeed = 0.02f;
-            state->pursuitSpeed = 0.04f;
-            state->fanWidth = 1.0471976f;
-            state->fanLength = 5.0f;
-            state->owner = index;
-            state->noticeRange = 0;
-            state->waitTime = state->wanderTime = 20;
-            state->pickCountB = state->pickCountA = 4;
-            state->area.x = -2.5f;
-            state->area.z = 10.0f;
-            state->areaSize = 3.0f;
-            state->mode = 0;
-            state->area.y = 0;
-            state->row = row;
-            state->flags = 0;
-            if (row != -1) {
-                keyRows = uwamonoKeyRowTable;
-                for (i = 0; i < 8; i++) {
-                    state->groups[i] = keyRows[row].bytes[i];
-                }
-            }
-            for (i = 15; i >= 0; i--) {
-                state->walk[i] = i;
-            }
-        }
-        record->flags &= ~0x60000;
-        record->effectId = 0x10000035;
-        XenoActorPushMatrix(actor);
-        break;
-
-    case MAP_KIND_MODEL_REQUEST:
-        record->kind = MAP_KIND_MODEL;
-        record->type = record->key;
-        if (record->key == 12) {
-            if (gameWork.eventFlags[fourth] == 1) {
-                record->kind = MAP_KIND_FREE;
-                record->type = -1;
-                return index;
-            }
-            switch (uwamonoEventTable[fourth].type) {
-            case 1:
-                hitAction = hitActionGet(uwamonoEventTable[fourth].id);
-                arg = (uwamonoRecords[uwamonoCurrentIndex].form == 1.0f ? hitAction->mapModel[0] : hitAction->mapModel[1]) + 12;
-                break;
-            case 2:
-                item = itemRecordGet(uwamonoEventTable[fourth].id);
-                arg = (uwamonoRecords[uwamonoCurrentIndex].form == 1.0f ? item->mapModel[0] : item->mapModel[1]) + 12;
-                break;
-            case 3:
-                dataBoxCategory4RecordGet(uwamonoEventTable[fourth].id);
-                arg = 18;
-                break;
-            case 4:
-                record8 = dataBoxCategory3RecordGet(uwamonoEventTable[fourth].id);
-                arg = (uwamonoRecords[uwamonoCurrentIndex].form == 1.0f ? record8->mapModel[0] : record8->mapModel[1]) + 12;
-                break;
-            default:
-                arg = 12;
-                break;
-            }
-            if (fifth != -1) {
-                arg = fifth + 12;
-            }
-            record->eventRow = (short) fourth;
-            record->type = arg;
-        }
-        record->key = -1;
-        record->positionCoords[0] = record->positionCoords[1] = record->positionCoords[2] = 0.0f;
-        record->positionCoords[3] = 1.0f;
-        record->rotationCoords[0] = record->rotationCoords[1] = record->rotationCoords[2] = 0.0f;
-        record->rotationCoords[3] = 1.0f;
-        uwamonoInitRecord((short) index);
-        record->transform = &record->savedMatrix;
-        break;
-
-    case MAP_KIND_MODEL:
-        if (entry == -1) {
-            rotation.x = rotation.y = rotation.z = position.x = position.y = position.z = 0.0f;
-        } else {
-            uwamonoObjectEntryPositionGet(&position, entry);
-            uwamonoObjectEntryAnglesGet(&rotation, entry);
-        }
-        record->positionCoords[0] = position.x;
-        record->positionCoords[1] = position.y;
-        record->positionCoords[2] = position.z;
-        record->positionCoords[3] = position.w;
-        record->rotationCoords[0] = rotation.x;
-        record->rotationCoords[1] = rotation.y;
-        record->rotationCoords[2] = rotation.z;
-        record->rotationCoords[3] = rotation.w;
-        uwamonoInitRecord((short) index);
-        if (entry != -1) {
-            table = (UwamonoPose *) ((unsigned char *) mapObjectTable + mapObjectTable->entryMatrixOffset) + entry;
-            record->savedMatrix.copy = table->copy;
-            record->transform = table;
-            record->pose.copy = table->copy;
-        } else {
-            record->transform = &record->savedMatrix;
-        }
-        break;
-
-    case MAP_KIND_EFFECT:
-        rotation.x = rotation.y = rotation.z = position.x = position.y = position.z = 0.0f;
-        record->positionCoords[0] = position.x;
-        record->positionCoords[1] = position.y;
-        record->positionCoords[2] = position.z;
-        record->positionCoords[3] = position.w;
-        record->rotationCoords[0] = rotation.x;
-        record->rotationCoords[1] = rotation.y;
-        record->rotationCoords[2] = rotation.z;
-        record->rotationCoords[3] = rotation.w;
-        record->flags = 2;
-        record->searchMode = 0;
-        sefStartEffectKeyDefault(0, entry);
-        record->handles[0] = sefCreateEffectCf(entry, &record->position, 0);
-        break;
-
-    case MAP_KIND_FLAG:
-        record->positionCoords[0] = record->positionCoords[1] = record->positionCoords[2] = 0.0f;
-        record->positionCoords[3] = 1.0f;
-        break;
-    }
-
-    record->state = 0;
-    return index;
-}
-
-
-/* Native "setLocater": id, x1, y1, z1, x2, y2, z2 (percent), type, angle1, angle2 (degrees): creates
- * two mover records (MAP_KIND_MOVER) at the two points, linked to each other, with ids id and id + 1. When
- * arguments 3, 4, 6 and 7 are omitted the points are the pose table rows of keys x1 and x2. */
-int runtimeSetLocater(SbThread *thread)
-{
-    int index[2];
-    int entry[2];
-    UwamonoPathPoint position[2];
-    int i;
-
-    if (VM_PLUGIN_CNT_GET(thread) != 10) {
-        sbSlotJumpRequest(thread, 2);
-        return 0;
-    }
-    if (vmArgTagIsZero(thread, 3) != 0 && vmArgTagIsZero(thread, 4) != 0 && vmArgTagIsZero(thread, 6) != 0 && vmArgTagIsZero(thread, 7) != 0) {
-        entry[0] = uwamonoFindEntry(vmArgGet(thread, 2));
-        entry[1] = uwamonoFindEntry(vmArgGet(thread, 5));
-        for (i = 0; i < 2; i++) {
-            position[i].coords[0] = uwamonoEntries[entry[i]].x;
-            position[i].coords[1] = uwamonoEntries[entry[i]].y;
-            position[i].coords[2] = uwamonoEntries[entry[i]].z;
-            position[i].coords[3] = 1.0f;
-        }
-    } else {
-        for (i = 0; i < 2; i++) {
-            position[i].coords[0] = (float) vmArgGet(thread, i * 3 + 2) / 100.0f;
-            position[i].coords[1] = (float) vmArgGet(thread, i * 3 + 3) / 100.0f;
-            position[i].coords[2] = (float) vmArgGet(thread, i * 3 + 4) / 100.0f;
-            position[i].coords[3] = 1.0f;
-        }
-    }
-    for (i = 0; i < 2; i++) {
-        index[i] = uwamonoCountLeadingInUse();
-        uwamonoRecords[index[i]].kind = MAP_KIND_MOVER;
-        uwamonoRecords[index[i]].positionCoords[0] = position[i].coords[0];
-        uwamonoRecords[index[i]].positionCoords[1] = position[i].coords[1];
-        uwamonoRecords[index[i]].positionCoords[2] = position[i].coords[2];
-        uwamonoRecords[index[i]].positionCoords[3] = position[i].coords[3];
-        uwamonoRecords[index[i]].turnFromCoords[0] = (float) vmArgGet(thread, 9) / 100.0f / 180.0f * 3.1415927f;
-        uwamonoRecords[index[i]].turnToCoords[0] = (float) vmArgGet(thread, 10) / 100.0f / 180.0f * 3.1415927f;
-        uwamonoRecords[index[i]].extent.y = 1.0f;
-    }
-    uwamonoRecords[index[0]].lookLink = index[1];
-    uwamonoRecords[index[1]].lookLink = index[0];
-    uwamonoRecords[index[0]].id = vmArgGet(thread, 1);
-    uwamonoRecords[index[1]].id = vmArgGet(thread, 1) + 1;
-    uwamonoRecords[index[0]].searchShape = vmArgGet(thread, 8);
-    uwamonoRecords[index[1]].searchShape = 10;
-    return 1;
-}
-
-int runtimeSetLastDan(void)
-{
-    gifStateStartWhiteShake(uwamonoSlotTable[uwamonoCurrentIndex].body.actor);
-    return 1;
-}
-
-/* Native "setPlayer": scripted, frameScale, radius, five movement parameters, climbFrames, rate,
- * scale, [child]. An omitted value keeps the current one; scripted 1 sets CONTROL_SCRIPTED and wakes
- * the current record's actor, another value clears it and stops the actor; a child key attaches that
- * record's actor to joint 0x4D, a negative key releases it. */
-int runtimeSetPlayer(SbThread *thread)
-{
-    struct XenoActor *actor = uwamonoRecords[uwamonoCurrentIndex].body.actor;
-    int childKey;
-
-    if (VM_PLUGIN_CNT_GET(thread) < 5) {
-        sbSlotJumpRequest(thread, 2);
-        return 0;
-    }
-    if (vmArgTagIsZero(thread, 1) == 0) {
-        if (vmArgGet(thread, 1) == 1) {
-            gameWork.control |= CONTROL_SCRIPTED;
-            XenoActorSetChannelValue(actor, 4.0f);
-            XenoActorEnableChannel(actor);
-            XenoActorSetMode(actor, 0);
-        } else {
-            gameWork.control &= ~CONTROL_SCRIPTED;
-            uwamonoRecords[uwamonoCurrentIndex].body.actor->collision.flags |= 0x1000;
-            if (actor->mode < 3 || actor->mode > 5) {
-                XenoActorEnableChannel(actor);
-                uwamonoSetMotion(uwamonoCurrentIndex, 0, 1.0f);
-            }
-        }
-    }
-    gameWork.frameScale = vmArgTagIsZero(thread, 2) != 0 ? gameWork.frameScale : (float) vmArgGet(thread, 2) / 100.0f / 100000.0f;
-    uwamonoRecords[uwamonoCurrentIndex].extent.x = uwamonoRecords[uwamonoCurrentIndex].body.actor->radius = uwamonoRecords[uwamonoCurrentIndex].body.actor->collision.radius
-        = vmArgTagIsZero(thread, 3) != 0 ? uwamonoRecords[uwamonoCurrentIndex].extent.x : (float) vmArgGet(thread, 3) / 100.0f;
-    gameWork.playerParams[0][0] = vmArgTagIsZero(thread, 4) != 0 ? gameWork.playerParams[0][0] : (float) vmArgGet(thread, 4) / 100.0f;
-    gameWork.playerParams[1][0] = vmArgTagIsZero(thread, 5) != 0 ? gameWork.playerParams[1][0] : (float) vmArgGet(thread, 5) / 100.0f;
-    gameWork.playerParams[2][0] = vmArgTagIsZero(thread, 6) != 0 ? gameWork.playerParams[2][0] : (float) vmArgGet(thread, 6) / 100.0f;
-    gameWork.playerParams[3][0] = vmArgTagIsZero(thread, 7) != 0 ? gameWork.playerParams[3][0] : (float) vmArgGet(thread, 7) / 100.0f;
-    gameWork.playerParams[4][0] = vmArgTagIsZero(thread, 8) != 0 ? gameWork.playerParams[4][0] : (float) vmArgGet(thread, 8) / 100.0f;
-    gameWork.climbFrames = vmArgTagIsZero(thread, 9) != 0 ? gameWork.climbFrames : vmArgGet(thread, 9);
-    gameWork.gravity = vmArgTagIsZero(thread, 10) != 0 ? gameWork.gravity : (float) vmArgGet(thread, 10) / 10000.0f;
-    gameWork.bounceDivisor = vmArgTagIsZero(thread, 11) != 0 ? gameWork.bounceDivisor : (float) vmArgGet(thread, 11) / 100.0f;
-    if (vmArgTagIsZero(thread, 12) == 0) {
-        childKey = vmArgGet(thread, 12);
-        if (childKey >= 0) {
-            XenoActorAttachChildToJoint(uwamonoRecords[uwamonoCurrentIndex].body.actor, uwamonoRecords[uwamonoFindIndexByShortKey((short) childKey)].body.actor, 0x4D);
-        } else {
-            XenoActorReleaseChild(uwamonoRecords[uwamonoCurrentIndex].body.actor, uwamonoRecords[uwamonoFindIndexByShortKey((short) -childKey)].body.actor);
-        }
-    }
-    return 1;
-}
 
 char objxModuleName[8] = "objx";

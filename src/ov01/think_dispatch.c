@@ -110,7 +110,7 @@ void thinkDispatch(BattleUnit *unit, int command, int arg, BattleUnit *target)
         cmdListSet(unit, &body);
         break;
     case CMD_KIND_LOOKUP:
-        code = battleLookupGet(arg)->tecIndex;
+        code = etherRecordGet(arg)->tecIndex;
         if (calcEthEnableChk(unit, arg) != 0) {
             body.command = command;
             body.code = code;
@@ -256,9 +256,9 @@ int unitParaFieldGet(struct BattleUnit *unit, int field)
     case UNIT_PARA_KEY:
         return stats->key;
     case UNIT_PARA_STATE70:
-        return stats->state70;
+        return stats->breakState;
     case UNIT_PARA_LEVEL:
-        return stats->level;
+        return stats->stockCount;
     case UNIT_PARA_EXP_LEVEL:
         return stats->expLevel;
     case UNIT_PARA_FLAGS:
@@ -266,13 +266,13 @@ int unitParaFieldGet(struct BattleUnit *unit, int field)
     case UNIT_PARA_POS_INDEX:
         return stats->posIndex;
     case UNIT_PARA_LIVE_ROW ... UNIT_PARA_SLOT_VALUE - 1:
-        return stats->liveRows[field - UNIT_PARA_LIVE_ROW];
+        return stats->breakZones[field - UNIT_PARA_LIVE_ROW];
     case UNIT_PARA_SLOT_VALUE ... UNIT_PARA_SLOT_ROLL - 1:
-        return stats->slotValue[field - UNIT_PARA_SLOT_VALUE];
+        return stats->attributeReaction[field - UNIT_PARA_SLOT_VALUE];
     case UNIT_PARA_SLOT_ROLL ... UNIT_PARA_CURRENT - 1:
-        return stats->slotRoll[field - UNIT_PARA_SLOT_ROLL];
+        return stats->attributeReactionRoll[field - UNIT_PARA_SLOT_ROLL];
     case UNIT_PARA_CURRENT:
-        return stats->current;
+        return stats->esEnergy;
     }
     return 0;
 }
@@ -324,7 +324,7 @@ void unitParaFieldSet(struct BattleUnit *unit, int field, int value)
         stats->key = value;
         break;
     case UNIT_PARA_LEVEL:
-        stats->level = value;
+        stats->stockCount = value;
         break;
     case UNIT_PARA_EXP_LEVEL:
         stats->expLevel = value;
@@ -336,16 +336,16 @@ void unitParaFieldSet(struct BattleUnit *unit, int field, int value)
         stats->posIndex = value;
         break;
     case UNIT_PARA_LIVE_ROW ... UNIT_PARA_SLOT_VALUE - 1:
-        stats->liveRows[field - UNIT_PARA_LIVE_ROW] = value;
+        stats->breakZones[field - UNIT_PARA_LIVE_ROW] = value;
         break;
     case UNIT_PARA_SLOT_VALUE ... UNIT_PARA_SLOT_ROLL - 1:
-        stats->slotValue[field - UNIT_PARA_SLOT_VALUE] = value;
+        stats->attributeReaction[field - UNIT_PARA_SLOT_VALUE] = value;
         break;
     case UNIT_PARA_SLOT_ROLL ... UNIT_PARA_CURRENT - 1:
-        stats->slotRoll[field - UNIT_PARA_SLOT_ROLL] = value;
+        stats->attributeReactionRoll[field - UNIT_PARA_SLOT_ROLL] = value;
         break;
     case UNIT_PARA_CURRENT:
-        stats->current = value;
+        stats->esEnergy = value;
         break;
     }
 }
@@ -371,7 +371,7 @@ void effectStartAtPosition(int high, int low, Vector4 *position) {
 
     memset(&request, 0, sizeof(request));
     request.key = (high << 0xC) | low;
-    sefStartEffectWithValue(&request, position);
+    sefStartEffectAtPosition(&request, position);
 }
 
 /* The 32-byte technique record of the tecRecordGet table as the native
@@ -395,7 +395,7 @@ int tecParaFieldGet(int index, int field)
     case 2:
         return tec->kindBits.kind;
     case 3:
-        return tec->actionBits;
+        return tec->attributeBits;
     }
     return 0;
 }
@@ -428,7 +428,7 @@ struct MsgObject *msgPutObject(int x, int y, char *text, int frames, int width, 
 }
 
 /* Release callback of a MsgObject (stored at +0x4 by msgPutObject). A mode-1 object is freed when
- * textEntryPlayVoice reports its handle done; otherwise the reference count is dropped. The busy flag follows. */
+ * textEntryConfirmPoll reports its handle done; otherwise the reference count is dropped. The busy flag follows. */
 void msgObjRelease(struct MsgObject *object) {
     TextEntry *handle;
     int remaining;
@@ -437,7 +437,7 @@ void msgObjRelease(struct MsgObject *object) {
     remove = 0;
     handle = object->handle;
     if (object->mode == 1) {
-        if (textEntryPlayVoice(handle) != 0) {
+        if (textEntryConfirmPoll(handle) != 0) {
             remove = 1;
         }
     } else {
@@ -459,8 +459,8 @@ int battleMsgEndChk(void) {
     return msgBusy == 0;
 }
 
-/* Reads one of the three bytes of gauge `id` (slot order as in partyDataSetSlot); 0 for another slot. */
-int partyDataGetSlot(int id, int slot)
+/* Reads one of the three bytes of Boost gauge `id` (slot order as in boostGaugeSetSlot); 0 for another slot. */
+int boostGaugeGetSlot(int id, int slot)
 {
     struct BoostGauge *gauge;
 
@@ -476,8 +476,8 @@ int partyDataGetSlot(int id, int slot)
     return 0;
 }
 
-/* Writes one of the three slot bytes of record `id`; slot 0 is stock, slot 1 progress, slot 2 maxStock. */
-void partyDataSetSlot(int id, int slot, int value) {
+/* Writes one of the three slot bytes of Boost gauge `id`; slot 0 is stock, slot 1 progress, slot 2 maxStock. */
+void boostGaugeSetSlot(int id, int slot, int value) {
     struct BoostGauge *gauge;
 
     gauge = boostGaugeSelect(id);

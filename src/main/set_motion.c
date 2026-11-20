@@ -1,5 +1,5 @@
 #include "common.h"
-#include "main/ladder_table.h"
+#include "main/get_ladder.h"
 #include "main/enemy_1.h"
 #include "main/pad.h"
 #include "shared.h"
@@ -41,7 +41,7 @@ void Enemy_After_Battle(int unusedKey)
         route = state->trailPoints;
         actor = uwamonoRecords[index].body.actor;
         if (state->action == 6) {
-            state->cooldown = kind;
+            state->stunTime = kind;
         }
         if (state->action != 5 && state->action != 9) {
             continue;
@@ -158,13 +158,13 @@ void Check_Discovery(int index)
     if (pxyTickScaleDouble != 0 && (PadData[0].held & 0x200)) {
         return;
     }
-    if (state->mode == UWAMONO_MODE_COOLDOWN || state->mode == UWAMONO_MODE_SPLINE_START) {
+    if (state->mode == UWAMONO_MODE_STIFF || state->mode == UWAMONO_MODE_SPLINE_START) {
         return;
     }
     Enemy_ActionReady(index, 4);
     state->focusIndex = (s16) uwamonoCurrentIndex;
     focus = uwamonoCurrentIndex;
-    state->homePoint = uwamonoRecords[focus].position;
+    state->chaseTarget = uwamonoRecords[focus].position;
 }
 
 void Check_Encount(int index, signed char takeValue, int reactionValue)
@@ -255,13 +255,13 @@ void Check_Encount(int index, signed char takeValue, int reactionValue)
         gameWork.encounterReaction = reactionValue;
     }
     for (i = 0; i < 8; i++) {
-        if ((short) state->groups[i] != -1) {
+        if ((short) state->setNumbers[i] != -1) {
             candidateCount++;
         }
     }
     work = &gameWork;
     if (candidateCount > 0) {
-        work->encounterTarget = state->groups[Get_Rnd(0, candidateCount - 1)];
+        work->encounterTarget = state->setNumbers[Get_Rnd(0, candidateCount - 1)];
     } else {
         work->encounterTarget = 0;
     }
@@ -281,7 +281,7 @@ void Check_Encount(int index, signed char takeValue, int reactionValue)
     if (gameWork.panelMode == 0) {
         gameWork.encounterFlags |= 0x20;
     }
-    gameWork.encounterFlags |= state->battle;
+    gameWork.encounterFlags |= state->cfEventBits;
     if (state->effect != 0) {
         sefDeleteEffectCf(state->effect);
         state->effect = 0;
@@ -329,13 +329,13 @@ void Homing_Search(int index)
     state->noticeCooldown = 60;
     if (!((s16) state->routeNodeCount > 0)) {
         if (state->mode != 6) {
-            state->mode = UWAMONO_MODE_WANDER;
+            state->mode = UWAMONO_MODE_PAUSE;
             actor->enemyFlags &= 0x7FFFFFFF;
         }
         return;
     }
     for (k = 0; k < (s16) state->routeNodeCount; k++) {
-        pointDistance[k] = Get_Distance(&actor->position, &state->routeNodes[k].point);
+        pointDistance[k] = Get_Distance(&actor->position, &state->homeNodes[k].point);
     }
     for (i = 0; i < (s16) (s16) state->routeNodeCount; i++) {
         best = 1000.0f;
@@ -350,7 +350,7 @@ void Homing_Search(int index)
         pointDistance[pathLength] = 0.0f;
     }
     for (i = 0; i < (s16) state->routeNodeCount; i++) {
-        if (Check_Straight_ID(actor->radius, &actor->position, &state->routeNodes[pathOrder[i]].point, 32, &straightHit, 2048) == 32) {
+        if (Check_Straight_ID(actor->radius, &actor->position, &state->homeNodes[pathOrder[i]].point, 32, &straightHit, 2048) == 32) {
             current = pathOrder[i];
             break;
         }
@@ -374,13 +374,13 @@ void Homing_Search(int index)
         }
         pathOrder[pathLength++] = current;
     }
-    angle = Get_Angle(&actor->position, &state->routeNodes[pathOrder[i]].point);
+    angle = Get_Angle(&actor->position, &state->homeNodes[pathOrder[i]].point);
     actor->direction.y = angle;
     vectorCopyPoint(&state->trailPoints[0], &actor->position, angle);
     state->trailCount = 1;
     state->trailStep = 1;
     for (i = 0; i < pathLength; i++) {
-        TM_Script_Spline_Add(index, state->routeNodes[pathOrder[i]].coords[0], state->routeNodes[pathOrder[i]].coords[1], state->routeNodes[pathOrder[i]].coords[2]);
+        TM_Script_Spline_Add(index, state->homeNodes[pathOrder[i]].coords[0], state->homeNodes[pathOrder[i]].coords[1], state->homeNodes[pathOrder[i]].coords[2]);
     }
     Get_Angle(&state->trailPoints[state->trailCount - 2], &state->trailPoints[state->trailCount - 1]);
     actor->enemyFlags |= 0x80000000;
@@ -404,9 +404,9 @@ void Homing_Add(int index, short parent, float x, float y, float z)
 {
     UwamonoState *state = uwamonoRecords[index].body.motions;
     short node = state->routeNodeCount;
-    state->routeNodes[node].coords[0] = x;
-    state->routeNodes[node].coords[1] = y;
-    state->routeNodes[node].coords[2] = z;
+    state->homeNodes[node].coords[0] = x;
+    state->homeNodes[node].coords[1] = y;
+    state->homeNodes[node].coords[2] = z;
     if (node != parent) {
         state->routeParents[node] = parent;
         if (parent != UWAMONO_NO_ROUTE_NODE) {

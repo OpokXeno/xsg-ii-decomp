@@ -77,7 +77,7 @@ void MEfAdvanceTepodon(TrailHost *host);
 
 
 /*
- * Creates the effect 29 trail: the curve runs from the first actor to the
+ * Creates the Tepodon trail (fire type 5): the curve runs from the first actor to the
  * second one, whose end is pushed sideways by a random angle and a signed
  * random distance; the trail rings and the smoke are cleared, the path is
  * sampled, and both samples start at the first actor.
@@ -174,7 +174,7 @@ void MEfBuildTepodonArcKeys(TrailBlock *work)
 }
 
 /*
- * Samples the effect 29 path into 29 points (Hermite keys at 1/7 steps, the
+ * Samples the Tepodon path into 29 points (Hermite keys at 1/7 steps, the
  * last one the end of segment 3) and the 28 directions between neighbours; the
  * last direction repeats. Samples and directions fill the block's ring.
  */

@@ -2265,12 +2265,12 @@ void menuDrawCharInfo(int x, int y, int group, int slot, int mode)
 }
 
 
-#define LICENSE_COLOR_IDLE 0x3F80000000000000LL
-#define LICENSE_COLOR_SELECTED 0x3F80000080120B50LL
+#define MENU_LIST_COLOR_IDLE 0x3F80000000000000LL
+#define MENU_LIST_COLOR_SELECTED 0x3F80000080120B50LL
 
 const unsigned char msgStyleInit[72] = "$init;$bg2;$shadow+1,+3,000000;$zoom13;$han1;$prop1;$xx0,21;$colc0c0c0;";
 
-/* Item window: up to ten rows of selectionWindowList from the cursor's first visible
+/* Item window: up to ten rows of selectionUsableItemList from the cursor's first visible
    row, each with its count (dataBoxChkCategory1) and name (hitActionTextGet); ineligible entries
    are drawn dimmed. */
 void menuDrawItemList(int x, int y, ListCursor *cursor)
@@ -2287,12 +2287,12 @@ void menuDrawItemList(int x, int y, ListCursor *cursor)
     textDrawSegment(0, 0, msgStyleInit, 0);
     for (i = 0; i < 10 && i + firstRow < selectionWindowCount; i++) {
         rowStyle = firstRow + i == cursor->cursor;
-        textDrawDecimalShadow(x + 0xB9, y + 0x32 + i * 0x14, dataBoxChkCategory1(selectionWindowList[firstRow + i]), 2,
-                              rowStyle ? LICENSE_COLOR_SELECTED : LICENSE_COLOR_IDLE);
+        textDrawDecimalShadow(x + 0xB9, y + 0x32 + i * 0x14, dataBoxChkCategory1(selectionUsableItemList[firstRow + i]), 2,
+                              rowStyle ? MENU_LIST_COLOR_SELECTED : MENU_LIST_COLOR_IDLE);
         if (!selectionEntryIsEligible(firstRow + i)) {
             rowStyle |= 2;
         }
-        textDrawSegment(x + 0x18, y + 0x30 + i * 0x14, hitActionTextGet(selectionWindowList[firstRow + i], 0),
+        textDrawSegment(x + 0x18, y + 0x30 + i * 0x14, hitActionTextGet(selectionUsableItemList[firstRow + i], 0),
                         rowStyle);
     }
     if (cursor->mode_flags & 1) {
@@ -2303,7 +2303,7 @@ void menuDrawItemList(int x, int y, ListCursor *cursor)
 
 
 /* Two-column item window: up to 18 rows (9 per column) from the cursor's first visible
-   row; candidates whose selectionBlockTestBit bit is clear show entry 0x190 instead
+   row; candidates whose selectionKeyItemBitTest bit is clear show entry 0x190 instead
    of their name and count. */
 void menuDrawItemListDetail(int x, int y, ListCursor *cursor)
 {
@@ -2331,9 +2331,9 @@ void menuDrawItemListDetail(int x, int y, ListCursor *cursor)
         rowY = y + (i % 9) * 0x15 + 0x36;
         count = dataBoxChkCategory3(firstRow + i + 1);
         rowStyle = firstRow + i == cursor->cursor;
-        if (selectionBlockTestBit(firstRow + i + 1)) {
+        if (selectionKeyItemBitTest(firstRow + i + 1)) {
             textDrawDecimalShadow(columnX + 0xBD, rowY + 2, count, 2,
-                                  rowStyle ? LICENSE_COLOR_SELECTED : LICENSE_COLOR_IDLE);
+                                  rowStyle ? MENU_LIST_COLOR_SELECTED : MENU_LIST_COLOR_IDLE);
             textDrawSegment(columnX + 0x12, rowY, dataBoxCategory3TextGet(firstRow + i + 1, 0), rowStyle);
         } else {
             textDrawSegment(columnX + 0x12, rowY, menuMainTxdEntry(0x190), rowStyle);
@@ -2364,7 +2364,7 @@ int menuMemberHasEntry(PartyMember *member, unsigned char item)
 
 
 
-/* Plain item list ("  List" / "  Num" columns): up to eight rows of selectionPlainList
+/* Plain item list ("  List" / "  Num" columns): up to eight rows of selectionAccessoryList
    from the first visible row with their counts, the page marks when the list has
    more than one page, then the icons of the back members (slots 7-9) other than the
    current character, marked when the selected item is in that member's list. */
@@ -2389,9 +2389,9 @@ void menuDrawPlainItemList(int x, int y, ListCursor *cursor)
     textDrawSegment(0, 0, msgStyleInit, 0);
     for (i = 0; i < 8 && i + firstRow < selectionPlainCount; i++) {
         rowStyle = (firstRow + i) == cursor->cursor;
-        textDrawDecimalShadow(x + 0xA8, y + i * 0x14 + 0x34, dataBoxChkCategory2(selectionPlainList[firstRow + i]), 2,
-                              rowStyle ? LICENSE_COLOR_SELECTED : LICENSE_COLOR_IDLE);
-        textDrawSegment(x + 0x10, y + i * 0x14 + 0x32, itemTextGet(selectionPlainList[firstRow + i], 0), rowStyle);
+        textDrawDecimalShadow(x + 0xA8, y + i * 0x14 + 0x34, dataBoxChkCategory2(selectionAccessoryList[firstRow + i]), 2,
+                              rowStyle ? MENU_LIST_COLOR_SELECTED : MENU_LIST_COLOR_IDLE);
+        textDrawSegment(x + 0x10, y + i * 0x14 + 0x32, itemTextGet(selectionAccessoryList[firstRow + i], 0), rowStyle);
     }
     if (cursor->mode_flags & 1) {
         menuPlaceCursor(x + 0xA, y + (cursor->cursor - firstRow) * 0x14 + 0x32, 0x8C, 1);
@@ -2402,7 +2402,7 @@ void menuDrawPlainItemList(int x, int y, ListCursor *cursor)
     for (i = 7; i < 10; i++) {
         if (ptState.slots[i] != 0 && ptGetMenuMember()->id != ptState.slots[i]->id) {
             icon = ptState.slots[i]->status->memberIndex;
-            if (cursor->capacity != 0 && menuMemberHasEntry(ptState.slots[i], selectionPlainList[cursor->cursor])) {
+            if (cursor->capacity != 0 && menuMemberHasEntry(ptState.slots[i], selectionAccessoryList[cursor->cursor])) {
                 menuDrawLitIcon(x, y + 0xE3, icon);
                 fontObjSetColor(0x3F80000060708040LL);
                 menuDrawCell(0x2E, x + 0x1B, y + 0xE9, 5);
@@ -2415,9 +2415,9 @@ void menuDrawPlainItemList(int x, int y, ListCursor *cursor)
     }
 }
 
-/* Item list of the selected party member: member tabs (0x166 for the selected one),
-   then one row per item with its count; a row whose count exceeds the member
-   record's ep is drawn dimmed. Only the count
+/* Ether list of the selected party member: member tabs (0x166 for the selected one),
+   then one row per ether with its EP cost; a row whose cost exceeds the member
+   record's ep is drawn dimmed. Only the cost
    lookup tests ptGetMenuMember's member for null; the dim test reads it unchecked. */
 void menuDrawMemberItemList(int x, int y, ListCursor *cursor, unsigned char *items)
 {
@@ -2462,7 +2462,7 @@ void menuDrawMemberItemList(int x, int y, ListCursor *cursor, unsigned char *ite
         }
         rowStyle = (firstRow + i) == cursor->cursor;
         textDrawDecimalShadow(x + 0xB9, y + i * 0x14 + 0x32, count, 2,
-                              rowStyle ? LICENSE_COLOR_SELECTED : LICENSE_COLOR_IDLE);
+                              rowStyle ? MENU_LIST_COLOR_SELECTED : MENU_LIST_COLOR_IDLE);
         if (calcTotalParaMenu(ptGetMenuMember()->id)->ep < count) {
             rowStyle |= 2;
         }
@@ -2764,21 +2764,21 @@ void menuDrawAttackCommand(int x, int y, ListCursor *cursor, int member)
                 index = i + 0x5F;
             }
         }
-        textDrawSegment(x + 0x10, y + 0x1F + i * 0x15, specialAttackRecordTable[index].text, rowStyle);
-        if (specialAttackRecordTable[index].attributes[0] != 0) {
-            if (!early && specialAttackRecordTable[index].attributes[0] == 3) {
+        textDrawSegment(x + 0x10, y + 0x1F + i * 0x15, attackRecordTable[index].text, rowStyle);
+        if (attackRecordTable[index].attributes[0] != 0) {
+            if (!early && attackRecordTable[index].attributes[0] == 3) {
                 textDrawSegment(iconX + 2, y + 0x1F + i * 0x15, menuMainTxdEntry(0x14A), rowStyle);
-            } else if (specialAttackRecordTable[index].attributes[0] == 4) {
+            } else if (attackRecordTable[index].attributes[0] == 4) {
                 textDrawSegment(iconX - 2, y + 0x1F + i * 0x15, menuMainTxdEntry(0x14B), rowStyle);
             } else {
-                menuDrawKindIcon(iconX, y + 0x1F + i * 0x15, specialAttackRecordTable[index].attributes[0]);
+                menuDrawKindIcon(iconX, y + 0x1F + i * 0x15, attackRecordTable[index].attributes[0]);
             }
         }
-        if (specialAttackRecordTable[index].attributes[1] != 0) {
-            menuDrawKindIcon(iconX + 0x12, y + 0x1F + i * 0x15, specialAttackRecordTable[index].attributes[1]);
+        if (attackRecordTable[index].attributes[1] != 0) {
+            menuDrawKindIcon(iconX + 0x12, y + 0x1F + i * 0x15, attackRecordTable[index].attributes[1]);
         }
-        if (specialAttackRecordTable[index].attributes[2] != 0) {
-            menuDrawKindIcon(iconX + 0x24, y + 0x1F + i * 0x15, specialAttackRecordTable[index].attributes[2]);
+        if (attackRecordTable[index].attributes[2] != 0) {
+            menuDrawKindIcon(iconX + 0x24, y + 0x1F + i * 0x15, attackRecordTable[index].attributes[2]);
         }
     }
     if (cursor->mode_flags & 1) {
@@ -2830,23 +2830,23 @@ void menuDrawSpecialAttack(int x, int y, ListCursor *cursor, int member, unsigne
         if (!early) {
             index = selectionCopilotRecordAt(member, i, mode);
             copilotId = ptGetCopilotId(member);
-            if (copilotId <= 0 || !((specialAttackRecordTable[index].attributes[1] >> (copilotId - 1)) & 1)) {
+            if (copilotId <= 0 || !((attackRecordTable[index].attributes[1] >> (copilotId - 1)) & 1)) {
                 rowStyle |= 2;
             }
-            textDrawSegment(x + 0xBE, y + i * 0x15 + 0x1F, menuMainTxdEntry(specialAttackRecordTable[index].attributes[0] + 0x14D),
+            textDrawSegment(x + 0xBE, y + i * 0x15 + 0x1F, menuMainTxdEntry(attackRecordTable[index].attributes[0] + 0x14D),
                             rowStyle);
-            textDrawSegment(x + 0x10, y + i * 0x15 + 0x1F, specialAttackRecordTable[index].text, rowStyle);
+            textDrawSegment(x + 0x10, y + i * 0x15 + 0x1F, attackRecordTable[index].text, rowStyle);
         } else {
             index = selectionPairRecordAt(member, i, mode);
             if (index != -1) {
-                if (specialAttackRecordTable[index].attributes[0] == member) {
+                if (attackRecordTable[index].attributes[0] == member) {
                     menuDrawLitIconWide(x + 0xC4, y + i * 0x15 + 0x1F,
-                                  ptMemberRecordAt(specialAttackRecordTable[index].attributes[1] - 1)->status->memberIndex);
+                                  ptMemberRecordAt(attackRecordTable[index].attributes[1] - 1)->status->memberIndex);
                 } else {
                     menuDrawLitIconWide(x + 0xC4, y + i * 0x15 + 0x1F,
-                                  ptMemberRecordAt(specialAttackRecordTable[index].attributes[0] - 1)->status->memberIndex);
+                                  ptMemberRecordAt(attackRecordTable[index].attributes[0] - 1)->status->memberIndex);
                 }
-                textDrawSegment(x + 0x10, y + i * 0x15 + 0x1F, specialAttackRecordTable[index].text, rowStyle);
+                textDrawSegment(x + 0x10, y + i * 0x15 + 0x1F, attackRecordTable[index].text, rowStyle);
             }
         }
     }
@@ -2882,7 +2882,7 @@ void menuDrawCommandInfo(int x, int y, ListCursor *cursor, int member)
     if (cursor->cursor >= 7) {
         record = &sharedCommandRecordTable[cursor->cursor];
     } else {
-        record = &specialAttackRecordTable[(member - 1) * 7 + cursor->cursor];
+        record = &attackRecordTable[(member - 1) * 7 + cursor->cursor];
     }
     panelDrawNineSlice(menuInfoPanelFrame, x, y, 0xE0, 0x11F);
     menuDrawBorder(x + 8, y + 0x1F, 0xD0, 0x2E, 0x3F80000080381A1ALL);
@@ -2988,7 +2988,7 @@ void menuDrawPartnerInfo(int x, int y, ListCursor *cursor, int member, unsigned 
     /* i is reused for the record index. */
     i = selectionPairRecordAt(member, cursor->cursor, mode);
     if (i != -1) {
-        record = &specialAttackRecordTable[i];
+        record = &attackRecordTable[i];
         textDrawSegment(x + 0x18, y + 0x32, record->text, 0);
         if (record->attributes[0] != member) {
             partner = record->attributes[0];
@@ -3039,7 +3039,7 @@ void menuDrawPartnerInfo(int x, int y, ListCursor *cursor, int member, unsigned 
    "None") rows with their values; the attributes are joined with "/". */
 void menuDrawCommandDetail(int x, int y, ListCursor *cursor, int member)
 {
-    struct LookupRecord *record = &specialAttackRecordTable[(member - 7) * 10 + 9 + cursor->cursor];
+    struct LookupRecord *record = &attackRecordTable[(member - 7) * 10 + 9 + cursor->cursor];
     int i;
     int attributeX;
     int separate;
@@ -3138,7 +3138,7 @@ void menuDrawCopilotInfo(int x, int y, ListCursor *cursor, int member, unsigned 
     }
     i = selectionCopilotRecordAt(member, cursor->cursor, mode);
     if (i != -1) {
-        record = &specialAttackRecordTable[i];
+        record = &attackRecordTable[i];
         textDrawSegment(x + 0x18, y + 0x32, record->text, 0);
         iconX = x + 0x64;
         for (i = 0; i < 7; i++) {
@@ -3224,10 +3224,10 @@ void menuDrawClassInfo(int x, int y)
 #define LICENSE_MARK_CMD 0x80 /* request command of one mark */
 #define LICENSE_MARK_BITS 4
 
-const unsigned char licenseTitleText[16] = "  License";
+const unsigned char skillBoardTitleText[16] = "  License";
 
 /* License board page: three tabs (mode 0, 1, 2), each with its own list of rows. */
-void menuDrawLicenseBoard(int x, int y, ListCursor *groupCursor, ListCursor *slotCursor,
+void menuDrawSkillBoard(int x, int y, ListCursor *groupCursor, ListCursor *slotCursor,
                           ListCursor *subCursor, int mode, int mask)
 {
     int firstRow; /* first visible row; scrolls the highlight */
@@ -3247,7 +3247,7 @@ void menuDrawLicenseBoard(int x, int y, ListCursor *groupCursor, ListCursor *slo
     case 0:
     default:
         menuDrawTitledFrame(x + 8, y + 0x51, 0x9F, 0xAE, "  List");
-        menuDrawTitledFrame(x + 0xA9, y + 0x51, 0x44, 0xAE, licenseTitleText);
+        menuDrawTitledFrame(x + 0xA9, y + 0x51, 0x44, 0xAE, skillBoardTitleText);
         cursor = groupCursor;
         break;
     case 1:
@@ -3300,7 +3300,7 @@ void menuDrawLicenseBoard(int x, int y, ListCursor *groupCursor, ListCursor *slo
             break;
         }
         rowStyle = i == cursor->cursor;
-        color = rowStyle ? LICENSE_COLOR_SELECTED : LICENSE_COLOR_IDLE;
+        color = rowStyle ? MENU_LIST_COLOR_SELECTED : MENU_LIST_COLOR_IDLE;
         if (!unlocked) {
             rowStyle |= 2;
         }
@@ -3597,7 +3597,7 @@ void menuHpColours(int hp, int maxHp, u64 *shadowColour, u64 *faceColour)
 {
     *faceColour = 0x3F80000080808080LL;
     if (hp <= 0) {
-        *shadowColour = LICENSE_COLOR_SELECTED;
+        *shadowColour = MENU_LIST_COLOR_SELECTED;
         *faceColour = 0x3F80000080575480LL;
     } else if (maxHp >= hp * 4) {
         *shadowColour = 0x3F8000008029224ALL;
@@ -3665,11 +3665,11 @@ void menuDrawEpWide(int x, int y, int ep, int maxEp)
 void menuDrawLevelShadow(int x, int y, int level)
 {
     fontObjSetColor(LICENSE_MARK_SHADOW);
-    menuDrawStatIcon(4, x + 1, y + 3, LICENSE_COLOR_IDLE);
+    menuDrawStatIcon(4, x + 1, y + 3, MENU_LIST_COLOR_IDLE);
     fontObjSetColor(0x3F80000080805939LL);
-    menuDrawStatIcon(4, x, y, LICENSE_COLOR_IDLE);
+    menuDrawStatIcon(4, x, y, MENU_LIST_COLOR_IDLE);
     fontObjResetColor();
-    textDrawDecimalShadow(x + 0x14, y + 4, level, 2, LICENSE_COLOR_IDLE);
+    textDrawDecimalShadow(x + 0x14, y + 4, level, 2, MENU_LIST_COLOR_IDLE);
 }
 
 void menuDrawHpShadow(int x, int y, int hp, int maxHp)
@@ -3678,28 +3678,28 @@ void menuDrawHpShadow(int x, int y, int hp, int maxHp)
     u64 faceColour;
 
     fontObjSetColor(LICENSE_MARK_SHADOW);
-    menuDrawStatIcon(0, x + 1, y + 3, LICENSE_COLOR_IDLE);
+    menuDrawStatIcon(0, x + 1, y + 3, MENU_LIST_COLOR_IDLE);
     fontObjSetColor(0x3F800000807D763FLL);
-    menuDrawStatIcon(0, x, y, LICENSE_COLOR_IDLE);
+    menuDrawStatIcon(0, x, y, MENU_LIST_COLOR_IDLE);
     fontObjResetColor();
     menuHpColours(hp, maxHp, &shadowColour, &faceColour);
-    textDrawShadow(x + 0x3C, y + 4, "/", LICENSE_COLOR_IDLE);
-    textDrawDecimalShadow(x + 0x45, y + 4, maxHp, 4, LICENSE_COLOR_IDLE);
+    textDrawShadow(x + 0x3C, y + 4, "/", MENU_LIST_COLOR_IDLE);
+    textDrawDecimalShadow(x + 0x45, y + 4, maxHp, 4, MENU_LIST_COLOR_IDLE);
     fontObjSetColor(faceColour);
-    textDrawDecimalShadow(x + 0x18, y + 4, hp, 4, LICENSE_COLOR_IDLE);
+    textDrawDecimalShadow(x + 0x18, y + 4, hp, 4, MENU_LIST_COLOR_IDLE);
     fontObjResetColor();
 }
 
 void menuDrawEpShadow(int x, int y, int ep, int maxEp)
 {
     fontObjSetColor(LICENSE_MARK_SHADOW);
-    menuDrawStatIcon(1, x + 1, y + 3, LICENSE_COLOR_IDLE);
+    menuDrawStatIcon(1, x + 1, y + 3, MENU_LIST_COLOR_IDLE);
     fontObjSetColor(0x3F800000807D763FLL);
-    menuDrawStatIcon(1, x, y, LICENSE_COLOR_IDLE);
+    menuDrawStatIcon(1, x, y, MENU_LIST_COLOR_IDLE);
     fontObjResetColor();
-    textDrawShadow(x + 0x3C, y + 4, "/", LICENSE_COLOR_IDLE);
-    textDrawDecimalShadow(x + 0x21, y + 4, ep, 3, LICENSE_COLOR_IDLE);
-    textDrawDecimalShadow(x + 0x45, y + 4, maxEp, 3, LICENSE_COLOR_IDLE);
+    textDrawShadow(x + 0x3C, y + 4, "/", MENU_LIST_COLOR_IDLE);
+    textDrawDecimalShadow(x + 0x21, y + 4, ep, 3, MENU_LIST_COLOR_IDLE);
+    textDrawDecimalShadow(x + 0x45, y + 4, maxEp, 3, MENU_LIST_COLOR_IDLE);
 }
 
 void menuDrawHpWideShadow(int x, int y, int hp, int maxHp)
@@ -3708,28 +3708,28 @@ void menuDrawHpWideShadow(int x, int y, int hp, int maxHp)
     u64 faceColour;
 
     fontObjSetColor(LICENSE_MARK_SHADOW);
-    menuDrawStatIcon(0, x + 1, y + 3, LICENSE_COLOR_IDLE);
+    menuDrawStatIcon(0, x + 1, y + 3, MENU_LIST_COLOR_IDLE);
     fontObjSetColor(0x3F800000807D763FLL);
-    menuDrawStatIcon(0, x, y, LICENSE_COLOR_IDLE);
+    menuDrawStatIcon(0, x, y, MENU_LIST_COLOR_IDLE);
     fontObjResetColor();
     menuHpColours(hp, maxHp, &shadowColour, &faceColour);
-    textDrawShadow(x + 0x44, y + 4, "/", LICENSE_COLOR_IDLE);
-    textDrawDecimalShadow(x + 0x4D, y + 4, maxHp, 5, LICENSE_COLOR_IDLE);
+    textDrawShadow(x + 0x44, y + 4, "/", MENU_LIST_COLOR_IDLE);
+    textDrawDecimalShadow(x + 0x4D, y + 4, maxHp, 5, MENU_LIST_COLOR_IDLE);
     fontObjSetColor(faceColour);
-    textDrawDecimalShadow(x + 0x18, y + 4, hp, 5, LICENSE_COLOR_IDLE);
+    textDrawDecimalShadow(x + 0x18, y + 4, hp, 5, MENU_LIST_COLOR_IDLE);
     fontObjResetColor();
 }
 
 void menuDrawEpWideShadow(int x, int y, int ep, int maxEp)
 {
     fontObjSetColor(LICENSE_MARK_SHADOW);
-    menuDrawStatIcon(1, x + 1, y + 3, LICENSE_COLOR_IDLE);
+    menuDrawStatIcon(1, x + 1, y + 3, MENU_LIST_COLOR_IDLE);
     fontObjSetColor(0x3F800000807D763FLL);
-    menuDrawStatIcon(1, x, y, LICENSE_COLOR_IDLE);
+    menuDrawStatIcon(1, x, y, MENU_LIST_COLOR_IDLE);
     fontObjResetColor();
-    textDrawShadow(x + 0x44, y + 4, "/", LICENSE_COLOR_IDLE);
-    textDrawDecimalShadow(x + 0x29, y + 4, ep, 3, LICENSE_COLOR_IDLE);
-    textDrawDecimalShadow(x + 0x4D, y + 4, maxEp, 3, LICENSE_COLOR_IDLE);
+    textDrawShadow(x + 0x44, y + 4, "/", MENU_LIST_COLOR_IDLE);
+    textDrawDecimalShadow(x + 0x29, y + 4, ep, 3, MENU_LIST_COLOR_IDLE);
+    textDrawDecimalShadow(x + 0x4D, y + 4, maxEp, 3, MENU_LIST_COLOR_IDLE);
 }
 
 /* The blinking band (cell 0x134) at (x, y): its offset_x steps through eight 0x10-pixel frames with
@@ -3812,7 +3812,7 @@ void menuDrawPartyPanel(MenuItem *item, PartyMember *member, int x, int y, int l
 {
     StatBlock *record;
     PartyMemberStatus *status;
-    PartyMemberLimits *limits;
+    PartyMemberExpPoints *limits;
 
     if (item == 0 || member == 0 || layout == MENU_PARTY_HIDDEN) {
         return;

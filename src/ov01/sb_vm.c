@@ -20,7 +20,7 @@ static int sbFlags;
 /* The per-thread areas: operand stack, slot table and message queue of thread index. */
 static int sbStacks[SB_THREAD_COUNT][SB_STACK_WORDS];
 static SbSlot sbSlotTables[SB_THREAD_COUNT][SB_SLOT_COUNT];
-static SbQueue sbChains[SB_THREAD_COUNT];
+static SbQueue sbQueues[SB_THREAD_COUNT];
 void *memset(void *destination, int value, unsigned int count);
 
 /* Frees every thread record and clears the per-thread areas and the native counts. */
@@ -34,7 +34,7 @@ void sbInit(void)
     }
     memset(sbStacks, 0, sizeof(sbStacks));
     memset(sbSlotTables, 0, sizeof(sbSlotTables));
-    memset(sbChains, 0, sizeof(sbChains));
+    memset(sbQueues, 0, sizeof(sbQueues));
     sbResetNativeCounts();
 }
 
@@ -63,7 +63,7 @@ void sbResetNativeCounts(void) {
 extern int (*sbOpHandlers[])(SbThread *, int);
 void sbRun(SbThread *thread);
 u16 sbCodeU16(SbThread *thread, int index);
-int sbCodeS32(SbThread *thread, int value);
+int sbCodeS32(SbThread *thread, int index);
 void sbLocalSet(SbThread *thread, int index, int value);
 int sbStackPop(SbThread *thread);
 
@@ -226,7 +226,8 @@ void sbSlotJumpUnhandledKey(SbThread *thread)
 }
 
 
-/* Fatal VM error (stack overflow in sbRun): reports the thread, then stops for good. */
+/* Fatal VM error (a pc past the code in sbRun, or a stack overflow or underflow): reports the thread, then
+ * stops for good. */
 void sbFatal(SbThread *thread)
 {
     sbFatalReport(thread, thread->pc);
@@ -407,8 +408,8 @@ void sbFlagsClear(int bits) {
 
 int *sbStackGet(int index);
 SbSlot *sbSlotTableGet(int index);
-SbQueue *sbChainGet(int index);
-void sbChainReset(SbThread *thread);
+SbQueue *sbQueueGet(int index);
+void sbQueueReset(SbThread *thread);
 
 /* Starts a thread in the first free record: key and entry name it, the pc starts at entry. */
 int sbThreadStart(struct SbImageHeader *key, int entry)
@@ -430,9 +431,9 @@ int sbThreadStart(struct SbImageHeader *key, int entry)
             thread->stack = sbStackGet(index);
             thread->stackLimit = SB_STACK_WORDS;
             thread->slots = sbSlotTableGet(index);
-            thread->queue = sbChainGet(index);
+            thread->queue = sbQueueGet(index);
             memset(thread->slots, 0, sizeof(sbSlotTables[0]));
-            sbChainReset(thread);
+            sbQueueReset(thread);
             thread->status = 0;
             return 1;
         }
@@ -466,8 +467,8 @@ int sbThreadRelease(struct SbImageHeader *key, int value)
     return 1;
 }
 
-int sbCursorPush(SbThread *thread);
-SbMessage *sbChainEntryGet(SbThread *thread, int index);
+int sbQueuePush(SbThread *thread);
+SbMessage *sbQueueEntryGet(SbThread *thread, int index);
 
 /* Queues a copy of message on the thread with this key and value; sender, when
  * given, is named in the copy by its value. 0 when there is no such thread or
@@ -482,11 +483,11 @@ int sbThreadEnqueue(struct SbImageHeader *key, int value, SbMessage *message, Sb
     if (thread == 0) {
         return 0;
     }
-    index = sbCursorPush(thread);
+    index = sbQueuePush(thread);
     if (index == -1) {
         return 0;
     }
-    entry = sbChainEntryGet(thread, index);
+    entry = sbQueueEntryGet(thread, index);
     *entry = *message;
     if (sender != 0) {
         entry->sender = sender->value;
@@ -496,8 +497,8 @@ int sbThreadEnqueue(struct SbImageHeader *key, int value, SbMessage *message, Sb
     return 1;
 }
 
-int sbCursorPop(SbThread *thread);
-int sbChainCountGet(SbThread *thread);
+int sbQueuePop(SbThread *thread);
+int sbQueueCountGet(SbThread *thread);
 
 /* Dequeue side of sbThreadEnqueue: pops the next cursor index of the thread and takes its chain entry. */
 SbMessage *sbThreadDequeue(struct SbImageHeader *key, int value)
@@ -509,11 +510,11 @@ SbMessage *sbThreadDequeue(struct SbImageHeader *key, int value)
     if (thread == 0) {
         return 0;
     }
-    if (sbChainCountGet(thread) == 0) {
+    if (sbQueueCountGet(thread) == 0) {
         return 0;
     }
-    index = sbCursorPop(thread);
-    return sbChainEntryGet(thread, index);
+    index = sbQueuePop(thread);
+    return sbQueueEntryGet(thread, index);
 }
 
 /* The value of the image's name-table entry called name, or -1. */
@@ -557,7 +558,7 @@ char *sbNameTableNameOf(struct SbImageHeader *image, int value)
 }
 
 
-/* Enqueues a thread at the entry the image's name table gives for name; 0 when
+/* Enqueues a message on the thread at the entry the image's name table gives for name; 0 when
  * the name is not there. */
 int sbThreadEnqueueByName(struct SbImageHeader *image, const char *name, SbMessage *message)
 {
@@ -626,11 +627,11 @@ void sbThreadsResume(struct SbImageHeader *key)
     }
 }
 
-SbQueue *sbChainGet(int index) {
-    return &sbChains[index];
+SbQueue *sbQueueGet(int index) {
+    return &sbQueues[index];
 }
 
-void sbChainReset(SbThread *thread) {
+void sbQueueReset(SbThread *thread) {
     SbQueue *chain;
 
     chain = thread->queue;
@@ -640,7 +641,7 @@ void sbChainReset(SbThread *thread) {
     chain->used = (chain->head = 0);
 }
 
-int sbCursorPush(SbThread *thread)
+int sbQueuePush(SbThread *thread)
 {
     SbQueue *cursor;
     int next;
@@ -659,7 +660,7 @@ int sbCursorPush(SbThread *thread)
 }
 
 /* Takes the next index from the thread's cursor ring; -1 when it is empty. */
-int sbCursorPop(SbThread *thread)
+int sbQueuePop(SbThread *thread)
 {
     SbQueue *cursor;
     int next;
@@ -677,11 +678,11 @@ int sbCursorPop(SbThread *thread)
     return cursor->head;
 }
 
-int sbChainCountGet(SbThread *thread) {
+int sbQueueCountGet(SbThread *thread) {
     return thread->queue->used;
 }
 
-SbMessage *sbChainEntryGet(SbThread *thread, int index) {
+SbMessage *sbQueueEntryGet(SbThread *thread, int index) {
     return &thread->queue->messages[index];
 }
 
@@ -779,16 +780,16 @@ int sbOpLength(unsigned short opcode, int count)
 int sbStep(SbThread *thread)
 {
     unsigned int opcode;
-    int original_total;
+    int saved_pc;
     int result;
 
     opcode = sbCodeU16(thread, thread->pc);
     if (opcode < 0x2E) {
-        original_total = thread->pc;
+        saved_pc = thread->pc;
         result = sbOpHandlers[opcode](thread, opcode);
         if (result == 1) {
             thread->status = result;
-            thread->pc = original_total;
+            thread->pc = saved_pc;
         } else {
             thread->status = 0;
         }
@@ -931,15 +932,15 @@ int sbOpNopOperand02(SbThread *thread, int opcode)
     return 0;
 }
 
-int sbOpPushWord(SbThread *thread, int amount)
+int sbOpPushWord(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int slot;
+    unsigned short opcode16;
+    int operand;
 
-    amount16 = (unsigned short) amount;
-    slot = sbCodeS32(thread, thread->pc + 1);
-    sbStackPush(thread, slot);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    operand = sbCodeS32(thread, thread->pc + 1);
+    sbStackPush(thread, operand);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
@@ -991,63 +992,63 @@ int sbOpPushWord07(SbThread *thread, int opcode)
 
 int sbGlobalGet(SbThread *thread, int index);
 
-int sbOpPushGlobal(SbThread *thread, int amount)
+int sbOpPushGlobal(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int slot;
-    int next_slot;
+    unsigned short opcode16;
+    int index;
+    int value;
 
-    amount16 = (unsigned short) amount;
-    slot = sbCodeS32(thread, thread->pc + 1);
-    next_slot = sbGlobalGet(thread, slot);
-    sbStackPush(thread, next_slot);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    index = sbCodeS32(thread, thread->pc + 1);
+    value = sbGlobalGet(thread, index);
+    sbStackPush(thread, value);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
 int sbLocalGet(SbThread *thread, int index);
 
-int sbOpPushLocal(SbThread *thread, int amount)
+int sbOpPushLocal(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int slot;
-    int next_slot;
+    unsigned short opcode16;
+    int index;
+    int value;
 
-    amount16 = (unsigned short) amount;
-    slot = sbCodeS32(thread, thread->pc + 1);
-    next_slot = sbLocalGet(thread, slot);
-    sbStackPush(thread, next_slot);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    index = sbCodeS32(thread, thread->pc + 1);
+    value = sbLocalGet(thread, index);
+    sbStackPush(thread, value);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
 void sbGlobalSet(SbThread *thread, int index, int value);
 
-int sbOpStoreGlobal(SbThread *thread, int amount)
+int sbOpStoreGlobal(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int first;
-    int second;
+    unsigned short opcode16;
+    int index;
+    int value;
 
-    amount16 = (unsigned short) amount;
-    first = sbStackPop(thread);
-    second = sbStackPop(thread);
-    sbGlobalSet(thread, first, second);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    index = sbStackPop(thread);
+    value = sbStackPop(thread);
+    sbGlobalSet(thread, index, value);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
-int sbOpStoreLocal(SbThread *thread, int amount)
+int sbOpStoreLocal(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int first;
-    int second;
+    unsigned short opcode16;
+    int index;
+    int value;
 
-    amount16 = (unsigned short) amount;
-    first = sbStackPop(thread);
-    second = sbStackPop(thread);
-    sbLocalSet(thread, first, second);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    index = sbStackPop(thread);
+    value = sbStackPop(thread);
+    sbLocalSet(thread, index, value);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
@@ -1055,13 +1056,13 @@ int sbOpStoreLocal(SbThread *thread, int amount)
 int sbOpStoreGlobalKeep(SbThread *thread, int opcode)
 {
     unsigned short opcode16;
-    int first;
-    int second;
+    int index;
+    int value;
 
     opcode16 = (unsigned short) opcode;
-    first = sbStackPop(thread);
-    second = sbStackPop(thread);
-    sbGlobalSet(thread, first, second);
+    index = sbStackPop(thread);
+    value = sbStackPop(thread);
+    sbGlobalSet(thread, index, value);
     thread->sp++;
     thread->pc += sbOpLength(opcode16, 0);
     return 0;
@@ -1071,13 +1072,13 @@ int sbOpStoreGlobalKeep(SbThread *thread, int opcode)
 int sbOpStoreLocalKeep(SbThread *thread, int opcode)
 {
     unsigned short opcode16;
-    int first;
-    int second;
+    int index;
+    int value;
 
     opcode16 = (unsigned short) opcode;
-    first = sbStackPop(thread);
-    second = sbStackPop(thread);
-    sbLocalSet(thread, first, second);
+    index = sbStackPop(thread);
+    value = sbStackPop(thread);
+    sbLocalSet(thread, index, value);
     thread->sp++;
     thread->pc += sbOpLength(opcode16, 0);
     return 0;
@@ -1089,39 +1090,39 @@ int sbOpJump(SbThread *thread, int opcode)
     return 0;
 }
 
-int sbOpJumpIfZero(SbThread *thread, int id)
+int sbOpJumpIfZero(SbThread *thread, int opcode)
 {
-    unsigned short id16;
-    int next;
+    unsigned short opcode16;
+    int target;
 
-    id16 = id;
-    next = sbCodeS32(thread, thread->pc + 1);
+    opcode16 = opcode;
+    target = sbCodeS32(thread, thread->pc + 1);
     if (sbStackPop(thread) == 0) {
-        thread->pc = next;
+        thread->pc = target;
     } else {
-        thread->pc += sbOpLength(id16, 0);
+        thread->pc += sbOpLength(opcode16, 0);
     }
     return 0;
 }
 
-int sbOpJumpIfNotZero(SbThread *thread, int id)
+int sbOpJumpIfNotZero(SbThread *thread, int opcode)
 {
-    unsigned short id16;
-    int next;
+    unsigned short opcode16;
+    int target;
 
-    id16 = id;
-    next = sbCodeS32(thread, thread->pc + 1);
+    opcode16 = opcode;
+    target = sbCodeS32(thread, thread->pc + 1);
     if (sbStackPop(thread) != 0) {
-        thread->pc = next;
+        thread->pc = target;
     } else {
-        thread->pc += sbOpLength(id16, 0);
+        thread->pc += sbOpLength(opcode16, 0);
     }
     return 0;
 }
 
 /*
- * Opcode 0x11: pushes a call frame header (return slot, saved limit, frame
- * marker) and records the marker in the local at -1.
+ * Opcode 0x11: pushes a call frame header (return slot, saved frame, unused zero word)
+ * and records the new frame index in the local at -1.
  */
 int sbOpEnterFrame(SbThread *thread, int opcode)
 {
@@ -1145,7 +1146,7 @@ int sbOpCall(SbThread *thread, int opcode)
     return 0;
 }
 
-/* Opcode 0x13: return. Restores the stack depth, the saved limit and the pc from the frame header. */
+/* Opcode 0x13: return. Restores the stack depth, the saved frame and the pc from the frame header. */
 int sbOpReturn(SbThread *thread, int opcode)
 {
     unsigned short opcode16;
@@ -1208,14 +1209,14 @@ int sbOpCallNative(SbThread *thread, int opcode)
     return 0;
 }
 
-int sbOpSpawn(SbThread *thread, int amount)
+int sbOpSpawn(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
+    unsigned short opcode16;
     int slot;
 
-    amount16 = (unsigned short) amount;
+    opcode16 = (unsigned short) opcode;
     slot = sbStackPop(thread);
-    thread->pc += sbOpLength(amount16, 0);
+    thread->pc += sbOpLength(opcode16, 0);
     return (sbThreadStart(thread->image, slot) != 0) ? 0 : 2;
 }
 
@@ -1240,48 +1241,48 @@ int sbOpKillThread(SbThread *thread, int opcode)
     return 2;
 }
 
-int sbOpDup(SbThread *thread, int value)
+int sbOpDup(SbThread *thread, int opcode)
 {
     int operand;
 
-    operand = value & 0xFFFF;
+    operand = opcode & 0xFFFF;
     sbStackPush(thread, thread->stack[thread->sp - 1]);
     thread->pc += sbOpLength(operand, 0);
     return 0;
 }
 
-int sbOpDrop(SbThread *thread, int value)
+int sbOpDrop(SbThread *thread, int opcode)
 {
     thread->sp -= 1;
-    thread->pc += sbOpLength(value & 0xFFFF, 0);
+    thread->pc += sbOpLength(opcode & 0xFFFF, 0);
     return 0;
 }
 
-int sbOpLoadGlobal(SbThread *thread, int amount)
+int sbOpLoadGlobal(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int slot;
-    int next_slot;
+    unsigned short opcode16;
+    int index;
+    int value;
 
-    amount16 = (unsigned short) amount;
-    slot = sbStackPop(thread);
-    next_slot = sbGlobalGet(thread, slot);
-    sbStackPush(thread, next_slot);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    index = sbStackPop(thread);
+    value = sbGlobalGet(thread, index);
+    sbStackPush(thread, value);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
-int sbOpLoadLocal(SbThread *thread, int amount)
+int sbOpLoadLocal(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int slot;
-    int next_slot;
+    unsigned short opcode16;
+    int index;
+    int value;
 
-    amount16 = (unsigned short) amount;
-    slot = sbStackPop(thread);
-    next_slot = sbLocalGet(thread, slot);
-    sbStackPush(thread, next_slot);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    index = sbStackPop(thread);
+    value = sbLocalGet(thread, index);
+    sbStackPush(thread, value);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
@@ -1299,12 +1300,12 @@ int sbOpYield(SbThread *thread, int opcode)
     return 3;
 }
 
-int sbOpWaitFrames(SbThread *thread, int amount)
+int sbOpWaitFrames(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
+    unsigned short opcode16;
     int result;
 
-    amount16 = (unsigned short) amount;
+    opcode16 = (unsigned short) opcode;
     if (thread->status == 0) {
         thread->wait[0] = sbStackPop(thread);
         result = 1;
@@ -1312,7 +1313,7 @@ int sbOpWaitFrames(SbThread *thread, int amount)
         thread->wait[0] -= 1;
         if (thread->wait[0] <= 0) {
             result = 0;
-            thread->pc += sbOpLength(amount16, 0);
+            thread->pc += sbOpLength(opcode16, 0);
         } else {
             result = 1;
         }
@@ -1365,59 +1366,59 @@ int sbOpReceive(SbThread *thread, int opcode)
     return 0;
 }
 
-int sbOpIncGlobal(SbThread *thread, int amount)
+int sbOpIncGlobal(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int first;
-    int second;
+    unsigned short opcode16;
+    int index;
+    int value;
 
-    amount16 = (unsigned short) amount;
-    first = sbStackPop(thread);
-    second = sbGlobalGet(thread, first);
-    sbGlobalSet(thread, first, second + 1);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    index = sbStackPop(thread);
+    value = sbGlobalGet(thread, index);
+    sbGlobalSet(thread, index, value + 1);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
-int sbOpIncLocal(SbThread *thread, int amount)
+int sbOpIncLocal(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int first;
-    int second;
+    unsigned short opcode16;
+    int index;
+    int value;
 
-    amount16 = (unsigned short) amount;
-    first = sbStackPop(thread);
-    second = sbLocalGet(thread, first);
-    sbLocalSet(thread, first, second + 1);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    index = sbStackPop(thread);
+    value = sbLocalGet(thread, index);
+    sbLocalSet(thread, index, value + 1);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
-int sbOpDecGlobal(SbThread *thread, int amount)
+int sbOpDecGlobal(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int first;
-    int second;
+    unsigned short opcode16;
+    int index;
+    int value;
 
-    amount16 = (unsigned short) amount;
-    first = sbStackPop(thread);
-    second = sbGlobalGet(thread, first);
-    sbGlobalSet(thread, first, second - 1);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    index = sbStackPop(thread);
+    value = sbGlobalGet(thread, index);
+    sbGlobalSet(thread, index, value - 1);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
-int sbOpDecLocal(SbThread *thread, int amount)
+int sbOpDecLocal(SbThread *thread, int opcode)
 {
-    unsigned short amount16;
-    int first;
-    int second;
+    unsigned short opcode16;
+    int index;
+    int value;
 
-    amount16 = (unsigned short) amount;
-    first = sbStackPop(thread);
-    second = sbLocalGet(thread, first);
-    sbLocalSet(thread, first, second - 1);
-    thread->pc += sbOpLength(amount16, 0);
+    opcode16 = (unsigned short) opcode;
+    index = sbStackPop(thread);
+    value = sbLocalGet(thread, index);
+    sbLocalSet(thread, index, value - 1);
+    thread->pc += sbOpLength(opcode16, 0);
     return 0;
 }
 
@@ -1451,7 +1452,7 @@ int sbOpSwitch(SbThread *thread, int opcode)
     return 0;
 }
 
-/* Operand length in halfwords of each opcode (sbOpLength); 0 for the variable-length switch. */
+/* Length in halfwords of each instruction, opcode included (sbOpLength); 0 for the variable-length switch. */
 signed char sbOpLengths[48] = {
     1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1,
     1, 1, 3, 3, 3, 1, 3, 1, 1, 3, 1, 1,

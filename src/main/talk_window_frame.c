@@ -1,7 +1,7 @@
 #include "common.h"
 #include "main/xgl_packet_scratch.h"
 #include "main/talk_script.h"
-#include "main/debt_box.h"
+#include "main/msg_text_draw.h"
 #include "main/talk_window_frame.h"
 #include "main/msg_slot_center.h"
 

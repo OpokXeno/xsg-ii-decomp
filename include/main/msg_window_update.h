@@ -5,7 +5,7 @@
 
 struct MsgSlot;
 
-/* Each function takes a list window slot (MsgSlot of timecode_counter.h, state 2). */
+/* Each function takes a list window slot (MsgSlot of msg_slot_core.h, slot type 2). */
 int msgWindowUpdate(struct MsgSlot *window);   /* int only for the original's codegen; the result is never set */
 void msgWindowPulseStep(struct MsgSlot *window);
 void msgWindowDraw(struct MsgSlot *window);

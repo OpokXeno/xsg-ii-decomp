@@ -103,7 +103,7 @@ int unitNumGet(int side)
     return count;
 }
 
-/* Counts the non-null units of side whose callback word has bit 0x4 clear. */
+/* Counts the non-null units of side whose flags word has bit 0x4 clear. */
 int unitLiveNumGet(int side)
 {
     BattleUnit **records;
@@ -156,7 +156,7 @@ int unitLiveNumGet2(int side)
     return acceptedCount;
 }
 
-/* Counts the non-null units of side whose callback word has bit 0x4 set. */
+/* Counts the non-null units of side whose flags word has bit 0x4 set. */
 int unitDownNumGet(int side)
 {
     BattleUnit **records;
@@ -184,7 +184,7 @@ int unitDownNumGet(int side)
 }
 
 /*
- * Counts the non-null units of side whose callback word has bit 0x1 set and
+ * Counts the non-null units of side whose flags word has bit 0x1 set and
  * bit 0x4 clear.
  */
 int busyUnitChk(int side)
@@ -215,7 +215,7 @@ int busyUnitChk(int side)
 
 /*
  * Counts the non-null units of side whose command queue is not empty, plus
- * the ones whose key lookup (unitEffectKeyFree) reports nothing pending.
+ * the ones whose move effect has not finished.
  */
 int unitNumBusyGet(int side)
 {

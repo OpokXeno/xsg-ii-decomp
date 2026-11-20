@@ -214,7 +214,8 @@ typedef struct GsQueueContext {
             int angleStep;                         /* +0x4C: added to the global wave angle per call */
             int divisions;                         /* +0x50: grid cells per side */
         } ringWave;
-        /* Fade lengths read by gsQueueFadeToColor / gsQueueFadeToColorPhases (overlaps the arms above). */
+        /* Fade lengths read by gsQueueFadeToColor / gsQueueFadeToColorPhases. They overlap the arms above: +0x34 is
+         * radiusX and +0x40 radiusY of type 18, +0x48 is amplitude of type 19. */
         struct {
             unsigned char unmodeled_04[0x34 - 0x04];
             int phase1Frames;                      /* +0x34: first phase length; with phase2Frames the divisor of the fade */

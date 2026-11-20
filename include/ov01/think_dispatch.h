@@ -12,7 +12,7 @@ struct MsgObject;
 struct MsgObject *msgPutObject(int x, int y, char *text, int frames, int width, int height);
 
 /* Effect request block sent to the main-side effect queue (sefCreateEffect /
- * sefStartEffectWithValue); the senders clear it first. */
+ * sefStartEffectAtPosition); the senders clear it first. */
 struct EffectRequest {
     struct XenoActor *head;            /* +0x00: the actor of the owner unit (BattleUnit.unit) */
     struct XenoActor *partner;         /* +0x04: the other unit's actor of a pair technique (attackEffectsStart) */
@@ -75,7 +75,7 @@ void thinkSendEnd(struct BattleUnit *unit);
 void thinkDispatch(struct BattleUnit *unit, int command, int arg, struct BattleUnit *target);
 
 /* The unit parameters scripts read and write by number (natives unitParaGet and unitParaSet, sb_natives.c). 17..36 are
- * the bytes from StatBlock.liveRows on: liveRows (17..20), slotValue (21..28) and slotRoll (29..36). */
+ * the bytes from StatBlock.breakZones on: liveRows (17..20), slotValue (21..28) and slotRoll (29..36). */
 enum {
     UNIT_PARA_MAX_HP,
     UNIT_PARA_MAX_EP,
@@ -107,11 +107,11 @@ void unitParaFieldSet(struct BattleUnit *unit, int field, int value);
 void effectSendOwned(int high, int low, struct BattleUnit *owner);
 void effectStartAtPosition(int high, int low, Vector4 *position);
 int tecParaFieldGet(int index, int field);
-int partyDataGetSlot(int id, int slot);
+int boostGaugeGetSlot(int id, int slot);
 
 /* Message and party data prototypes. */
 int battleMsgEndChk(void);
-void partyDataSetSlot(int id, int slot, int value);
+void boostGaugeSetSlot(int id, int slot, int value);
 void msgReset(void);
 
 #endif /* INCLUDE_OV01_THINK_DISPATCH_H */

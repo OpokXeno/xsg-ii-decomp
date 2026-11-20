@@ -6,11 +6,11 @@
 #include "main/TiDynamicsColl.h"
 #include "shared.h"
 
-/* Status threshold below which the point entries are indexed by key (else searched by key). */
-#define TI_DYNAMICS_INDEXED_THRESHOLD 1.1f
+/* File version below which the point entries are indexed by key (else searched by key). */
+#define TI_DYNAMICS_INDEXED_VERSION 1.1f
 
 
-/* Writes the position of the entry for key into dst with w = 1. Below a threshold of 1.1f the entries are indexed
+/* Writes the position of the entry for key into dst with w = 1. Below file version 1.1f the entries are indexed
  * directly by key; otherwise the first keyed entry with that key is used. With apply set, dst is then transformed
  * by the global matrix that the entry names. */
 int tiMRPackageGetNodePoint(TiMRPackage *pMRPack, u32 key, Vector4 *dst, int apply)
@@ -25,7 +25,7 @@ int tiMRPackageGetNodePoint(TiMRPackage *pMRPack, u32 key, Vector4 *dst, int app
     if (pStatus == 0) {
         return 0;
     }
-    if (pStatus->threshold < TI_DYNAMICS_INDEXED_THRESHOLD) {
+    if (pStatus->version < TI_DYNAMICS_INDEXED_VERSION) {
         indexedEntries = pStatus->slots;
         if (key >= pStatus->count) {
             return 0;
@@ -93,12 +93,12 @@ void tiDynamicsCollTransformVectors(TiMRPackage *pMRPack)
 void tiDynamicsCollBuildInverseMatrices(TiMRPackage *pMRPack)
 {
     TiHrcData *hrc;
-    TiCollMatrix *entry;
+    TiCollPlane *entry;
     u32 entryIndex;
 
     entryIndex = 0;
     hrc = pMRPack->hrcData;
-    entry = (TiCollMatrix *) ((u8 *) hrc + hrc->matrixOffset);
+    entry = (TiCollPlane *) ((u8 *) hrc + hrc->matrixOffset);
     if (hrc->matrixCount != 0) {
         do {
             if (entry->index == -1) {
@@ -113,7 +113,7 @@ void tiDynamicsCollBuildInverseMatrices(TiMRPackage *pMRPack)
     }
 }
 
-/* Same as the matrix entry pass, for the wide entry list. */
+/* Builds the inverse matrix of each wide capsule entry (matrix_a0); an index of -1 gives the identity. */
 void tiDynamicsCollBuildWideInverseMatrices(TiMRPackage *pMRPack)
 {
     TiHrcData *hrc;

@@ -12,7 +12,7 @@
 #include "main/xgl_mc_request.h"
 #include "main/menu_draw.h"
 #include "main/effect_request.h"
-#include "main/debt_box.h"
+#include "main/msg_text_draw.h"
 #include "main/cfe_entry.h"
 #include "main/sef.h"
 #include "main/cfe_list.h"
@@ -260,7 +260,7 @@ void cfeMesUnescape(char *destination, const char *source)
 /* The resource block the cfe object loaders read. */
 typedef struct CfeResourceBlock {
     int pack;
-    int effect;
+    int texture;
     int hierarchy;
     int lookLink;
     int slotTable;
@@ -268,7 +268,7 @@ typedef struct CfeResourceBlock {
 
 
 /* Loads resource `id` (waiting for the CD first), creates an actor for it with the block's pack and
- * effect and sets the pack as the culling map. */
+ * texture and sets the pack as the culling map. */
 XenoActor *cfeLoadResourceObject(int id)
 {
     void *data;
@@ -285,7 +285,7 @@ XenoActor *cfeLoadResourceObject(int id)
     actor = XenoActorAlloc();
     ((XenoActorKindView *) actor)->kind = (void *) id;
     actor->rsrc[XAct_Rsrc_MDL] = resource->pack;
-    actor->rsrc[XAct_Rsrc_TEX] = resource->effect;
+    actor->rsrc[XAct_Rsrc_TEX] = resource->texture;
     if (resource->pack != 0) {
         xglCullingMapSet((const PxyHeader *)resource->pack);
     }
@@ -352,7 +352,7 @@ typedef struct CfeHierarchyHeader {
 /* The shared resource the hierarchy loads (0x30041). */
 #define CFE_SHARED_RESOURCE_ID 0x30041
 
-/* Loads resource `id` as a full actor: pack, effect, hierarchy, slot table and look link from the
+/* Loads resource `id` as a full actor: pack, texture, hierarchy, slot table and look link from the
  * block (draw mode 6). A hierarchy that needs it also gets the shared resource. The matrices are
  * built and both channels start at 0. */
 XenoActor *cfeLoadActorObject(int id)
@@ -373,10 +373,10 @@ XenoActor *cfeLoadActorObject(int id)
     do {
     } while (xglCdServiceIfPending() != 0);
     pack = resource->pack;
-    actor->drawMode = 6;
+    actor->shadowType = 6;
     actor->rsrc[XAct_Rsrc_MDL] = pack;
     actor->kind = id;
-    actor->rsrc[XAct_Rsrc_TEX] = resource->effect;
+    actor->rsrc[XAct_Rsrc_TEX] = resource->texture;
     actor->rsrc[XAct_Rsrc_XHR] = resource->hierarchy;
     actor->rsrc[XAct_Rsrc_XAP] = resource->slotTable;
     actor->rsrc[XAct_Rsrc_EntryTableC] = resource->lookLink;
@@ -385,18 +385,18 @@ XenoActor *cfeLoadActorObject(int id)
         } while (xglCdServiceIfPending() != 0);
         GameResLoadID(CFE_SHARED_RESOURCE_ID, &data, 0, 0);
         actor->rsrc[XAct_Rsrc_SlotTableB] = data;
-        XenoActorSetChannelValueB(actor, 0.0f);
+        XenoActorSetBlendFramesB(actor, 0.0f);
         XenoActorSetSelector(actor, 0);
     }
     XenoActorAllocMatrices(actor);
-    XenoActorSetChannelValue(actor, 0.0f);
-    XenoActorSetChannelValueB(actor, 0.0f);
+    XenoActorSetBlendFrames(actor, 0.0f);
+    XenoActorSetBlendFramesB(actor, 0.0f);
     XenoActorSetModeInSlot(actor, 0, 0);
     return actor;
 }
 
 
-/* Script command `cfe.ldAt` (1 argument): loads actor argument 1 into the next entry of cfeEntries, copies the play
+/* Script command `cfe.ldAt` (1 argument): loads actor argument 1 into the next entry of cfeActors, copies the play
  * range of its first motion state, sets draw mode 6 and allocates a cleared record block of two words per
  * pack geometry. */
 int cfeCmdLoadActor(SbThread *handle)
@@ -408,22 +408,22 @@ int cfeCmdLoadActor(SbThread *handle)
     if (VM_PLUGIN_CNT_GET(handle) != 1) {
         assertFailed("VM_PLUGIN_CNT_GET() == 1", "../cfePlugIn.euc.c", 394);
     }
-    cfeEntries[cfeEntryCount].actor = cfeLoadActorObject(vmArgGet(handle, 1));
-    if (cfeEntries[cfeEntryCount].actor == 0) {
+    cfeActors[cfeEntryCount].actor = cfeLoadActorObject(vmArgGet(handle, 1));
+    if (cfeActors[cfeEntryCount].actor == 0) {
         assertFailed("actor[numActor].pAct", "../cfePlugIn.euc.c", 398);
     }
-    actor = cfeEntries[cfeEntryCount].actor;
+    actor = cfeActors[cfeEntryCount].actor;
     /* XenoActor keeps the pack as an int. */
     pack = (CfePackHeader *) actor->rsrc[XAct_Rsrc_MDL];
-    cfeEntries[cfeEntryCount].playStart = actor->motion[0].range[0];
-    cfeEntries[cfeEntryCount].playEnd = actor->motion[0].range[1];
-    cfeEntries[cfeEntryCount].drawMode = 6;
+    cfeActors[cfeEntryCount].playStart = actor->motion[0].range[0];
+    cfeActors[cfeEntryCount].playEnd = actor->motion[0].range[1];
+    cfeActors[cfeEntryCount].drawMode = 6;
     if (pack != 0 && pack->geometryCount != 0) {
         block = GameResBufferAlloc(pack->geometryCount * 8);
-        cfeEntries[cfeEntryCount].records = block;
+        cfeActors[cfeEntryCount].records = block;
         memset(block, 0, pack->geometryCount * 8);
     } else {
-        cfeEntries[cfeEntryCount].records = 0;
+        cfeActors[cfeEntryCount].records = 0;
     }
     cfeEntryCount++;
     return 1;
@@ -452,7 +452,7 @@ int cfeCmdLoadMotion(SbThread *handle)
     do {
     } while (xglCdServiceIfPending() != 0);
     if (data != 0) {
-        slotActor = &cfeEntries[slot].actor;
+        slotActor = &cfeActors[slot].actor;
         actor = *slotActor;
         actor->rsrc[XAct_Rsrc_XAP + index] = (int) data;
         if (index == 0) {
@@ -468,7 +468,7 @@ int cfeCmdLoadMotion(SbThread *handle)
 /* The initial scale of a command (1, 1, 1). */
 const AlignedVector4 cfeUnitScale = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-/* Script command `cfe.ldEf` (2 or 3 arguments): starts the effect of the next command of cfeCommands (page index
+/* Script command `cfe.ldEf` (2 or 3 arguments): starts the effect of the next command of cfeEffects (page index
  * and offset; the 3-argument form also gives the bank flag) and sets the command's position and
  * rotation to the origin and its scale to cfeUnitScale. */
 int cfeCmdLoadEffect(SbThread *handle)
@@ -476,14 +476,14 @@ int cfeCmdLoadEffect(SbThread *handle)
     AlignedVector4 position;
     AlignedVector4 rotation;
     AlignedVector4 scale;
-    CfeEvalCommand *command;
+    CfeEffect *command;
 
     memset(&position, 0, sizeof(position));
     position.w = 1.0f;
     memset(&rotation, 0, sizeof(rotation));
     rotation.w = 1.0f;
     scale = cfeUnitScale;
-    command = &cfeCommands[cfeCommandCount];
+    command = &cfeEffects[cfeCommandCount];
     if (VM_PLUGIN_CNT_GET(handle) == 2) {
         command->page_index = vmArgGet(handle, 1);
         command->page_offset = vmArgGet(handle, 2);
@@ -526,7 +526,7 @@ int cfeCmdLoadMap(SbThread *handle)
     /* XenoActor keeps the pack as an int. */
     pack = (CfePackHeader *) object->rsrc[XAct_Rsrc_MDL];
     offset = pack->subPackOffset;
-    group = &cfeGroups[cfeGroupCount];
+    group = &cfeMaps[cfeGroupCount];
     group->object = object;
     /* subPackOffset is a byte offset from the pack. */
     parts = (CfePackHeader *) ((unsigned char *) pack + offset);
@@ -535,7 +535,7 @@ int cfeCmdLoadMap(SbThread *handle)
         /* matrixOffset is a byte offset from the part pack. */
         group->matrices = (Matrix4 *) ((unsigned char *) parts + parts->matrixOffset);
         records = GameResBufferAlloc(parts->geometryCount * sizeof(CfeEvalRecord));
-        group = &cfeGroups[cfeGroupCount];
+        group = &cfeMaps[cfeGroupCount];
         group->records = records;
         memset(records, 0, group->parts->geometryCount * sizeof(CfeEvalRecord));
     } else {
@@ -543,7 +543,7 @@ int cfeCmdLoadMap(SbThread *handle)
         group->matrices = 0;
         group->records = 0;
     }
-    cfeMapInitRecords(&cfeGroups[cfeGroupCount]);
+    cfeMapInitRecords(&cfeMaps[cfeGroupCount]);
     cfeGroupCount++;
     return 1;
 }
@@ -564,18 +564,18 @@ int cfeCmdLoadMapCollision(SbThread *handle)
     GameResLoadName(buffer, &data, 0, 0);
     do {
     } while (xglCdServiceIfPending() != 0);
-    cfeGroups[slot].collision = data;
+    cfeMaps[slot].collision = data;
     return 1;
 }
 
 const char cfeMovieOpenFailedText[24] = "failed movie open\n";
 
 /* Script command `cfe.ldMnt` (1 argument): opens the movie named by argument 1 in the next entry of
- * cfeEvalEntries: reads the file into a new block (walking the block table when the allocation
+ * cfeMonitors: reads the file into a new block (walking the block table when the allocation
  * fails), opens it and allocates its two frame buffers. */
 int cfeCmdLoadMonitor(SbThread *handle)
 {
-    CfeEvalEntry *entry = &cfeEvalEntries[cfeEvalEntryCount];
+    CfeMonitor *entry = &cfeMonitors[cfeEvalEntryCount];
     unsigned int slot;
 
     strcpy(entry->name, vmKeyedEntryGet(handle, vmArgGet(handle, 1)));
@@ -586,7 +586,7 @@ int cfeCmdLoadMonitor(SbThread *handle)
     entry->movie.source = GameResBufferAlloc(entry->movie.sourceSize);
     if (entry->movie.source == 0) {
         /* An empty walk to the first unused slot; the result is not used. */
-        for (slot = 1; slot < GAME_RES_BLOCK_COUNT - 1 && xglCdSlotTable[slot + 1].owner != -1; slot++) {
+        for (slot = 1; slot < GAME_RES_BLOCK_COUNT - 1 && gameResBlockTable[slot + 1].owner != -1; slot++) {
         }
     }
     do {
@@ -714,15 +714,15 @@ int cfeCmdSetActorKey(SbThread *handle)
     value = vmArgGet(handle, 5);
     if (sub >= 3 && sub < 6) {
         if (linear != 0) {
-            cfeListSetAngleLinear(&cfeEntries[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetAngleLinear(&cfeActors[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         } else {
-            cfeListSetAngle(&cfeEntries[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetAngle(&cfeActors[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         }
     } else {
         if (linear != 0) {
-            cfeListSetValueLinear(&cfeEntries[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetValueLinear(&cfeActors[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         } else {
-            cfeListSetValue(&cfeEntries[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetValue(&cfeActors[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         }
     }
     return 1;
@@ -748,9 +748,9 @@ int cfeCmdSetActorHeadKey(SbThread *handle)
     linear = vmArgGet(handle, 4);
     value = vmArgGet(handle, 5);
     if (linear != 0) {
-        cfeListSetValueLinear(&cfeEntries[index].headTrack[sub], key, CFE_FIXED_TO_FLOAT(value));
+        cfeListSetValueLinear(&cfeActors[index].headTrack[sub], key, CFE_FIXED_TO_FLOAT(value));
     } else {
-        cfeListSetValue(&cfeEntries[index].headTrack[sub], key, CFE_FIXED_TO_FLOAT(value));
+        cfeListSetValue(&cfeActors[index].headTrack[sub], key, CFE_FIXED_TO_FLOAT(value));
     }
     return 1;
 }
@@ -779,11 +779,11 @@ int cfeCmdSetActorPartKey(SbThread *handle)
     linear = vmArgGet(handle, 5);
     value = vmArgGet(handle, 6);
     if (linear != 0) {
-        cfeListSetValueLinear(&cfeEntries[entry].records[row].track[column], key, CFE_FIXED_TO_FLOAT(value));
+        cfeListSetValueLinear(&cfeActors[entry].records[row].track[column], key, CFE_FIXED_TO_FLOAT(value));
     } else {
-        cfeListSetValue(&cfeEntries[entry].records[row].track[column], key, CFE_FIXED_TO_FLOAT(value));
+        cfeListSetValue(&cfeActors[entry].records[row].track[column], key, CFE_FIXED_TO_FLOAT(value));
     }
-    for (node = cfeEntries[entry].records[row].track[column]; node != 0; node = node->next) {
+    for (node = cfeActors[entry].records[row].track[column]; node != 0; node = node->next) {
     }
     return 1;
 }
@@ -836,15 +836,15 @@ int cfeCmdSetEffectKey(SbThread *handle)
     value = vmArgGet(handle, 5);
     if (sub >= 3 && sub < 6) {
         if (linear != 0) {
-            cfeListSetAngleLinear(&cfeCommands[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetAngleLinear(&cfeEffects[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         } else {
-            cfeListSetAngle(&cfeCommands[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetAngle(&cfeEffects[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         }
     } else {
         if (linear != 0) {
-            cfeListSetValueLinear(&cfeCommands[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetValueLinear(&cfeEffects[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         } else {
-            cfeListSetValue(&cfeCommands[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetValue(&cfeEffects[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         }
     }
     return 1;
@@ -871,15 +871,15 @@ int cfeCmdSetLightKey(SbThread *handle)
     value = vmArgGet(handle, 5);
     if (sub >= 3 && sub < 6) {
         if (linear != 0) {
-            cfeListSetAngleLinear(&cfeDirections[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetAngleLinear(&cfeLights[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         } else {
-            cfeListSetAngle(&cfeDirections[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetAngle(&cfeLights[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         }
     } else {
         if (linear != 0) {
-            cfeListSetValueLinear(&cfeDirections[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetValueLinear(&cfeLights[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         } else {
-            cfeListSetValue(&cfeDirections[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetValue(&cfeLights[index].track[sub], key, CFE_FIXED_TO_FLOAT(value));
         }
     }
     return 1;
@@ -906,15 +906,15 @@ int cfeCmdSetMapKey(SbThread *handle)
         value = vmArgGet(handle, 6);
         if (sub >= 3 && sub < 6) {
             if (linear != 0) {
-                cfeListSetAngleLinear(&cfeGroups[group].records[part].source[sub], key, CFE_FIXED_TO_FLOAT(value));
+                cfeListSetAngleLinear(&cfeMaps[group].records[part].source[sub], key, CFE_FIXED_TO_FLOAT(value));
             } else {
-                cfeListSetAngle(&cfeGroups[group].records[part].source[sub], key, CFE_FIXED_TO_FLOAT(value));
+                cfeListSetAngle(&cfeMaps[group].records[part].source[sub], key, CFE_FIXED_TO_FLOAT(value));
             }
         } else {
             if (linear != 0) {
-                cfeListSetValueLinear(&cfeGroups[group].records[part].source[sub], key, CFE_FIXED_TO_FLOAT(value));
+                cfeListSetValueLinear(&cfeMaps[group].records[part].source[sub], key, CFE_FIXED_TO_FLOAT(value));
             } else {
-                cfeListSetValue(&cfeGroups[group].records[part].source[sub], key, CFE_FIXED_TO_FLOAT(value));
+                cfeListSetValue(&cfeMaps[group].records[part].source[sub], key, CFE_FIXED_TO_FLOAT(value));
             }
         }
     } else {
@@ -924,15 +924,15 @@ int cfeCmdSetMapKey(SbThread *handle)
         linear = vmArgGet(handle, 4);
         value = vmArgGet(handle, 5);
         if (linear != 0) {
-            cfeListSetValueLinear(&cfeGroups[group].tracks[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetValueLinear(&cfeMaps[group].tracks[sub], key, CFE_FIXED_TO_FLOAT(value));
         } else {
-            cfeListSetValue(&cfeGroups[group].tracks[sub], key, CFE_FIXED_TO_FLOAT(value));
+            cfeListSetValue(&cfeMaps[group].tracks[sub], key, CFE_FIXED_TO_FLOAT(value));
         }
     }
     return 1;
 }
 
-/* Script command `cfe.stKyFog` (4 arguments): sets key `key` of fog track `index` (cfeEvalGlobal.source) to the 8.8
+/* Script command `cfe.stKyFog` (4 arguments): sets key `key` of fog track `index` (cfeFog.source) to the 8.8
  * value, linear (cfeListSetValueLinear) when `linear` is set. */
 int cfeCmdSetFogKey(SbThread *handle)
 {
@@ -949,14 +949,14 @@ int cfeCmdSetFogKey(SbThread *handle)
     linear = vmArgGet(handle, 3);
     value = vmArgGet(handle, 4);
     if (linear != 0) {
-        cfeListSetValueLinear(&cfeEvalGlobal.source[index], key, CFE_FIXED_TO_FLOAT(value));
+        cfeListSetValueLinear(&cfeFog.source[index], key, CFE_FIXED_TO_FLOAT(value));
     } else {
-        cfeListSetValue(&cfeEvalGlobal.source[index], key, CFE_FIXED_TO_FLOAT(value));
+        cfeListSetValue(&cfeFog.source[index], key, CFE_FIXED_TO_FLOAT(value));
     }
     return 1;
 }
 
-/* Script command `cfe.stKyMnt` (5 arguments): sets key `key` of track `sub` of monitor `index` (cfeEvalEntries)
+/* Script command `cfe.stKyMnt` (5 arguments): sets key `key` of track `sub` of monitor `index` (cfeMonitors)
  * (140 per row) to the 8.8 value, linear (cfeListSetValueLinear) when
  * `linear` is set. */
 int cfeCmdSetMonitorKey(SbThread *handle)
@@ -976,9 +976,9 @@ int cfeCmdSetMonitorKey(SbThread *handle)
     linear = vmArgGet(handle, 4);
     value = vmArgGet(handle, 5);
     if (linear != 0) {
-        cfeListSetValueLinear(&cfeEvalEntries[index].source[sub], key, CFE_FIXED_TO_FLOAT(value));
+        cfeListSetValueLinear(&cfeMonitors[index].source[sub], key, CFE_FIXED_TO_FLOAT(value));
     } else {
-        cfeListSetValue(&cfeEvalEntries[index].source[sub], key, CFE_FIXED_TO_FLOAT(value));
+        cfeListSetValue(&cfeMonitors[index].source[sub], key, CFE_FIXED_TO_FLOAT(value));
     }
     return 1;
 }
@@ -1002,9 +1002,9 @@ int cfeCmdSetScreenEffectKey(SbThread *handle)
     linear = vmArgGet(handle, 4);
     value = vmArgGet(handle, 5);
     if (linear != 0) {
-        cfeListSetValueLinear(&cfeEvalSlots[index].source[sub], key, CFE_FIXED_TO_FLOAT(value));
+        cfeListSetValueLinear(&cfeScreenEffects[index].source[sub], key, CFE_FIXED_TO_FLOAT(value));
     } else {
-        cfeListSetValue(&cfeEvalSlots[index].source[sub], key, CFE_FIXED_TO_FLOAT(value));
+        cfeListSetValue(&cfeScreenEffects[index].source[sub], key, CFE_FIXED_TO_FLOAT(value));
     }
     return 1;
 }
@@ -1069,7 +1069,7 @@ int cfeCmdAllocMessages(SbThread *handle)
     return 1;
 }
 
-extern int cfePlugInRecordCount;
+extern int cfeMessageCount;
 extern const char cfeEmptyName[];
 
 /* Script command `cfe.setMes` (3 or 5 arguments): fills the next message record with the unescaped, laid-out text
@@ -1077,7 +1077,7 @@ extern const char cfeEmptyName[];
  * sound slot (argument 5). */
 int cfeCmdSetMessage(SbThread *handle)
 {
-    CfeMessageRecord *record = &cfeMessages[cfePlugInRecordCount];
+    CfeMessageRecord *record = &cfeMessages[cfeMessageCount];
 
     if (VM_PLUGIN_CNT_GET(handle) == 3) {
         memset(record->text, 0, sizeof(record->text));
@@ -1088,7 +1088,7 @@ int cfeCmdSetMessage(SbThread *handle)
         /* The empty name: the original copies the one byte of the empty string cfeEmptyName (an inlined
          * strcpy). */
         record->name[0] = cfeEmptyName[0];
-        cfePlugInRecordCount++;
+        cfeMessageCount++;
     } else if (VM_PLUGIN_CNT_GET(handle) == 5) {
         memset(record->text, 0, sizeof(record->text));
         cfeMesUnescape(record->text, vmKeyedEntryGet(handle, vmArgGet(handle, 1)));
@@ -1097,7 +1097,7 @@ int cfeCmdSetMessage(SbThread *handle)
         record->endFrame = vmArgGet(handle, 3);
         cfeMesUnescape(record->name, vmKeyedEntryGet(handle, vmArgGet(handle, 4)));
         record->soundSlot = vmArgGet(handle, 5);
-        cfePlugInRecordCount++;
+        cfeMessageCount++;
     }
     return 1;
 }
@@ -1192,7 +1192,7 @@ int cfeCmdStepFrame(SbThread *handle)
             xglClockSampleDayTime();
         }
     }
-    if (cfePlugInRecordCount > 0 && time == cfeRangeGetMin() && strcmp(cfeMessages->name, cfeEmptyName) != 0) {
+    if (cfeMessageCount > 0 && time == cfeRangeGetMin() && strcmp(cfeMessages->name, cfeEmptyName) != 0) {
         cfeSoundSlotStartWait(cfeMessages->name, cfeMessages->soundSlot);
     }
     if (cfePaused == 0) {
@@ -1208,15 +1208,15 @@ int cfeCmdStepFrame(SbThread *handle)
     cfeSlotTableEvaluate(time);
     cfeSndTableEvaluate(time);
     pxySetDefaultLight(&cfeLightSet);
-    if (cfeEvalGlobal.fogEnabled != 0) {
-        nmlModelSetGlobalFogDist(cfeEvalGlobal.evaluated[1].x, cfeEvalGlobal.evaluated[1].y, cfeEvalGlobal.evaluated[1].z,
-                            cfeEvalGlobal.evaluated[1].w);
-        nmlModelSetGlobalFogCol(&cfeEvalGlobal.evaluated[0]);
+    if (cfeFog.fogEnabled != 0) {
+        nmlModelSetGlobalFogDist(cfeFog.evaluated[1].x, cfeFog.evaluated[1].y, cfeFog.evaluated[1].z,
+                            cfeFog.evaluated[1].w);
+        nmlModelSetGlobalFogCol(&cfeFog.evaluated[0]);
     }
     for (i = 0; i < cfeEntryCount; i++) {
-        entry = &cfeEntries[i];
-        if (entry->flags & CFE_ACTOR_SHOWN) {
-            XenoActorSetFocusTarget(entry->actor, &entry->position);
+        entry = &cfeActors[i];
+        if (entry->flags & CFE_ACTOR_LOOK_ENABLED) {
+            XenoActorSetFocusTarget(entry->actor, &entry->lookTarget);
         }
         cfeDampDirOffset(entry->actor, entry->dampOffset);
     }
@@ -1224,13 +1224,13 @@ int cfeCmdStepFrame(SbThread *handle)
         fadeReset();
         fadeStartIn(30);
     }
-    for (i = 0; i < cfePlugInRecordCount; i++) {
+    for (i = 0; i < cfeMessageCount; i++) {
         if (cfeMessages[i].firstFrame <= time && time < cfeMessages[i].endFrame && cfeMessages[i].firstFrame == time
             && strcmp(cfeMessages[i].name, cfeEmptyName) != 0 && cfePaused == 0) {
             soundSlotSetPause(cfeMessages[i].soundSlot, 0);
         }
     }
-    for (i = 0; i < cfePlugInRecordCount; i++) {
+    for (i = 0; i < cfeMessageCount; i++) {
         if (cfeMessages[i].firstFrame <= time && time < cfeMessages[i].endFrame
             && (SaveData.caption_all != 0 || cfeMessages[i].text[0] == ' ')) {
             y = CFE_SUBTITLE_Y;
@@ -1277,18 +1277,18 @@ int cfeCmdStepFrame(SbThread *handle)
         }
     }
     for (i = 0; i < 3; i++) {
-        if ((unsigned int) (cfeEvalSlots[i].result_int - 1) < 2 && cfeEvalSlots[i].sample_int > 0) {
+        if ((unsigned int) (cfeScreenEffects[i].effectKind - 1) < 2 && cfeScreenEffects[i].sample_int > 0) {
             fadeClear();
         }
-        if (cfeEvalSlots[i].result_int == 0x22) {
-            effectRequestToCommand(i, 0x1A, cfeEvalSlots[i].sample_float * CFE_SLOT_SCALE * CFE_SLOT_SHORT,
-                          cfeEvalSlots[i].sample_int);
-        } else if (cfeEvalSlots[i].result_int == 0x23) {
-            effectRequestToCommand(i, 0x1B, cfeEvalSlots[i].sample_float * CFE_SLOT_SCALE * CFE_SLOT_SHORT,
-                          cfeEvalSlots[i].sample_int);
+        if (cfeScreenEffects[i].effectKind == 0x22) {
+            effectRequestToCommand(i, 0x1A, cfeScreenEffects[i].sample_float * CFE_SLOT_SCALE * CFE_SLOT_SHORT,
+                          cfeScreenEffects[i].sample_int);
+        } else if (cfeScreenEffects[i].effectKind == 0x23) {
+            effectRequestToCommand(i, 0x1B, cfeScreenEffects[i].sample_float * CFE_SLOT_SCALE * CFE_SLOT_SHORT,
+                          cfeScreenEffects[i].sample_int);
         } else {
-            effectRequestToCommand(i, cfeEvalSlots[i].result_int, cfeEvalSlots[i].sample_float * CFE_SLOT_SCALE,
-                          cfeEvalSlots[i].sample_int);
+            effectRequestToCommand(i, cfeScreenEffects[i].effectKind, cfeScreenEffects[i].sample_float * CFE_SLOT_SCALE,
+                          cfeScreenEffects[i].sample_int);
         }
     }
     cfeEntryTableUpdate(cfePaused);
@@ -1301,7 +1301,8 @@ int cfeCmdStepFrame(SbThread *handle)
 }
 
 
-int cfeCmdFadeIn(SbThread *handle)
+/* Script command `cfe.stFdIn`: starts no fade; it only kills every running sound effect (sefKillEffect(-1)). */
+int cfeCmdKillEffects(SbThread *handle)
 {
     if (VM_PLUGIN_CNT_GET(handle) != 1) {
         assertFailed("VM_PLUGIN_CNT_GET() == 1", "../cfePlugIn.euc.c", 1456);
@@ -1354,21 +1355,21 @@ int cfeCmdDestroy(SbThread *handle)
         cfeMessages = 0;
     }
     for (i = 0; i < cfeGroupCount; i++) {
-        if (cfeGroups[i].records != 0) {
-            GameResBlockFreeByBuffer(cfeGroups[i].records);
+        if (cfeMaps[i].records != 0) {
+            GameResBlockFreeByBuffer(cfeMaps[i].records);
         }
-        GameResBlockFreeByOwner(cfeGroups[i].object->kind);
+        GameResBlockFreeByOwner(cfeMaps[i].object->kind);
     }
     cfeGroupCount = 0;
     for (i = 0; i < cfeEvalEntryCount; i++) {
-        if (cfeEvalEntries[i].movie.source != 0) {
-            GameResBlockFreeByBuffer(cfeEvalEntries[i].movie.source);
+        if (cfeMonitors[i].movie.source != 0) {
+            GameResBlockFreeByBuffer(cfeMonitors[i].movie.source);
         }
-        if (cfeEvalEntries[i].movie.imageAddress[0] != 0) {
-            GameResBlockFreeByBuffer(cfeEvalEntries[i].movie.imageAddress[0]);
+        if (cfeMonitors[i].movie.imageAddress[0] != 0) {
+            GameResBlockFreeByBuffer(cfeMonitors[i].movie.imageAddress[0]);
         }
-        if (cfeEvalEntries[i].movie.imageAddress[1] != 0) {
-            GameResBlockFreeByBuffer(cfeEvalEntries[i].movie.imageAddress[1]);
+        if (cfeMonitors[i].movie.imageAddress[1] != 0) {
+            GameResBlockFreeByBuffer(cfeMonitors[i].movie.imageAddress[1]);
         }
     }
     cfeEvalEntryCount = 0;
@@ -1423,7 +1424,7 @@ const char cfeNativeNameInit[8] = "init";
 
 int cfePaused = 0;
 int cfeStartDelay = 0;
-int cfePlugInRecordCount = 0;
+int cfeMessageCount = 0;
 CfeMessageRecord *cfeMessages = 0;
 const char cfePlugInName[16] = "cfe";
 
@@ -1437,7 +1438,7 @@ SbNativeMethod cfePlugInTable[30] = {
     { cfeNativeNameLdMnt, cfeCmdLoadMonitor },
     { cfeNativeNameLdDev, cfeCmdLoadDev },
     { cfeNativeNameLdSnd, cfeCmdLoadSound },
-    { cfeNativeNameStFdIn, cfeCmdFadeIn },
+    { cfeNativeNameStFdIn, cfeCmdKillEffects },
     { cfeNativeNameStFdOut, cfeCmdFadeOut },
     { cfeNativeNameStFrm, cfeCmdStepFrame },
     { cfeNativeNameStKyAt, cfeCmdSetActorKey },

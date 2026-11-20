@@ -5,7 +5,7 @@
 
 #include "main/xgl_camera.h"
 
-typedef void (*XglRenderFadeCallback)(XglPacket *packet);
+typedef void (*XglRenderPacketCallback)(XglPacket *packet);
 
 /* One row of asDispReso: the display geometry sceGsSetDefDispEnv and the draw environment take. */
 typedef struct XglRenderReso {
@@ -15,17 +15,17 @@ typedef struct XglRenderReso {
     short frame_height;                /* +0x06 */
 } XglRenderReso;
 
-/* One row of asVramBase: the GS frame-buffer pages of a resolution (movie_player.c copies decoded movie frames
- * from the page flip_base to the page width). */
+/* One row of asVramBase: the GS frame-buffer pages of a resolution. movie_player.c copies decoded movie frames from
+ * the work buffer page to the display page. */
 typedef struct XglRenderVram {
     unsigned short depth_base;         /* +0x08 */
     unsigned short unmodeled_0a[3];
-    u16 width;                         /* +0x10: the display page */
-    u16 height;                        /* +0x12: the draw page */
-    unsigned short flip_base;          /* +0x14: sRenderFrameBase */
+    u16 display_page;                  /* +0x10: the page shown on screen (sRenderDispfbBase) */
+    u16 draw_page;                     /* +0x12: the page the GS draws into (sRenderPrevDispfbBase) */
+    unsigned short work_buffer_base;   /* +0x14: the third full-screen work page (sRenderFrameBase) */
     unsigned short unmodeled_16[2];
-    unsigned short second_base;        /* +0x1A: the second page the movie player (xgl_1.c) uploads movie strips to; the talk and
-                                          text frames read it as the font texture base (in 32-word units) */
+    unsigned short texture_base;       /* +0x1A: the texture area page (sRenderTextureBase), in 32-word units. The movie
+                                          player (xgl_1.c) also uploads movie strips here. */
     unsigned short unmodeled_1c[2];
 } XglRenderVram;
 
@@ -37,14 +37,18 @@ typedef struct XglRenderState {
     XglRenderVram vram;                /* +0x08 */
     u16 display_buffer_base;           /* +0x20: sRenderDisplayBase */
     u16 draw_buffer_base;              /* +0x22 */
-    /* +0x24: the per-frame callbacks xgl_render.c's final packet pass calls with the frame packet; recordRenderAll takes
-     * slot 6. */
-    XglRenderFadeCallback final_packet_callback[8];
-    /* +0x44: ov01SceneInit sets it to ov01DrawAll and ov01SceneEnd clears it. */
-    XglRenderFadeCallback fade_callback;
-    u32 render_status;                 /* +0x48 */
-    u32 frame_delta;                   /* +0x4c */
-    u32 frame_count;                   /* +0x50 */
+    /* +0x24: callback slots 0 to 7 of the final packet pass. xglRenderFinalPacket calls every non-null slot with the frame
+     * packet. The loop runs over 17 slots: slots 12 to 16 follow this struct as globals in xgl_render.c. recordRenderAll
+     * takes slot 6. */
+    XglRenderPacketCallback final_packet_callback[8];
+    /* +0x44: slot 8, ov01DrawAll while the battle scene runs (set by ov01SceneInit, cleared by ov01SceneEnd). */
+    XglRenderPacketCallback battle_draw_callback;
+    /* +0x48: slot 9, menuCallbackHook (xglCallbackQueueRun, menu_scene.c). */
+    XglRenderPacketCallback menu_callback;
+    /* +0x4c: slot 10, gifStateModeHook (one of gifStateEffectDraws, gifState.c). */
+    XglRenderPacketCallback gif_mode_callback;
+    /* +0x50: slot 11, fadeUpdateHook (fadeUpdate, fade_ctrl.c). It advances the fade colour. */
+    XglRenderPacketCallback fade_update_callback;
 } XglRenderState;
 
 extern XglRenderState sRender;

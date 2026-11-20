@@ -1,13 +1,13 @@
 #include "common.h"
 #include "main/xgl_packet_scratch.h"
 #include "main/talk_script.h"
-#include "main/debt_box.h"
+#include "main/msg_text_draw.h"
 #include "main/msg_window_layout.h"
 #include "main/msg_window_update.h"
 #include "main/msg_window_size.h"
 #include "main/game_data.h"
 #include "main/game_camera.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/ease_step.h"
 #include "main/text_tag.h"
 
@@ -17,7 +17,7 @@ f32 cosf(f32);
 
 
 #define MSG_OPEN_FRAMES 12
-/* Flag bits of MsgSlot.flags beyond the MSG_SLOT_* ones of timecode_counter.h (closing, opening, open). */
+/* Flag bits of MsgSlot.flags beyond the MSG_SLOT_* ones of msg_slot_core.h (closing, opening, open). */
 #define MSG_WIN_SLIDE 0x20          /* list slide in progress (msgWindowSlideStep) */
 #define MSG_WIN_SWEEP 0x100         /* cursor sweep in progress (msgWindowSweepStep) */
 #define MSG_WIN_ANGLE_END 180       /* slide and sweep run their cosine for 0..180 degrees */
@@ -31,7 +31,7 @@ f32 cosf(f32);
  * The result is never used; int keeps the final call from becoming a tail jump. */
 int msgWindowUpdate(MsgSlot *window)
 {
-    if (window->state == MSG_SLOT_STATE_WINDOW)
+    if (window->slot_type == MSG_SLOT_TYPE_WINDOW)
     {
         if (window->u.list.list_active != 0)
         {
@@ -44,7 +44,7 @@ int msgWindowUpdate(MsgSlot *window)
                 window->open_counter++;
                 if (window->open_counter >= MSG_OPEN_FRAMES)
                 {
-                    window->flags = (window->flags & ~MSG_SLOT_OPENING) | MSG_SLOT_OPEN | TIMECODE_FLAG_PHASE;
+                    window->flags = (window->flags & ~MSG_SLOT_OPENING) | MSG_SLOT_OPEN | TIMECODE_FLAG_SELECT;
                 }
             }
             if (window->flags & MSG_SLOT_CLOSING)
@@ -112,7 +112,7 @@ void msgWindowPulseStep(MsgSlot *window)
 /* Draws the window parts for its phase flags; the list is drawn as text rows (msgWindowDrawLineList or drawSellPanel). */
 void msgWindowDraw(MsgSlot *window)
 {
-    if (window->state == MSG_SLOT_STATE_WINDOW)
+    if (window->slot_type == MSG_SLOT_TYPE_WINDOW)
     {
         if (window->flags & MSG_SLOT_OPENING)
         {
@@ -147,11 +147,11 @@ void msgWindowDraw(MsgSlot *window)
 /* Closing phase: when the window is active, clears the opening, pulse, 0x40 and sweep bits and sets 0x2. */
 void msgWindowClose(MsgSlot *window)
 {
-    if (window->state == MSG_SLOT_STATE_WINDOW)
+    if (window->slot_type == MSG_SLOT_TYPE_WINDOW)
     {
         window->flags &= ~MSG_SLOT_OPENING;
         window->flags &= ~MSG_SLOT_OPEN;
-        window->flags &= ~TIMECODE_FLAG_PHASE;
+        window->flags &= ~TIMECODE_FLAG_SELECT;
         window->flags &= ~MSG_WIN_SWEEP;
         window->flags |= MSG_SLOT_CLOSING;
     }
@@ -160,7 +160,7 @@ void msgWindowClose(MsgSlot *window)
 /* Cursor index of an active window, 0 otherwise. */
 int msgWindowGetItemIndex(MsgSlot *window)
 {
-    if (window->state != MSG_SLOT_STATE_WINDOW)
+    if (window->slot_type != MSG_SLOT_TYPE_WINDOW)
     {
         return 0;
     }
@@ -172,7 +172,7 @@ int msgWindowScrollBy(MsgSlot *window, int delta)
 {
     MsgSlotList *list = &window->u.list;
 
-    if (window->state == MSG_SLOT_STATE_WINDOW)
+    if (window->slot_type == MSG_SLOT_TYPE_WINDOW)
     {
         window->flags |= MSG_WIN_SLIDE;
         list->slide_from = list->slide_pos;
@@ -326,7 +326,7 @@ int *msgWindowFindFilledEntry(int *from, int *bound)
 /* Sets the cursor of an active window. */
 void msgWindowSetItemIndex(MsgSlot *window, int index)
 {
-    if (window->state == MSG_SLOT_STATE_WINDOW)
+    if (window->slot_type == MSG_SLOT_TYPE_WINDOW)
     {
         window->u.list.cursor = index;
     }
@@ -335,7 +335,7 @@ void msgWindowSetItemIndex(MsgSlot *window, int index)
 /* First visible row (scroll), 0 when the window is not active. */
 int msgWindowGetScroll(MsgSlot *window)
 {
-    if (window->state != MSG_SLOT_STATE_WINDOW)
+    if (window->slot_type != MSG_SLOT_TYPE_WINDOW)
     {
         return 0;
     }
@@ -345,7 +345,7 @@ int msgWindowGetScroll(MsgSlot *window)
 /* Scroll plus visible rows: the first row after the visible ones. */
 int msgWindowGetScrollEnd(MsgSlot *window)
 {
-    if (window->state != MSG_SLOT_STATE_WINDOW)
+    if (window->slot_type != MSG_SLOT_TYPE_WINDOW)
     {
         return 0;
     }
@@ -355,7 +355,7 @@ int msgWindowGetScrollEnd(MsgSlot *window)
 /* Visible rows of the list. */
 int msgWindowGetVisibleRows(MsgSlot *window)
 {
-    if (window->state != MSG_SLOT_STATE_WINDOW)
+    if (window->slot_type != MSG_SLOT_TYPE_WINDOW)
     {
         return 0;
     }
@@ -368,7 +368,7 @@ int msgWindowMoveCursor(MsgSlot *window, int delta)
 {
     MsgSlotList *list = &window->u.list;
 
-    if (window->state == MSG_SLOT_STATE_WINDOW)
+    if (window->slot_type == MSG_SLOT_TYPE_WINDOW)
     {
         if (list->list_active == 0)
         {
@@ -401,7 +401,7 @@ void msgWindowStepCursor(MsgSlot *window, int delta)
     window->flags |= MSG_WIN_SWEEP;
     list->sweep_begin = list->sweep_value;
     list->cursor += delta;
-    list->cursor = wrapIntRange(list->cursor, 0, textCountLinesOf(text) - 1);
+    list->cursor = xglWrapIntRange(list->cursor, 0, textCountLinesOf(text) - 1);
     list->sweep_angle = 0;
     list->sweep_end = list->cursor * MSG_LIST_ROW_PIXELS;
     list->sweep_step = easeAngleStep(list->sweep_value, list->sweep_end);
@@ -449,7 +449,7 @@ void msgWindowStepCursorSkipEmpty(MsgSlot *window, int delta)
     list->cursor = old_cursor + delta;
     for (;;)
     {
-        list->cursor = wrapIntRange(list->cursor, 0, MSG_LIST_CAPACITY - 1);
+        list->cursor = xglWrapIntRange(list->cursor, 0, MSG_LIST_CAPACITY - 1);
         if (list->counts[list->cursor] != 0)
         {
             break;

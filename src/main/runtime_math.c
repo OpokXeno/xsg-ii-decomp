@@ -3,6 +3,7 @@
 #include "ov01/sb_natives.h"
 #include "main/get.h"
 #include "main/runtime_math.h"
+#include "shared.h"
 
 /* Script native "atan": two centi-unit arguments, atan2f of them scaled by 10000. */
 extern float sinf(float angle);
@@ -64,4 +65,20 @@ int mathRandom(SbThread *context)
     min = vmArgGet(context, 1);
     max = vmArgGet(context, 2);
     return Get_Rnd(min, max);
+}
+
+
+/* Native table: (name, function) pairs, then a null entry. Passed to sbNativeOwnerAdd by mathRegisterNatives; its names come before "math" in .sdata. */
+SbNativeMethod mathNativeTable[5] = {
+    { "atan", mathAtan },
+    { "sin", mathSin },
+    { "cos", mathCos },
+    { "random", mathRandom },
+    { 0, 0 },
+};
+
+/* Registers the math native table mathNativeTable (atan, sin, cos, random) under the module name "math". */
+void mathRegisterNatives(void)
+{
+    sbNativeOwnerAdd("math", mathNativeTable);
 }

@@ -138,7 +138,7 @@ typedef struct MEfStepObject {
     unsigned char unmodeled_00[0x08];
     void (*flags_callback)();
     unsigned char unmodeled_0c[0x04];
-    void (*update_callback)();
+    void (*draw_callback)();
     void (*advance_callback)();
     unsigned char unmodeled_18[0x20 - 0x18];
     MEfStepRecord record;                    /* +0x20 */
@@ -170,7 +170,7 @@ typedef struct MEfPathRecord {
 void *memcpy(void *, const void *, unsigned int);
 
 void MEfWaitPhaseFlagsDummy(void);
-void MEfWaitUpdate(void);
+void MEfWaitDraw(void);
 void MEfWaitStep(MEfStepObject *object);
 
 void *memset(void *s, int c, unsigned int n);
@@ -467,7 +467,7 @@ int MEfMake4Vertex2(Vector4 *destination, const Vector4 *source, float halfSize,
 int MEfCreateWait(MEfStepObject *object)
 {
     object->flags_callback = MEfWaitPhaseFlagsDummy;
-    object->update_callback = MEfWaitUpdate;
+    object->draw_callback = MEfWaitDraw;
     object->record.counter = 0;
     object->advance_callback = MEfWaitStep;
     return 1;
@@ -500,7 +500,7 @@ Matrix4 *MEfMakeTranslationMatrix(Matrix4 *destination)
     return destination;
 }
 
-void MEfWaitUpdate(void)
+void MEfWaitDraw(void)
 {
     Matrix4 scratch;
     DoublewordVector4 cornerVector;
@@ -547,7 +547,7 @@ int MEfCreateHermitePath(MEfStepObject *object)
     MEfSampleHermitePath(record);
     MGsGPInit(&object->record.packet, 0, 0);
     object->flags_callback = MEfSetPhaseFlags;
-    object->update_callback = MEfDrawStepTrail;
+    object->draw_callback = MEfDrawStepTrail;
     object->advance_callback = MEfAdvanceStep;
     return 1;
 }
@@ -983,7 +983,7 @@ typedef struct MEfPathObject {
     unsigned char unmodeled_00[0x08];
     void (*flags_callback)();
     unsigned char unmodeled_0c[0x04];
-    void (*update_callback)();
+    void (*draw_callback)();
     void (*advance_callback)();
     unsigned char unmodeled_18[0x20 - 0x18];
     MEfPathRecord record;                    /* +0x20 */
@@ -1020,7 +1020,7 @@ int MEfCreatePathStep(MEfPathObject *object)
     MEfSamplePathTrack(record);
     MGsGPInit(&record->packet, 0, 0);
     object->flags_callback = MEfSetPathPhaseFlags;
-    object->update_callback = MEfDrawPathStepTrail;
+    object->draw_callback = MEfDrawPathStepTrail;
     object->advance_callback = MEfAdvanceStepShort;
     return 1;
 }

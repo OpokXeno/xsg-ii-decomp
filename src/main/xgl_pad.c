@@ -77,7 +77,7 @@ void xglPadInitial(void) {
 
     first_record_bytes = (unsigned char *)&PadData[0];
     second_record_bytes = (unsigned char *)&PadData[1];
-    /* Keep the original paired byte walk across the two 0x68-byte records. */
+    /* Keep the original paired byte walk across the two 0x80-byte records. */
     byte_index = 0;
     do {
         *first_record_bytes = 0;

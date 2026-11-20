@@ -21,7 +21,8 @@ char *strcat(char *destination, const char *source);
 int sbLinkImage(void *buffer);
 char *strcpy(char *, const char *);
 
-/* Allocates a buffer in *slot, waits for it, then loads fileName from host0:.../cf/. */
+/* Allocates a buffer in *slot, waits for it, then loads fileName from host0:.../cf/. Original behaviour, kept as
+ * coded: the buffer is 100 bytes, far smaller than a whole script. */
 int scriptReadFile(void **slot, char *fileName) {
     char path[0x100];
     const char *hostPath;

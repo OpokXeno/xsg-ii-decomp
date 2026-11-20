@@ -31,11 +31,11 @@ void menuStatPanelNew(int kind);
 enum {
     MENU_STAT_PANEL_NO_HIT = 1,         /* hit kind 0 */
     MENU_STAT_PANEL_BLOCKED = 2,        /* hitMode bit 9 */
-    MENU_STAT_PANEL_TAKEN = 3,          /* hitMode bit 8 */
-    MENU_STAT_PANEL_TAKEN_BONUS = 4,    /* hitMode bit 8 after calcCrit's bonus roll */
+    MENU_STAT_PANEL_CRITICAL = 3,         /* hitMode bit 8 (critical hit) */
+    MENU_STAT_PANEL_CRITICAL_BONUS = 4,   /* hitMode bit 8 after calcCrit's bonus roll */
     MENU_STAT_PANEL_BACK_ATTACK = 6     /* HitRecord.backAttack */
 };
-/* Opens the stat panel of a step state (1 to 3, ActStepCounter.stepState). */
+/* Opens the stat panel of a step state (1 to 3, EventSlot.stepState). */
 void menuStatPanelOpen(int stepState);
 
 /* Draws the face of the unit with key `key`; style picks the smaller of the two frames. */

@@ -62,7 +62,7 @@ void menuUnitPanelBind(BattleUnit *unit)
     panel = menuUnitPanel;
     panel->owner = unit;
     panel->state = UNIT_PANEL_IDLE;
-    panel->kind = unit->stats->state70;
+    panel->kind = unit->stats->breakState;
     panel->slide.position.y = originY;
     panel->timer = UNIT_PANEL_CLOSE_TIME;
     panel->slide.position.x = originX;

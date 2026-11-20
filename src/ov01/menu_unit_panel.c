@@ -90,7 +90,7 @@ void menuUnitPanelDraw(UnitPanel *panel)
 
     if (panel->owner != 0) {
         owner = panel->owner;
-        kind = owner->stats->state70;
+        kind = owner->stats->breakState;
         switch (kind) {
         case 1:
             srcY = 0;

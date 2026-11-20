@@ -48,7 +48,7 @@ typedef struct UwamonoState {
     unsigned char unmodeled_000d;
     short focusIndex;                       /* +0x000E: the record the slot aims at (Enemy_Found, Enemy_Chase) */
     AlignedVector4 target;                  /* +0x0010: the route point the slot moves toward; x, y, z zeroed on reset */
-    /* A one-member union: enepcAlgorithm (runtime_motion_face.c) stores the area with alias set 0, so the state
+    /* A one-member union: enepcAlgorithm (runtime_enepc.c) stores the area with alias set 0, so the state
      * pointer is reloaded after each store. */
     union {
         AlignedVector4 area;                /* +0x0020: centre of the area the slot keeps to; x, y, z zeroed on reset */
@@ -61,16 +61,16 @@ typedef struct UwamonoState {
     float fanWidth;                         /* +0x0044: radians */
     float fanLength;                        /* +0x0048 */
     float noticeRange;                      /* +0x004C */
-    unsigned short wanderTime;              /* +0x0050 */
-    short pickCountA;                       /* +0x0052: the upper bound of the first random pick */
-    unsigned short waitTime;                /* +0x0054 */
-    short pickCountB;                       /* +0x0056: the upper bound of the second random pick */
+    unsigned short pauseTime;              /* +0x0050 */
+    short pauseCycle;                       /* +0x0052: the upper bound of the first random pick */
+    unsigned short threatTime;                /* +0x0054 */
+    short threatCycle;                       /* +0x0056: the upper bound of the second random pick */
     short trailStep;                        /* +0x0058 */
     unsigned short timer;                   /* +0x005A: ticks since the current action started */
     short timerLimit;                       /* +0x005C */
     signed char alert;                      /* +0x005E: 99 at the start of every ACT_updateEnemy pass; Enemy_Chase tests it against 64, 88, 96 and 99 */
     unsigned char mode;                     /* +0x005F: the behaviour the slot was set up with (enepcSetParams), a UWAMONO_MODE_* value; Enemy_Pause and Enemy_Threat pick the next action from it */
-    unsigned short cooldown;                /* +0x0060: ticks left in the cooldown mode */
+    unsigned short stunTime; /* +0x0060: ticks left of the stun */
     signed char pickRow[2][8];              /* +0x0062: the two random pick sets */
     short pickIndex[2];                     /* +0x0072 */
     unsigned char reactionKind;             /* +0x0076 */
@@ -93,14 +93,14 @@ typedef struct UwamonoState {
     short trailCount;                       /* +0x1090 */
     unsigned char unmodeled_1092[0xE];
     UwamonoPathPoint points[256];                 /* +0x10A0: path points, reset to (0, 0, 0, 1) */
-    short pointLinks[256][4];               /* +0x20A0 */
-    short pointLinkValues[256][4];          /* +0x28A0 */
+    short actionMotions[256][4];               /* +0x20A0 */
+    short actionLengths[256][4];          /* +0x28A0 */
     short routeIndex;                       /* +0x30A0 */
     short routePrev;                        /* +0x30A2 */
     short motionCol;                        /* +0x30A4 */
     short pointCount;                       /* +0x30A6 */
     unsigned char unmodeled_30a8[8];
-    UwamonoPathPoint routeNodes[64];               /* +0x30B0: reset to (0, 0, 0, 1) */
+    UwamonoPathPoint homeNodes[64];               /* +0x30B0: reset to (0, 0, 0, 1) */
     short routeLinks[64][4];                /* +0x34B0: per node, the linked node ids */
     short routeLinkCounts[64];              /* +0x36B0 */
     short routeParents[64];                 /* +0x3730: the node Homing_Add linked from,
@@ -118,7 +118,7 @@ typedef struct UwamonoState {
     int flags;                              /* +0x3FF0 */
     short unmodeled_3ff4;                   /* -1 on reset */
     unsigned char unmodeled_3ff6[0xA];
-    DoublewordAlignedVector4 homePoint;     /* +0x4000: the point the slot moves toward; x zeroed on reset */
+    DoublewordAlignedVector4 chaseTarget;     /* +0x4000: the point the slot moves toward; x zeroed on reset */
     int seIds[3];                           /* +0x4010: -1 on reset */
     unsigned char unmodeled_401c;           /* 1 on reset */
     unsigned char unmodeled_401d;
@@ -135,10 +135,10 @@ typedef struct UwamonoState {
     unsigned char unmodeled_402c[4];
     AlignedVector4 targetVector;            /* +0x4030: the point the held target is moved to; x, y, z zeroed on reset */
     short unmodeled_4040;
-    short groups[8];                        /* +0x4042: -1 on reset */
+    short setNumbers[8];                        /* +0x4042: -1 on reset */
     unsigned char unmodeled_4052[2];
     int together[4];                        /* +0x4054: -1 on reset */
-    short battle;                           /* +0x4064 */
+    short cfEventBits;                           /* +0x4064 */
     unsigned char unmodeled_4066[2];
     void *effect;                           /* +0x4068: the effect record */
     int unmodeled_406c;
@@ -162,7 +162,7 @@ typedef struct UwamonoRecord {
     short id;                               /* +0x000: the key uwamonoFindIndexByShortKey searches */
     unsigned char kind;                     /* +0x002: MAP_KIND_* */
     unsigned char unmodeled_003;
-    /* A one-member union: uwamonoInitRecord (runtime_menu.c) reads the key with alias set 0, after the stores
+    /* A one-member union: uwamonoInitRecord (uwamono_record_init.c) reads the key with alias set 0, after the stores
      * before it. */
     union {
         int key;                            /* +0x004: bit number in the map flag sets */
@@ -250,8 +250,8 @@ typedef struct UwamonoRecord {
     int event;                              /* +0x250: 0 state change, 1 player model change, -1 none */
     int eventState;                         /* +0x254 */
     int eventStateArg;                      /* +0x258 */
-    short tiltStep;                         /* +0x25C */
-    short tiltCount;                        /* +0x25E */
+    short moveTicks; /* +0x25C: ticks run by a door, lid or item move */
+    short moveDuration; /* +0x25E: length of that move in ticks */
     signed char rotationOrder;              /* +0x260: the order the rotation angles are applied in, 5 on reset */
     unsigned char unmodeled_261[3];
     /* A one-member union: HitCheckBoxCorner and NyuruMatrix (init_uwamono_sys.c) load the pointer with alias set 0. */
@@ -263,7 +263,7 @@ typedef struct UwamonoRecord {
     UwamonoPose pose;                       /* +0x2B0: copied to *transform by mapSceneScriptLoad */
     Matrix4 matrix;                         /* +0x2F0: the placement matrix, its last row the position */
     UwamonoBody body;                       /* +0x330: the actor and its motion state */
-    float form;                             /* +0x338: UWAMONO_FORM_ES while riding an ES, else 5.0; also the effect's scale */
+    float form; /* +0x338: UWAMONO_FORM_ES (5.0) in an E.S., else UWAMONO_FORM_FOOT (1.0); also the effect's scale */
     short motion;                           /* +0x33C: 4 on reset; 1 once the form is chosen */
     unsigned char unmodeled_33e[2];
     float moveX[32];                        /* +0x340: move curve, uwamonoAddMoveStep */
@@ -297,34 +297,34 @@ typedef struct UwamonoRecord {
     int elevatorArg;                        /* +0x594: setElevator argument 3; 0 on reset */
     unsigned char searchFlag;               /* +0x598 */
     unsigned char unmodeled_599[3];
-    int level;                              /* +0x59C: the jump height step */
+    int level; /* +0x59C: the strike height step */
     int effectId;                           /* +0x5A0: effect or motion started when searched, -1 on reset */
     /* One-member unions: uwamonoStartPairMove and uwamonoTriggerRecord (uwamono_record.c) read the partner indices with
      * alias set 0, so every use of one reloads it after the stores before it. */
     union {
-        int linkA;                          /* +0x5A4: partner records set by the kowaremono native, -1 on reset */
+        int enemyLink; /* +0x5A4: the enemy released when the record breaks, set by the kowaremono native; -1 on reset */
     };
     union {
-        int linkB;                          /* +0x5A8 */
+        int itemLink; /* +0x5A8: the item released when the record breaks */
     };
     unsigned char unmodeled_5ac[4];
-    /* A one-member union: the rider placement of DispMapObject (game_map_object.c) reads it with alias set 0. */
+    /* A one-member union: the marker placement of DispMapObject (game_map_object.c) reads it with alias set 0. */
     union {
-        AlignedVector4 focusOffset;         /* +0x5B0: from the position to the point that is marked, aimed at and ridden; reset to (0, 0, 0, 1) */
+        AlignedVector4 focusOffset;         /* +0x5B0: from the position to the point that is marked and aimed at; reset to (0, 0, 0, 1) */
     };
     signed char motionKind;                 /* +0x5C0: 1 = moves between two points, else rotates */
-    signed char searchState;                /* +0x5C1 */
-    signed char busy;                       /* +0x5C2: set while the door motion runs */
+    signed char openerKind; /* +0x5C1: who may open the door */
+    signed char openState; /* +0x5C2: door state, 0 open or 1 closed; box state, 3 open or 4 closed */
     unsigned char unmodeled_5c3;
-    short timer;                            /* +0x5C4 */
+    short timer; /* +0x5C4: door travel time */
     unsigned char unmodeled_5c6[0x5D0 - 0x5C6];
     Vector4Elements closedPosition;         /* +0x5D0: the two states of a door; uwamonoStartMove takes the pair as an array */
     Vector4Elements openPosition;                   /* +0x5E0 */
     Vector4 closedRotation;                 /* +0x5F0 */
     Vector4 openRotation;                   /* +0x600 */
-    float speed;                            /* +0x610 */
+    float openDistance;                            /* +0x610: opening distance of a door */
     float swingLength;                      /* +0x614 */
-    int lookLink;                           /* +0x618: index of the record this one looks at or is linked to, -1 when none */
+    int partnerLink; /* +0x618: the partner record, -1 when none */
     short eventRow;                         /* +0x61C: the event index of a kind 8 record, -1 on reset */
     unsigned char unmodeled_61e[2];
     int triggerSound;                       /* +0x620: seVoiceStartDefault id played when the record is triggered, -1 none */
@@ -352,13 +352,13 @@ typedef struct UwamonoRecord {
     /* One-member unions: Game_Data_Push stores the two blocks with alias set 0, which keeps the loads of the actor
      * fields after them behind the stores. */
     union {
-        DoublewordAlignedVector4 savedColor;      /* +0x810 */
+        DoublewordAlignedVector4 savedFogDist;   /* +0x810 */
     };
     union {
-        DoublewordAlignedVector4 savedColorBlock; /* +0x820 */
+        DoublewordAlignedVector4 savedFogColor;  /* +0x820 */
     };
-    float savedFog[4];                      /* +0x830: fogA..fogD */
-    int savedDrawMode;                      /* +0x840 */
+    float savedShadowHeight[4];             /* +0x830: shadowHeightA..D */
+    int savedShadowType;                    /* +0x840 */
     int savedDrawFlags;                     /* +0x844 */
     float savedDrawParam;                   /* +0x848 */
     float savedModeValue4;                  /* +0x84C */
@@ -377,8 +377,8 @@ enum {
     MAP_KIND_ACTOR = 1,
     MAP_KIND_MODEL = 2,
     MAP_KIND_FLAG = 3,
-    MAP_KIND_ACTOR_STATIC = 4, /* an actor that is not moved by ACT_updateEnemy */
-    MAP_KIND_PART = 5,         /* a part attached to the player (game_camera.c) */
+    MAP_KIND_ACTOR_STATIC = 4, /* the player's own record (game_camera.c): not moved by ACT_updateEnemy */
+    MAP_KIND_PART = 5,         /* a hand-held part of the player, e.g. a weapon (game_camera.c) */
     MAP_KIND_EFFECT = 6,
     MAP_KIND_MOVER = 7,
     MAP_KIND_MODEL_REQUEST = 8 /* create only: uwamonoCreateRecord turns it into a model or frees it */
@@ -403,17 +403,17 @@ enum UwamonoScanState {
  */
 enum UwamonoMode {
     UWAMONO_MODE_INIT = 0,          /* Enemy_Init, then the next action */
-    UWAMONO_MODE_WANDER = 1,        /* Enemy_Pause: random walk in the area */
-    UWAMONO_MODE_WAIT = 2,          /* Enemy_Threat */
-    UWAMONO_MODE_ANCHOR = 3,        /* Enemy_Route */
+    UWAMONO_MODE_PAUSE = 1,         /* Enemy_Pause: stands, then picks the next action */
+    UWAMONO_MODE_THREAT = 2,        /* Enemy_Threat: the threat pose */
+    UWAMONO_MODE_ROUTE = 3,         /* Enemy_Route: walks the route */
     UWAMONO_MODE_AIM = 4,           /* Enemy_Found */
     UWAMONO_MODE_PURSUE = 5,        /* Enemy_Chase */
-    UWAMONO_MODE_COOLDOWN = 6,      /* Enemy_Stiff */
+    UWAMONO_MODE_STIFF = 6,         /* Enemy_Stiff: stunned until stunTime runs out */
     UWAMONO_MODE_SCRIPT = 8,        /* Enemy_Unique */
-    UWAMONO_MODE_ALERT = 9,         /* Enemy_Damage_Explosion; entered with the cooldown and effect set up */
-    UWAMONO_MODE_ROUTE = 10,        /* Enemy_Escape */
+    UWAMONO_MODE_EXPLOSION = 9,     /* Enemy_Damage_Explosion; entered with the stun and effect set up */
+    UWAMONO_MODE_ESCAPE = 10,       /* Enemy_Escape */
     UWAMONO_MODE_SPLINE = 11,       /* Enemy_Route_Chase */
-    UWAMONO_MODE_START = 12,        /* entered by Enemy_Init; moves on to a wander or a route */
+    UWAMONO_MODE_START = 12,        /* entered by Enemy_Init */
     UWAMONO_MODE_SPLINE_START = 13  /* moves on to the spline mode */
 };
 
@@ -456,7 +456,7 @@ typedef struct UwamonoEventRow {
 extern UwamonoKeyRow *uwamonoKeyRowTable;
 extern UwamonoEventRow *uwamonoEventTable;
 extern struct EnepcParamSet *enepcParamSets;
-/* The look-at points are enepcLookAtPointTable (float[9][4]); game_camera.c and runtime_motion_face.c each declare their own
+/* The look-at points are enepcLookAtPointTable (float[9][4]); game_camera.c and runtime_enepc.c each declare their own
  * view of it (Vector4 rows, float rows: the float view gives the addressing of enepcLookAt), so it has no declaration here.
  * enepcLookAtReachTable holds the reach of each point (0 = unused). */
 extern float enepcLookAtReachTable[12];

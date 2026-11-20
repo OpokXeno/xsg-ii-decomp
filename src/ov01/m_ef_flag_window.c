@@ -56,8 +56,8 @@ static inline void CloseTag(MGsPacket *packet, int nloop)
 }
 
 /*
- * The flag-window block at object+0x20. The creator reads the actor pair at +0x0C..+0x34 and the two samples
- * at +0x60 and +0x70 and builds the path from them; the draw and advance callbacks read the status words,
+ * The flag-window block at object+0x20. The creator reads the actor pair at +0x0C..+0x34 and the start and target
+ * points at +0x60 and +0x70 and builds the path from them; the draw and advance callbacks read the status words,
  * positions and angles. statusWords[0] holds the status word of the current tick and [1..24] its history.
  */
 typedef struct FlagWindowBlock FlagWindowBlock;
@@ -73,8 +73,8 @@ struct FlagWindowBlock {
     MGsPacket packet;                       /* +0x40 */
     s16 ticks;                              /* +0x54 */
     unsigned char unmodeled_56[0x60 - 0x56];
-    AlignedVector4 sample;                  /* +0x60 */
-    AlignedVector4 prevSample;              /* +0x70 */
+    AlignedVector4 startPoint;              /* +0x60: the start point of the tube */
+    AlignedVector4 targetPoint;             /* +0x70: the target point of the tube */
     Matrix4 actorMatrix;                    /* +0x80: the first actor's matrix */
     u16 statusWords[FLAG_WINDOW_POINTS];                   /* +0xC0 */
     unsigned char unmodeled_F2[0x100 - 0xF2];
@@ -109,8 +109,8 @@ int MEfCreateFlagWindow(FlagWindowHost *object)
 
     block = &object->block;
     block->ticks = 0;
-    MEfGetActorCoord(&block->sample, block->firstActor, block->firstCoordinate);
-    MEfGetActorCoord(&block->prevSample, block->secondActor, block->secondCoordinate);
+    MEfGetActorCoord(&block->startPoint, block->firstActor, block->firstCoordinate);
+    MEfGetActorCoord(&block->targetPoint, block->secondActor, block->secondCoordinate);
     MSeGetActorMatrix(&block->actorMatrix, block->firstActor, block->firstCoordinate);
     memset(block->statusWords, 0, sizeof(block->statusWords));
     memset(block->positions, 0, sizeof(block->positions));
@@ -139,20 +139,20 @@ void MEfMakeFlagWindowPath(FlagWindowBlock *block)
 
     curve = &mefPathCurve.curve;
     key1 = &curve->points[0];
-    segmentLength = MMathCalcDist(&block->sample, &block->prevSample) * 0.5f;
+    segmentLength = MMathCalcDist(&block->startPoint, &block->targetPoint) * 0.5f;
     MEfHermitePathInit(curve, 4);
     __asm__ __volatile__(
         "lq $8, 0(%3)\n"
         "sq $8, 0(%2)\n"
         : "=m" (*key1), "=m" (*key1)
-        : "r" (key1), "r" (&block->sample)
+        : "r" (key1), "r" (&block->startPoint)
         : "$8");
     key3 = &curve->points[2];
     __asm__ __volatile__(
         "lq $8, 0(%2)\n"
         "sq $8, 0(%1)\n"
         : "=m" (*key3)
-        : "r" (key3), "r" (&block->prevSample)
+        : "r" (key3), "r" (&block->targetPoint)
         : "$8");
     __asm__ __volatile__("sqc2 vf0, 0(%0)\n" : : "r" (&direction) : "memory");
     direction.z = segmentLength;

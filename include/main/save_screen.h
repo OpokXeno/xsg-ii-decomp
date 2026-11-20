@@ -3,7 +3,7 @@
 
 /* Functions of src/main/save_screen.c that other files call. */
 
-/* Names of the debug test menu items (Shift-JIS text, 0x10 or 0x18 bytes apart). */
+/* Names of the debug test menu items (EUC-JP text, 0x10 or 0x18 bytes apart). */
 extern const char testUiItemNameText[];
 
 /* Six bytes of saved maxima, one per party member that has them. */

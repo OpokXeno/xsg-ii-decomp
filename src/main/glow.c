@@ -104,7 +104,7 @@ void glowRunScene(void)
     cdState = -1;
     pChaos->position.x = 2.0f;
     XenoActorAllocMatrices(pChaos);
-    XenoActorSetChannelValue(pChaos, 8.0f);
+    XenoActorSetBlendFrames(pChaos, 8.0f);
     XenoActorSetMode(pChaos, 0);
     bufAddr = loadAddr;
     xglCdReadFile(glowCitizenTexturePath, (void *) bufAddr, 1, CD_NOTIFY_DUMMY);

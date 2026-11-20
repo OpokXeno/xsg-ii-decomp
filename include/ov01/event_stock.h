@@ -7,7 +7,7 @@
 #include "ov01/cmd_exec.h"
 
 /* Kind 18: nothing to do, returns 1. */
-int eventStockBegin(void);
+int eventCombinedEtherBegin(void);
 /* Kind 19: clears the second action-stock boost slot and ends the turn of the record's unit when it changed. Returns 1. */
 int eventActStockBoostClear(EventQueueEntry *entry);
 /* Kind 20: a countdown wait; returns 1 once the count has run out, 0 while it steps down. */

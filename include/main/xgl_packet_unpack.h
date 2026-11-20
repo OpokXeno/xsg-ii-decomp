@@ -11,6 +11,6 @@ void tiWaterSendFrame(XglCamera *camera, Matrix4 data);
 /* Sends the camera position and the direction from it to the translation row (row 3) of transform. */
 void tiWaterSendDirection(XglCamera *camera, Matrix4 transform);
 /* Sends the pair (x, y) at VU address 0x3DA. */
-void tiWaterSendItemPair(float x, float y);
+void tiWaterSendBrightnessPair(float x, float y);
 
 #endif /* INCLUDE_MAIN_XGL_PACKET_UNPACK_H */

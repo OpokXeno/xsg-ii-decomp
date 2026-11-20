@@ -48,7 +48,7 @@ static int ov01SceneFrames;
 
 /* Scene init: runs the reset chain of the battle systems, makes the light block the default light set of xgl and
  * sef_light_set.c, resets the menus and text systems, clears the frame counter ov01SceneFrames and sets the draw
- * hook (sRender.fade_callback) to ov01DrawAll. The light block is the 0x180-byte light set (see initLight,
+ * hook (sRender.battle_draw_callback) to ov01DrawAll. The light block is the 0x180-byte light set (see initLight,
  * sb_natives_unit.c). */
 void ov01SceneInit(void)
 {
@@ -75,7 +75,7 @@ void ov01SceneInit(void)
     textWindowReset();
     tiWindClearTables();
     ov01SceneFrames = 0;
-    sRender.fade_callback = ov01DrawAll;
+    sRender.battle_draw_callback = ov01DrawAll;
 }
 
 
@@ -120,7 +120,7 @@ void ov01SceneLoop(void)
             sefExecEffect();
             textUpdate();
             msgUpdateTimed();
-            msgClose();
+            msgQueueClose();
             if (ov01SceneIsDone() == 1) {
                 break;
             }
@@ -154,11 +154,11 @@ int pauseProc(void) {
     return 0;
 }
 
-/* Scene end: release the scene, reset the tables, clear the draw hook (sRender.fade_callback). */
+/* Scene end: release the scene, reset the tables, clear the draw hook (sRender.battle_draw_callback). */
 void ov01SceneEnd(void) {
     ov01SceneRelease();
     ov01ResetAll();
-    sRender.fade_callback = 0;
+    sRender.battle_draw_callback = 0;
     xglCdArenaClose();
 }
 
@@ -242,8 +242,8 @@ void *memset(void *destination, int value, unsigned int size);
 #define BONUS_EFFECT_GROUP 0x154
 
 /*
- * Battle start bonuses of the cfEvent: CF_EVENT_BOOST_BONUS adds 1..2 stocks to the boost gauge of side 0,
- * CF_EVENT_PARTY_BONUS raises the party units (units with key 11..15 get 100 or 200 current, the others 1..2
+ * Battle start bonuses of the cfEvent: CF_EVENT_BOOST_BONUS adds 1..3 stocks to the boost gauge of side 0,
+ * CF_EVENT_PARTY_BONUS raises the party units (units with key 11..15 get 100 or 200 current, the others 1..3
  * levels). With any bonus every unit's unitValue is cleared and the bonus effect starts.
  */
 void battleStartBonusApply(void)
@@ -282,7 +282,7 @@ void battleStartBonusApply(void)
             i = count;
             do {
                 if (*list != 0) {
-                    (*list)->stats->unitValue = 0;
+                    (*list)->stats->waitCounter = 0;
                 }
                 list++;
             } while (--i != 0);

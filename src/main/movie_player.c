@@ -113,9 +113,9 @@ struct MoviePlayer {
     MoviePlayerMethods *methods;
 };
 
-/* get_status values moviePlayerUpdate tells apart. */
-#define MOVIE_STATUS_PLAYING 3
-#define MOVIE_STATUS_PLAY_END 4
+/* get_status values moviePlayerUpdate tells apart: 3 is the end of the movie, 4 a playback error. */
+#define MOVIE_STATUS_PLAY_END 3
+#define MOVIE_STATUS_ERROR 4
 
 /* The creation parameters moviePlayerParamsInit fills and mwPlyCreateSofdec takes. max_width and
  * max_height are also the size makeGstransChain is built for; base and size are the work area.
@@ -213,15 +213,15 @@ typedef struct MovieFrame {
     unsigned char unmodeled_24[0x2C];
 } MovieFrame;
 
-/* The decoded frame is uploaded to the page sRender.vram.flip_base and copied from there to the page
- * sRender.vram.width (main/gr_screen.h). */
+/* The decoded frame is uploaded to the page sRender.vram.work_buffer_base and copied from there to the page
+ * sRender.vram.display_page (main/gr_screen.h). */
 void mwPlyGetCurFrm(int handle, MovieFrame *frame);
 void mwPlyRelCurFrm(int handle);
 
 /* One step of playback: releases the frame taken last time, takes the next one and, when there is
  * one, queues its upload chain; then, once a frame has arrived, queues the copy of the uploaded
- * page to the page shown. Returns 1 while the player is playing, -1 when it reached the end,
- * 0 otherwise. */
+ * page to the page shown. Returns 1 when the player reports the end of the movie, -1 on a playback
+ * error (GameMpeg2Play shows the seek-error prompt), 0 otherwise. */
 int moviePlayerUpdate(MoviePlayerRecord *player)
 {
     MovieFrame frame;
@@ -240,7 +240,7 @@ int moviePlayerUpdate(MoviePlayerRecord *player)
         player->frame_stamp = frame.stamp;
         makeGstransChain(player->chain_address, frame.image, frame.width, frame.height);
         chain = UNCACHED(player->chain_address);
-        chain[4] = ((u64) sRender.vram.flip_base << 37) | MOVIE_BITBLTBUF_DBW_512;
+        chain[4] = ((u64) sRender.vram.work_buffer_base << 37) | MOVIE_BITBLTBUF_DBW_512;
         sceVif1PkCall(packet, player->chain_address, 0);
         player->frame_held = 1;
     }
@@ -250,7 +250,7 @@ int moviePlayerUpdate(MoviePlayerRecord *player)
         scratch[1] = VIF_DIRECT | (MOVIE_COPY_QWORDS - 1);
         scratch[2] = MOVIE_GIF_TAG_AD_5;
         scratch[3] = GIF_AD;
-        scratch[4] = (MOVIE_BITBLTBUF_SBW_512 | (sRender.vram.flip_base << 5)) | ((u64) sRender.vram.width << 37)
+        scratch[4] = (MOVIE_BITBLTBUF_SBW_512 | (sRender.vram.work_buffer_base << 5)) | ((u64) sRender.vram.display_page << 37)
                      | MOVIE_BITBLTBUF_DBW_512;
         scratch[5] = GS_BITBLTBUF;
         scratch[6] = 0;
@@ -268,9 +268,9 @@ int moviePlayerUpdate(MoviePlayerRecord *player)
     }
     status = RECORD_PLAYER(player)->methods->get_status(RECORD_PLAYER(player));
     switch (status) {
-    case MOVIE_STATUS_PLAYING:
-        return 1;
     case MOVIE_STATUS_PLAY_END:
+        return 1;
+    case MOVIE_STATUS_ERROR:
         return -1;
     default:
         return 0;

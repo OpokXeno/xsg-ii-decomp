@@ -1,5 +1,5 @@
 #include "common.h"
-#include "main/ladder_table.h"
+#include "main/get_ladder.h"
 #include "main/enemy_1.h"
 #include "main/set_motion.h"
 #include "main/game_camera.h"
@@ -13,6 +13,7 @@
 #include "main/game_data.h"
 #include "main/game_map_object.h"
 #include "main/pt_member.h"
+#include "main/talk_natives.h"
 #include "main/msg_state.h"
 #include "main/ysegf.h"
 #include "main/sef.h"
@@ -29,11 +30,11 @@
 #include "main/gifState.h"
 #include "main/fade_ctrl.h"
 #include "main/game_disk_change.h"
-#include "main/game_over_059.h"
+#include "main/game_over.h"
 #include "ov01/tgt_select.h"
 #include "ov01/choice_menu.h"
 #include "main/game_pause_disp.h"
-#include "main/runtime_menu.h"
+#include "main/uwamono_record_init.h"
 #include "main/menu_scene.h"
 #include "main/TiGlobalColl.h"
 #include "main/uwamono_record.h"
@@ -58,16 +59,16 @@ extern unsigned char elvActiveMask;
 extern int elvKeepOffFlags[32];
 
 
-/* Game_Data_Pop restores the two color blocks of an actor with stores of alias set 0, which keep the loads of the saved
+/* Game_Data_Pop restores the two fog blocks of an actor with stores of alias set 0, which keep the loads of the saved
  * record fields behind them. struct XenoActor declares them as plain members, so this one site reaches them through a
  * view of the actor with one-member unions. */
 typedef struct ActorColorView {
     unsigned char unmodeled_000[0x490];
     union {
-        DoublewordAlignedVector4 color;     /* +0x490 */
+        DoublewordAlignedVector4 fogDist;     /* +0x490 */
     };
     union {
-        DoublewordAlignedVector4 colorBlock; /* +0x4A0 */
+        DoublewordAlignedVector4 fogColor; /* +0x4A0 */
     };
 } ActorColorView;
 
@@ -134,13 +135,13 @@ void Game_Data_Push(void)
         if (actor) {
             record->savedProbe = actor->collision;
             record->savedLight = actor->light;
-            record->savedColor = actor->color;
-            record->savedColorBlock = actor->colorBlock;
-            record->savedFog[0] = actor->fogA;
-            record->savedFog[1] = actor->fogB;
-            record->savedFog[2] = actor->fogC;
-            record->savedFog[3] = actor->fogD;
-            record->savedDrawMode = actor->drawMode;
+            record->savedFogDist = actor->fogDist;
+            record->savedFogColor = actor->fogColor;
+            record->savedShadowHeight[0] = actor->shadowHeightA;
+            record->savedShadowHeight[1] = actor->shadowHeightB;
+            record->savedShadowHeight[2] = actor->shadowHeightC;
+            record->savedShadowHeight[3] = actor->shadowHeightD;
+            record->savedShadowType = actor->shadowType;
             record->savedDrawFlags = actor->drawFlags;
             record->savedDrawParam = actor->drawParam;
             record->savedModeValue4 = actor->modeValue4;
@@ -257,7 +258,7 @@ void Game_Data_Pop(void)
                 actor->rsrc[XAct_Rsrc_5] = (int) data;
             }
             XenoActorAllocMatrices(actor);
-            XenoActorSetChannelValue(actor, 0.0f);
+            XenoActorSetBlendFrames(actor, 0.0f);
             XenoActorSetMode(actor, 0);
             actor->position = record->position;
             if (uwamonoCurrentIndex == i) {
@@ -294,13 +295,13 @@ void Game_Data_Pop(void)
             actor->light.fourthDirection[3] = record->followD.component[3];
             actor->drawParam = record->blendEnd;
             actor->light = record->savedLight;
-            ((ActorColorView *) actor)->color = record->savedColor;
-            ((ActorColorView *) actor)->colorBlock = record->savedColorBlock;
-            actor->fogA = record->savedFog[0];
-            actor->fogB = record->savedFog[1];
-            actor->fogC = record->savedFog[2];
-            actor->fogD = record->savedFog[3];
-            actor->drawMode = record->savedDrawMode;
+            ((ActorColorView *) actor)->fogDist = record->savedFogDist;
+            ((ActorColorView *) actor)->fogColor = record->savedFogColor;
+            actor->shadowHeightA = record->savedShadowHeight[0];
+            actor->shadowHeightB = record->savedShadowHeight[1];
+            actor->shadowHeightC = record->savedShadowHeight[2];
+            actor->shadowHeightD = record->savedShadowHeight[3];
+            actor->shadowType = record->savedShadowType;
             actor->drawFlags = record->savedDrawFlags;
             actor->drawParam = record->savedDrawParam;
             actor->modeValue4 = record->savedModeValue4;
@@ -606,7 +607,7 @@ void Game(void)
                     pxyProfileEnd("sefExecEffect");
                 }
                 VibrationEngine();
-                if (!(gameWork.control & 0x200) && !(uwamonoSearchWaitCount > 0 || (gameWork.control & 0x20000000))) {
+                if (!(gameWork.control & 0x200) && !(uwamonoSquareWaitCount > 0 || (gameWork.control & 0x20000000))) {
                     if (!(gameWork.control & 0x40008400) && uwamonoLadderState.state == 0 && gameWork.encounterReaction == -1) {
                         pressed = PadData[0].pressed;
                         if (pressed & 0x10) {
@@ -617,7 +618,7 @@ void Game(void)
                             soundSetMuted(0);
                             GameCameraStateRestore();
                         } else if (pressed & 0x20) {
-                            choice = uwamonoGetNearbySearchType();
+                            choice = uwamonoGetNearbyUnitType();
                             if ((unsigned int)(choice - 7) < 2) {
                                 resResetScriptState();
                                 GameCameraStateSave();
@@ -646,7 +647,7 @@ void Game(void)
                 } else {
                     msgPanelClear();
                 }
-                padDebugPrintDirection(12);
+                padRightStickRotate(12);
             } else {
                 sefSetRenderHooks();
                 pauseStart();
@@ -657,7 +658,7 @@ void Game(void)
             } else {
                 msgPanelClear();
             }
-            msgClose();
+            msgQueueClose();
             resJumpPointsUpdate();
             if (fadeUpdateHook[0] != 0 || gameWork.encounterReaction != -1 || (gameWork.control & 0x230)
                 || gameWork.nextMap != -1 || uwamonoLadderState.state == 2 || uwamonoLadderState.state == 3
@@ -884,6 +885,6 @@ int mapTextureData = 0;
 PxyHeader *mapObjectTable = 0;
 struct MapFixupEntry *uwamonoEntryCountPtr = 0;
 UwamonoEntry *uwamonoEntries = 0;
-/* The game work block (0x1B28 bytes): the scene, player, camera and module state the field loop and the
+/* The game work block (0x1B30 bytes): the scene, player, camera and module state the field loop and the
  * other modules share. */
 GameWork gameWork = { 0 };

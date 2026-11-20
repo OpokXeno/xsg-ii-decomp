@@ -1,13 +1,13 @@
 #include "common.h"
 #include "main/msg_window_slot.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/talk_scan.h"
 #include "main/interp_text.h"
 
 /* int keeps the result in v0 for msgWindowSetCurrentSlot below; a void prototype does not compile there ("void value not
    ignored"), so interp_text.h does not declare it. The definition cannot be int either: interp_text.c then gains
    an instruction (@sizes .text DIFF, checked 2026-11-20), since the original leaves v0 as a by-product of the test. */
-/* Forwards two values to the slot block of the current slot; without a current slot (index -1)
+/* Sets text argument `first` (1 to 10) of the current slot to the value `second`; without a current slot (index -1)
  * it returns the byte offset of that index, the product the compiler computes before the test. */
 int msgWindowSetCurrentSlot(MsgWindow *window, int first, int second) {
     int current;
@@ -23,7 +23,7 @@ int msgWindowSetCurrentSlot(MsgWindow *window, int first, int second) {
     return offset;
 }
 
-/* Sets the first slot of the current record's slot block, if any. */
+/* Sets the speaker name of the current text slot, if any. */
 void msgWindowSetCurrentFirstSlot(MsgWindow *window, const char *name) {
     int current;
     MsgSlot *slot;
@@ -35,7 +35,7 @@ void msgWindowSetCurrentFirstSlot(MsgWindow *window, const char *name) {
     }
 }
 
-/* Close step of the message window, called from msgClose (main/msg_state.c). */
+/* Close step of the message window, called from msgQueueClose (main/msg_state.c). */
 void msgWindowActivateTalk(void) {
     talkActivate();
 }

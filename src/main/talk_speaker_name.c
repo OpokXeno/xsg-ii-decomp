@@ -62,5 +62,5 @@ void talkCopySpeakerName(unsigned char *buffer, MsgSlot *box)
 }
 
 /* Scaffold data of this file (.sdata), in address order. The string items are read by the other main TUs
- * (main/debt_box.c and others) through their own extern declarations. */
+ * (main/msg_text_draw.c and others) through their own extern declarations. */
 signed char talkPrefixStash[2] = { 0, 0 };

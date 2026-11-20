@@ -3,7 +3,7 @@
 
 /* Functions of src/main/talk_scan.c that other files call. */
 
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
 void talkActivate(void);
 /* Helpers of a state 1 (text) slot; they do nothing for another state. */

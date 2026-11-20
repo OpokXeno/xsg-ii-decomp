@@ -152,7 +152,7 @@ void menuStatRecordsCreate(void)
  * level pips. */
 #define MENU_STAT_EASE_RATE 0.125f
 #define MENU_STAT_LEVEL_EASE_RATE 0.25f
-/* Highest level a gauge shows: the cap unitLevelAdd clamps StatBlock.level to (UNIT_LEVEL_MAX, calc.c). */
+/* Highest level a gauge shows: the cap unitLevelAdd clamps StatBlock.stockCount to (UNIT_LEVEL_MAX, calc.c). */
 #define MENU_STAT_LEVEL_MAX 3.0f
 
 /* The negation of the distance as its own inline call (codegen: a plain -delta_ in the ternary does not give
@@ -201,14 +201,14 @@ void menuStatObj(MenuObject *record)
         *epShown = stats->maxEp;
     }
     if ((unsigned int)(stats->keyUnsigned - UNIT_KEY_PARTY_FIRST) < UNIT_KEY_PARTY_COUNT) {
-        MENU_STAT_EASE(*thirdShown, stats->level, MENU_STAT_LEVEL_EASE_RATE);
+        MENU_STAT_EASE(*thirdShown, stats->stockCount, MENU_STAT_LEVEL_EASE_RATE);
         if (*thirdShown > MENU_STAT_LEVEL_MAX) {
             *thirdShown = MENU_STAT_LEVEL_MAX;
         }
     } else {
-        MENU_STAT_EASE(*thirdShown, stats->current, MENU_STAT_EASE_RATE);
-        if (*thirdShown > stats->currentMax) {
-            *thirdShown = stats->currentMax;
+        MENU_STAT_EASE(*thirdShown, stats->esEnergy, MENU_STAT_EASE_RATE);
+        if (*thirdShown > stats->esEnergyMax) {
+            *thirdShown = stats->esEnergyMax;
         }
     }
 }
@@ -313,10 +313,10 @@ void menuPlStatPut(MenuObject *record, GrPacket *packet)
         /* Current gauge: its track (MENU_STAT_CURRENT_BAR_WIDTH wide) and fill, then the shown value. */
         grOpenSpr(packet);
         value = record->kind.stat.shown[2];
-        if (unit->stats->currentMax <= 0) {
+        if (unit->stats->esEnergyMax <= 0) {
             value = 0;
         } else {
-            value = value * MENU_STAT_CURRENT_BAR_WIDTH / unit->stats->currentMax;
+            value = value * MENU_STAT_CURRENT_BAR_WIDTH / unit->stats->esEnergyMax;
         }
         menuStatSprite(packet, x + 0x48, y + 0x30, MENU_STAT_CURRENT_BAR_WIDTH, 5, 0x48, 0x98);
         menuStatSprite(packet, x + 0x48, y + 0x2F, value, 5, 0x48, 0x93);
@@ -356,6 +356,7 @@ typedef struct ObjPathPoint {
 ObjPathPoint stockPosTbl[OBJ_PATH_COUNT] = {
     { 376, 390 }, { 404, 390 }, { 432, 390 }, { 460, 390 }, { 288, 390 },
 };
+/* Action stock icons: the five path objects of the stock row (the allocator below). */
 PathObject *pStockObj[OBJ_PATH_COUNT];
 
 /* ActStock.pickSource value that shows the moving path object instead of point 0. */

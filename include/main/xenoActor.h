@@ -26,7 +26,7 @@ typedef struct XenoMotionState {
     int flags;                              /* +0x00: tiWordSetBits/tiWordClearBits */
     float speed;                            /* +0x04: tiMRStateSetSpeed; its sign picks which bound XenoActorSetPlayRange restarts from (state A) */
     float frame;                            /* +0x08: the value the motion package accumulates; read back after it advances */
-    float value;                            /* +0x0C: XenoActorSetChannelValue */
+    float blendFrames;                      /* +0x0C: blend length in frames (XenoActorSetBlendFrames) */
     int range[2];                           /* +0x10: the play range; word 0 of state A is the source value XenoActorApplySourceValue converts */
     unsigned char unmodeled_18[8];
     Vector4 vectors[3];                     /* +0x20: state A keeps the focus target, its previous copy and the current point here (XenoActorSetFocusTarget) */
@@ -84,12 +84,12 @@ typedef struct XenoTransform {
 typedef struct XenoHrc {
     unsigned char unmodeled_00[0xC];
     unsigned int numTransform;              /* 0x0C */
-    int leadCountA;                         /* 0x10: leading entries before the focus joint; the three counts sum to its matrix index */
-    int leadCountB;                         /* 0x14 */
-    int leadCountC;                         /* 0x18 */
-    int focus;                              /* 0x1C */
-    int jointRecordCount;                   /* 0x20: number of joint records (XenoActor.jointRecords); also the fourth term of the child joint index */
-    unsigned int jointCount;                /* 0x24 */
+    int jointCount;                         /* 0x10: the joint counts of the hierarchy (same layout as TiHrcData) */
+    int joint2Count;                        /* 0x14 */
+    int joint3Count;                        /* 0x18 */
+    int skipCount;                          /* 0x1C */
+    int dynamicsCount;                      /* 0x20: number of joint records (XenoActor.jointRecords) */
+    unsigned int staticCount;               /* 0x24 */
     unsigned char unmodeled_28[0x3C - 0x28];
     unsigned int count;                     /* 0x3C: item count */
     unsigned char unmodeled_40[0x4C - 0x40];
@@ -120,9 +120,9 @@ struct XenoActor {
     int enemyFlags;                         /* 0x0B8: the enemy mode bits of ACT_updateEnemy: 0x80000000 follows a route, 0x400000 noticed the player, 0x800000 frozen, 0x1000000 in the cooldown mode */
     int drawFlags;                          /* 0x0BC: 0x4 hides the actor, 0x08000000 draws it translucent */
     float alpha;                            /* 0x0C0: a fade writes its progress, 0 pauses a battle actor */
-    int drawMode;                           /* 0x0C4: 1 while attached as a part (uwamonoAttachPlayerParts), 2 on a battle unit's root */
+    int shadowType;                         /* 0x0C4: shadow kind that ACT_DrawShadow (act_3.c) switches on */
     unsigned char unmodeled_0c8[4];
-    float drawParam;                        /* 0x0CC: 0.5 with drawMode 2 */
+    float drawParam;                        /* 0x0CC: shadow alpha (act_3.c shadow_alpha); uwamono_light_blend.c also writes it as a blend value */
     int renderFlags;                        /* 0x0D0 */
     float renderValue;                      /* 0x0D4 */
     float renderValue2;                     /* 0x0D8 */
@@ -134,34 +134,34 @@ struct XenoActor {
     float modeValue3;                       /* 0x14C */
     float sweepPhase;                       /* 0x150: clip-plane sweep phase, advanced by XenoActorUpdateClipSweep and wrapped at 1 */
     float sweepSpeed;                       /* 0x154: sweep speed, its sign is the direction (init 1.0) */
-    float shadowValue;                      /* 0x158 */
-    int shadowCount;                        /* 0x15C: XenoActorUpdateClipSweep runs while it is set */
+    float clipPlaneValue;                   /* 0x158 */
+    int clipPlaneCount;                     /* 0x15C: plane count of pxySetClipPlaneMasked; XenoActorUpdateClipSweep runs while it is set */
     int moveState;                          /* 0x160: clip-plane shape selector of XenoActorUpdateClipSweep (0..7) */
-    float shadowValue2;                     /* 0x164 */
-    float shadowValue3;                     /* 0x168 */
+    float clipPlaneValue2;                  /* 0x164 */
+    float clipPlaneValue3;                  /* 0x168 */
     float heightOffset;                     /* 0x16C */
-    float fogA;                             /* 0x170 */
-    float fogB;                             /* 0x174 */
-    float fogC;                             /* 0x178 */
-    float fogD;                             /* 0x17C */
+    float shadowHeightA;                    /* 0x170: shadow height range, given to pxySetShadowHeightRange */
+    float shadowHeightB;                    /* 0x174 */
+    float shadowHeightC;                    /* 0x178 */
+    float shadowHeightD;                    /* 0x17C */
     float modeValue4;                       /* 0x180 */
     float modeValue5;                       /* 0x184: reset to 0 by XenoActorInit with the other mode values */
     float alphaScale;                       /* 0x188 */
     float fadeRadius;                       /* 0x18C: fade distance override (0 = use the pack radius) */
     XenoLight light;                        /* 0x190 */
     XenoLight sourceLight;                  /* 0x310 */
-    DoublewordAlignedVector4 color;         /* 0x490: runtimeFogPtrGet's output copied into every battle actor; the setFog native writes its args 2-5 / 100 */
-    DoublewordAlignedVector4 colorBlock;    /* 0x4A0: the second fog block; setFog args 6-8 */
+    DoublewordAlignedVector4 fogDist;       /* 0x490: fog distances (nmlModelSetFogDist); a copy of runtimeFogPtrGet's output, the setFog native writes its args 2-5 / 100 */
+    DoublewordAlignedVector4 fogColor;      /* 0x4A0: fog color (nmlModelSetFogCol); setFog args 6-8 */
     DoublewordAlignedVector4 sourceBlock;   /* 0x4B0 */
     u32 visibility[8];                      /* 0x4C0: one bit per geometry of the pack; a cut-scene actor's flag records set them */
     u32 subVisibility[8];                   /* 0x4E0: one bit per geometry of the sub pack */
     u32 geometryMask[8];                    /* 0x500: one bit per shadow-casting geometry */
     unsigned char block520[0x20];           /* 0x520 */
-    Vector4 shadowA;                        /* 0x540 */
-    unsigned char shadowA2[0x10];           /* 0x550 */
-    Vector4 shadowB;                        /* 0x560 */
-    unsigned char shadowB2[0x10];           /* 0x570 */
-    unsigned char shadowC[0x10];            /* 0x580 */
+    Vector4 clipPlaneA;                     /* 0x540: first clip plane (pxySetClipPlaneWithAngle) */
+    unsigned char clipPlaneA2[0x10];           /* 0x550 */
+    Vector4 clipPlaneB;                     /* 0x560: second clip plane */
+    unsigned char clipPlaneB2[0x10];           /* 0x570 */
+    unsigned char clipPlaneC[0x10];         /* 0x580: rotation angle of the clip planes */
     unsigned char colorIndex[16];           /* 0x590: 0xFF marks a free entry */
     void *overrideMatrix;                   /* 0x5A0 */
     struct XenoActor *parent;               /* 0x5A4: the actor this one is attached to */
@@ -200,7 +200,7 @@ struct XenoActor {
     XenoMatrix *matrices;                   /* 0x71C */
     XenoMatrix *pMotionGlobalMat;           /* 0x720: motionPack.pGlobalMat (the asserts of XenoActorDrawMotion) */
     unsigned char unmodeled_724[0x72C - 0x724];
-    XenoJointRecord *jointRecords;          /* 0x72C: one 64-byte record per hierarchy joint (XenoHrc.jointRecordCount of them) */
+    XenoJointRecord *jointRecords;          /* 0x72C: one 64-byte record per hierarchy joint (XenoHrc.dynamicsCount of them) */
     XenoMatrix *channelMatrix;              /* 0x730: set to localMatrix when the channel is updated */
     unsigned char unmodeled_734[0x740 - 0x734];
     /* The actor's collision object, the request block of UnduCheck (UnduParamInit resets it). Its members are the actor's own state:
@@ -237,8 +237,8 @@ int XenoActorAttachChildToJoint(struct XenoActor *actor, struct XenoActor *child
 int XenoActorAttachAtSlot(struct XenoActor *parent, struct XenoActor *actor, int slotIndex);
 int XenoActorReleaseChild(struct XenoActor *parent, struct XenoActor *child);
 void XenoActorSetFlagAll(int flag);
-void XenoActorDisableChannel(struct XenoActor *actor);
-void XenoActorDisableChannelB(struct XenoActor *actor);
+void XenoActorSetBlendGlobal(struct XenoActor *actor);
+void XenoActorSetBlendGlobalB(struct XenoActor *actor);
 void XenoActorResetChannelFlags(struct XenoActor *actor);
 void XenoActorClearChannel(struct XenoActor *actor);
 void XenoActorSetMode(struct XenoActor *actor, int mode);
@@ -256,18 +256,18 @@ void XenoActorPushMatrix(struct XenoActor *actor);
 void XenoActorShiftJoints(struct XenoActor *actor, int sign, int x, int y, int z);
 struct XenoActor *XenoActorAlloc(void);
 void XenoActorRelease(struct XenoActor *actor);
-void XenoActorEnableChannel(struct XenoActor *actor);
-void XenoActorEnableChannelB(struct XenoActor *actor);
+void XenoActorSetBlendLocal(struct XenoActor *actor);
+void XenoActorSetBlendLocalB(struct XenoActor *actor);
 void XenoActorPoolInitDefault(void);
 void XenoActorReleaseAll(void);
-void XenoActorSetChannelValue(struct XenoActor *actor, float value);
-void XenoActorSetChannelValueB(struct XenoActor *actor, float value);
+void XenoActorSetBlendFrames(struct XenoActor *actor, float value);
+void XenoActorSetBlendFramesB(struct XenoActor *actor, float value);
 int XenoActorIsDone(struct XenoActor *actor);
 int XenoActorHidePart(struct XenoActor *actor, const char *partName);
 int XenoActorShowPart(struct XenoActor *actor, const char *partName);
 void XenoActorApplySourceValue(struct XenoActor *actor);
 void XenoActorSetPlayRange(struct XenoActor *actor, int start, int end);
-void XenoActorSetFirstWord(struct XenoActor *actor, int value);
+void XenoActorSetSolverPasses(struct XenoActor *actor, int value);
 void XenoActorSetModeInSlot(struct XenoActor *actor, unsigned int slot, int mode);
 void XenoActorSetSelector(struct XenoActor *actor, int selector);
 void XenoActorSetHoldFlag(void);

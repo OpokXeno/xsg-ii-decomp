@@ -28,7 +28,7 @@ typedef long long s64;
 /* Values of this file's own GS constants; the shared names are in ov01/m_gs.h. */
 #define MEF_GS_STRIP3_REGS 0x551 /* RGBAQ, XYZ2, XYZ2 */
 
-/* Stencil B trail timing and motion. */
+/* Missile trail timing and motion (the stencil B data). */
 #define MEF_STENCIL_B_FADE_TICK 61
 #define MEF_STENCIL_B_LIFETIME 0x44
 #define MEF_STENCIL_B_DRIFT_HEIGHT 0.02
@@ -36,7 +36,7 @@ typedef long long s64;
 
 
 
-/* Stencil B data: edge offsets and the drift of the arms, the model name table, the alpha value. */
+/* Missile trail data (stencil B): edge offsets and the drift of the arms, the model name table, the alpha value. */
 const Vector4 mefStencilEdgeOffsets[2] = {
     { -0.018f, 0.0f, 0.0f, 1.0f },
     { 0.018f, 0.0f, 0.0f, 1.0f },
@@ -47,10 +47,10 @@ const char mefStencilModelNameB[32] = "missile.pxy\0\0\0\0\0\x30\0\0\0\x50\0\0\0
 const Vector4 mefStencilDrift = { 0.0f, 0.0f, 0.8f, 1.0f };
 
 /* The sub-record of an effect object at +0x20: the stencil trail state (translation,
- * base and block matrices, scales, edge points and transparency). Only the fields
+ * base and block matrices, roll rates, edge points and transparency). Only the fields
  * this file reads or writes are modelled. */
 
-typedef struct MEfEffectSub {
+typedef struct MEfMissileTrailSub {
     unsigned char unmodeled_00[4];
     struct XenoActor *actor;           /* 0x04 */
     u32 coordinate;                /* 0x08 */
@@ -62,23 +62,23 @@ typedef struct MEfEffectSub {
     unsigned char unmodeled_56[0x60 - 0x56];
     Matrix4 baseMatrix;            /* 0x60: the actor matrix the blocks are built from */
     Matrix4 matrices[MEF_TRAIL_BLOCKS]; /* 0xA0: one per block, the stencil copy source */
-    f32 scales[MEF_TRAIL_BLOCKS];  /* 0x1E0 */
+    f32 rollRates[MEF_TRAIL_BLOCKS];  /* 0x1E0: roll rate per frame of each block */
     unsigned char unmodeled_1f4[0x200 - 0x1F4];
     Vector4 leftEdge[MEF_TRAIL_BLOCKS * MEF_TRAIL_POINTS]; /* 0x200: 7 trail points per block */
     Vector4 rightEdge[MEF_TRAIL_BLOCKS * MEF_TRAIL_POINTS]; /* 0x430 */
     f32 transparency_b;            /* 0x660 */
-} MEfEffectSub;
+} MEfMissileTrailSub;
 
-typedef struct MEfEffectObject {
+typedef struct MEfMissileTrailObject {
     unsigned char unmodeled_00[4];
     s32 slot;                      /* 0x04: passed to svGetPrmFromName */
-    void (*stepFunc)(struct MEfEffectObject *);    /* 0x08 */
-    void (*drawFunc)(struct MEfEffectObject *);    /* 0x0C */
-    void (*drawStripsFunc)(struct MEfEffectObject *); /* 0x10 */
-    void (*advanceFunc)(struct MEfEffectObject *); /* 0x14 */
+    void (*stepFunc)(struct MEfMissileTrailObject *);    /* 0x08 */
+    void (*drawFunc)(struct MEfMissileTrailObject *);    /* 0x0C */
+    void (*drawStripsFunc)(struct MEfMissileTrailObject *); /* 0x10 */
+    void (*advanceFunc)(struct MEfMissileTrailObject *); /* 0x14 */
     unsigned char unmodeled_18[0x20 - 0x18];
-    MEfEffectSub sub;              /* 0x20 */
-} MEfEffectObject;
+    MEfMissileTrailSub sub;              /* 0x20 */
+} MEfMissileTrailObject;
 
 extern s64 mefStencilAlphaB;
 extern const char mefStencilModelNameB[];
@@ -86,18 +86,18 @@ extern const Vector4 mefStencilEdgeOffsets[];
 
 double fptodp(float value);
 int dpcmp(double a, double b);
-void MEfUpdateMissileTrail(MEfEffectObject *obj);
-void MEfDrawTrailMissiles(MEfEffectObject *obj);
-void MEfDrawTrailStrips(MEfEffectObject *obj);
-void MEfAdvanceMissileTrail(MEfEffectObject *object);
+void MEfUpdateMissileTrail(MEfMissileTrailObject *obj);
+void MEfDrawTrailMissiles(MEfMissileTrailObject *obj);
+void MEfDrawTrailStrips(MEfMissileTrailObject *obj);
+void MEfAdvanceMissileTrail(MEfMissileTrailObject *object);
 
-int MEfCreateMissileTrail(MEfEffectObject *obj)
+int MEfCreateMissileTrail(MEfMissileTrailObject *obj)
 {
-    MEfEffectSub *sub;
+    MEfMissileTrailSub *sub;
     Matrix4 actorMatrix;
     Matrix4 scratch;
     Matrix4 *blockMatrix;
-    f32 *blockScale;
+    f32 *blockRollRate;
     int firstPoint;
     int block;
     int point;
@@ -115,8 +115,8 @@ int MEfCreateMissileTrail(MEfEffectObject *obj)
         MMathRotateMatrixX(&scratch, &scratch, MMathMakeRandomSigned() * 0.05235987901687622f);
         QuadwordCopyMatrixT0(blockMatrix, &scratch);
         /* Spin of the block about Z (radians, up to 12 degrees either way), applied by the advance step. */
-        blockScale = &sub->scales[block];
-        *blockScale = MMathMakeRandomSigned() * 0.20943951606750488f;
+        blockRollRate = &sub->rollRates[block];
+        *blockRollRate = MMathMakeRandomSigned() * 0.20943951606750488f;
         firstPoint = block * MEF_TRAIL_POINTS;
         for (point = 0; point < MEF_TRAIL_POINTS; point++) {
             __asm__ __volatile__(
@@ -151,9 +151,9 @@ int MEfCreateMissileTrail(MEfEffectObject *obj)
  * MEF_STENCIL_B_FADE_TICK. The trail points are walked by byte address from the block start (sub+0x200 left
  * edges, sub+0x430 right edges): a Vector4-indexed walk changes the loop's address strength reduction.
  */
-void MEfUpdateMissileTrail(MEfEffectObject *obj)
+void MEfUpdateMissileTrail(MEfMissileTrailObject *obj)
 {
-    MEfEffectSub *sub;
+    MEfMissileTrailSub *sub;
     unsigned char *point;
     unsigned char *blockEdges;
     unsigned char *blockStart;
@@ -189,9 +189,9 @@ void MEfUpdateMissileTrail(MEfEffectObject *obj)
 /* Same stencil draw as MEfDrawSwayMissiles, with the second table, value and
  * transparency. One pass per block: remaining runs 3 down to -1, five passes
  * over the block matrices sub->matrices. */
-void MEfDrawTrailMissiles(MEfEffectObject *obj)
+void MEfDrawTrailMissiles(MEfMissileTrailObject *obj)
 {
-    MEfEffectSub *sub;
+    MEfMissileTrailSub *sub;
     SvTexParam params;
     Matrix4 *cursor;
     s32 remaining;
@@ -247,7 +247,7 @@ static inline void CloseTag(MGsPacket *packet, int nloop)
  * colour alpha to 65% of its value per step. A clipped point suppresses the
  * drawing kick of the next two steps (the sibling of MEfDrawSwayStrands in m_ef_sway.c).
  */
-void MEfDrawTrailStrips(MEfEffectObject *obj)
+void MEfDrawTrailStrips(MEfMissileTrailObject *obj)
 {
     AlignedVector4 leftPoint;
     AlignedVector4 rightPoint;
@@ -255,7 +255,7 @@ void MEfDrawTrailStrips(MEfEffectObject *obj)
     MEfGsVertex bottomVertex;
     MEfGsColor stripColor;
     Matrix4 strandMatrix;
-    MEfEffectSub *sub;
+    MEfMissileTrailSub *sub;
     MGsPacket *packet;
     MEfGsQword *setup;
     MEfGsQword *write;
@@ -326,9 +326,9 @@ void MEfDrawTrailStrips(MEfEffectObject *obj)
  * spins about Z by its scale. The effect frees itself after
  * MEF_STENCIL_B_LIFETIME steps.
  */
-void MEfAdvanceMissileTrail(MEfEffectObject *object)
+void MEfAdvanceMissileTrail(MEfMissileTrailObject *object)
 {
-    MEfEffectSub *sub;
+    MEfMissileTrailSub *sub;
     int index;
     int nextStep;
 
@@ -339,7 +339,7 @@ void MEfAdvanceMissileTrail(MEfEffectObject *object)
     for (index = 0; index < MEF_TRAIL_BLOCKS; index++) {
         if (dpcmp(fptodp(sub->matrices[index][3][1]), MEF_STENCIL_B_DRIFT_HEIGHT) > 0) {
             MMathTranslateMatrix(&sub->matrices[index], &sub->matrices[index], &mefStencilDrift);
-            MMathRotateMatrixZ(&sub->matrices[index], &sub->matrices[index], sub->scales[index]);
+            MMathRotateMatrixZ(&sub->matrices[index], &sub->matrices[index], sub->rollRates[index]);
         }
     }
     nextStep = sub->ticks + 1;

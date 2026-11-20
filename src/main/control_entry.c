@@ -109,9 +109,9 @@ extern const char soundEffectBankName[];
 #define TITLE_ENTRY_MASK 0xFFFFFF
 #define TITLE_OVERLAY_SHIFT 24
 
-/* Sound-bank slot and size of the system sound effects. */
+/* Sound-bank slot and start address (in sound memory) of the system sound effects. */
 #define SYSTEM_SE_SLOT 1
-#define SYSTEM_SE_SIZE 0x5000
+#define SYSTEM_SE_ADDRESS 0x5000
 
 /*
  * Entry point: stores argc and argv in mainParamArgc and mainParamArgv, runs
@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
     xglStudioSetup();
     xglStudioUpdate();
     xglRenderDispOn();
-    seBankLoad(SYSTEM_SE_SLOT, soundEffectBankName, SYSTEM_SE_SIZE);
+    seBankLoad(SYSTEM_SE_SLOT, soundEffectBankName, SYSTEM_SE_ADDRESS);
     xglCdLoadOverlay(OVERLAY_TITLE);
     LogoFirst();
 

@@ -71,7 +71,7 @@ Matrix4 *MMathRotateMatrixZYX(Matrix4 *out, Matrix4 *matrix, const Vector4 *angl
 /* The matrix helpers the effect files call. */
 
 Vector4 *MMathApplyMatrix(Vector4 *out, Matrix4 *matrix, const Vector4 *vector);
-/* out = rhs x lhs in the row-vector convention of MMathApplyMatrix; the sources are not declared const for the
+/* out = lhs x rhs in the row-vector convention of MMathApplyMatrix; the sources are not declared const for the
  * reason given at the rotation helpers. */
 Matrix4 *MMathMulMatrix(Matrix4 *out, Matrix4 *rhs, Matrix4 *lhs);
 /* A rotation matrix at position that looks from source towards target, rolled by roll. */

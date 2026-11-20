@@ -13,13 +13,13 @@ void xglFontInitial(void);
 unsigned char xglFontLoad(int font_index, CdCompletionCallback *notify);
 int xglFontFitWords(const char *text, int *width);
 void xglFontDebugHex(int x, int y, unsigned int value, int digits);
-void xglFontDebugPrefixSet(int stored_value);
+void xglFontDebugPrefixSet(int debug_prefix);
 void xglFontReloadTexture(FontDrawCursor *cursor, unsigned int request);
 
 int xglFontGetStringWidth(const char *text);
-void xglFontPrint(int x, int y, unsigned int color, const char *text);
+void xglFontPrint(int x, int y, unsigned int ot, const char *text);
 void xglFontPrintDirectOT(int ot, const char *text);
-void xglFontPrintf(int x, int y, unsigned int color, void *arg);
+void xglFontPrintf(int x, int y, unsigned int ot, void *arg);
 void xglFontPrintDirect(const char *text);
 int xglFontGetSPcodeSize(int code, const unsigned char *text);
 unsigned short xglFontGetFlags(void);

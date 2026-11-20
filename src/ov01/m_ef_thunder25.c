@@ -68,7 +68,7 @@ extern float mefSampleJitter25[];
 extern float mefQuadSize25[];
 
 void *memset(void *destination, int value, unsigned int count);
-void MEfBuildPathRecord(MEfThunder25Block *block);
+void MEfBuildThunder25Record(MEfThunder25Block *block);
 void MEfFillThunderSamples25(MEfThunder25Block *block);
 void MEfDrawThunderSparks25(MEfThunder25Effect *object);
 void MEfDrawThunderQuads25(MEfThunder25Effect *object);
@@ -85,7 +85,7 @@ int MEfCreateThunder25(MEfThunder25Effect *object)
     sefActorMulLocalVector(block->secondActor, block->secondCoordinate, &block->secondPoint, 1);
     MSeGetActorMatrix(&block->matrix, block->firstActor, block->firstCoordinate);
     memset(block->samples, 0, sizeof(block->samples));
-    MEfBuildPathRecord(block);
+    MEfBuildThunder25Record(block);
     MEfFillThunderSamples25(block);
     MGsGPInit(&block->gsPacket, 0, 0);
     object->drawCallback = MEfDrawThunderSparks25;
@@ -94,7 +94,7 @@ int MEfCreateThunder25(MEfThunder25Effect *object)
     return 1;
 }
 
-void MEfBuildPathRecord(MEfThunder25Block *block)
+void MEfBuildThunder25Record(MEfThunder25Block *block)
 {
     MEfPathCurve *curve;
     AlignedVector4 offset;

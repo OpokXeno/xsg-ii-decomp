@@ -31,8 +31,8 @@ int VM_PLUGIN_CNT_GET(SbThread *thread)
 
 /*
  * Argument slots step by 8 bytes below the count word. The tag of argument k
- * is the first byte of its high word, which lies VM_ARG_TAG_BASE bytes below
- * the stack top for the newest argument.
+ * is the low byte of its high word (the tag word of its slot), which lies VM_ARG_TAG_BASE bytes
+ * below the stack top for the newest argument.
  */
 enum {
     VM_ARG_SLOT_BYTES = 8,

@@ -3,7 +3,7 @@
 #include "main/msg_window_move.h"
 #include "main/msg_window_layout.h"
 #include "main/msg_window_center.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/msg_list_slot.h"
 #include "main/msg_slot_center.h"
 

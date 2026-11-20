@@ -4,10 +4,10 @@
 #include "main/talk_script.h"
 #include "main/talk_scan.h"
 #include "main/talk_text_box.h"
-#include "main/debt_box.h"
+#include "main/msg_text_draw.h"
 #include "main/game_data.h"
 #include "main/game_camera.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/interp_update.h"
 #include "main/ease_step.h"
 #include "main/text_tag.h"
@@ -21,7 +21,7 @@ extern float cosf(float x);
 /* Per-frame update of a text slot: ramps the timer, steps the scan and the cosine easing, advances the counter. */
 void interpUpdate(MsgSlot *slot)
 {
-    if (slot->state != MSG_SLOT_STATE_TEXT) {
+    if (slot->slot_type != MSG_SLOT_TYPE_TEXT) {
         return;
     }
     if (gameWork.control & CONTROL_PAUSED) {
@@ -66,7 +66,7 @@ int interpAdvanceCursor(MsgSlot *slot)
     MsgSlotText *interp;
     const char *end;
 
-    if (slot->state != MSG_SLOT_STATE_TEXT) {
+    if (slot->slot_type != MSG_SLOT_TYPE_TEXT) {
         return 0;
     }
     interp = &slot->u.text;
@@ -100,7 +100,7 @@ int interpAdvanceCursor(MsgSlot *slot)
  * changes the bytes). */
 int interpDrawTextSlot(MsgSlot *slot)
 {
-    if (slot->state == MSG_SLOT_STATE_TEXT) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TEXT) {
         if (slot->flags & MSG_SLOT_OPENING) {
             talkDrawFramesBasic(slot);
         }
@@ -115,9 +115,10 @@ int interpDrawTextSlot(MsgSlot *slot)
     }
 }
 
+/* Starts the closing of a text slot: rewinds its text output cursor to the start of its text, then sets the closing bit. */
 void interpRewind(MsgSlot *slot)
 {
-    if (slot->state == MSG_SLOT_STATE_TEXT) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TEXT) {
         textSetOutputCursor(slot->u.text.start);
         /* The original clears the two bits with two separate masks (li -5, li -9): the first AND on the flags read
          * as int and the second on the (u32) mask keep the compiler from folding them into one. */
@@ -125,9 +126,10 @@ void interpRewind(MsgSlot *slot)
     }
 }
 
+/* Sets the reveal delay of a text slot (MsgSlotText.pending). */
 void interpSetPending(MsgSlot *slot, int value)
 {
-    if (slot->state == MSG_SLOT_STATE_TEXT) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TEXT) {
         slot->u.text.pending = value;
     }
 }
@@ -141,7 +143,7 @@ int interpScrollBy(MsgSlot *slot, int advance)
     int base;
 
     interp = &slot->u.text;
-    if (slot->state == MSG_SLOT_STATE_TEXT) {
+    if (slot->slot_type == MSG_SLOT_TYPE_TEXT) {
         slot->flags |= INTERP_FLAG_EASE;
         old_value = interp->scroll_y;
         cursor = interp->first_line + advance;

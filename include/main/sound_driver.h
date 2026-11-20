@@ -20,7 +20,7 @@ typedef struct SoundSlot {
  * ramp, then the two sound slots (the label soundSlots is slots[0]). */
 typedef union SoundControl {
     struct {
-        unsigned char initialized;    /* +0x00: nonzero once the driver setup has run */
+        unsigned char initialized;    /* +0x00: soundInitIfNeeded flushes the MIDI batch queue while this is 0; nothing sets it */
         unsigned char unmodeled_01[2];
         unsigned char song;           /* +0x03: number of the loaded song (seBgmLoad) */
         unsigned char master_volume;  /* +0x04: scales every level */

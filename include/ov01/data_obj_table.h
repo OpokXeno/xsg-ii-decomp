@@ -36,7 +36,7 @@ struct DataObject {
 struct BattleUnit;
 
 /* Releases the slot of a unit (unitRemove calls it). */
-void unitSideRelease(struct BattleUnit *unit);
+void unitSlotRelease(struct BattleUnit *unit);
 void dataObjResetAll(void);
 struct DataObject *dataObjAlloc(void);
 void dataObjDrawAll(void);

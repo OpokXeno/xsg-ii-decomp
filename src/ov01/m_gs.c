@@ -9,7 +9,7 @@
 #define MGS_PACKET_DEFAULT_CAPACITY 0x400
 
 
-/* ov01 .bss of this file: the tick counter and the reset flag word. */
+/* ov01 .bss of this file: the tick counter and the reset flag word (ov01SceneResetFlag is written and never read). */
 static int ov01TickCount;
 static int ov01SceneResetFlag;
 
@@ -34,7 +34,7 @@ void ov01SceneSystemsShutdown(void) {
     sefDestroyEffect();
 }
 
-/* Records value as the last value and counts one tick. */
+/* Records value as the pause switch of all effect families and counts one tick. */
 void ov01EffectPauseSet(s16 value) {
     extern s16 ov01LastValue;
     extern int ov01TickCount;
@@ -43,7 +43,7 @@ void ov01EffectPauseSet(s16 value) {
     ov01TickCount += 1;
 }
 
-/* Last value recorded by ov01EffectPauseSet. */
+/* Pause switch recorded by ov01EffectPauseSet. */
 s16 ov01EffectPauseGet(void) {
     extern s16 ov01LastValue;
 
@@ -122,6 +122,7 @@ void MSeFire(MSeFireEntry *entry) {
     }
 }
 
+/* The pause switch of all effect families (ov01EffectPauseSet stores it). */
 s16 ov01LastValue = 0;
 
 MSeFireCallback MSeFireCallbacks[14] = {

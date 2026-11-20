@@ -10,8 +10,8 @@
 /* TiSolverNode flag bits tested by tiDynamicsNodeSolvePalette: a set bit zeroes that axis of the local position. */
 #define TI_NODE_FLAG_ZERO_Y 0x4
 #define TI_NODE_FLAG_ZERO_Z 0x2
-/* TiSolverObject flag bit tested by tiDynamicsCollSolveNode: clamp the node scale. */
-#define TI_OBJECT_FLAG_CLAMP_SCALE 0x80
+/* state_a.flags bit tested by tiDynamicsCollSolveNode: clamp the body height. */
+#define TI_MR_STATE_FLAG_CLAMP_HEIGHT 0x80
 
 /* Unit quaternion (x, y, z, w) to a row-major rotation matrix; the last column is zero except m[3][3] = 1. */
 void XrgQuaternionToMatrix(Matrix4 matrix, const Vector4 *quaternion) {
@@ -138,7 +138,7 @@ int XrgQuaternionFromVectors(Vector4 *destination, const Vector4 *left, const Ve
 typedef union { float value; } FloatAlias;
 
 /* Advances one node's point: the previous position is kept in the state's first words, the
- * accumulator is damped to a length of 0.2 when it is longer, then scaled by the node weight. */
+ * velocity is damped to a length of 0.2 when it is longer, then scaled by the node weight. */
 void tiDynamicsNodeIntegrate(TiHrcDynamics *node, TiSolverState *state) {
     /* Union view kept: a float store through the union changes the code (check.py). */
     FloatAlias *previous = (FloatAlias *)state->previous_position;
@@ -146,28 +146,28 @@ void tiDynamicsNodeIntegrate(TiHrcDynamics *node, TiSolverState *state) {
     float root;
     float delta;
 
-    delta = state->accumulator.vector.y - node->biasY;
-    state->accumulator.vector.y = delta;
+    delta = state->velocity.vector.y - node->gravity;
+    state->velocity.vector.y = delta;
     previous[0].value = state->position.vector.x;
     previous[1].value = state->position.vector.y;
     previous[2].value = state->position.vector.z;
-    length = state->accumulator.vector.x * state->accumulator.vector.x;
+    length = state->velocity.vector.x * state->velocity.vector.x;
     length = length + delta * delta;
-    length = length + state->accumulator.vector.z * state->accumulator.vector.z;
+    length = length + state->velocity.vector.z * state->velocity.vector.z;
     root = __builtin_sqrtf(length);
     if (root >= 0.2f) {
         float inv = 1.0f / root;
 
-        state->accumulator.vector.y = (state->accumulator.vector.y * inv) * 0.2f;
-        state->accumulator.vector.x = (state->accumulator.vector.x * inv) * 0.2f;
-        state->accumulator.vector.z = (state->accumulator.vector.z * inv) * 0.2f;
+        state->velocity.vector.y = (state->velocity.vector.y * inv) * 0.2f;
+        state->velocity.vector.x = (state->velocity.vector.x * inv) * 0.2f;
+        state->velocity.vector.z = (state->velocity.vector.z * inv) * 0.2f;
     }
-    state->position.vector.x = state->position.vector.x + state->accumulator.vector.x;
-    state->position.vector.y = state->position.vector.y + state->accumulator.vector.y;
-    state->position.vector.z = state->position.vector.z + state->accumulator.vector.z;
-    state->accumulator.vector.x = state->accumulator.vector.x * node->damping;
-    state->accumulator.vector.y = state->accumulator.vector.y * node->damping;
-    state->accumulator.vector.z = state->accumulator.vector.z * node->damping;
+    state->position.vector.x = state->position.vector.x + state->velocity.vector.x;
+    state->position.vector.y = state->position.vector.y + state->velocity.vector.y;
+    state->position.vector.z = state->position.vector.z + state->velocity.vector.z;
+    state->velocity.vector.x = state->velocity.vector.x * node->damping;
+    state->velocity.vector.y = state->velocity.vector.y * node->damping;
+    state->velocity.vector.z = state->velocity.vector.z * node->damping;
 }
 
 
@@ -175,11 +175,11 @@ void tiDynamicsNodeIntegrate(TiHrcDynamics *node, TiSolverState *state) {
  * global collision body and, when object flag 0x80 is set, the scale clamp. Called twice per step. */
 void tiDynamicsCollSolveNode(TiMRPackage *object, TiHrcDynamics *node, TiSolverState *state) {
     tiDynamicsCollPushOutSphereList(object, node, state);
-    tiDynamicsCollPushOutMatrixList(object, node, state);
+    tiDynamicsCollPushOutPlaneList(object, node, state);
     tiDynamicsCollPushOutCapsuleList(object, node, state);
     tiGlobalCollSolveBody(node, state);
-    if (object->state_a.flags & TI_OBJECT_FLAG_CLAMP_SCALE) {
-        tiGlobalCollClampScale(state);
+    if (object->state_a.flags & TI_MR_STATE_FLAG_CLAMP_HEIGHT) {
+        tiGlobalCollClampHeight(state);
     }
 }
 
@@ -190,9 +190,9 @@ void tiDynamicsNodePullToTarget(float (*matrix)[4], TiHrcDynamics *node, TiSolve
 
     if (node->pullScale != 0.0f) {
         xglVectorMulMat(&transformed, matrix, &node->translationDefault);
-        state->accumulator.vector.x += (transformed.x - state->position.vector.x) * node->pullScale;
-        state->accumulator.vector.y += (transformed.y - state->position.vector.y) * node->pullScale;
-        state->accumulator.vector.z += (transformed.z - state->position.vector.z) * node->pullScale;
+        state->velocity.vector.x += (transformed.x - state->position.vector.x) * node->pullScale;
+        state->velocity.vector.y += (transformed.y - state->position.vector.y) * node->pullScale;
+        state->velocity.vector.z += (transformed.z - state->position.vector.z) * node->pullScale;
     }
 }
 
@@ -209,16 +209,16 @@ void tiDynamicsNodeConstrainNormal(float (*matrix)[4], TiHrcDynamics *node, TiSo
     delta.z = state->position.vector.z - matrix[3][2];
     xglVectorNormal(&unit, &delta);
 
-    scaled_x = unit.x * node->normalScale;
+    scaled_x = unit.x * node->boneLength;
     state->position.vector.x = scaled_x;
-    scaled_y = unit.y * node->normalScale;
+    scaled_y = unit.y * node->boneLength;
     state->position.vector.y = scaled_y;
-    scaled_z = unit.z * node->normalScale;
+    scaled_z = unit.z * node->boneLength;
     state->position.vector.z = scaled_z;
 
-    state->accumulator.vector.x += (scaled_x - delta.x) * node->damping;
-    state->accumulator.vector.y += (scaled_y - delta.y) * node->damping;
-    state->accumulator.vector.z += (scaled_z - delta.z) * node->damping;
+    state->velocity.vector.x += (scaled_x - delta.x) * node->damping;
+    state->velocity.vector.y += (scaled_y - delta.y) * node->damping;
+    state->velocity.vector.z += (scaled_z - delta.z) * node->damping;
 
     state->position.vector.x = scaled_x + matrix[3][0];
     state->position.vector.y = scaled_y + matrix[3][1];

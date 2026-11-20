@@ -72,7 +72,7 @@ void renderFadeBand(int x0, int y0, int x1, int y1, u32 fillColour) {
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-/* Draws a width x height textured sprite of the work page at (x, y) into the draw page, blended with the fixed alpha. */
+/* Draws a width x height sprite textured from the second page (vram.texture_base) at (x, y) into the display page, blended with the fixed alpha. */
 void renderSprite(int x, int y, int width, int height, int alpha) {
     XglPacket *packet;
 
@@ -87,7 +87,7 @@ void renderSprite(int x, int y, int width, int height, int alpha) {
     gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 0, 0, 0, 0x80));
     gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_buffer_base, 8, GS_PSMCT32, 0));
-    gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.second_base << 5, 8, GS_PSMCT32, 8, 8, 1, 0, 0, 0, 0, 0, 0));
+    gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.texture_base << 5, 8, GS_PSMCT32, 8, 8, 1, 0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(GS_TEX_MODULATE_ONE, GS_TEX_MODULATE_ONE, GS_TEX_MODULATE_ONE, GS_TEX_MODULATE_ONE, GS_Q_ONE));
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 1, 2, 1, alpha));
     gifStateAddReg(GS_PRIM, GS_PRIM_TEXTURED_SPRITE);
@@ -99,7 +99,7 @@ void renderSprite(int x, int y, int width, int height, int alpha) {
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-/* Draws a width x height textured sprite of the work page at (x, y) into the draw page, read through the CLUT at clutOffset. */
+/* Draws a width x height sprite textured from the second page (vram.texture_base) at (x, y) into the display page, read through the CLUT at clutOffset. */
 void renderSpriteClut(int x, int y, int width, int height, int clutOffset) {
     XglPacket *packet;
 
@@ -113,7 +113,7 @@ void renderSpriteClut(int x, int y, int width, int height, int clutOffset) {
     gifStateAddReg(GS_TEST_1, GS_TEST_ZTE_ALWAYS);
     gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_buffer_base, 8, GS_PSMCT32, 0));
-    gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.second_base << 5, 16, GS_PSMT8, 9, 9, 0, 0, clutOffset + 0x3800, 0, 0, 0, 1));
+    gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.texture_base << 5, 16, GS_PSMT8, 9, 9, 0, 0, clutOffset + 0x3800, 0, 0, 0, 1));
     gifStateAddReg(GS_TEX1_1, GS_SET_TEX1(0, 0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(GS_TEX_MODULATE_ONE, GS_TEX_MODULATE_ONE, GS_TEX_MODULATE_ONE, GS_TEX_MODULATE_ONE, GS_Q_ONE));
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 1, 1, 1, 0));
@@ -126,7 +126,7 @@ void renderSpriteClut(int x, int y, int width, int height, int clutOffset) {
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-/* Draws a width x height textured sprite of the work page at (x, y) into the draw page, read through the CLUT at clutOffset, with the alpha in the vertex colour. */
+/* Draws a width x height sprite textured from the second page (vram.texture_base) at (x, y) into the display page, read through the CLUT at clutOffset, with the alpha in the vertex colour. */
 void renderSpriteClutAlpha(int x, int y, int width, int height, int clutOffset, int alpha) {
     XglPacket *packet;
 
@@ -140,7 +140,7 @@ void renderSpriteClutAlpha(int x, int y, int width, int height, int clutOffset, 
     gifStateAddReg(GS_TEST_1, GS_TEST_ZTE_ALWAYS);
     gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_buffer_base, 8, GS_PSMCT32, 0xFFFFFF));
-    gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.second_base << 5, 16, GS_PSMT8, 10, 8, 1, 0, clutOffset + 0x3800, 0, 0, 0, 1));
+    gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.texture_base << 5, 16, GS_PSMT8, 10, 8, 1, 0, clutOffset + 0x3800, 0, 0, 0, 1));
     gifStateAddReg(GS_TEX1_1, GS_SET_TEX1(0, 0, 0, 0, 0, 0, 0));
     gifStateAddReg(GS_RGBAQ, GS_SET_RGBAQ(GS_TEX_MODULATE_ONE, GS_TEX_MODULATE_ONE, GS_TEX_MODULATE_ONE, alpha, GS_Q_ONE));
     gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 1, 0, 1, 0));

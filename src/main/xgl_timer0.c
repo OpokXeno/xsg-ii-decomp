@@ -22,7 +22,7 @@ void xglTimer0Reset(int mode) {
 
 /*
  * ARX stream layout, in words: magic "ARX\0", decoded size in bytes, packed
- * payload size in bytes, flags (must be zero), 30 table entries, then the
+ * stream size in bytes (header, table and bit stream), flags (must be zero), 30 table entries, then the
  * bit stream.  The table is copied to the 64-byte aligned address after
  * WorkEnd; the 32 words that follow it receive the unread tail of the stream
  * when the output cursor catches up with the read pointer.
@@ -31,7 +31,7 @@ void xglTimer0Reset(int mode) {
 
 #define ARX_MAGIC_WORD 0
 #define ARX_SIZE_WORD 1
-#define ARX_PAYLOAD_SIZE_WORD 2
+#define ARX_STREAM_SIZE_WORD 2
 #define ARX_FLAGS_WORD 3
 #define ARX_TABLE_WORD 4
 #define ARX_TABLE_COUNT 30
@@ -81,7 +81,7 @@ typedef struct XglLanguageCodes {
 extern const XglLanguageCodes xglLanguageCodeTable;
 
 /* Copies the nine two-letter language codes in xglLanguageCodeTable to the stack and
- * returns the one selected by xglLanguageIndex; a non-null buffer receives its two bytes. */
+ * returns the one indexed by SaveData.caption_all; a non-null buffer receives its two bytes. */
 unsigned short xglGetLanguageCode(char *buffer)
 {
     XglLanguageCodes codes = xglLanguageCodeTable;
@@ -132,7 +132,7 @@ int xglArxExtract(u32 *dest, u32 *src)
     u32 *table;
     u32 *cursor = dest;
     int size;
-    int payloadSize;
+    int streamSize;
     int i;
     u32 offsetBits;
     u32 tableIndex;
@@ -143,7 +143,7 @@ int xglArxExtract(u32 *dest, u32 *src)
         return -1;
     }
     size = src[ARX_SIZE_WORD];
-    payloadSize = src[ARX_PAYLOAD_SIZE_WORD];
+    streamSize = src[ARX_STREAM_SIZE_WORD];
     table = (u32 *)(((u32)WorkEnd + ARX_TABLE_ALIGN - 1) & ~(ARX_TABLE_ALIGN - 1));
     for (i = 0; i < ARX_TABLE_COUNT; i++) {
         table[i] = src[ARX_TABLE_WORD + i];
@@ -152,10 +152,10 @@ int xglArxExtract(u32 *dest, u32 *src)
     reader.bit_count = 0;
     reader.data = src + ARX_DATA_WORD;
     if (!((reader.data < dest || dest + size / 4 < reader.data) &&
-          (reader.data + payloadSize / 4 < dest ||
-           dest + size / 4 < reader.data + payloadSize / 4))) {
+          (reader.data + streamSize / 4 < dest ||
+           dest + size / 4 < reader.data + streamSize / 4))) {
         if (cursor < (u32 *)((u8 *)dest + size)) {
-            u32 *payloadEnd = src + payloadSize / 4;
+            u32 *payloadEnd = src + streamSize / 4;
 
             while (1) {
                 ARX_DECODE_WORD(word);

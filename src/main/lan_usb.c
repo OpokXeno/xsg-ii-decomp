@@ -313,7 +313,7 @@ int UsbGetInitState(void) {
     return netInitState;
 }
 
-/* Once the network stack is initialized: copies the default host name into name, stores the device (init state minus one) into device, and returns the word at offset 4 of the default block. */
+/* Once the network stack is initialized: copies the local address text (netLocalAddressText) into name, stores the device (init state minus one) into device, and returns the word at offset 4 of the default block. */
 int UsbGetLocalAddress(char *name, int *device) {
     if (netInitState == 0) {
         return 0;

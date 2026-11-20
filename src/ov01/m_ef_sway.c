@@ -34,8 +34,8 @@ typedef long long s64;
 
 /*
  * The block at +0x20 of the sway object: actor pair, translation, packet, step counter,
- * matrix and position, five spline matrices and points, a 5x7 sample array, arm and
- * jitter arrays and five vectors.
+ * matrix and position, five missile matrices and points, a 5x7 sample array, arm and
+ * yaw-rate arrays and five vectors.
  */
 typedef struct MEfSwayBlock {
     unsigned char unmodeled_00[0x04];
@@ -49,10 +49,10 @@ typedef struct MEfSwayBlock {
     unsigned char unmodeled_56[0x60 - 0x56];
     Matrix4 matrix;                          /* +0x60 */
     Vector4 position;                        /* +0xa0 */
-    Matrix4 spline[MEF_SWAY_ARMS];                       /* +0xb0 */
+    Matrix4 missileMatrices[MEF_SWAY_ARMS];                /* +0xb0: the missile matrices */
     Vector4 points[MEF_SWAY_ARMS];                       /* +0x1f0 */
     Vector4 samples[MEF_SWAY_ARMS][MEF_SWAY_SAMPLES];                   /* +0x240 */
-    float scale_a;                           /* +0x470 */
+    float modelOpacity;                        /* +0x470: opacity of the model */
     unsigned char unmodeled_474[0x480 - 0x474];
     union {
         float wave[10];                      /* +0x480 */
@@ -72,7 +72,7 @@ typedef struct MEfSwayBlock {
         Vector4 vecs[MEF_SWAY_ARMS];                     /* +0x4b0: the arms' x/y turns */
         float vecAxes[MEF_SWAY_ARMS][4];                 /* +0x4b0: the same turns by axis */
     };
-    float jitter[MEF_SWAY_ARMS];                         /* +0x500 */
+    float yawRates[MEF_SWAY_ARMS];                      /* +0x500: yaw rate of each arm */
 } MEfSwayBlock;
 
 typedef struct MEfSwayObject {
@@ -163,14 +163,14 @@ int MEfCreateSway(MEfSwayObject *object)
     for (i = 0; i < MEF_SWAY_ARMS; i++) {
         MMathRotateMatrixY(&armMatrix, &baseMatrix, MMathMakeRandomSigned() * MEF_SWAY_START_ANGLE);
         MMathRotateMatrixX(&armMatrix, &armMatrix, MMathMakeRandomSigned() * MEF_SWAY_START_ANGLE);
-        QuadwordCopyMatrixT0(block->spline[i], armMatrix);
+        QuadwordCopyMatrixT0(block->missileMatrices[i], armMatrix);
         Vu0MMathCopyPointAtW2(&block->points[i], armMatrix, 48);
         for (j = 0; j < MEF_SWAY_SAMPLES; j++) {
             Vu0MMathCopyPointAtW(&block->samples[i][j], armMatrix, 48);
         }
     }
 
-    block->scale_a = 1.0f;
+    block->modelOpacity = 1.0f;
     block->wave[0] = 0.5f;
     for (i = 0; i < MEF_SWAY_ARMS; i++) {
         sign = -MEF_DEG_TO_RAD;
@@ -206,28 +206,28 @@ void MEfUpdateSway(MEfSwayObject *object)
             for (j = MEF_SWAY_SAMPLES - 1; j > 0; j--) {
                 QuadwordCopyT0W(&block->samples[i][j], &block->samples[i][j - 1]);
             }
-            Vu0MMathCopyPointAtV2(&block->samples[i][0], block->spline[i], 48);
+            Vu0MMathCopyPointAtV2(&block->samples[i][0], block->missileMatrices[i], 48);
         }
     }
     if ((short) block->step == MEF_SWAY_REACH_STEP) {
         armSpeed = &block->wave[5];
         for (i = 0; i < MEF_SWAY_ARMS; i++) {
-            Vu0MMathCopyPointAt(&armTip, &block->spline[i], 48);
+            Vu0MMathCopyPointAt(&armTip, &block->missileMatrices[i], 48);
             block->wave[i] = MMathCalcDist(&block->position, &armTip);
             armSpeed[i] = 0.1f;
             MMathCalcAngle(&block->vecs[i], &block->position, &armTip);
             jitterAngle = MMathMakeRandomSigned() * 4.0f + 16.0f;
-            block->jitter[i] = (MMathRandomNext() & 1) ? jitterAngle * -MEF_DEG_TO_RAD : jitterAngle * MEF_DEG_TO_RAD;
-            Vu0MMathCopyPointAt(&armTip, &block->spline[i], 48);
-            MMathRotateMatrixYX(&block->spline[i], 0, &block->vecs[i]);
-            Vu0MMathCopyPointTo(block->spline[i], 48, &armTip);
+            block->yawRates[i] = (MMathRandomNext() & 1) ? jitterAngle * -MEF_DEG_TO_RAD : jitterAngle * MEF_DEG_TO_RAD;
+            Vu0MMathCopyPointAt(&armTip, &block->missileMatrices[i], 48);
+            MMathRotateMatrixYX(&block->missileMatrices[i], 0, &block->vecs[i]);
+            Vu0MMathCopyPointTo(block->missileMatrices[i], 48, &armTip);
             for (j = 0; j < MEF_SWAY_SAMPLES; j++) {
-                Vu0MMathCopyPointAtW(&block->samples[i][j], block->spline[i], 48);
+                Vu0MMathCopyPointAtW(&block->samples[i][j], block->missileMatrices[i], 48);
             }
         }
     }
     if ((short) block->step >= MEF_SWAY_FADE_STEP) {
-        block->scale_a *= 0.8f;
+        block->modelOpacity *= 0.8f;
     }
 }
 
@@ -254,21 +254,21 @@ void MEfDrawSwayMissiles(MEfSwayObject *object)
 {
     MEfSwayBlock *block;
     SvTexParam params;
-    Matrix4 *splineCursor;
+    Matrix4 *missileCursor;
     s32 remaining;
 
     block = &object->block;
     svGetPrmFromName(mefStencilModelNameA, object->slot, &params);
-    splineCursor = block->spline;
+    missileCursor = block->missileMatrices;
     remaining = 4;
     do {
         remaining -= 1;
         nmlModelSetStencil(1);
         nmlModelSetStencilAlpha(mefStencilAlphaA);
-        nmlModelSetTransparency(block->scale_a);
+        nmlModelSetTransparency(block->modelOpacity);
         nmlModelSetTexture(params.companionData);
-        nmlModelSetDrawMatrix(*splineCursor);
-        splineCursor++;
+        nmlModelSetDrawMatrix(*missileCursor);
+        missileCursor++;
         pxySubmitModel(params.primaryData);
     } while (remaining >= 0);
 }
@@ -305,7 +305,7 @@ static inline void CloseTag(MGsPacket *packet, int nloop)
 }
 
 /*
- * Draws the five sway strands: each spline matrix is moved to every one of its
+ * Draws the five sway strands: each missile matrix is moved to every one of its
  * seven samples, the two edge points of mefSwayEdgePoints are projected, and the pair is
  * written as one strip step whose alpha keeps 65% of its value per sample. A clipped point
  * suppresses the drawing kick of the next two steps.
@@ -345,7 +345,7 @@ void MEfDrawSwayStrands(MEfSwayObject *object)
     for (strand = 0; strand < MEF_SWAY_ARMS; strand++) {
         stripColor.whole = 0x000000A0000000600000005000000030;
         skipSteps = 0;
-        QuadwordCopyMatrixT0(strandMatrix, block->spline[strand]);
+        QuadwordCopyMatrixT0(strandMatrix, block->missileMatrices[strand]);
         stripQword = OpenTag(&block->packet, 1, MEF_GS_STRIP_PRIM, 3, MEF_SWAY_STRIP_REGS);
         for (step = 0; step < MEF_SWAY_SAMPLES; step++) {
             sample = &block->samples[strand][step];
@@ -382,8 +382,8 @@ void MEfDrawSwayStrands(MEfSwayObject *object)
 }
 
 /*
- * Late update of the sway: refreshes the five arm points from the spline
- * matrices. Until step 15 the arms are pushed out along z and twisted, the push
+ * Late update of the sway: refreshes the five arm points from the missile matrices.
+ * Until step 15 the arms are pushed out along z and twisted, the push
  * fading and (for the first steps) the twist growing; from step 15 every arm
  * still above the floor is rebuilt from the sway position, its angles and its
  * growing length. The object is freed at step 0x53.
@@ -404,14 +404,14 @@ void MEfAdvanceSway(MEfSwayObject *object)
         return;
     }
     for (i = 0; i < MEF_SWAY_ARMS; i++) {
-        Vu0MMathCopyPointAtW(&object->block.points[i], object->block.spline[i], 48);
+        Vu0MMathCopyPointAtW(&object->block.points[i], object->block.missileMatrices[i], 48);
     }
     if ((short) block->step < MEF_SWAY_REACH_STEP) {
         Vu0SetOrigin(&translation);
         translation.z = block->arms.spread.push;
         for (i = 0; i < MEF_SWAY_ARMS; i++) {
-            MMathTranslateMatrix(&block->spline[i], &block->spline[i], &translation);
-            MMathRotateMatrixZ(&block->spline[i], &block->spline[i], block->arms.spread.twist[i]);
+            MMathTranslateMatrix(&block->missileMatrices[i], &block->missileMatrices[i], &translation);
+            MMathRotateMatrixZ(&block->missileMatrices[i], &block->missileMatrices[i], block->arms.spread.twist[i]);
         }
         block->arms.spread.push *= 0.65f;
         if ((short) block->step < MEF_SWAY_TWIST_GROW_STEPS) {
@@ -421,9 +421,9 @@ void MEfAdvanceSway(MEfSwayObject *object)
         }
     }
     if ((short) block->step >= MEF_SWAY_REACH_STEP) {
-        for (i = 0, armSpline = block->spline, armScratch = &armMatrix, swayPosition = &block->position,
+        for (i = 0, armSpline = block->missileMatrices, armScratch = &armMatrix, swayPosition = &block->position,
              armSpeed = block->arms.reach.speed; i < MEF_SWAY_ARMS; i++) {
-            if (dpcmp(block->spline[i][3][1], MEF_SWAY_FLOOR_HEIGHT) > 0) {
+            if (dpcmp(block->missileMatrices[i][3][1], MEF_SWAY_FLOOR_HEIGHT) > 0) {
                 MMathRotateMatrixYX(armScratch, 0, &block->vecs[i]);
                 __asm__ __volatile__(
                     "lqc2 vf1, 0(%2)\n"
@@ -438,8 +438,8 @@ void MEfAdvanceSway(MEfSwayObject *object)
                 MMathRotateMatrixXY(armSpline, armScratch, &mefSwayArmAngles);
                 block->arms.reach.length[i] += armSpeed[i];
                 armSpeed[i] *= 1.05f;
-                block->vecAxes[i][1] += block->jitter[i];
-                block->jitter[i] *= 0.992f;
+                block->vecAxes[i][1] += block->yawRates[i];
+                block->yawRates[i] *= 0.992f;
             }
             armSpline++;
         }

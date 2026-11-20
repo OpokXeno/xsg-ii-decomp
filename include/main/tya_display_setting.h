@@ -1,17 +1,18 @@
 #ifndef INCLUDE_MAIN_TYA_DISPLAY_SETTING_H
 #define INCLUDE_MAIN_TYA_DISPLAY_SETTING_H
 
+#include "shared.h"
+
 /* Functions of src/main/tya_display_setting.c that other files call. */
 
-/* Native names of the elevator module (src/main/elevator.c registers them); .rodata strings, declared without a size. */
-extern const char elevatorNativeNamePreload[];
-extern const char elevatorNativeNamePreren[];
-extern const char elevatorNativeNameKeepOff[];
-extern const char elevatorNativeNameElvMove[];
+/* The first argument of tyaDisplaySetting is a mode or the framebuffer of the adjustment screen. */
+#define TYA_DISPLAY_APPLY ((u8 *)0) /* DispEnv follows the saved display offset */
+#define TYA_DISPLAY_RESET ((u8 *)1) /* clears the saved offset and the DispEnv shift */
 
-void actionSoundSlotLevelSet(int index);
-void bgmSlotLevelSet(int index);
-void streamKeySlotLevelSet(int index);
-int streamSetLevel(int index);
+/* The display adjustment screen (or, for a mode, applies or resets the saved offset).
+ * A framebuffer needs the 0xE0000 bytes past it for the compressed image. */
+void tyaDisplaySetting(u8 *framebuffer_or_mode);
+/* DispEnv.display1 dx/dy = the base dx + 5 * horizontal, the base dy + vertical. */
+void tyaSetDisplayOffset(int horizontal, int vertical);
 
 #endif /* INCLUDE_MAIN_TYA_DISPLAY_SETTING_H */

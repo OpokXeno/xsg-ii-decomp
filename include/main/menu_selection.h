@@ -12,8 +12,8 @@
    text entries: target 0x111 + n, zone 0x116 + n, type 0x125 + n, range 0x12B + n,
    condition 0x13A + n (from 4 on: "%1d" of n - 3), effect 0x140 + n, and one entry
    0x130 + n per bit n of elementMask ("Attribute"). The command panels index the same table by member: the attack
-   command panel reads specialAttackRecordTable[(member - 1) * 7 + index] and the detail panel
-   specialAttackRecordTable[(member - 7) * 10 + 9 + index] (ten records per member). */
+   command panel reads attackRecordTable[(member - 1) * 7 + index] and the detail panel
+   attackRecordTable[(member - 7) * 10 + 9 + index] (ten records per member). */
 struct LookupRecord {
     char *text;                         /* 0x00: the record's text */
     /* In the special-attack records selectionCopilotRecordCount and selectionCopilotRecordAt scan,
@@ -44,8 +44,8 @@ typedef struct SelectionRecord {
 /* Selection lists and flags kept in the party data files: the window list and the plain item list with their counts. */
 extern unsigned char selectionWindowCount;
 extern unsigned char selectionPlainCount;
-extern unsigned char selectionWindowList[256];
-extern unsigned char selectionPlainList[256];
+extern unsigned char selectionUsableItemList[256];
+extern unsigned char selectionAccessoryList[256];
 extern u16 selectionFlagTable[44];
 /* Per group (4) and slot (8, the last group has 4): the class points a slot costs to open and gives back. */
 extern unsigned short selectionSlotOpenCostTable[28];
@@ -53,7 +53,7 @@ extern unsigned short selectionSlotRewardTable[28];
 /* The command page cursor capacity, indexed by member id - 4. */
 extern unsigned char selectionMemberCapacityTableByKind[16];
 
-extern struct LookupRecord specialAttackRecordTable[88];
+extern struct LookupRecord attackRecordTable[88];
 
 void menuSceneResetStub(void);
 void commandRecordTextsBind(void);
@@ -71,9 +71,9 @@ int selectionEntryIsUseful(int index, PartyMember *holder);
 u16 selectionWindowEntryMarkedFlags(int index);
 int selectionActiveMemberNeedsHp(void);
 int selectionCountedMemberNeedsHpEp(void);
-void selectionBlockClear(void);
-void selectionBlockFill(void);
-int selectionBlockTestBit(int slot);
+void selectionKeyItemBitsClear(void);
+void selectionKeyItemBitsFill(void);
+int selectionKeyItemBitTest(int slot);
 void selectionRebuildList(void);
 int selectionListDropAt(int index);
 int selectionMemberCapacity(int id);

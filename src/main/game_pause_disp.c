@@ -41,7 +41,7 @@ void pauseDrawTitleHook(XglPacket *packet)
     pauseDrawHook[0] = 0;
 }
 
-/* Draws the "Pause" title centred at the top of the screen when visible is nonzero. */
+/* Draws the "Pause" title centred at y 200 of the screen when visible is nonzero. */
 void pauseDrawTitle(int visible)
 {
     int width;

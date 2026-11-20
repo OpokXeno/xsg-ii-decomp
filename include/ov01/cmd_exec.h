@@ -55,7 +55,7 @@ typedef struct EventQueueArgs {
         int countdown;                  /* kind 20: the steps eventWaitCountdown has left */
     };                                  /* +0x00 */
     union {
-        int tecIndex;                   /* the tec whose EP cost cmdStockRun charges */
+        int tecIndex;                   /* the tec whose EP cost cmdCombinedEtherRun charges */
         int hits;                       /* kind 3: the kind-5 records (targets) of the attack */
     };                                  /* +0x04 */
     int pairIndex;                      /* +0x08: the command's pair record (CmdListBody.pairIndex, pairLinkGet) */
@@ -93,7 +93,7 @@ enum {
     EVENT_KIND_STREAM_BIND = 15,        /* ov01StreamBind */
     EVENT_KIND_PAIR_BEGIN = 16,         /* eventPairBegin: unbinds the pair and hides its monster slots */
     EVENT_KIND_PAIR_END = 17,           /* eventPairEnd: shows and releases the monster slots again */
-    EVENT_KIND_STOCK_BEGIN = 18,        /* eventStockBegin */
+    EVENT_KIND_STOCK_BEGIN = 18,        /* eventCombinedEtherBegin */
     EVENT_KIND_STOCK_BOOST_CLEAR = 19,  /* eventActStockBoostClear */
     EVENT_KIND_WAIT_COUNTDOWN = 20      /* eventWaitCountdown */
 };

@@ -32,14 +32,14 @@ typedef struct TiCollSphere {
 /* 208-byte record of the ground-plane clamp: index selects the palette matrix, flags bit 0 gates the push-out.
  * matrix_90 is built from the global matrix of the record (the inverse, or the identity for an index of -1);
  * a point is taken through matrix_90 then matrix_50, and back out through matrix_10. */
-typedef struct TiCollMatrix {
+typedef struct TiCollPlane {
     int index;
     unsigned int flags;
     unsigned char unmodeled_08[0x8];
     Matrix4 matrix_10;
     Matrix4 matrix_50;
     Matrix matrix_90;
-} TiCollMatrix;
+} TiCollPlane;
 
 /* 224-byte capsule record: index selects a 64-byte palette matrix, flags bit 0 disables the push-out, radius and
  * height size the ring and the two end points. matrix_a0 (built like matrix_90) and matrix_60 take the point
@@ -63,10 +63,10 @@ void tiDynamicsCollBuildInverseMatrices(TiMRPackage *pMRPack);
 void tiDynamicsCollBuildWideInverseMatrices(TiMRPackage *pMRPack);
 
 void tiDynamicsCollPushOutSphereList(TiMRPackage *object, TiHrcDynamics *node, TiSolverState *state);
-void tiDynamicsCollPushOutMatrixList(TiMRPackage *object, TiHrcDynamics *node, TiSolverState *state);
+void tiDynamicsCollPushOutPlaneList(TiMRPackage *object, TiHrcDynamics *node, TiSolverState *state);
 void tiDynamicsCollPushOutCapsuleList(TiMRPackage *object, TiHrcDynamics *node, TiSolverState *state);
 void tiDynamicsCollSolveSpherePair(TiSolverState *first, TiSolverState *second, TiMRPackage *object);
-void tiDynamicsCollSolveMatrixPair(TiSolverState *first, TiSolverState *second, TiMRPackage *object);
+void tiDynamicsCollSolvePlanePair(TiSolverState *first, TiSolverState *second, TiMRPackage *object);
 void tiDynamicsCollSolveCapsulePair(TiSolverState *first, TiSolverState *second, TiMRPackage *object);
 
 #endif /* INCLUDE_MAIN_TIDYNAMICSCOLL_H */

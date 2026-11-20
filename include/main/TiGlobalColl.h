@@ -26,7 +26,7 @@ extern float mapHeadingCoefficients[8];
 void tiGlobalCollSetHandle(TiGlobalCollSet *handle);
 void tiGlobalCollClearHandle(void);
 void tiGlobalCollSolveBody(TiHrcDynamics *pNode, TiSolverState *context);
-void tiGlobalCollClampScale(TiSolverState *state);
+void tiGlobalCollClampHeight(TiSolverState *state);
 TiGlobalCollSet *tiGlobalCollGetHandle(void);
 
 #endif /* INCLUDE_MAIN_TIGLOBALCOLL_H */

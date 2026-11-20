@@ -3,7 +3,7 @@
 
 /* Functions of src/main/msg_window_move.c. */
 
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
 void msgWindowMoveCurrent(MsgWindow *window, int x, int y);
 void msgWindowResizeCurrent(MsgWindow *window, int x, int y);

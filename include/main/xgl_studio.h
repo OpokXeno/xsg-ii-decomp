@@ -23,7 +23,8 @@ typedef struct StudioLightEntry {
  * (+0x510). Whole-block copies (game.c GameStateSave/RestoreCameraLight) are
  * ld/sd, while the Studio records holding it are only 8-aligned (xgl_studio
  * .bss): the block is 8-aligned, which the doubleword view of its first vector
- * gives. */
+ * gives. xglStudioLightReset passes this block to xglLightSetDefault, which writes a whole XglLightSet into it, so the
+ * block is the light set of the studio, not only the parameters below. */
 typedef struct StudioLight {
     union {
         struct {

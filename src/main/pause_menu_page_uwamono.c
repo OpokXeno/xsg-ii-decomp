@@ -7,7 +7,7 @@
 #include "main/xgl_studio.h"
 #include "main/control_entry.h"
 #include "main/pause_menu_page_uwamono.h"
-#include "main/ladder_table.h"
+#include "main/get_ladder.h"
 #include "main/nml_packet_add.h"
 
 #include "main/cur_matrix_asm.h"
@@ -176,8 +176,8 @@ void uwamonoDrawStateLinks(int slotIndex)
                     DoublewordVector4 current;
                     DoublewordVector4 linked;
                     target = state->routeLinks[i][j];
-                    current.vector = state->routeNodes[i].point;
-                    linked.vector = state->routeNodes[target].point;
+                    current.vector = state->homeNodes[i].point;
+                    linked.vector = state->homeNodes[target].point;
                     current.vector.y += uwamonoLinkDebugLift;
                     linked.vector.y += uwamonoLinkDebugLift;
                 } while (++j < state->routeLinkCounts[i]);

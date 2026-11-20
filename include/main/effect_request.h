@@ -1,7 +1,7 @@
 #ifndef INCLUDE_MAIN_EFFECT_REQUEST_H
 #define INCLUDE_MAIN_EFFECT_REQUEST_H
 
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 
 /* Functions of src/main/effect_request.c that other files call. */
 
@@ -12,7 +12,7 @@ extern MsgWindow *msgPendingWindow;        /* window whose slots msgWindowFlush 
 extern MsgSlot *msgSlotQueue[];            /* MSG_SLOT_QUEUE_SIZE slots queued by msgQueueSlot */
 extern int msgSlotQueueCount;              /* filled entries of msgSlotQueue */
 
-extern int sellLabelTextOff;               /* nonzero hides the sell list's label texts (debt_box.c) */
+extern int sellLabelTextOff;               /* nonzero hides the sell list's label texts (msg_text_draw.c) */
 
 void msgWindowReset(MsgWindow *window);
 void recordUpdatesHold(void);

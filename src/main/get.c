@@ -49,12 +49,14 @@ float Get_Decimal_Surplus_for_Radius(float angle)
 #include "main/xgl_render.h"
 #include "main/init_uwamono_sys.h"
 
-/* Debug HUD: prints "%2d(%3d)" from the stick angle (the right stick axes of PadData through atan2f). */
+/* Counts the turns of the right stick: the sector it points into (padDebugSector) advances as the stick turns
+ * through sector_count sectors, and padDebugCount counts the full turns. The native GetAnalogR reads both
+ * counters (runtimeGetAnalogR). Each frame it also prints them as the debug HUD "%2d(%3d)". */
 extern int padDebugSector;
 extern int padDebugCount;
 extern const char padDebugDirectionFormat[];
 
-int padDebugPrintDirection(int sector_count)
+int padRightStickRotate(int sector_count)
 {
     float angle = GET_PI - atan2f(PadData[0].rightX, PadData[0].rightY);
     float count = (float)sector_count;
@@ -75,7 +77,6 @@ int padDebugPrintDirection(int sector_count)
     return padDebugCount;
 }
 
-/* Debug move-square check: same strings and corner offsets as X1 Check_MoveSquare. */
 /* Sweeps from start toward end through the Undu query block; returns 1 when the sweep end is within 0.01 of end. */
 int Check_Undu(int slotIndex, const Vector4 *from, const Vector4 *to, int map_block, int bits, Vector4 *hit, int attr_mask);
 
@@ -208,7 +209,7 @@ void Get_Point_By_AngleLength(const Vector4 *source, Vector4 *destination,
 
 
 
-/* Returns 1.0 when the 1-D spans [0x14, 0x14 + 0x584) of uwamonoRecords entries a and b overlap, else 0.0. */
+/* Returns 1.0 when the height spans position.y to position.y + extent.y of uwamonoRecords entries a and b overlap, else 0.0. */
 float uwamonoRecordsOverlap(int a, int b)
 {
     float firstEnd = uwamonoRecords[a].position.y + uwamonoRecords[a].extent.y;
@@ -798,6 +799,8 @@ int Get_Rnd(int min, int max)
 }
 
 
+/* The original game uses xglFRand() as if it returned 0 to 1, but it returns 1 to 2, so the result lies in
+ * [maximum, 2 * maximum - minimum). Kept as it is. */
 int Get_RndFloatRange(float minimum, float maximum)
 {
     return (int) (minimum + (xglFRand() * (maximum - minimum)));

@@ -49,36 +49,36 @@ void xglVectorZero_001D4508(void *destination);
 void xglMatrixCopy_001D44C4(void *destination, void *source);
 void xglVectorSubXYZ_001D4530(void *dst, void *minuend, void *subtrahend);
 /* The reflection matrix and the words packed into its last column and row. */
-typedef union PxyReflectMatrix {
+typedef union PxyBreakMatrix {
     Matrix4 rows;
     s32 words[4][4];
-} PxyReflectMatrix;
+} PxyBreakMatrix;
 
-/* Static block of the reflection state (.bss 0x9899F0-0x989A50): the colour vector, the reflection matrix,
+/* Static block of the break-up state (.bss 0x9899F0-0x989A50): the colour vector, the break-up matrix,
  * then the cleared vector and the rotation angle. */
-typedef struct PxyReflectBlock {
-    Vector4 colour;     /* +0x00 pxyReflectBlock.colour (colorScale copy) */
-    /* +0x10 reflection matrix (xglMatrixStackSave target); pxyUploadViewMatrices fills its last column with the
+typedef struct PxyBreakBlock {
+    Vector4 colour;     /* +0x00 pxyBreakBlock.colour (colorScale copy) */
+    /* +0x10 break-up matrix (xglMatrixStackSave target); pxyUploadViewMatrices fills its last column with the
      * blend, shade and mode words and its last row with the position vector and the flag. */
-    PxyReflectMatrix matrix;
+    PxyBreakMatrix matrix;
     s32 zeroVec[3];     /* +0x50 cleared by pxyResetReflectionState */
     float angle;        /* +0x5C reflection rotation angle */
-} PxyReflectBlock;
+} PxyBreakBlock;
 
-static PxyReflectBlock pxyReflectBlock;
+static PxyBreakBlock pxyBreakBlock;
 
 void pxyResetReflectionState(void)
 {
-    xglMatrixUnit(pxyReflectBlock.matrix.rows);
-    xglVectorZero_001D4508(pxyReflectBlock.zeroVec);
+    xglMatrixUnit(pxyBreakBlock.matrix.rows);
+    xglVectorZero_001D4508(pxyBreakBlock.zeroVec);
 }
 
 extern u8 xglPlainMicrocodeSize[];
 extern u8 xglPlainMicrocodeProgram[];
-extern u8 xglEnvMicrocodeSize[];
-extern u8 xglEnvMicrocodeProgram[];
-extern u8 xglTexturePassMicrocodeSize[];
-extern u8 xglTexturePassMicrocodeProgram[];
+extern u8 xglVertexColorMicrocodeSize[];
+extern u8 xglVertexColorMicrocodeProgram[];
+extern u8 xglBreakUpMicrocodeSize[];
+extern u8 xglBreakUpMicrocodeProgram[];
 extern u8 xglMode3MicrocodeSize[];
 extern u8 xglMode3MicrocodeProgram[];
 extern u8 xglMode4MicrocodeSize[];
@@ -96,8 +96,8 @@ extern u8 D_DB0[];
 extern u8 D_DD8[];
 
 /* Microcode table lookup for the current xglPacketMode (0..4): kind 0 = program data, 1 = program size, 2 = model kick address,
- * 3 = GS kick address, 4 = wide GS kick address (the last three >> 3, for MSCAL). Packet mode 0 plain, 1 env, 2 texture pass,
- * 3 = xglPacketMode3Flag, 4 = xglPacketMode4Flag (drop pass in X1). */
+ * 3 = GS kick address, 4 = wide GS kick address (the last three >> 3, for MSCAL). Packet mode 0 plain, 1 vertex colour,
+ * 2 break-up, 3 = xglPacketMode3Flag, 4 = xglPacketMode4Flag (the battle variant of the lit program, no drop shadow). */
 u8 *xglPacketMicrocodeEntry(int kind)
 {
     switch (kind) {
@@ -106,10 +106,10 @@ u8 *xglPacketMicrocodeEntry(int kind)
             return xglPlainMicrocodeProgram;
         }
         if (xglPacketMode == 1) {
-            return xglEnvMicrocodeProgram;
+            return xglVertexColorMicrocodeProgram;
         }
         if (xglPacketMode == 2) {
-            return xglTexturePassMicrocodeProgram;
+            return xglBreakUpMicrocodeProgram;
         }
         if (xglPacketMode == 3) {
             return xglMode3MicrocodeProgram;
@@ -123,10 +123,10 @@ u8 *xglPacketMicrocodeEntry(int kind)
             return *(u8 **) xglPlainMicrocodeSize;
         }
         if (xglPacketMode == 1) {
-            return *(u8 **) xglEnvMicrocodeSize;
+            return *(u8 **) xglVertexColorMicrocodeSize;
         }
         if (xglPacketMode == 2) {
-            return *(u8 **) xglTexturePassMicrocodeSize;
+            return *(u8 **) xglBreakUpMicrocodeSize;
         }
         if (xglPacketMode == 3) {
             return *(u8 **) xglMode3MicrocodeSize;
@@ -192,7 +192,7 @@ u8 *xglPacketMicrocodeEntry(int kind)
 
 
 /*
- * Sets the rotation freeze flag: pxyUpdateReflectionRotation adds no angle step while the flag is
+ * Sets the rotation freeze flag: pxyUpdateBreakRotation adds no angle step while the flag is
  * nonzero. pxyFlush passes pxyFreezeAnimation.
  */
 void pxySetRotateFreeze(s32 freeze)
@@ -231,14 +231,14 @@ void xglPacketSetMode4Flag(s32 value)
 
 void pxySetGlobalColor(const Vector4 *colorScale)
 {
-    pxyReflectBlock.colour = *colorScale;
+    pxyBreakBlock.colour = *colorScale;
 }
 
 f32 sinf(f32 x);
 
-/* Reflection mapping rotation (X1 s_inReflRotX/Y): advances pxyReflectBlock.angle by 0.1 unless frozen, wraps at 2*pi and saves
+/* Break-up tumble rotation (X1 s_inReflRotX/Y): advances pxyBreakBlock.angle by 0.1 unless frozen, wraps at 2*pi and saves
  * RotY(angle) * RotX(sin(angle)) in pxyReflectionMatrix. */
-void pxyUpdateReflectionRotation(s32 reflect)
+void pxyUpdateBreakRotation(s32 reflect)
 {
     if (reflect != 0) {
         pxyReflectionType = 1;
@@ -246,15 +246,15 @@ void pxyUpdateReflectionRotation(s32 reflect)
         pxyReflectionType = 0;
     }
     if (pxyRotateFreeze == 0) {
-        pxyReflectBlock.angle += 0.1f;
+        pxyBreakBlock.angle += 0.1f;
     }
-    if (pxyReflectBlock.angle >= 6.283184f) {
-        pxyReflectBlock.angle -= 6.283184f;
+    if (pxyBreakBlock.angle >= 6.283184f) {
+        pxyBreakBlock.angle -= 6.283184f;
     }
     xglMatrixStackUnit();
-    xglMatrixStackRotX(sinf(pxyReflectBlock.angle));
-    xglMatrixStackRotY(pxyReflectBlock.angle);
-    xglMatrixStackSave(pxyReflectBlock.matrix.rows);
+    xglMatrixStackRotX(sinf(pxyBreakBlock.angle));
+    xglMatrixStackRotY(pxyBreakBlock.angle);
+    xglMatrixStackSave(pxyBreakBlock.matrix.rows);
 }
 
 
@@ -601,34 +601,34 @@ void pxyUploadViewMatrices(void)
         sceVif1PkOpenUpkCode(vif, 918, 108, 1, 1);
         sceVif1PkAddUpkData128N(vif, &modelMatrix, 4);
         sceVif1PkCloseUpkCode(vif);
-        if ((SPR_CURRENT_PXY->renderStatus & 0x8000) != 0 && SPR_CURRENT_PXY->reflectMask != 0
+        if ((SPR_CURRENT_PXY->renderStatus & 0x8000) != 0 && SPR_CURRENT_PXY->clipPlaneMask != 0
             && SPR_PXY_CHANNEL != 0) {
             register u8 *partBitmask;
 
-            xglVectorSubXYZ_001D4530(pxyReflectBlock.matrix.rows[3], &SPR_CURRENT_PXY->center,
+            xglVectorSubXYZ_001D4530(pxyBreakBlock.matrix.rows[3], &SPR_CURRENT_PXY->center,
                                      (AlignedVector4 *) SPR_CURRENT_PXY->localMatrix[3]);
-            pxyReflectBlock.matrix.rows[0][3] = SPR_CURRENT_PXY->reflectBlend;
-            pxyReflectBlock.matrix.rows[1][3] = 1.0f;
-            if (SPR_CURRENT_PXY->reflectMode == 2) {
-                pxyReflectBlock.matrix.rows[1][3] = -1.0f;
+            pxyBreakBlock.matrix.rows[0][3] = SPR_CURRENT_PXY->clipPlaneMaskedTime;
+            pxyBreakBlock.matrix.rows[1][3] = 1.0f;
+            if (SPR_CURRENT_PXY->clipPlaneMaskedCount == 2) {
+                pxyBreakBlock.matrix.rows[1][3] = -1.0f;
             }
-            pxyReflectBlock.matrix.words[2][3] = SPR_CURRENT_PXY->reflectMode;
-            pxyReflectBlock.matrix.words[3][3] = 0;
-            partBitmask = SPR_CURRENT_PXY->reflectMask;
+            pxyBreakBlock.matrix.words[2][3] = SPR_CURRENT_PXY->clipPlaneMaskedCount;
+            pxyBreakBlock.matrix.words[3][3] = 0;
+            partBitmask = SPR_CURRENT_PXY->clipPlaneMask;
             /* One bit per matrix index, packed into 32-bit words. */
             if ((*(u32 *) (partBitmask + ((s16) (SPR_PXY_CHANNEL->matrixIndex >> 5) << 2))
                  & (1 << (SPR_PXY_CHANNEL->matrixIndex & 0x1F))) != 0) {
-                pxyReflectBlock.matrix.words[3][3] = 1;
+                pxyBreakBlock.matrix.words[3][3] = 1;
             }
             sceVif1PkOpenUpkCode(vif, 969, 108, 1, 1);
-            sceVif1PkAddUpkData128N(vif, pxyReflectBlock.matrix.rows, 4);
+            sceVif1PkAddUpkData128N(vif, pxyBreakBlock.matrix.rows, 4);
             sceVif1PkCloseUpkCode(vif);
-            scale = SPR_CURRENT_PXY->reflectScale;
+            scale = SPR_CURRENT_PXY->clipPlaneMaskedScale;
             if (scale < 1.0f) {
                 scale = 1.0f;
             }
             invScale = 1.0f / scale;
-            extra = SPR_CURRENT_PXY->reflectExtra;
+            extra = SPR_CURRENT_PXY->clipPlaneMaskedPush;
             sceVif1PkOpenUpkCode(vif, 973, 108, 1, 1);
             sceVif1PkAddUpkData128N(vif, &scale, 1);
             sceVif1PkCloseUpkCode(vif);
@@ -650,7 +650,7 @@ void pxyUploadPartState(void)
     style->words[0].f = -1.0f;
     style->words[1].i = 0;
     if (style->words[3].i == 0) {
-        if (SPR_CURRENT_PXY->alpha == 0.0f || (SPR_CURRENT_PXY->drawFlags & 0x800) != 0) {
+        if (SPR_CURRENT_PXY->reflectTransparency == 0.0f || (SPR_CURRENT_PXY->drawFlags & 0x800) != 0) {
             style->words[3].i = 1;
         }
     }
@@ -731,12 +731,12 @@ void pxyUploadRenderFlags(s32 mode)
     cameraLevel = SPR_CURRENT_PXY->cameraFog[xglStudioSelectedIndex];
     params.scale = 1.0f;
     if ((mode & 8) == 0) {
-        params.scale = params.scale * SPR_CURRENT_PXY->glowScale;
+        params.scale = params.scale * SPR_CURRENT_PXY->circleShadowScale;
     }
     if ((mode & 0x1000000) != 0) {
-        params.scale = 1.0f - SPR_CURRENT_PXY->glowIntensity * SPR_CURRENT_PXY->glowScale;
+        params.scale = 1.0f - SPR_CURRENT_PXY->shadowAlpha * SPR_CURRENT_PXY->circleShadowScale;
     }
-    params.alpha = SPR_CURRENT_PXY->glowScale * SPR_CURRENT_PXY->alpha;
+    params.alpha = SPR_CURRENT_PXY->circleShadowScale * SPR_CURRENT_PXY->reflectTransparency;
     if (SPR_CURRENT_PXY->levelTable != 0 && SPR_PXY_CHANNEL != 0) {
         register s32 *levelRow;
 
@@ -788,9 +788,9 @@ void pxyUploadRenderFlags(s32 mode)
     sceVif1PkOpenUpkCode(packet, 965, 108, 1, 1);
     sceVif1PkAddUpkData128(packet, *(Quadword *) &params);
     sceVif1PkCloseUpkCode(packet);
-    uniform.x = SPR_CURRENT_PXY->uniformScale;
-    uniform.y = SPR_CURRENT_PXY->uniformScale;
-    uniform.z = SPR_CURRENT_PXY->uniformScale;
+    uniform.x = SPR_CURRENT_PXY->fadeAlpha;
+    uniform.y = SPR_CURRENT_PXY->fadeAlpha;
+    uniform.z = SPR_CURRENT_PXY->fadeAlpha;
     uniform.w = 0.0f;
     uniformCopy = uniform;
     sceVif1PkOpenUpkCode(packet, 974, 108, 1, 1);
@@ -812,12 +812,12 @@ void xglPacketUploadVu1Data(void *data, int count, int address)
 
 float tanf(float x);
 void *memset(void *s, int c, unsigned int n);
-const u8 vuStateTable[256] = { 0, 128, 0, 0, 0, 64, 14, 48, 18, 4, 0, 0, 0, 192, 14, 48, 0, 128, 0, 0, 0, 64, 6, 48, 18, 4, 0, 0, 0, 192, 6, 48, 0, 128, 0, 0, 0, 64, 46, 48, 18, 4, 0, 0, 0, 192, 46, 48, 0, 128, 0, 0, 0, 64, 38, 48, 18, 4, 0, 0, 0, 192, 38, 48, 0, 128, 0, 0, 0, 64, 14, 80, 242, 241, 4, 0, 0, 192, 14, 80, 0, 128, 0, 0, 0, 64, 6, 80, 242, 241, 4, 0, 0, 192, 6, 80, 0, 128, 0, 0, 0, 64, 46, 80, 242, 241, 4, 0, 0, 192, 46, 80, 0, 128, 0, 0, 0, 64, 38, 80, 242, 241, 4, 0, 0, 192, 38, 80, 0, 128, 0, 0, 0, 64, 30, 48, 18, 4, 0, 0, 0, 192, 30, 48, 0, 128, 0, 0, 0, 64, 22, 48, 18, 4, 0, 0, 0, 192, 22, 48, 0, 128, 0, 0, 0, 64, 62, 48, 18, 4, 0, 0, 0, 192, 62, 48, 0, 128, 0, 0, 0, 64, 54, 48, 18, 4, 0, 0, 0, 192, 54, 48, 0, 128, 0, 0, 0, 64, 30, 80, 242, 241, 4, 0, 0, 192, 30, 80, 0, 128, 0, 0, 0, 64, 22, 80, 242, 241, 4, 0, 0, 192, 22, 80, 0, 128, 0, 0, 0, 64, 62, 80, 242, 241, 4, 0, 0, 192, 62, 80, 0, 128, 0, 0, 0, 64, 54, 80, 242, 241, 4, 0, 0, 192, 54, 80 };
-const u8 vuStateTableReflection[256] = { 0, 128, 0, 0, 0, 64, 6, 48, 18, 4, 0, 0, 0, 192, 6, 48, 0, 128, 0, 0, 0, 64, 6, 48, 18, 4, 0, 0, 0, 192, 6, 48, 0, 128, 0, 0, 0, 64, 38, 48, 18, 4, 0, 0, 0, 192, 38, 48, 0, 128, 0, 0, 0, 64, 38, 48, 18, 4, 0, 0, 0, 192, 38, 48, 0, 128, 0, 0, 0, 64, 6, 80, 242, 241, 4, 0, 0, 192, 6, 80, 0, 128, 0, 0, 0, 64, 6, 80, 242, 241, 4, 0, 0, 192, 6, 80, 0, 128, 0, 0, 0, 64, 38, 80, 242, 241, 4, 0, 0, 192, 38, 80, 0, 128, 0, 0, 0, 64, 38, 80, 242, 241, 4, 0, 0, 192, 38, 80, 0, 128, 0, 0, 0, 64, 22, 48, 18, 4, 0, 0, 0, 192, 22, 48, 0, 128, 0, 0, 0, 64, 22, 48, 18, 4, 0, 0, 0, 192, 22, 48, 0, 128, 0, 0, 0, 64, 54, 48, 18, 4, 0, 0, 0, 192, 54, 48, 0, 128, 0, 0, 0, 64, 54, 48, 18, 4, 0, 0, 0, 192, 54, 48, 0, 128, 0, 0, 0, 64, 22, 80, 242, 241, 4, 0, 0, 192, 22, 80, 0, 128, 0, 0, 0, 64, 22, 80, 242, 241, 4, 0, 0, 192, 22, 80, 0, 128, 0, 0, 0, 64, 54, 80, 242, 241, 4, 0, 0, 192, 54, 80, 0, 128, 0, 0, 0, 64, 54, 80, 242, 241, 4, 0, 0, 192, 54, 80 };
-const u8 vuSmallStateTable[32] = { 0, 128, 0, 0, 0, 64, 46, 81, 47, 31, 4, 0, 0, 192, 46, 81, 0, 128, 0, 0, 0, 64, 38, 81, 47, 31, 4, 0, 0, 192, 38, 81 };
+const u8 vuStripGifTags[256] = { 0, 128, 0, 0, 0, 64, 14, 48, 18, 4, 0, 0, 0, 192, 14, 48, 0, 128, 0, 0, 0, 64, 6, 48, 18, 4, 0, 0, 0, 192, 6, 48, 0, 128, 0, 0, 0, 64, 46, 48, 18, 4, 0, 0, 0, 192, 46, 48, 0, 128, 0, 0, 0, 64, 38, 48, 18, 4, 0, 0, 0, 192, 38, 48, 0, 128, 0, 0, 0, 64, 14, 80, 242, 241, 4, 0, 0, 192, 14, 80, 0, 128, 0, 0, 0, 64, 6, 80, 242, 241, 4, 0, 0, 192, 6, 80, 0, 128, 0, 0, 0, 64, 46, 80, 242, 241, 4, 0, 0, 192, 46, 80, 0, 128, 0, 0, 0, 64, 38, 80, 242, 241, 4, 0, 0, 192, 38, 80, 0, 128, 0, 0, 0, 64, 30, 48, 18, 4, 0, 0, 0, 192, 30, 48, 0, 128, 0, 0, 0, 64, 22, 48, 18, 4, 0, 0, 0, 192, 22, 48, 0, 128, 0, 0, 0, 64, 62, 48, 18, 4, 0, 0, 0, 192, 62, 48, 0, 128, 0, 0, 0, 64, 54, 48, 18, 4, 0, 0, 0, 192, 54, 48, 0, 128, 0, 0, 0, 64, 30, 80, 242, 241, 4, 0, 0, 192, 30, 80, 0, 128, 0, 0, 0, 64, 22, 80, 242, 241, 4, 0, 0, 192, 22, 80, 0, 128, 0, 0, 0, 64, 62, 80, 242, 241, 4, 0, 0, 192, 62, 80, 0, 128, 0, 0, 0, 64, 54, 80, 242, 241, 4, 0, 0, 192, 54, 80 };
+const u8 vuStripGifTagsUntextured[256] = { 0, 128, 0, 0, 0, 64, 6, 48, 18, 4, 0, 0, 0, 192, 6, 48, 0, 128, 0, 0, 0, 64, 6, 48, 18, 4, 0, 0, 0, 192, 6, 48, 0, 128, 0, 0, 0, 64, 38, 48, 18, 4, 0, 0, 0, 192, 38, 48, 0, 128, 0, 0, 0, 64, 38, 48, 18, 4, 0, 0, 0, 192, 38, 48, 0, 128, 0, 0, 0, 64, 6, 80, 242, 241, 4, 0, 0, 192, 6, 80, 0, 128, 0, 0, 0, 64, 6, 80, 242, 241, 4, 0, 0, 192, 6, 80, 0, 128, 0, 0, 0, 64, 38, 80, 242, 241, 4, 0, 0, 192, 38, 80, 0, 128, 0, 0, 0, 64, 38, 80, 242, 241, 4, 0, 0, 192, 38, 80, 0, 128, 0, 0, 0, 64, 22, 48, 18, 4, 0, 0, 0, 192, 22, 48, 0, 128, 0, 0, 0, 64, 22, 48, 18, 4, 0, 0, 0, 192, 22, 48, 0, 128, 0, 0, 0, 64, 54, 48, 18, 4, 0, 0, 0, 192, 54, 48, 0, 128, 0, 0, 0, 64, 54, 48, 18, 4, 0, 0, 0, 192, 54, 48, 0, 128, 0, 0, 0, 64, 22, 80, 242, 241, 4, 0, 0, 192, 22, 80, 0, 128, 0, 0, 0, 64, 22, 80, 242, 241, 4, 0, 0, 192, 22, 80, 0, 128, 0, 0, 0, 64, 54, 80, 242, 241, 4, 0, 0, 192, 54, 80, 0, 128, 0, 0, 0, 64, 54, 80, 242, 241, 4, 0, 0, 192, 54, 80 };
+const u8 vuLayerGifTags[32] = { 0, 128, 0, 0, 0, 64, 46, 81, 47, 31, 4, 0, 0, 192, 46, 81, 0, 128, 0, 0, 0, 64, 38, 81, 47, 31, 4, 0, 0, 192, 38, 81 };
 const u8 vuSmallStateTableReflection[32] = { 0, 128, 0, 0, 0, 64, 38, 81, 47, 31, 4, 0, 0, 192, 38, 81, 0, 128, 0, 0, 0, 64, 38, 81, 47, 31, 4, 0, 0, 192, 38, 81 };
-const u8 vuSecondSmallStateTable[32] = { 0, 128, 0, 0, 0, 64, 46, 81, 47, 241, 4, 0, 0, 192, 46, 81, 0, 128, 0, 0, 0, 64, 46, 81, 242, 241, 4, 0, 0, 192, 46, 81 };
-const u8 vuStateHeaderQuad[16] = { 0, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+const u8 vuThreeKickGifTags[32] = { 0, 128, 0, 0, 0, 64, 46, 81, 47, 241, 4, 0, 0, 192, 46, 81, 0, 128, 0, 0, 0, 64, 46, 81, 242, 241, 4, 0, 0, 192, 46, 81 };
+const u8 vuEmptyEndTag[16] = { 0, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 #define GS_ZBUF_2 0x4F
 
@@ -828,10 +828,10 @@ typedef struct GsRegEntry {
     u32 regHigh;
 } GsRegEntry;
 
-/* One 16-byte record of the five-record VU1 parameter block uploaded to 994: a count, an address, a float and a spare word. */
+/* One 16-byte record of the five-record VU1 parameter block uploaded to 994: a count, a CLIPW flag mask, a float and a spare word. */
 typedef struct PxyVu1ParamRecord {
     u32 count;
-    u32 address;
+    u32 clipFlags;
     float value;
     u32 spare;
 } PxyVu1ParamRecord;
@@ -911,10 +911,10 @@ void xglPacketInitVuState(void)
         const u8 *vuTable;
         const u8 *smallTable;
 
-        vuTable = vuStateTable;
-        smallTable = vuSmallStateTable;
+        vuTable = vuStripGifTags;
+        smallTable = vuLayerGifTags;
         if (pxyReflectionType != 0) {
-            vuTable = vuStateTableReflection;
+            vuTable = vuStripGifTagsUntextured;
             smallTable = vuSmallStateTableReflection;
         }
         sceVif1PkOpenUpkCode(vif, 860, 108, 1, 1);
@@ -924,10 +924,10 @@ void xglPacketInitVuState(void)
         sceVif1PkAddUpkData128N(vif, smallTable, 2);
         sceVif1PkCloseUpkCode(vif);
         sceVif1PkOpenUpkCode(vif, 956, 108, 1, 1);
-        sceVif1PkAddUpkData128N(vif, vuSecondSmallStateTable, 2);
+        sceVif1PkAddUpkData128N(vif, vuThreeKickGifTags, 2);
         sceVif1PkCloseUpkCode(vif);
         sceVif1PkOpenUpkCode(vif, 828, 108, 1, 1);
-        sceVif1PkAddUpkData128N(vif, vuStateHeaderQuad, 1);
+        sceVif1PkAddUpkData128N(vif, vuEmptyEndTag, 1);
         sceVif1PkCloseUpkCode(vif);
     }
     {
@@ -956,7 +956,7 @@ void xglPacketInitVuState(void)
         scaleVec.y = scaleVec.w;
         scaleVec.z = scaleVec.w;
         xglPacketUploadVu1Data(&scaleVec, 1, 825);
-        xglPacketUploadVu1Data(&pxyReflectBlock.colour, 1, 833);
+        xglPacketUploadVu1Data(&pxyBreakBlock.colour, 1, 833);
     }
     {
         PxyVu1ParamRecord records[5];
@@ -964,19 +964,19 @@ void xglPacketInitVuState(void)
 
         record = records;
         record->count = 2;
-        record->address = 2080;
+        record->clipFlags = 2080;
         (record++)->value = -1.0f;
         record->count = 1;
-        record->address = 520;
+        record->clipFlags = 520;
         (record++)->value = -1.0f;
         record->count = 1;
-        record->address = 260;
+        record->clipFlags = 260;
         (record++)->value = 1.0f;
         record->count = 0;
-        record->address = 130;
+        record->clipFlags = 130;
         (record++)->value = -1.0f;
         record->count = 0;
-        record->address = 65;
+        record->clipFlags = 65;
         (record++)->value = 1.0f;
         xglPacketUploadVu1Data(records, 5, 994);
     }
@@ -1080,20 +1080,20 @@ void pxyUploadBoneMatrices(void)
 void sceGsSetDefLoadImage(void *image, short fbp, short fbw, short psm, short x, short y, short w, short h);
 int xglPsmBufferWidth(int value, int mode);
 
-/* One 32-byte record of a packet set; its data sits dataOffset bytes past the table. */
+/* One 32-byte record of a texture set; its data sits dataOffset bytes past the table. */
 typedef struct XglPacketRecord {
     s32 dataOffset;     /* +0x00 */
-    u16 originX;        /* +0x04 */
+    u16 destX;          /* +0x04: destination x of the block */
     u8 unk06[2];
-    s16 extentA;        /* +0x08 */
+    s16 width;         /* +0x08: block width */
     u8 unk0A[2];
-    s16 extentB;        /* +0x0C */
+    s16 height;        /* +0x0C: block height */
     u8 unk0E[6];
     s32 count;          /* +0x14 */
     u8 unk18[8];
 } XglPacketRecord;
 
-/* A packet set: its record count at +0x14, records from +0x20. */
+/* A texture set of a txy block: its record count at +0x14, records from +0x20. */
 typedef struct XglPacketSet {
     u8 unk00[0x14];
     s32 count;                  /* +0x14 */
@@ -1128,8 +1128,8 @@ void pxyQueueTextureSet(int slot, TxyBlock *table, int index, int originX)
         i = set->count - 1;
         while (i >= 0) {
             rec = &set->records[i];
-            sceGsSetDefLoadImage(&msg.block, (s16) ((u16) originX + rec->originX), (s16) xglPsmBufferWidth(512, 0), 0,
-                                 0, 0, rec->extentA, rec->extentB);
+            sceGsSetDefLoadImage(&msg.block, (s16) ((u16) originX + rec->destX), (s16) xglPsmBufferWidth(512, 0), 0,
+                                 0, 0, rec->width, rec->height);
             msg.block.words[0] &= ~0x8000;
             msg.tag[3] = 0x50000005;
             msg.tag[0] = 0;
@@ -1158,8 +1158,8 @@ void nmlPacketTextureTrans(TxyBlock *table, int index, int originX)
             rec = &set->records[i];
             sceVif1PkCnt(packet, 0);
             sceVif1PkAddCode(packet, 0x11000000);
-            sceGsSetDefLoadImage(&block, (s16) ((u16) originX + rec->originX), (s16) xglPsmBufferWidth(512, 0), 0, 0, 0,
-                          rec->extentA, rec->extentB);
+            sceGsSetDefLoadImage(&block, (s16) ((u16) originX + rec->destX), (s16) xglPsmBufferWidth(512, 0), 0, 0, 0,
+                          rec->width, rec->height);
             block.words[0] &= ~0x8000;
             sceVif1PkOpenDirectCode(packet, 0);
             sceVif1PkAddDirectDataN(packet, &block, 5);
@@ -1351,7 +1351,7 @@ void pxyDrawPartData(void)
     nmlPacketAddWaitMicrocode();
 }
 
-/* Sets the current packet's count to 0 (sceVif1PkCnt), then adds VIF FLUSHE with the interrupt bit (0x91000000). */
+/* Sets the current packet's count to 0 (sceVif1PkCnt), then adds VIF FLUSH with the interrupt bit (0x91000000). */
 void nmlPacketAddWaitMicrocodeIrq(void)
 {
     XglPacket *packet;
@@ -1361,7 +1361,7 @@ void nmlPacketAddWaitMicrocodeIrq(void)
     sceVif1PkAddCode(packet, 0x91000000);
 }
 
-/* Sets the current packet's count to 0 (sceVif1PkCnt), then adds VIF FLUSHE (0x11000000). */
+/* Sets the current packet's count to 0 (sceVif1PkCnt), then adds VIF FLUSH (0x11000000). */
 void nmlPacketAddWaitMicrocode(void)
 {
     XglPacket *packet;
@@ -1410,7 +1410,7 @@ void xglDirectQueueAppendFlushWide(XglDirectQueueSourceEntry *source, s32 count)
 /* GS primitive coordinates are 12.4 fixed point around the 2048 origin; Q = 1.0f as raw bits. */
 #define GS_ORIGIN 0x800
 #define GS_Q_ONE 0x3F800000
-/* The glow passes copy the 0xFF-pixel square that starts one pixel after the origin. */
+/* The shadow passes copy the 0xFF-pixel square that starts one pixel after the origin. */
 #define GS_ORIGIN_1 (GS_ORIGIN + 1)
 #define GS_LAST (GS_ORIGIN + 0xFF)
 /* XYZ2 vertex at (x, y) in pixels. */
@@ -1490,8 +1490,8 @@ void nmlPacketAddScreenClear(u32 frameBase, u32 flags)
     nmlPacketAddGsFlushWide();
 }
 
-#define GLOW_LEVEL(packet) \
-    ((int) ((packet)->glowIntensity * 128.0f * (packet)->glowScale * \
+#define SHADOW_LEVEL(packet) \
+    ((int) ((packet)->shadowAlpha * 128.0f * (packet)->circleShadowScale * \
             (float) (packet)->cameraFog[xglStudioSelectedIndex] / 4080.0f))
 
 
@@ -1557,10 +1557,10 @@ void pxyDrawTextureFullscreen(u32 texBase, u32 frameBase)
 }
 
 /*
- * Draws the glow of `packet` into the frame buffer at frameBase: a sprite in the glow colour, three
- * passes that copy the buffer onto itself shifted by one texel, and a line-strip border.
+ * Softens the projected shadow of `packet` in the frame buffer at frameBase: a sprite whose level comes from the
+ * shadow alpha and scale, three passes that copy the buffer onto itself shifted by one texel, and a line-strip border.
  */
-void pxyDrawGlow(u32 frameBase, PxyPacket *packet)
+void pxySoftenShadow(u32 frameBase, PxyPacket *packet)
 {
     int i;
     u64 *p;
@@ -1572,9 +1572,9 @@ void pxyDrawGlow(u32 frameBase, PxyPacket *packet)
     GS_PUT(p, GS_TEST_1, GS_SET_TEST(1, 0, 0, 1, 1, 0, 1, 1));
     if (packet->drawMode == 4) {
         GS_PUT(p, GS_RGBAQ,
-               GS_SET_RGBAQ(GLOW_LEVEL(packet), GLOW_LEVEL(packet), GLOW_LEVEL(packet), 0x80, GS_Q_ONE));
+               GS_SET_RGBAQ(SHADOW_LEVEL(packet), SHADOW_LEVEL(packet), SHADOW_LEVEL(packet), 0x80, GS_Q_ONE));
     } else {
-        GS_PUT(p, GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, 0x80 - GLOW_LEVEL(packet), GS_Q_ONE));
+        GS_PUT(p, GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, 0x80 - SHADOW_LEVEL(packet), GS_Q_ONE));
     }
     GS_PUT(p, GS_PRIM, 6);
     GS_PUT(p, GS_XYZF2, XY(GS_ORIGIN - SCREEN_HALF_WIDTH, GS_ORIGIN - SCREEN_HALF_HEIGHT));
@@ -1987,7 +1987,7 @@ f32 xglPacketBufferUsedPercent(void)
 }
 
 
-/* One screen position of the glow quad: GS X, Y and depth as integers, and the scale of the corner. */
+/* One screen position of the circle shadow quad: GS X, Y and depth as integers, and the scale of the corner. */
 typedef ScreenVector4 PxyScreenVertex;
 
 
@@ -1995,14 +1995,14 @@ typedef ScreenVector4 PxyScreenVertex;
 /* The bit pattern of a float, as the packet words carry it. */
 #define FLOAT_BITS(f) (*(s32 *) &(f))
 
-/* Four corner signs of the glow quad, viewed as floats or copied as two doublewords. */
+/* Four corner signs of the circle shadow quad, viewed as floats or copied as two doublewords. */
 typedef Vector4Doublewords GlowSigns;
 
 /*
- * Writes the glow quad of the active camera: four corners at the unit square, projected through the
+ * Writes the circle shadow quad of the active camera: four corners at the unit square, projected through the
  * camera's view, then the packet of the four vertices. Does nothing without a selected camera.
  */
-/* Draws the blob shadow quad (textured with the circle texture sent by nmlPacketSendCircleTexture) under the model. */
+/* Draws the circle shadow quad (textured with the circle texture sent by nmlPacketSendCircleTexture) under the model. */
 void nmlPacketMakeCircleTexture(PxyPacket *model)
 {
     union { Matrix4 f; Vector4 v[4]; } worldCorner;

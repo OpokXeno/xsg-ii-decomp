@@ -736,7 +736,10 @@ void *DefineRestartInterval(void *marker)
 
 /* Each quantization table has 64 floats. DefineQuantizeTable selects
  * luminance for table ID 0 and chrominance otherwise; HuffmanDecode uses
- * the same bases (main:0x224c24/0x224c30) and indexes 64 coefficients. */
+ * the same bases (main:0x224c24/0x224c30) and indexes 64 coefficients.
+ * The copy takes length - 3 values with no limit of 64: a segment that
+ * holds more values than the one table it selects writes past that table
+ * (original behaviour, not guarded). */
 u8 *DefineQuantizeTable(u8 *marker)
 {
     u8 *segment;

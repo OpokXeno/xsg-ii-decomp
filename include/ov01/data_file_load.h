@@ -79,15 +79,15 @@ struct DataStreamEntry {
 
 void dataBatDatLoad(void);
 void dataBattleSeLoad(void);
-void dataBattleSeRelease(void);
+void dataBattleSeUpload(void);
 char *dataBattleActionPathGet(int kind, int mode);
 void dataFaceFileLoad(void);
-void dataSlotUnload(struct DataSlot *slot);
+void dataSlotVoiceUpload(struct DataSlot *slot);
 int dataStatBufGet(void);
 void dataStatFileLoad(void);
-/* Streams and effect slots: dataStreamOpen returns the stream record, unitEffectSlotAcquire takes an effect key. */
+/* Streams and effect slots: dataStreamOpen returns the stream record, unitEffectFilesSetup takes an effect key. */
 struct DataStreamEntry *dataStreamOpen(int count, int small_buffer);
-int unitEffectSlotAcquire(int key);
+int unitEffectFilesSetup(int key);
 /* The stream record of a key. */
 struct DataStreamEntry *dataStreamFind(int key);
 /* The data slot of a unit id that dataUnitFileLoad loads, and the lookup dataSlotFind. */

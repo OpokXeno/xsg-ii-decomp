@@ -7,9 +7,9 @@
 #include "main/xgl_2.h"
 #include "main/xgl_light.h"
 
-/* One 0x80-byte command of cfeCommands: an effect (its id built from a page index and a page offset,
+/* One 0x80-byte command of cfeEffects: an effect (its id built from a page index and a page offset,
  * cfeCommandSetOwnerFlags), where and how it is spawned, and the tracks that drive those values. */
-typedef struct CfeEvalCommand {
+typedef struct CfeEffect {
     int flag;                   /* +0x00 */
     int page_index;             /* +0x04 */
     int page_offset;            /* +0x08 */
@@ -20,12 +20,12 @@ typedef struct CfeEvalCommand {
     unsigned char unmodeled_3c[4];
     int frames;                 /* +0x40 */
     int action;                 /* +0x44: what cfeCommandEvaluate does, 0 to 4 */
-    int owner;                  /* +0x48: entry of cfeEntries that owns the effect, or negative */
+    int owner;                  /* +0x48: entry of cfeActors that owns the effect, or negative */
     CfeTrackNode *track[12];    /* +0x4C: CFE_COMMAND_TRACK_* (cfe.stKyEf sets them by this index) */
     unsigned char unmodeled_7c[4];
-} CfeEvalCommand;
+} CfeEffect;
 
-/* The tracks of a command (CfeEvalCommand.track). */
+/* The tracks of a command (CfeEffect.track). */
 enum CfeCommandTrack {
     CFE_COMMAND_TRACK_POSITION,         /* x, y, z */
     CFE_COMMAND_TRACK_ROTATION = 3,     /* x, y, z */
@@ -41,29 +41,29 @@ enum CfeCommandTrack {
 #define CFE_BANK_PLAIN 0x10000000
 #define CFE_OWNER_FLAGS 0x80
 
-/* One 0x18-byte slot of the table at cfeEvalSlots (the screen effects): three values and the tracks they are
+/* One 0x18-byte slot of the table at cfeScreenEffects (the screen effects): three values and the tracks they are
  * sampled from (CFE_SLOT_SOURCE_*; cfe.stKyScrEff sets them by this index). */
-typedef struct CfeEvalSlot {
-    int result_int;
+typedef struct CfeScreenEffect {
+    int effectKind;
     int sample_int;
     float sample_float;
     CfeTrackNode *source[3];    /* +0x0C */
-} CfeEvalSlot;
+} CfeScreenEffect;
 
-/* CfeEvalSlot.source: the track of result_int, sample_float and sample_int. */
+/* CfeScreenEffect.source: the track of effectKind, sample_float and sample_int. */
 enum CfeSlotSource {
     CFE_SLOT_SOURCE_RESULT_INT,
     CFE_SLOT_SOURCE_SAMPLE_FLOAT,
     CFE_SLOT_SOURCE_SAMPLE_INT
 };
 
-/* Global block at cfeEvalGlobal (cfeGlobalEvaluate): the fog switch, two vectors and eight source handles. */
-typedef struct CfeEvalGlobal {
+/* Global block at cfeFog (cfeGlobalEvaluate): the fog switch, two vectors and eight source handles. */
+typedef struct CfeFog {
     int fogEnabled;             /* sampled from source[7]; cfeCmdStepFrame sets the fog when it is set */
     unsigned char unmodeled_04[0x0C];
     Vector4 evaluated[2];
     CfeTrackNode *source[8];
-} CfeEvalGlobal;
+} CfeFog;
 
 /* The vector of the cfe records and entries, with its components by name or by index. The original
  * reaches it through a union: after every store the record pointer is loaded again (alias set 0), and
@@ -89,7 +89,7 @@ typedef struct CfePackHeader {
     int subPackOffset;          /* +0xD0: bytes from the pack to its part pack, 0 if none */
 } CfePackHeader;
 
-/* A map of cfeGroups, the original's maps (cfe.ldMp; 0xC0 bytes, quadword aligned): an object, the part table of
+/* A map of cfeMaps, the original's maps (cfe.ldMp; 0xC0 bytes, quadword aligned): an object, the part table of
  * its pack with the part matrices and one evaluation record per part, and the group's own values with their tracks. */
 typedef struct CfeMap {
     struct XenoActor *object;   /* +0x00 */
@@ -97,9 +97,9 @@ typedef struct CfeMap {
     Matrix4 *matrices;          /* +0x08: one per part */
     CfeEvalRecord *records;     /* +0x0C: one per part */
     unsigned char unmodeled_10[0x50 - 0x10];
-    AlignedVector4 position;    /* +0x50: from tracks 0..2 */
-    int light;                  /* +0x60: from track 4 */
-    CfeTrackNode *tracks[5];    /* +0x64: position x, y, z, hidden, light */
+    AlignedVector4 colorScale;  /* +0x50: the colour scale of the group (pxySetColorScale), from tracks 0..2 */
+    int texMapDrop;             /* +0x60: from track 4; a shown group with it set drops the texture map */
+    CfeTrackNode *tracks[5];    /* +0x64: colour scale x, y, z, hidden, texture map drop */
     unsigned char unmodeled_78[0xB8 - 0x78];
     /* +0xB8: the collision set that is current while the group is shown. A pointer: its load is scheduled
      * ahead of an int store in cfeGroupTableEvaluate. */
@@ -107,7 +107,7 @@ typedef struct CfeMap {
     unsigned char unmodeled_bc[0xC0 - 0xBC];
 } CfeMap;
 
-/* A row of cfeDirections, the original's lights (0x40 bytes): the angles of a light direction, the light-set
+/* A row of cfeLights, the original's lights (0x40 bytes): the angles of a light direction, the light-set
  * vectors it drives (cfeLightRowsInit points them into cfeLightSet; row 0 has only the ambient colour) and
  * the tracks they are sampled from. */
 typedef struct CfeLight {
@@ -115,7 +115,7 @@ typedef struct CfeLight {
     unsigned char unmodeled_0c[4];
     float *direction;           /* +0x10: rotated from angles */
     float *color;               /* +0x14 */
-    float *extra;               /* +0x18 */
+    float *extra;               /* +0x18: never set (stays null), yet the tracks 0 to 2 of cfeEvaluate write through it */
     CfeTrackNode *track[9];     /* +0x1C: CFE_LIGHT_TRACK_* (cfe.stKyLgt sets them by this index) */
 } CfeLight;
 
@@ -127,7 +127,7 @@ enum CfeLightTrack {
 };
 
 /* Table entry (stride 0x230) of cfeEntryEvaluate: three vectors, a result word and ten source handles. */
-typedef struct CfeEvalEntry {
+typedef struct CfeMonitor {
     /* The movie work record (XS1 MovieInfo). The movie plays from memory: source is the file, read into a
      * GameResBufferAlloc block, and imageAddress are two more blocks of 16 * imageQwords + 0x20 bytes.
      * bufferIndex is nonzero while imageAddress[0] holds the frame to show, else [1]. */
@@ -139,7 +139,7 @@ typedef struct CfeEvalEntry {
     int rewind;                 /* +0x200: sampled from source[9]; cfeEntryTableUpdate rewinds the movie when set */
     CfeTrackNode *source[10];
     unsigned char unmodeled_22c[4];
-} CfeEvalEntry;
+} CfeMonitor;
 
 struct XenoActor;
 
@@ -177,31 +177,32 @@ enum CfeActorTrack {
 
 /* The tracks of an actor entry from +0x194 (CfeActor.headTrack), set by cfe.stKyAtHd. */
 enum CfeActorHeadTrack {
-    CFE_ACTOR_HEAD_SHOWN,
-    CFE_ACTOR_HEAD_POSITION,            /* x, y, z of the entry position */
+    CFE_ACTOR_HEAD_LOOK_ENABLED,
+    CFE_ACTOR_HEAD_POSITION,            /* x, y, z of the look target */
     CFE_ACTOR_HEAD_COUNT = 4
 };
 
-/* One 0x1B0-byte entry of cfeEntries, the original's actor table (actor[numActor].pAct in its asserts): the
+/* One 0x1B0-byte entry of cfeActors, the original's actor table (actor[numActor].pAct in its asserts): the
  * XenoActor it drives, the values it last set and the tracks they come from. */
 typedef struct CfeActor {
     unsigned char unmodeled_000[0xC0];
     struct XenoActor *actor;    /* +0x0C0: pAct */
     unsigned char unmodeled_0c4[0xD0 - 0xC4];
     AlignedVector4 vectorD0;    /* +0x0D0: cfeActorInitialVector (cfeActorTableInit) */
-    /* +0x0E0: the sampled offset, then in front of the actor. Reached through a union in the original:
-     * cfeActorEvaluate loads the actor pointer again after the store to position.x (alias set 0). */
+    /* +0x0E0: the look target, a point in front of the actor, given to XenoActorSetFocusTarget. Reached through
+     * a union in the original: cfeActorEvaluate loads the actor pointer again after the store to lookTarget.x
+     * (alias set 0). */
     union {
-        AlignedVector4 position;
+        AlignedVector4 lookTarget;
     };
-    int flags;                  /* +0x0F0: CFE_ACTOR_SHOWN */
+    int flags;                  /* +0x0F0: CFE_ACTOR_LOOK_ENABLED */
     int mode;                   /* +0x0F4 */
     int selector;               /* +0x0F8 */
     int slot;                   /* +0x0FC: the mode slot */
     float channelValue;         /* +0x100: the channel value of the actor's first motion state */
     int playStart;              /* +0x104: the play range of that motion state */
     int playEnd;                /* +0x108 */
-    int parentActId;            /* +0x10C: parentActID, the cfeEntries entry whose actor this one hangs on; -1 none */
+    int parentActId;            /* +0x10C: parentActID, the cfeActors entry whose actor this one hangs on; -1 none */
     int parentMatId;            /* +0x110: parentMatID, the joint of that actor */
     float speedA;               /* +0x114: of the actor's motion state A */
     float speedB;               /* +0x118: of motion state B */
@@ -216,8 +217,8 @@ typedef struct CfeActor {
     unsigned char unmodeled_1a8[0x1B0 - 0x1A8];
 } CfeActor;
 
-/* CfeActor.flags: the entry's actor follows its position. */
-#define CFE_ACTOR_SHOWN 0x1
+/* CfeActor.flags: the actor looks at lookTarget (XenoActorSetFocusTarget) while it is set. */
+#define CFE_ACTOR_LOOK_ENABLED 0x1
 
 /* The tracks of the studio camera (CfeCamera.track): cfe.stKyCm sets them by this index. */
 enum CfeCameraTrack {
@@ -261,17 +262,17 @@ typedef union CfeStudioView {
 
 /* The cut-scene tables (the original's actors, maps, effects, lights, fog, monitors and screen effects) and
  * the light set the lights point into. */
-extern CfeActor cfeEntries[];
+extern CfeActor cfeActors[];
 extern int cfeEntryCount;
-extern CfeMap cfeGroups[];
+extern CfeMap cfeMaps[];
 extern int cfeGroupCount;
-extern CfeEvalCommand cfeCommands[];
+extern CfeEffect cfeEffects[];
 extern int cfeCommandCount;
-extern CfeLight cfeDirections[4];
-extern CfeEvalGlobal cfeEvalGlobal;
-extern CfeEvalEntry cfeEvalEntries[];
+extern CfeLight cfeLights[4];
+extern CfeFog cfeFog;
+extern CfeMonitor cfeMonitors[];
 extern int cfeEvalEntryCount;
-extern CfeEvalSlot cfeEvalSlots[3];
+extern CfeScreenEffect cfeScreenEffects[3];
 extern XglLightSet cfeLightSet;
 extern CfeStudioView cfeCamera;
 
@@ -284,7 +285,7 @@ void cfeLightTableEvaluate(int time);
 void cfeGlobalEvaluate(int sample_param);
 int cfeEntryTableEvaluate(int sample_param);
 void cfeSlotTableEvaluate(int sample_param);
-void cfeSndTableEvaluate(int target);
+void cfeSndTableEvaluate(int time);
 void cfeEntryTableUpdate(int noPlay);
 
 #endif /* INCLUDE_MAIN_CFEEVALUATE_H */

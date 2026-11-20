@@ -2,18 +2,18 @@
 #include "main/cfe_entry.h"
 
 extern int cfeEntryCount;
-extern unsigned char cfeEntries[];
+extern unsigned char cfeActors[];
 
-/* Number of entries in cfeEntries; each entry is 0x1B0 bytes. */
+/* Number of entries in cfeActors; each entry is 0x1B0 bytes. */
 int cfeGetEntryCount(void) {
     return cfeEntryCount;
 }
 
-/* Entry `index` of cfeEntries, or null when index is outside the count. */
+/* Entry `index` of cfeActors, or null when index is outside the count. */
 void *cfeGetEntry(int index) {
     void *entry = 0;
 
-    if (cfeEntryCount == 0 || (entry = cfeEntries + index * 0x1B0, !(index < cfeEntryCount))) {
+    if (cfeEntryCount == 0 || (entry = cfeActors + index * 0x1B0, !(index < cfeEntryCount))) {
         entry = 0;
     }
     return entry;

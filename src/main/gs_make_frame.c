@@ -7,8 +7,8 @@ extern u16 sRenderDisplayBase;
 extern u16 sRenderFrameBase;
 extern u16 sRenderFlipBase;
 
-/* GS FRAME register value of a 512-pixel-wide (FBW 8) frame page: buffer 0 the display page, 1 the page sRenderFlipBase,
-   2 sRenderFrameBase; flag is not read. */
+/* GS FRAME register value of a 512-pixel-wide (FBW 8) frame page: buffer 0 the display page (sRenderDisplayBase), 1 the draw page
+   (sRenderFlipBase), 2 the work page (sRenderFrameBase); flag is not read. */
 u64 gsMakeFrame(int buffer, int flag)
 {
     switch (buffer) {

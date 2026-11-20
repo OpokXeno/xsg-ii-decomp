@@ -128,8 +128,8 @@ int testLoadFile(int *bufferCursor, const char *name) {
     return buffer;
 }
 
-/* Converts the two-byte character at first/second in place: the lead byte is doubled and both bytes are
- * moved into the Shift-JIS ranges. Only yg2PathReadTaggedText calls it, for each high-bit character. */
+/* Converts the two-byte Shift-JIS character at first/second in place to EUC-JP: the lead byte is doubled and
+ * both bytes are moved into the EUC-JP ranges. Only yg2PathReadTaggedText calls it, for each high-bit character. */
 void sjisToEuc(unsigned char *first, unsigned char *second)
 {
     unsigned int leadDoubled;
@@ -228,7 +228,7 @@ unsigned int tiWaterStateTemplate[60] = {
     36856, 32759, 0xFFFFFFFFu, 0, 0, 0, 63, 0,
     0, 0, 74, 0
 };
-unsigned int tiWaterDepthProgramSelect[2] = { 0 };
+unsigned int tiWaterPerVertexDirection[2] = { 0 };
 unsigned int tiWaterSurfaceGridHeader[4] = {
     32768, 0x300E4000u, 1298, 0
 };

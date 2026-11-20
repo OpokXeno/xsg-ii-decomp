@@ -44,6 +44,6 @@ int uwamonoQuadEdgesVisible(const Vector4 *origin, const Vector4 *corner0, const
 void vectorCopyPoint(Vector4 *destination, const Vector4 *source, float facing);
 void GetBSplineLoop(short frame, short count, int period_value, Vector4 *points, Vector4 *destination);
 void GetBSplineLoopDummy(short frame, short count, short period, Vector4 *points, Vector4 *destination, int slot);
-int padDebugPrintDirection(int sector_count);
+int padRightStickRotate(int sector_count);
 
 #endif /* INCLUDE_MAIN_GET_H */

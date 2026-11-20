@@ -4,7 +4,7 @@
 #include "shared.h"
 #include "main/m_se_obj.h"
 
-/* Functions of src/ov01/m_gs.c that other files call. */
+/* Functions of the ov01 scene (src/ov01/scene.c and src/ov01/m_gs.c) that other files call. */
 
 void ov01SceneSystemsShutdown(void);
 void ov01SceneStateReset(void);
@@ -21,8 +21,8 @@ struct MEfStepObject;
 struct MEfPathObject;
 struct TrailHost;
 struct FlagWindowHost;
-struct MEfEffectObject;
-struct MEfCounterObject;
+struct MEfMissileTrailObject;
+struct MEfSpiralObject;
 struct SprayHost;
 struct MEfSwayObject;
 struct MEfThunder25Effect;
@@ -33,7 +33,7 @@ struct MEfHistoryObject;
 
 int MEfCreateWait(struct MEfStepObject *object);
 int MEfCreateHermitePath(struct MEfStepObject *object);
-int MEfCreateSpiral(struct MEfCounterObject *object);
+int MEfCreateSpiral(struct MEfSpiralObject *object);
 int MEfCreateThunder25(struct MEfThunder25Effect *object);
 int MEfCreateThunder31(struct MEfThunder31Effect *object);
 int MEfCreateTepodon(struct TrailHost *object);
@@ -42,7 +42,7 @@ int MEfCreateWaveEffect(struct WaveHost *host);
 int MEfCreateSpray(struct SprayHost *host);
 int MEfCreatePathStep(struct MEfPathObject *object);
 int MEfCreateSway(struct MEfSwayObject *object);
-int MEfCreateMissileTrail(struct MEfEffectObject *object);
+int MEfCreateMissileTrail(struct MEfMissileTrailObject *object);
 int MEfCreateActorPath(struct MEfActorPathObject *object);
 int MEfCreateActorHistory(struct MEfHistoryObject *object);
 
@@ -79,7 +79,7 @@ typedef union MEfGsQword {
  *   current   the open GIF tag; reset to data by MGsGPInit and MGsGPTerm.
  *   count     quadwords written, passed to sceVif1PkAddDirectDataN and reset
  *             to zero after each flush.
- *   regCount  registers per loop of the open tag (m_ef_path_debug.c writes it); MGsGPInit
+ *   regCount  registers per loop of the open tag (m_ef_path.c writes it); MGsGPInit
  *             and MGsGPTerm reset it to zero.
  */
 typedef struct MGsPacket {

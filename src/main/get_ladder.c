@@ -9,11 +9,12 @@
 #include "main/xenoActor.h"
 #include "main/xgl_font.h"
 #include "main/game_data.h"
-#include "main/ladder_table.h"
 #include "ov01/sb_vm.h"
 #include "main/get.h"
 #include "main/uwamono_event_check.h"
 #include "main/runtime_uwamono_door.h"
+#include "ov01/sb_natives.h"
+#include "main/uwamono_record.h"
 
 /* Ladder climb state. */
 static short ladderRungIndex;           /* the rung the climb started from */
@@ -39,14 +40,6 @@ const char ladderLeftClimbableFormat[16] = "\xba" "\xb8" "\xbe" "\xba" "\xb9" "\
 /* JP: 右昇降可能%3d
  * EN: Right side climbable %3d */
 const char ladderRightClimbableFormat[16] = "\xb1" "\xa6" "\xbe" "\xba" "\xb9" "\xdf" "\xb2" "\xc4" "\xc7" "\xbd" "%3d";
-
-extern SbNativeMethod uwamonoNativeTable[];
-extern char uwamonoModuleName[];
-
-/* Registers the uwamono native table uwamonoNativeTable with the module name uwamonoModuleName. */
-void uwamonoRegisterNatives(void) {
-    sbNativeOwnerAdd(uwamonoModuleName, uwamonoNativeTable);
-}
 
 
 /*
@@ -136,11 +129,11 @@ void Fly_to_Ladder(void)
             angle = ladderSlots[uwamonoLadderSlot].angle;
             actor->direction.y = angle;
             actor->rotation.y = angle;
-            XenoActorSetFirstWord(actor, 15);
+            XenoActorSetSolverPasses(actor, 15);
             cameraApplyAllSlots(0);
         } else {
             uwamonoSetMotion(uwamonoCurrentIndex, 13, 1.0f);
-            XenoActorSetFirstWord(actor, 15);
+            XenoActorSetSolverPasses(actor, 15);
         }
         uwamonoLadderState.state = 3;
     }
@@ -167,7 +160,7 @@ void Fly_to_Ladder(void)
         }
         uwamonoSetMotion(uwamonoCurrentIndex, 20, 1.0f);
         if (ladderExitSide == 0) {
-            XenoActorSetFirstWord(actor, 20);
+            XenoActorSetSolverPasses(actor, 20);
         }
         XenoActorApplySourceValue(actor);
         actor->flags |= 1;
@@ -212,7 +205,7 @@ void Get_Off_Ladder(void)
         uwamonoLadderState.state = 0;
         actor->position.y = object->moveTo.y;
         landing->hitFlags = 0x1000 | oldHitFlags;
-        XenoActorSetChannelValue(actor, 4.0f);
+        XenoActorSetBlendFrames(actor, 4.0f);
         uwamonoSetMotion(uwamonoCurrentIndex, 0, 1.0f);
         XenoActorShiftJoints(actor, -1, 1, 0, 1);
         if (ladderExitSide != 0) {
@@ -331,7 +324,7 @@ finalize:
     object->turnTo.y = slot->angle;
     uwamonoLadderSlot = index;
     ladderFrame = 0;
-    XenoActorSetChannelValue(actor, 4.0f);
+    XenoActorSetBlendFrames(actor, 4.0f);
     uwamonoSetMotion(uwamonoCurrentIndex, 0, 1.0f);
     Fly_to_Ladder();
     XenoActorWrapRotation(actor);
@@ -456,7 +449,7 @@ void On_Ladder(void)
         if (climb > 0.0f) {
             if (slot->position.y + slot->height <= actor->position.y + 0.8f) {
                 uwamonoSendEvent(4, ladderSlots[uwamonoLadderSlot].id, 0);
-                if (gameWork.control & CONTROL_TOP_EXIT) {
+                if (gameWork.control & CONTROL_MAP_LOADED) {
                     uwamonoLadderState.state = LADDER_STATE_TOP;
                 }
                 return;
@@ -516,7 +509,7 @@ void On_Ladder(void)
                     ladderExitFrames = 0x2A;
                     ladderExitSide = 1;
                     exited = 1;
-                    XenoActorSetChannelValue(actor, 4.0f);
+                    XenoActorSetBlendFrames(actor, 4.0f);
                     if (slot->position.y + slot->rungs[i] + 0.3f <= actor->position.y) {
                         uwamonoSetMotion(uwamonoCurrentIndex, 0x10, 1.0f);
                         ladderExitOffset = -0.13f;
@@ -541,7 +534,7 @@ void On_Ladder(void)
                     ladderExitFrames = 0x2A;
                     ladderExitSide = 1;
                     exited = 1;
-                    XenoActorSetChannelValue(actor, 4.0f);
+                    XenoActorSetBlendFrames(actor, 4.0f);
                     if (slot->position.y + slot->rungs[i] + 0.3f <= actor->position.y) {
                         uwamonoSetMotion(uwamonoCurrentIndex, 0xF, 1.0f);
                         ladderExitOffset = -0.13f;
@@ -611,16 +604,146 @@ int Ladder_Main(void)
     return 1;
 }
 
-char uwamonoModuleName[8] = "uwamono";
+/* Clears every ladder slot to its unused state and selects slot 0. */
+void ladderInitTable(void)
+{
+    int slotIndex;
+    int rungIndex;
+    LadderSlot *slot;
 
-/* .data of this file (0x3E6FF0): the uwamono script natives. */
+    uwamonoLadderState.state = 0;
+    for (slotIndex = 0; slotIndex < LADDER_SLOT_COUNT; slotIndex++) {
+        slot = &ladderSlots[slotIndex];
+        slot->id = -1;
+        slot->slotIndex = -1;
+        slot->position.x = slot->position.y = slot->position.z = 0.0f;
+        slot->position.w = 1.0f;
+        slot->height = slot->angle = 0.0f;
+        slot->rungCount = 0;
+        slot->footBlocked = 0;
+        for (rungIndex = 0; rungIndex < LADDER_MAX_RUNGS; rungIndex++) {
+            slot->rungs[rungIndex] = 0.0f;
+            slot->rungExits[rungIndex] = 0;
+        }
+    }
+}
 
-/* Native table of the uwamono module. */
-SbNativeMethod uwamonoNativeTable[6] = {
-    { "setDoorAll", uwamonoSetDoorAll },
-    { "setKowaremonoAll", uwamonoSetKowaremonoAll },
-    { "SendSignal", uwamonoSendSignal },
-    { "setCollisionSize", uwamonoSetCollisionSize },
-    { "setCollisionScale", setCollisionScale },
+/* Returns the index of the first slot whose id is id, or -1 when no slot holds it. */
+int ladderFindSlot(short id)
+{
+    int slotIndex;
+    LadderSlot *slot;
+
+    slot = ladderSlots;
+    for (slotIndex = 0; slotIndex < LADDER_SLOT_COUNT; slotIndex++) {
+        if (slot->id == id) {
+            return slotIndex;
+        }
+        slot += 1;
+    }
+    return -1;
+}
+
+/* Returns how many slots, counted from slot 0, are in use before the first unused one. */
+int ladderCountUsedPrefix(void)
+{
+    int usedCount;
+    LadderSlot *slot;
+
+    usedCount = 0;
+    if (ladderSlots[0].id != -1) {
+        slot = ladderSlots;
+        for (;;) {
+            usedCount += 1;
+            slot += 1;
+            if (usedCount < LADDER_SLOT_COUNT && slot->id != -1) {
+                continue;
+            }
+            break;
+        }
+    }
+    return usedCount;
+}
+
+
+/* Fills the slot of the ladder at the first unused position from the entry key and the foot data. */
+int ladderSetLadder(SbThread *thread)
+{
+    LadderSlot *slot;
+    float *angleHeight;
+    char *slotBytes;
+    int poseOffset;
+    int usedCount;
+    int ladderId;
+    int entryKey;
+    float height;
+
+    if (VM_PLUGIN_CNT_GET(thread) != 3) {
+        sbSlotJumpRequest(thread, 2);
+        return 0;
+    }
+    usedCount = ladderCountUsedPrefix();
+    ladderId = vmArgGet(thread, 1);
+    entryKey = vmArgGet(thread, 2);
+    height = (float) vmArgGet(thread, 3) / 100.0f;
+    if (entryKey == -1) {
+        ladderSlots[usedCount].id = 0;
+        return 1;
+    }
+    /* The angle/height pair is addressed as a byte offset into the table: a field address gets folded differently and changes the code. */
+    slotBytes = (char *)ladderSlots;
+    slot = &ladderSlots[usedCount];
+    poseOffset = usedCount * sizeof(LadderSlot) + 32;
+    angleHeight = (float *)(slotBytes + poseOffset);
+    slot->slotIndex = usedCount;
+    slot->id = ladderId;
+    angleHeight[1] = height;
+    slot->key = entryKey;
+    *angleHeight = uwamonoGetEntryPose(entryKey, &ladderSlots[usedCount].position.x);
+    return 1;
+}
+
+/* Adds a rung to the ladder of the entry key: its height and the exits it allows. */
+int ladderSetEntrance(SbThread *thread)
+{
+    int slotIndex;
+    float rungHeight;
+    int leftExit;
+    int rightExit;
+    int rungExitBits;
+    int rungIndex;
+
+    if (VM_PLUGIN_CNT_GET(thread) != 4) {
+        sbSlotJumpRequest(thread, 2);
+        return 0;
+    }
+    slotIndex = ladderFindSlot(vmArgGet(thread, 1));
+    rungHeight = (float) vmArgGet(thread, 2) / 100.0f;
+    leftExit = (vmArgGet(thread, 3) == 1) ? RUNG_EXIT_LEFT : 0;
+    rightExit = (vmArgGet(thread, 4) == 1) ? RUNG_EXIT_RIGHT : 0;
+    rungExitBits = leftExit | rightExit;
+    rungIndex = ladderSlots[slotIndex].rungCount;
+    ladderSlots[slotIndex].rungs[rungIndex] = rungHeight;
+    ladderSlots[slotIndex].rungCount += 1;
+    ladderSlots[slotIndex].rungExits[rungIndex] = rungExitBits;
+    return 1;
+}
+
+extern SbNativeMethod ladderNatives[];
+extern char ladderModuleName[];
+
+void ladderRegisterNatives(void) {
+    sbNativeOwnerAdd(ladderModuleName, ladderNatives);
+}
+
+char ladderModuleName[8] = "ladder";
+LadderStateWork uwamonoLadderState = { 0 };
+/* .data of this file (0x3E7020-0x3E7040): the ladder script natives. */
+
+/* Native table of the ladder module. */
+SbNativeMethod ladderNatives[4] = {
+    { "setLadder", ladderSetLadder },
+    { "setEntrance", ladderSetEntrance },
+    { 0, 0 },
     { 0, 0 }
 };

@@ -117,7 +117,7 @@ int tiMRPackageGetNodeMatrix(TiMRPackage *handle, int nodeKey, Matrix4 outMatrix
     if (table == 0) {
         return 0;
     }
-    if (table->threshold < 1.1f) {
+    if (table->version < 1.1f) {
         slots = table->slots;
         if ((unsigned int) nodeKey >= table->count) {
             return 0;

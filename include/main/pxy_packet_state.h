@@ -29,7 +29,7 @@ typedef struct TxyBlock {
     int setCount; /* +0x04 */
     u32 size; /* +0x08 */
     u32 flags; /* +0x0c: bit 31 set while the table is pending */
-    int setOffset[8]; /* +0x10: one offset per index, to a packet set */
+    int setOffset[8]; /* +0x10: offsets of the packet sets; the file table has 32 slots, only eight are declared */
 } TxyBlock;
 
 /* One 0x20-byte record of a model's entry table: the offset and size of its data in the model file. */
@@ -54,34 +54,34 @@ typedef struct PxyHeader {
     u32 fileSize[1]; /* +0x0c, a one-word array, read as *h->fileSize */
     char name[0x20]; /* +0x10 */
     int layerCount; /* +0x30 */
-    int entryCount; /* +0x34: the map code clears one hide-mask bit for each */
+    int entryCount; /* +0x34: same count as geometryCount (+0x60) */
     u8 unmodeled_38[4];
-    int offset3C; /* +0x3c */
+    int entryTableOffset; /* +0x3c: offset of the PxyTableEntry table (packet->entries) */
     int partOffset; /* +0x40 */
     u8 unmodeled_44[4];
     int partCount; /* +0x48 */
     u8 unmodeled_4C[8];
     int rangeOffset; /* +0x54 */
-    int offset58; /* +0x58 */
+    int materialOffset; /* +0x58: offset of the material table */
     int nJointMatrix; /* +0x5c: number of global part matrices (pPxyHead->nJointMatrix in the original asserts) */
     int geometryCount; /* +0x60 */
     int jointMatrixOffset; /* +0x64: offset of the joint matrices */
     int entryMatrixOffset; /* +0x68: offset of the 0x40-byte entry matrices (the default part matrices) */
     int geometryOffset; /* +0x6c: offset of the 0x70-byte geometry array */
-    int offset70; /* +0x70 */
-    int offset74; /* +0x74 */
-    int offset78; /* +0x78 */
+    int defaultJointOffset; /* +0x70: offset of the default joint matrices */
+    int trackHeaderOffset; /* +0x74: offset of the track header */
+    int trackTableOffset; /* +0x78: offset of the table of track part offsets */
     u8 unmodeled_7C[0x80 - 0x7C];
     AlignedVector4 sphere; /* +0x80: bounding sphere centre, radius in w */
-    float minX; /* +0x90 */
+    float minX; /* +0x90: box corner min, x */
     u8 unmodeled_94[0x98 - 0x94];
-    float minZ; /* +0x98 */
+    float minZ; /* +0x98: box corner min, z */
     u8 unmodeled_9C[0xA0 - 0x9C];
-    float maxX; /* +0xA0 */
+    float maxX; /* +0xA0: box corner max, x */
     u8 unmodeled_A4[0xA8 - 0xA4];
-    float maxZ; /* +0xA8 */
+    float maxZ; /* +0xA8: box corner max, z */
     u8 unmodeled_AC[0xC0 - 0xAC];
-    int waterFlag; /* +0xc0: nonzero runs tiWaterObjectUpdate */
+    int waterOffset; /* +0xc0: offset of the water table (WAT chunk), 0 if none */
     u8 unmodeled_C4[0xC8 - 0xC4];
     int trackOffset; /* +0xc8: offset of the PxyTrack of the flags-0x10 entries */
     int entryOffsets; /* +0xcc: offset of the int table of entry offsets */
@@ -107,7 +107,7 @@ typedef struct PxyPart {
     s16 index; /* +0x14: index into the per-part flag bytes */
     u8 unmodeled_16[2];
     u32 flags; /* +0x18 */
-    signed char styleLevel; /* +0x1C */
+    signed char styleLevel; /* +0x1C: back-face removal switch and side */
     u8 unmodeled_1D[3];
     Vector4 boundsMin; /* +0x20 */
     Vector4 boundsMax; /* +0x30 */
@@ -121,11 +121,11 @@ typedef struct PxyPacket {
     u32 renderStatus; /* +0x00 */
     int camera; /* +0x04: camera that owns the model */
     int drawMode; /* +0x08: 1 and 4 cast shadows */
-    u8 unmodeled_0C[4];
+    u8 unmodeled_0C[4]; /* +0x0C: the hide mask (pxyHideMask) */
     PxyHeader *header; /* +0x10 */
     struct PxyPartRange *ranges; /* +0x14 */
     u8 unmodeled_18[4];
-    u8 *channelTable; /* +0x1C: 0x70-byte record per matrix index, its bone ids from +0x30 */
+    u8 *channelTable; /* +0x1C: the 0x70-byte geometry array (pxyHeaderTable6C) */
     PxyPart *parts; /* +0x20 */
     u8 unmodeled_24[0x2C - 0x24];
     u8 *matrixTable; /* +0x2C */
@@ -134,11 +134,11 @@ typedef struct PxyPacket {
     TxyBlock *textureTable; /* +0x38 */
     PxyTableEntry *entries; /* +0x3C */
     u8 unmodeled_40[4];
-    float alpha; /* +0x44 */
-    u8 unmodeled_48[4];
-    float glowScale; /* +0x4C */
+    float reflectTransparency; /* +0x44: transparency of the break-up pieces */
+    u8 unmodeled_48[4]; /* +0x48: model transparency (pxyTransparency) */
+    float circleShadowScale; /* +0x4C: circle shadow scale, a copy of the transparency */
     u8 unmodeled_50[0x58 - 0x50];
-    float glowIntensity; /* +0x58 */
+    float shadowAlpha; /* +0x58: shadow strength */
     union Matrix *boneMatrices; /* +0x5C: one per part matrix index */
     u8 unmodeled_60[0x68 - 0x60];
     int (*levelTable)[4]; /* +0x68 */
@@ -149,23 +149,23 @@ typedef struct PxyPacket {
     u8 unmodeled_88[0x94 - 0x88];
     float shadowY; /* +0x94 */
     union Matrix *shadowMatrix; /* +0x98 */
-    int frameMask; /* +0x9c */
+    int frameWriteMask; /* +0x9c: GS frame write mask */
     u8 unmodeled_A0[4];
     s16 planeCount; /* +0xA4 */
-    s16 reflectMode; /* +0xA6 */
+    s16 clipPlaneMaskedCount; /* +0xA6: 2 = the pieces move the other way */
     PxyClipPlanes *planes; /* +0xA8: clip planes */
     u8 unmodeled_AC[0xB0 - 0xAC];
-    float reflectBlend; /* +0xB0 */
-    u8 *reflectMask; /* +0xB4 */
-    float reflectScale; /* +0xB8 */
-    float reflectExtra; /* +0xBC */
+    float clipPlaneMaskedTime; /* +0xB0: time factor */
+    u8 *clipPlaneMask; /* +0xB4: mask of the geometries that break up */
+    float clipPlaneMaskedScale; /* +0xB8: plane distance scale */
+    float clipPlaneMaskedPush; /* +0xBC: push strength */
     float lowerClipHeight; /* +0xC0 */
-    struct PxyHideMask *hideMask; /* +0xC4 */
+    struct PxyHideMask *secondPartMask; /* +0xC4 */
     float upperClipHeight; /* +0xC8 */
     u8 unmodeled_CC[4];
-    u8 *partIndexList; /* +0xD0: 16 part indices ended by 0xff */
+    u8 *shadowReceiverParts; /* +0xD0: 16 part indices ended by 0xff, the receivers of the shadow */
     u32 unmodeled_D4; /* +0xD4 */
-    float uniformScale; /* +0xD8 */
+    float fadeAlpha; /* +0xD8 */
     u8 unmodeled_DC[4];
     Matrix4 localMatrix; /* +0xE0: model to world */
     Matrix worldMatrix; /* +0x120 */
@@ -226,12 +226,12 @@ void pxyDrawPartData(void);
 void nmlPacketAddScreenClear(u32 frameBase, u32 flags);
 void pxyDrawTextureRect(u32 texBase, Vector4 *srcRect, u32 frameBase, Vector4 *dstRect);
 void pxyFillFrameAlphaMsbStrip(u16 unused0);
-void pxyDrawGlow(u32 frameBase, PxyPacket *packet);
+void pxySoftenShadow(u32 frameBase, PxyPacket *packet);
 void nmlPacketMakeCircleTexture(PxyPacket *model);
 void nmlPacketSendCircleTexture(const void *indices, void *palette);
 void pxyUploadScreenSampleParams(void);
 void pxySetGlobalColor(const Vector4 *colorScale);
-void pxyUpdateReflectionRotation(int reflect);
+void pxyUpdateBreakRotation(int reflect);
 void pxySetBlackFogFlag(int flag);
 void pxySetDrawPass(int value);
 void xglStudioSelect(int index);

@@ -10,7 +10,7 @@
 void xglCdArenaOpen(void *buffer, long long size);
 void xglCdArenaClose(void);
 /* The arena start address; 0 while no arena is open. */
-unsigned char *xglCdArenaGetSize(void);
+unsigned char *xglCdArenaGetStart(void);
 /* Bump allocation of size bytes at the arena cursor. */
 void *xglCdSectorAlloc(int size);
 /* Reserves size bytes in the arena as the buffer area xglCdBufferReserve hands out from and rewinds to. */

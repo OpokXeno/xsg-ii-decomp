@@ -6,8 +6,8 @@
 #include "ov01/ov01_task.h"
 #include "gs.h"
 
-/* Alpha of a fully opaque screen fade (GS ALPHA value of the fix). */
-#define SCREEN_FADE_OPAQUE 0x80
+/* GS ALPHA value that leaves the picture unchanged (the quad computes Cd x FIX, 0x80 is 1.0). */
+#define SCREEN_FADE_NEUTRAL 0x80
 
 /* GIF tag of the fade quad: NLOOP 2, EOP set, NREG 1 (A+D). */
 #define GIF_TAG_TWO_AD_EOP 0x1000000000008002ULL
@@ -15,7 +15,7 @@
 /*
  * Screen fade task (the object fadeIn and fadeOut allocate).
  * The words used by the step and draw functions: step at 0x04 and draw at 0x08 (the
- * callbacks), alpha at 0x0C (GS alpha, 0x80 is opaque), alphaStep at 0x10, frameDelay
+ * callbacks), alpha at 0x0C (GS alpha, 0x80 leaves the picture unchanged), alphaStep at 0x10, frameDelay
  * at 0x14 and finished at 0x18. Nothing else is evidenced.
  */
 struct ScreenFade {
@@ -34,7 +34,7 @@ void fadeObjDraw(struct ScreenFade *fade);
 void fadeOutObj(struct ScreenFade *fade);
 
 /*
- * Starts a screen fade whose alpha rises from 0 to 0x80 (opaque): allocates a
+ * Starts a screen fade whose alpha rises from 0 (black) to 0x80 (picture unchanged): allocates a
  * task, stores alphaStep and frameDelay in it and makes it the running fade.
  */
 void fadeIn(int alphaStep, int frameDelay)
@@ -63,7 +63,7 @@ void fadeOut(int alphaStep, int frameDelay)
     if (fade == 0) {
         return;
     }
-    fade->alpha = SCREEN_FADE_OPAQUE;
+    fade->alpha = SCREEN_FADE_NEUTRAL;
     fade->alphaStep = alphaStep;
     fade->frameDelay = frameDelay;
     fade->finished = 0;
@@ -89,7 +89,7 @@ void fadeInObj(struct ScreenFade *fade)
     }
     nextAlpha = fade->alpha + fade->alphaStep;
     fade->alpha = nextAlpha;
-    if (nextAlpha > SCREEN_FADE_OPAQUE) {
+    if (nextAlpha > SCREEN_FADE_NEUTRAL) {
         fade->finished = 1;
     }
 }

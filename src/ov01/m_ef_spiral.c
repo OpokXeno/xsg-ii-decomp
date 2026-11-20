@@ -14,7 +14,7 @@
 #include "main/m_se_obj.h"
 #include "main/sm_initilize.h"
 
-/* Counter effect constants. The GS register values and names (MEF_GS_*) are in ov01/m_gs.h. */
+/* Spiral effect constants. The GS register values and names (MEF_GS_*) are in ov01/m_gs.h. */
 #define MEF_COUNTER_KEYS 25                  /* keys of the path, one flag word each */
 #define MEF_COUNTER_SEGMENT_KEYS 8           /* keys per Hermite segment */
 #define MEF_COUNTER_ACTIVE_STEPS 10          /* steps 0..9 of the window hold a live key */
@@ -33,7 +33,7 @@
 /* The block at +0x20 of the object these functions update. Only the fields
  * they access are modelled. key_flags[0] holds the flags of the newest
  * key (MEF_COUNTER_KEY_*); the functions shift the window by one entry per call. */
-typedef struct MEfCounterBlock {
+typedef struct MEfSpiralBlock {
     unsigned char unmodeled_00[0x0C];
     struct XenoActor *startActor;                          /* +0x0C: actor and coordinate of coord_a and matrix */
     u32 startCoordinate;                     /* +0x10 */
@@ -51,32 +51,32 @@ typedef struct MEfCounterBlock {
     unsigned char unmodeled_f2[0x0E];
     Vector4 keys[MEF_COUNTER_KEYS];
     Vector4 angles[MEF_COUNTER_KEYS];
-} MEfCounterBlock;
+} MEfSpiralBlock;
 
 /* The object of MEfCreateSpiral: its three callbacks at +0x08 (step), +0x10 (draw) and +0x14 (advance). */
-typedef struct MEfCounterObject {
+typedef struct MEfSpiralObject {
     unsigned char unmodeled_00[0x08];
-    void (*stepFunc)(struct MEfCounterObject *);
+    void (*stepFunc)(struct MEfSpiralObject *);
     unsigned char unmodeled_0C[0x04];
-    void (*drawFunc)(struct MEfCounterObject *);
-    void (*advanceFunc)(struct MEfCounterObject *);
+    void (*drawFunc)(struct MEfSpiralObject *);
+    void (*advanceFunc)(struct MEfSpiralObject *);
     unsigned char unmodeled_18[0x08];
-    MEfCounterBlock block;
-} MEfCounterObject;
+    MEfSpiralBlock block;
+} MEfSpiralObject;
 
 double fptodp(float value);
 int dpcmp(double first, double second);
 void *memset(void *dst, int value, unsigned int size);
-void MEfBuildSpiralCurve(MEfCounterBlock *block);
-void MEfFillSpiralKeys(MEfCounterBlock *block);
-void MEfSetSpiralPhaseFlags(MEfCounterObject *object);
-void MEfDrawSpiralStrips(MEfCounterObject *object);
-void MEfAdvanceSpiral(MEfCounterObject *object);
+void MEfBuildSpiralCurve(MEfSpiralBlock *block);
+void MEfFillSpiralKeys(MEfSpiralBlock *block);
+void MEfSetSpiralPhaseFlags(MEfSpiralObject *object);
+void MEfDrawSpiralStrips(MEfSpiralObject *object);
+void MEfAdvanceSpiral(MEfSpiralObject *object);
 
 /* Create callback: reads the actor placements, clears the key tables, builds the path and keys, and installs the three callbacks. */
-int MEfCreateSpiral(MEfCounterObject *object)
+int MEfCreateSpiral(MEfSpiralObject *object)
 {
-    MEfCounterBlock *block;
+    MEfSpiralBlock *block;
 
     block = &object->block;
     block->step = 0;
@@ -96,7 +96,7 @@ int MEfCreateSpiral(MEfCounterObject *object)
 }
 
 /* Builds the path curve from the block's two endpoints and the matrix. */
-void MEfBuildSpiralCurve(MEfCounterBlock *block)
+void MEfBuildSpiralCurve(MEfSpiralBlock *block)
 {
     MEfPathCurve *curve;
     AlignedVector4 handle;
@@ -138,7 +138,7 @@ void MEfBuildSpiralCurve(MEfCounterBlock *block)
 }
 
 /* Samples the path curve into the 25 keys, then the 24 angles between neighbouring keys (the last angle repeats the one before). */
-void MEfFillSpiralKeys(MEfCounterBlock *block)
+void MEfFillSpiralKeys(MEfSpiralBlock *block)
 {
     MEfPathCurve *curve;
     Matrix4 matrix;
@@ -182,9 +182,9 @@ void MEfFillSpiralKeys(MEfCounterBlock *block)
 }
 
 /* Step callback: sets the flags of the newest key from the step (HEAD at step 0, TAIL at the last active step). */
-void MEfSetSpiralPhaseFlags(MEfCounterObject *object)
+void MEfSetSpiralPhaseFlags(MEfSpiralObject *object)
 {
-    MEfCounterBlock *block;
+    MEfSpiralBlock *block;
     short step;
 
     block = &object->block;
@@ -249,9 +249,9 @@ static inline void CloseTag(MGsPacket *packet, int nloop)
  * path. Each strip takes the 25 keys whose key flags are set and gives every
  * key two vertices, pushed apart along the rotated z axis.
  */
-void MEfDrawSpiralStrips(MEfCounterObject *object)
+void MEfDrawSpiralStrips(MEfSpiralObject *object)
 {
-    MEfCounterBlock *block;
+    MEfSpiralBlock *block;
     MGsPacket *packet;
     Matrix4 matrix;
     Vector4 point;
@@ -342,9 +342,9 @@ void MEfDrawSpiralStrips(MEfCounterObject *object)
 }
 
 /* Advance callback: shifts the key flags by one entry, steps the counter and frees the object at MEF_COUNTER_LIFETIME. */
-void MEfAdvanceSpiral(MEfCounterObject *object)
+void MEfAdvanceSpiral(MEfSpiralObject *object)
 {
-    MEfCounterBlock *block;
+    MEfSpiralBlock *block;
     int keyIndex;
     int nextStep;
 

@@ -32,7 +32,7 @@ void tiMRPackageFillNodes(TiMRPackage *pMRPackage, TiDynamicsOut *nodes) {
             do {
                 QuadwordCopy(&node->position, &dynamics->rows[1]);
                 QuadwordCopy(node->previous_position, &dynamics->rows[0]);
-                QuadwordCopy(&node->accumulator, &dynamics->rows[2]);
+                QuadwordCopy(&node->velocity, &dynamics->rows[2]);
                 i++;
                 node->node = (TiHrcDynamics *) dynamics;
                 node->gust = 1.0f;

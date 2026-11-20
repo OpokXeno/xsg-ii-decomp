@@ -1,5 +1,5 @@
 #include "common.h"
-#include "main/ladder_table.h"
+#include "main/get_ladder.h"
 #include "main/enemy_1.h"
 #include "main/set_motion.h"
 #include "main/pause_menu_page_uwamono.h"
@@ -67,8 +67,8 @@ typedef struct UwamonoMoveRecord {
  */
 
 /*
- * Sets up the state of one slot. The record key decides whether the slot's motion
- * table keeps flag 1, two random byte sets are drawn from the pick counts, the
+ * Sets up the state of one slot. The record key decides whether state flag 1 is set,
+ * two random byte sets are drawn from the pause and threat cycles, the
  * probe is reset and moved to the record's probe radius, and the slot enters
  * action 12.
  */
@@ -101,29 +101,29 @@ void Enemy_Init(int slotIndex)
     }
     state->pickIndex[0] = 0;
     state->pickIndex[1] = 0;
-    if (state->pickCountA == 1)
+    if (state->pauseCycle == 1)
     {
-        state->pickCountA = 2;
+        state->pauseCycle = 2;
     }
-    if (state->pickCountB == 1)
+    if (state->threatCycle == 1)
     {
-        state->pickCountB = 2;
+        state->threatCycle = 2;
     }
-    if (state->pickCountA >= 8)
+    if (state->pauseCycle >= 8)
     {
-        state->pickCountA = 7;
+        state->pauseCycle = 7;
     }
-    if (state->pickCountB >= 8)
+    if (state->threatCycle >= 8)
     {
-        state->pickCountB = 7;
+        state->threatCycle = 7;
     }
-    if (state->pickCountA != 0)
+    if (state->pauseCycle != 0)
     {
-        state->pickRow[0][Get_Rnd(1, state->pickCountA) % 8] = 1;
+        state->pickRow[0][Get_Rnd(1, state->pauseCycle) % 8] = 1;
     }
-    if (state->pickCountB != 0)
+    if (state->threatCycle != 0)
     {
-        state->pickRow[1][Get_Rnd(1, state->pickCountB) % 8] = 1;
+        state->pickRow[1][Get_Rnd(1, state->threatCycle) % 8] = 1;
     }
     probe = &actor->collision;
     Enemy_ActionReady(slotIndex, 12);
@@ -139,7 +139,7 @@ void Enemy_Init(int slotIndex)
     }
     UnduCheck(&actor->position, 0, &actor->collision);
     state->routeIndex = 0;
-    state->cooldown = 0;
+    state->stunTime = 0;
 }
 
 /*
@@ -175,8 +175,8 @@ void Enemy_Damage_Explosion(int slotIndex)
 }
 
 /*
- * Counts down the cooldown of one slot. When the count is no longer positive
- * the slot leaves the cooldown: its state flag 1 and actor flag 0x01000000 are
+ * Counts down the stun time of one slot. When the count is no longer positive
+ * the slot leaves the stun: its state flag 1 and actor flag 0x01000000 are
  * cleared, the effect record is released, and the slot returns to action 2.
  */
 int Enemy_Stiff(int slotIndex)
@@ -189,11 +189,11 @@ int Enemy_Stiff(int slotIndex)
     slot = &uwamonoRecords[slotIndex].body;
     state = slot->motions;
     actor = slot->actor;
-    remaining = state->cooldown - 1;
-    state->cooldown = (u16) remaining;
+    remaining = state->stunTime - 1;
+    state->stunTime = (u16) remaining;
     if ((s16) remaining <= 0)
     {
-        state->cooldown = 0;
+        state->stunTime = 0;
         state->reactionFlags &= 0xFE;
         actor->enemyFlags &= 0xFEFFFFFF;
         sefDeleteEffectCf(state->effect);
@@ -277,12 +277,12 @@ void Enemy_Chase(int slotIndex)
 
     if (record->parent != -1)
     {
-        state->homePoint = state->path[state->pathStep];
-        destination = state->homePoint;
+        state->chaseTarget = state->path[state->pathStep];
+        destination = state->chaseTarget;
         if (TM_Check_Before_Eyes(slotIndex, state->pursuitSpeed + 0.1f) == 0)
         {
-            XenoActorSetChannelValue(actor, 4.0f);
-            XenoActorEnableChannel(actor);
+            XenoActorSetBlendFrames(actor, 4.0f);
+            XenoActorSetBlendLocal(actor);
             actor->motion[0].speed = 1.0f;
             XenoActorCheckMode(actor, 0);
             return;
@@ -293,7 +293,7 @@ void Enemy_Chase(int slotIndex)
         destination = uwamonoRecords[state->focusIndex].position;
     }
 
-    dist = Get_Distance(&actor->position, (&state->homePoint));
+    dist = Get_Distance(&actor->position, (&state->chaseTarget));
     if (dist >= 1.0f)
     {
         speed = state->pursuitSpeed * 3.0f;
@@ -316,15 +316,15 @@ void Enemy_Chase(int slotIndex)
     crossResult = CrossPointUwamono(&actor->position, &destination, actor->radius, &crossPoint);
     if (__builtin_fabsf(hit.x - destination.x) < 0.01f && __builtin_fabsf(hit.z - destination.z) < 0.01f && crossResult == 0)
     {
-        state->homePoint = destination;
+        state->chaseTarget = destination;
         fmt = enemySightingDebugFormat;
-        xglFontDebugPrintf(8, 100, fmt, (double) state->homePoint.x, (double) state->homePoint.y, (double) state->homePoint.z);
+        xglFontDebugPrintf(8, 100, fmt, (double) state->chaseTarget.x, (double) state->chaseTarget.y, (double) state->chaseTarget.z);
     }
     else if (crossResult == 1)
     {
         if (Check_MoveSquare(&destination, &actor->position, &squarePoint, actor->radius, state->id) == 1)
         {
-            state->homePoint = squarePoint;
+            state->chaseTarget = squarePoint;
             xglFontDebugPrintf(8, 112, uwamonoDebugText);
         }
     }
@@ -332,17 +332,17 @@ void Enemy_Chase(int slotIndex)
     {
         if (Check_MoveSquare(&destination, &actor->position, &squarePoint, actor->radius, state->id) == 1)
         {
-            state->homePoint = squarePoint;
+            state->chaseTarget = squarePoint;
             xglFontDebugPrintf(8, 112, enemyNewTargetDebugFormat, state->focusIndex);
         }
     }
 
-    state->target = state->homePoint;
+    state->target = state->chaseTarget;
     color.r = 255;
     color.g = 255;
     color.b = 255;
     color.a = 128;
-    moveResult = uwamonoMoveAlongHeading(slotIndex, (&state->homePoint), speed);
+    moveResult = uwamonoMoveAlongHeading(slotIndex, (&state->chaseTarget), speed);
     if (moveResult == 0 && (record->flags & 0x8000) != 0)
     {
         Enemy_ActionReady(slotIndex, 2);
@@ -353,12 +353,12 @@ void Enemy_Chase(int slotIndex)
     {
         if (Check_MoveSquare(&crossPoint, &actor->position, &squarePoint, actor->radius, state->id) == 1)
         {
-            state->homePoint = squarePoint;
+            state->chaseTarget = squarePoint;
             xglFontDebugPrintf(8, 124, uwamonoDebugText);
         }
         else
         {
-            state->homePoint = crossPoint;
+            state->chaseTarget = crossPoint;
             xglFontDebugPrintf(8, 124, goStraightDebugText);
         }
     }
@@ -368,7 +368,7 @@ void Enemy_Chase(int slotIndex)
         if (state->leashRange <= Get_Distance(&actor->position, &uwamonoRecords[state->focusIndex].position)
             || state->areaSize - actor->radius <= Get_Distance(&state->area, &actor->position)
             || state->alert == 88 || state->alert == 64 || uwamonoLadderState.state != 0
-            || (Get_Distance(&actor->position, (&state->homePoint)) < 0.01f && state->alert != 96 && state->alert != 99))
+            || (Get_Distance(&actor->position, (&state->chaseTarget)) < 0.01f && state->alert != 96 && state->alert != 99))
         {
             uwamonoClampToStopRange(slotIndex);
             state->trailStep = 0;
@@ -378,22 +378,22 @@ void Enemy_Chase(int slotIndex)
             Homing_Search(slotIndex);
             return;
         }
-        if (Get_Distance(&actor->position, (&state->homePoint)) < 0.05f)
+        if (Get_Distance(&actor->position, (&state->chaseTarget)) < 0.05f)
         {
             if (Check_MoveSquare(&state->probe, &actor->position, &squarePoint, actor->radius, state->id) == 1)
             {
-                state->homePoint = squarePoint;
+                state->chaseTarget = squarePoint;
                 xglFontDebugPrintf(8, 112, enemyAddDebugText);
-                uwamonoMoveAlongHeading(slotIndex, (&state->homePoint), speed);
+                uwamonoMoveAlongHeading(slotIndex, (&state->chaseTarget), speed);
             }
             actor->direction.y = Get_Angle(&actor->position, &uwamonoRecords[state->focusIndex].position);
         }
     }
     else
     {
-        xglFontDebugPrintf(8, 90, enemyDistanceDebugFormat, (double) Get_Distance(&actor->position, (&state->homePoint)));
+        xglFontDebugPrintf(8, 90, enemyDistanceDebugFormat, (double) Get_Distance(&actor->position, (&state->chaseTarget)));
         limit = uwamonoRecords[record->parent].extent.x * 0.0625f;
-        if (limit <= Get_Distance(&actor->position, (&state->homePoint)))
+        if (limit <= Get_Distance(&actor->position, (&state->chaseTarget)))
         {
             if ((state->pathTail + 1) % UWAMONO_RING_SIZE != state->pathStep)
             {
@@ -401,7 +401,7 @@ void Enemy_Chase(int slotIndex)
                 state->pathTail = (state->pathTail + 1) % UWAMONO_RING_SIZE;
             }
         }
-        while (Get_Distance(&actor->position, ringCursor = &state->homePoint) <= speed)
+        while (Get_Distance(&actor->position, ringCursor = &state->chaseTarget) <= speed)
         {
             state->pathStep = (state->pathStep + 1) % UWAMONO_RING_SIZE;
             *ringCursor = state->path[state->pathStep];
@@ -444,21 +444,21 @@ void Enemy_Route(int slotIndex)
         {
             for (pickKind = 0; pickKind < 2; pickKind++)
             {
-                if (pickKind == 0 && state->pickCountA == 0)
+                if (pickKind == 0 && state->pauseCycle == 0)
                 {
                     continue;
                 }
-                if (pickKind == 1 && state->pickCountB == 0)
+                if (pickKind == 1 && state->threatCycle == 0)
                 {
                     continue;
                 }
                 switch (pickKind)
                 {
                 case UWAMONO_MODE_INIT:
-                    pickCount = state->pickCountA;
+                    pickCount = state->pauseCycle;
                     break;
-                case UWAMONO_MODE_WANDER:
-                    pickCount = state->pickCountB;
+                case UWAMONO_MODE_PAUSE:
+                    pickCount = state->threatCycle;
                     break;
                 }
                 offset = pickKind * 2 + 112;
@@ -483,7 +483,7 @@ void Enemy_Route(int slotIndex)
                     case UWAMONO_MODE_INIT:
                         Enemy_ActionReady(slotIndex, 1);
                         break;
-                    case UWAMONO_MODE_WANDER:
+                    case UWAMONO_MODE_PAUSE:
                         Enemy_ActionReady(slotIndex, 2);
                         break;
                     }
@@ -498,7 +498,7 @@ void Enemy_Route(int slotIndex)
         {
             Set_Spline_By_Route(slotIndex, 0);
         }
-        if (state->mode == UWAMONO_MODE_WANDER && !(actor->enemyFlags & 0x80000000))
+        if (state->mode == UWAMONO_MODE_PAUSE && !(actor->enemyFlags & 0x80000000))
         {
             xglFontDebugPrintf(8, 136, enemyRandomDebugText);
             offset = Get_Rnd(0, 179);
@@ -549,8 +549,8 @@ void Enemy_Route(int slotIndex)
 
 /*
  * Steps one slot along its route. On timer tick 1 the slot takes the route point
- * before, at or after its current index, whichever of the three is nearest to the
- * current record; it reaches that point when the timer is 1. Otherwise it keeps
+ * before, at or after its current index, whichever of the three is farthest from the
+ * player; it reaches that point when the timer is 1. Otherwise it keeps
  * moving toward its target and steps back when the move is complete.
  */
 void Enemy_Escape(int slotIndex)
@@ -693,7 +693,7 @@ void Enemy_Pause(int slotIndex)
     struct XenoActor *actor = uwamonoRecords[slotIndex].body.actor;
     u16 timer;
 
-    if (state->mode == UWAMONO_MODE_PURSUE || state->mode == UWAMONO_MODE_COOLDOWN)
+    if (state->mode == UWAMONO_MODE_PURSUE || state->mode == UWAMONO_MODE_STIFF)
     {
         if (actor->enemyFlags & 0x400000)
         {
@@ -709,10 +709,10 @@ void Enemy_Pause(int slotIndex)
     switch (state->mode)
     {
     case UWAMONO_MODE_PURSUE:
-    case UWAMONO_MODE_COOLDOWN:
+    case UWAMONO_MODE_STIFF:
         Enemy_ActionReady(slotIndex, 1);
         return;
-    case UWAMONO_MODE_WANDER:
+    case UWAMONO_MODE_PAUSE:
         Enemy_ActionReady(slotIndex, 3);
         state->trailStep = 0;
         state->routeIndex = 0;
@@ -738,7 +738,7 @@ void Enemy_Pause(int slotIndex)
         case UWAMONO_MODE_INIT:
             Enemy_ActionReady(slotIndex, 3);
             return;
-        case UWAMONO_MODE_WANDER:
+        case UWAMONO_MODE_PAUSE:
             Enemy_ActionReady(slotIndex, 2);
             return;
         }
@@ -804,7 +804,7 @@ void Enemy_Unique(int slotIndex)
         return;
     }
     state->motionCol = (u16) (state->motionCol + 1);
-    scriptAction = state->pointLinks[state->routeIndex][(s16) state->motionCol];
+    scriptAction = state->actionMotions[state->routeIndex][(s16) state->motionCol];
     if (scriptAction != -1)
     {
         Enemy_ActionReady(slotIndex, 8);
@@ -837,9 +837,9 @@ void Enemy_Pause(int slotIndex);
 void Enemy_Route(int slotIndex);
 /* * Advances the action timer of one slot and turns its actor toward the current * record. When the timer reaches its limit the slot enters action 5. The actor's * moving angle is then set from its position toward uwamonoRecords[uwamonoCurrentIndex]. */ void Enemy_Found(int slotIndex);
 /* * Moves one slot toward its focus record along the ring of move points. While the * slot has a focus, the current move point is taken from the ring head and the * sweep and move tests choose the next point; without a focus the slot follows * the nearest route point and turns to face the focus record. */ void Enemy_Chase(int slotIndex);
-/* * Counts down the cooldown of one slot. When the count is no longer positive * the slot leaves the cooldown: its state flag 1 and actor flag 0x01000000 are * cleared, the effect record is released, and the slot returns to action 2. */ int Enemy_Stiff(int slotIndex);
+/* * Counts down the stun time of one slot. When the count is no longer positive * the slot leaves the stun: its state flag 1 and actor flag 0x01000000 are * cleared, the effect record is released, and the slot returns to action 2. */ int Enemy_Stiff(int slotIndex);
 /* * Ticks the timer of one slot. At its limit the script cursor advances and the * action of actionTable for the pending count and the cursor is entered: -1 sets * action 3 and runs the expiry tail, any other value sets action 8. */ void Enemy_Unique(int slotIndex);
-/* * Steps one slot along its route. On timer tick 1 the slot takes the route point * before, at or after its current index, whichever of the three is nearest to the * current record; it reaches that point when the timer is 1. Otherwise it keeps * moving toward its target and steps back when the move is complete. */ void Enemy_Escape(int slotIndex);
+/* * Steps one slot along its route. On timer tick 1 the slot takes the route point * before, at or after its current index, whichever of the three is farthest from the * player; it reaches that point when the timer is 1. Otherwise it keeps * moving toward its target and steps back when the move is complete. */ void Enemy_Escape(int slotIndex);
 void Enemy_Route_Chase(int slotIndex);
 
 void ACT_updateEnemy(int index)
@@ -922,13 +922,13 @@ void ACT_updateEnemy(int index)
     {
     case UWAMONO_MODE_INIT:
         Enemy_Init(index);
-    case UWAMONO_MODE_WANDER:
+    case UWAMONO_MODE_PAUSE:
         Enemy_Pause(index);
         break;
-    case UWAMONO_MODE_WAIT:
+    case UWAMONO_MODE_THREAT:
         Enemy_Threat(index);
         break;
-    case UWAMONO_MODE_ANCHOR:
+    case UWAMONO_MODE_ROUTE:
         Enemy_Route(index);
         break;
     case UWAMONO_MODE_AIM:
@@ -937,16 +937,16 @@ void ACT_updateEnemy(int index)
     case UWAMONO_MODE_PURSUE:
         Enemy_Chase(index);
         break;
-    case UWAMONO_MODE_COOLDOWN:
+    case UWAMONO_MODE_STIFF:
         Enemy_Stiff(index);
         break;
     case UWAMONO_MODE_SCRIPT:
         Enemy_Unique(index);
         break;
-    case UWAMONO_MODE_ALERT:
+    case UWAMONO_MODE_EXPLOSION:
         Enemy_Damage_Explosion(index);
         break;
-    case UWAMONO_MODE_ROUTE:
+    case UWAMONO_MODE_ESCAPE:
         Enemy_Escape(index);
         break;
     case UWAMONO_MODE_SPLINE:
@@ -1076,7 +1076,7 @@ int uwamonoMoveAlongHeading(int index, Vector4 *target, float speed)
     {
         xglFontDebugPrintf(8, 128, uwamonoFallingDebugText);
     }
-    XenoActorEnableChannel(actor);
+    XenoActorSetBlendLocal(actor);
     uwamonoSetMotion(index, distance <= 0.135f ? 1 : 2, 1.0f);
     return 1;
 }
@@ -1175,7 +1175,7 @@ void uwamonoSetMotion(int slotIndex, int motion, float speed)
     {
         return;
     }
-    XenoActorSetChannelValue(actor, 4.0f);
+    XenoActorSetBlendFrames(actor, 4.0f);
     XenoActorSetModeInSlot(actor, motion / 100, motion % 100);
 }
 
@@ -1196,29 +1196,29 @@ void Enemy_ActionReady(int slot_index, signed char action)
     }
     state->action = action;
     state->timer = 0;
-    XenoActorSetChannelValue(actor, 4.0f);
-    XenoActorEnableChannel(actor);
+    XenoActorSetBlendFrames(actor, 4.0f);
+    XenoActorSetBlendLocal(actor);
     switch (action)
     {
-    case UWAMONO_MODE_ANCHOR:
+    case UWAMONO_MODE_ROUTE:
         uwamonoSetMotion(slot_index, 1, 1.0f);
         break;
-    case UWAMONO_MODE_WANDER:
-        state->timerLimit = state->wanderTime;
+    case UWAMONO_MODE_PAUSE:
+        state->timerLimit = state->pauseTime;
         uwamonoSetMotion(slot_index, 0, 1.0f);
         break;
     case UWAMONO_MODE_START:
-        if ((s16) state->wanderTime > 0)
+        if ((s16) state->pauseTime > 0)
         {
-            state->timerLimit = state->wanderTime;
+            state->timerLimit = state->pauseTime;
             uwamonoSetMotion(slot_index, 0, 1.0f);
             state->action = 1;
         }
         break;
-    case UWAMONO_MODE_WAIT:
-        if ((s16) state->waitTime > 0)
+    case UWAMONO_MODE_THREAT:
+        if ((s16) state->threatTime > 0)
         {
-            state->timerLimit = state->waitTime;
+            state->timerLimit = state->threatTime;
             uwamonoSetMotion(slot_index, 4, 1.0f);
         }
         break;
@@ -1245,17 +1245,17 @@ void Enemy_ActionReady(int slot_index, signed char action)
         break;
     case UWAMONO_MODE_SCRIPT:
     {
-        state->timerLimit = state->pointLinkValues[state->routeIndex][state->motionCol];
-        uwamonoSetMotion(slot_index, state->pointLinks[state->routeIndex][state->motionCol], 1.0f);
+        state->timerLimit = state->actionLengths[state->routeIndex][state->motionCol];
+        uwamonoSetMotion(slot_index, state->actionMotions[state->routeIndex][state->motionCol], 1.0f);
         break;
     }
-    case UWAMONO_MODE_ALERT:
+    case UWAMONO_MODE_EXPLOSION:
     {
         SefEffectRecord *effect;
         float formScale;
 
         state->reactionFlags |= 1;
-        state->cooldown += 300;
+        state->stunTime += 300;
         state->timerLimit = 30;
         actor->enemyFlags &= 0xFEFFFFFF;
         if (state->effect != 0)
@@ -1273,7 +1273,7 @@ void Enemy_ActionReady(int slot_index, signed char action)
         XenoActorResetChannelFlags(actor);
         break;
     }
-    case UWAMONO_MODE_COOLDOWN:
+    case UWAMONO_MODE_STIFF:
         actor->motion[0].speed = 0.0f;
         break;
     default:

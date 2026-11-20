@@ -1,91 +1,24 @@
 #include "common.h"
 #include "shared.h"
-#include "main/runtime_uwamono_door.h"
 #include "main/runtime_enepc.h"
-#include "main/runtime_motion_face.h"
+#include "main/runtime_uwamono_door.h"
+#include "main/runtime.h"
 #include "ov01/sb_vm.h"
 #include "ov01/sb_natives.h"
-#include "main/ladder_table.h"
+#include "main/get_ladder.h"
 #include "main/game_camera.h"
 #include "main/uwamono_objx.h"
 #include "main/init_uwamono_sys.h"
 #include "main/sef.h"
 #include "main/srs_file.h"
+
 /* Bytes per uwamonoSlotTable entry and per uwamonoRecords record. */
 #define UWAMONO_RECORD_SIZE 0x870
-/* Upper bound of the uwamonoSlotTable walk in disableDrawFlags. */
-#define UWAMONO_SLOT_COUNT 0x100
-
-/* Record kind byte (+0x02): 1 talks, 2 is searched. */
-enum {
-    UWAMONO_KIND_TALK = 1,
-    UWAMONO_KIND_SEARCHED = 2
-};
 
 /* Record motion kind (+0x5C0): 1 moves between two points, anything else rotates. */
 enum {
     UWAMONO_MOTION_MOVE = 1
 };
-
-
-int disableDrawFlags(SbThread *thread)
-{
-    int shortKey;
-    int flagMask;
-    int slotIndex;
-    int kindFilter;
-    int firstSlot;
-    int endSlot;
-    int slot;
-    struct XenoActor *actor;
-
-    if (VM_PLUGIN_CNT_GET(thread) < 2) {
-        sbSlotJumpRequest(thread, 2);
-        return 0;
-    }
-    shortKey = vmArgGet(thread, 1);
-    slotIndex = uwamonoFindIndexByShortKey(shortKey);
-    if (slotIndex == -1) {
-        return 1;
-    }
-    flagMask = vmArgGet(thread, 2);
-    if (vmArgTagIsZero(thread, 3) != 0) {
-        kindFilter = -1;
-    } else {
-        kindFilter = vmArgGet(thread, 3);
-    }
-    if (kindFilter == -1) {
-        firstSlot = slotIndex;
-        endSlot = slotIndex + 1;
-        if (slotIndex == kindFilter) {
-            return 1;
-        }
-    } else {
-        firstSlot = 0;
-        endSlot = UWAMONO_SLOT_COUNT;
-    }
-    for (slot = firstSlot; slot < endSlot; slot++) {
-        if (uwamonoRecords[slot].kind != kindFilter && kindFilter != -1) {
-            continue;
-        }
-        if (uwamonoRecords[slot].kind != 4 && uwamonoRecords[slot].kind != 1) {
-            continue;
-        }
-        actor = uwamonoRecords[slot].body.actor;
-        if (actor != 0) {
-            actor->drawFlags &= ~flagMask;
-        }
-    }
-    return 1;
-}
-
-extern SbNativeMethod enepcNativeTable[];
-extern char enepcModuleName[];
-
-/* Registers the enepc native table enepcNativeTable with the module name "enepc". */
-void enepcRegisterNatives(void) {
-    sbNativeOwnerAdd(enepcModuleName, enepcNativeTable);
-}
 
 
 extern float sinf(float angle);
@@ -112,8 +45,8 @@ int uwamonoSetDoorAll(SbThread *thread)
     shortKey = vmArgGet(thread, 1);
     recordIndex = uwamonoFindIndexByShortKey(shortKey);
     record = &uwamonoRecords[recordIndex];
-    if (record->lookLink != -1) {
-        linkedRecord = &uwamonoRecords[record->lookLink];
+    if (record->partnerLink != -1) {
+        linkedRecord = &uwamonoRecords[record->partnerLink];
     } else {
         linkedRecord = record;
     }
@@ -132,10 +65,10 @@ int uwamonoSetDoorAll(SbThread *thread)
             return 1;
         }
         if (vmArgTagIsZero(thread, 12) == 0) {
-            int searchState = vmArgGet(thread, 12);
+            int openerKind = vmArgGet(thread, 12);
 
-            linkedRecord->searchState = searchState;
-            record->searchState = searchState;
+            linkedRecord->openerKind = openerKind;
+            record->openerKind = openerKind;
             return 1;
         }
     }
@@ -163,12 +96,12 @@ int uwamonoSetDoorAll(SbThread *thread)
     }
 
     if (vmArgTagIsZero(thread, 8) != 0) {
-        scaledValue = record->speed;
+        scaledValue = record->openDistance;
     } else {
         scaledValue = (float) vmArgGet(thread, 8) / 100.0f;
     }
-    linkedRecord->speed = scaledValue;
-    record->speed = scaledValue;
+    linkedRecord->openDistance = scaledValue;
+    record->openDistance = scaledValue;
 
     if (vmArgTagIsZero(thread, 9) != 0) {
         scaledValue = record->extent.y;
@@ -196,15 +129,15 @@ int uwamonoSetDoorAll(SbThread *thread)
     record->swingLength = scaledValue;
 
     {
-        int searchState;
+        int openerKind;
 
         if (vmArgTagIsZero(thread, 12) != 0) {
-            searchState = (unsigned char) record->searchState;
+            openerKind = (unsigned char) record->openerKind;
         } else {
-            searchState = vmArgGet(thread, 12);
+            openerKind = vmArgGet(thread, 12);
         }
-        linkedRecord->searchState = searchState;
-        record->searchState = searchState;
+        linkedRecord->openerKind = openerKind;
+        record->openerKind = openerKind;
     }
     {
         int value624;
@@ -242,10 +175,10 @@ int uwamonoSetDoorAll(SbThread *thread)
         motionDelta[2] = (float) vmArgGet(thread, 7) / 100.0f;
     }
 
-    record->busy = 1;
-    record->tiltStep = -1;
-    if (record->timer == 0 && record->lookLink != -1) {
-        uwamonoRecords[record->lookLink].timer = 0;
+    record->openState = 1;
+    record->moveTicks = -1;
+    if (record->timer == 0 && record->partnerLink != -1) {
+        uwamonoRecords[record->partnerLink].timer = 0;
     }
 
     if (record->motionKind == UWAMONO_MOTION_MOVE) {
@@ -305,8 +238,8 @@ int uwamonoSetKowaremonoAll(SbThread *thread)
     int value;
     float scale;
     int effectKey;
-    int linkA;
-    int linkB;
+    int enemyLink;
+    int itemLink;
     UwamonoRecord *record;
 
     if (VM_PLUGIN_CNT_GET(thread) < 9) {
@@ -346,17 +279,17 @@ int uwamonoSetKowaremonoAll(SbThread *thread)
         }
         record->searchFlag = value;
         if (vmArgTagIsZero(thread, 5) != 0) {
-            linkA = record->linkA;
+            enemyLink = record->enemyLink;
         } else {
-            linkA = uwamonoFindIndexByShortKey(vmArgGet(thread, 5));
+            enemyLink = uwamonoFindIndexByShortKey(vmArgGet(thread, 5));
         }
-        record->linkA = linkA;
+        record->enemyLink = enemyLink;
         if (vmArgTagIsZero(thread, 6) != 0) {
-            linkB = record->linkB;
+            itemLink = record->itemLink;
         } else {
-            linkB = uwamonoFindIndexByShortKey(vmArgGet(thread, 6));
+            itemLink = uwamonoFindIndexByShortKey(vmArgGet(thread, 6));
         }
-        record->linkB = linkB;
+        record->itemLink = itemLink;
         if (vmArgTagIsZero(thread, 7) != 0) {
             value = record->level;
         } else {
@@ -398,19 +331,19 @@ int uwamonoSetKowaremonoAll(SbThread *thread)
             record->cellMask |= (((vmArgGet(thread, 12) / 1000000) & 1) << 6);
             record->cellMask |= (((vmArgGet(thread, 12) / 10000000) & 1) << 7);
         }
-        /* Structured if/else folds the linkB argument of the pair move to -1; the original reloads it, so the jump stays. */
-        while (record->linkB != -1) {
-            uwamonoRecords[record->linkB].flags &= ~2;
-            uwamonoRecords[record->linkB].flags |= 0x02000000;
+        /* Structured if/else folds the itemLink argument of the pair move to -1; the original reloads it, so the jump stays. */
+        while (record->itemLink != -1) {
+            uwamonoRecords[record->itemLink].flags &= ~2;
+            uwamonoRecords[record->itemLink].flags |= 0x02000000;
             goto linkBDone;
         }
-        if ((record->kind == UWAMONO_KIND_SEARCHED) && ((unsigned int) (record->type - 4) < 3U)) {
-            uwamonoStartPairMove(recordIndex, 3, 1, record->linkB);
+        if ((record->kind == MAP_KIND_MODEL) && ((unsigned int) (record->type - 4) < 3U)) {
+            uwamonoStartPairMove(recordIndex, 3, 1, record->itemLink);
         }
 linkBDone:
-        if (record->linkA != -1) {
-            uwamonoRecords[record->linkA].flags &= ~2;
-            uwamonoRecords[record->linkA].flags |= 0x02000000;
+        if (record->enemyLink != -1) {
+            uwamonoRecords[record->enemyLink].flags &= ~2;
+            uwamonoRecords[record->enemyLink].flags |= 0x02000000;
         }
         return 1;
     }
@@ -614,50 +547,24 @@ int setCollisionScale(SbThread *thread)
     return 1;
 }
 
-/* Native table of the enepc module: name and function pairs, then a null entry. The natives are defined in runtime_enepc.c,
- * runtime_motion_face.c and runtime_camera.c. */
+extern SbNativeMethod uwamonoNativeTable[];
+extern char uwamonoModuleName[];
 
-extern const char enepcNativeNameDisableDrawFlags[];
-extern const char enepcNativeNameEnableDrawFlags[];
-extern const char enepcNativeNameReadyEnepcData[];
-extern const char enepcNativeNameAlgorithm[];
-extern const char enepcNativeNameSetTogether[];
-extern const char enepcNativeNameDefaultMotion[];
-extern const char enepcNativeNameSetBattle[];
-extern const char enepcNativeNameSetGroup[];
-extern const char enepcNativeNameMotionFace[];
-extern const char enepcNativeNameExMotion[];
-extern const char enepcNativeNameSetParamsAll[];
-extern const char enepcNativeNameSetParams[];
-extern const char enepcNativeNameSetSE[];
-extern const char enepcNativeNameResigne[];
-extern const char enepcNativeNameEncount[];
-extern const char enepcNativeNameLookat[];
-extern const char enepcNativeNameMotion[];
-extern const char enepcNativeNameExtra[];
+/* Registers the uwamono native table uwamonoNativeTable with the module name uwamonoModuleName. */
+void uwamonoRegisterNatives(void) {
+    sbNativeOwnerAdd(uwamonoModuleName, uwamonoNativeTable);
+}
 
-SbNativeMethod enepcNativeTable[19] = {
-    { enepcNativeNameSetParams, enepcSetParams },
-    { enepcNativeNameSetParamsAll, enepcSetParamsAll },
-    { enepcNativeNameExtra, enepcExtra },
-    { enepcNativeNameMotion, enepcMotion },
-    { enepcNativeNameExMotion, enepcExMotion },
-    { enepcNativeNameMotionFace, motionFace },
-    { enepcNativeNameLookat, enepcLookAt },
-    { enepcNativeNameEncount, enepcEncount },
-    { enepcNativeNameResigne, Resigne },
-    { enepcNativeNameSetGroup, setGroup },
-    { enepcNativeNameSetBattle, enepcSetBattle },
-    { enepcNativeNameSetSE, enepcSetSe },
-    { enepcNativeNameDefaultMotion, enepcDefaultMotion },
-    { enepcNativeNameSetTogether, enepcSetTogether },
-    { enepcNativeNameAlgorithm, enepcAlgorithm },
-    { enepcNativeNameReadyEnepcData, enepcReadyEnepcData },
-    { enepcNativeNameEnableDrawFlags, enepcEnableDrawFlags },
-    { enepcNativeNameDisableDrawFlags, disableDrawFlags },
+char uwamonoModuleName[8] = "uwamono";
+
+/* .data of this file (0x3E6FF0): the uwamono script natives. */
+
+/* Native table of the uwamono module. */
+SbNativeMethod uwamonoNativeTable[6] = {
+    { "setDoorAll", uwamonoSetDoorAll },
+    { "setKowaremonoAll", uwamonoSetKowaremonoAll },
+    { "SendSignal", uwamonoSendSignal },
+    { "setCollisionSize", uwamonoSetCollisionSize },
+    { "setCollisionScale", setCollisionScale },
     { 0, 0 }
 };
-
-/* Module name of the enepc natives. */
-char enepcModuleName[8] = "enepc";
-

@@ -1,21 +1,23 @@
 #include "common.h"
 #include "main/msg_window_close.h"
-#include "main/timecode_counter.h"
+#include "main/msg_slot_core.h"
 #include "main/msg_window_run.h"
 #include "main/interp_update.h"
 #include "main/msg_window_update.h"
 #include "main/timecode_window.h"
 
+/* Returns the index of the current slot (current_index). */
 int msgWindowGetFirstWord(MsgWindow *window)
 {
     return window->current_index;
 }
 
-/* Slot flag bits tested by the message window loops (the unmodeled bits are not named yet). */
-#define MSG_SLOT_FLAG_DONE 0x20
-#define MSG_SLOT_FLAG_PAUSED 0x100
+/* Slot flag bits tested by the message window loops: the same bits as the list bits MSG_WIN_SLIDE (slide in progress)
+ * and MSG_WIN_SWEEP (cursor sweep in progress) of msg_window_update.c. */
+#define MSG_SLOT_SLIDING 0x20
+#define MSG_SLOT_SWEEPING 0x100
 
-/* Steps the current slot unless it is already done or paused in state 2. */
+/* Starts closing the current slot unless it is a window slot that is sliding or sweeping. */
 void msgWindowCloseCurrent(MsgWindow *window)
 {
     int current;
@@ -26,11 +28,11 @@ void msgWindowCloseCurrent(MsgWindow *window)
         return;
     }
     status = &window->slots[current];
-    if (status->state == MSG_SLOT_STATE_WINDOW) {
-        if (status->flags & MSG_SLOT_FLAG_DONE) {
+    if (status->slot_type == MSG_SLOT_TYPE_WINDOW) {
+        if (status->flags & MSG_SLOT_SLIDING) {
             return;
         }
-        if (status->flags & MSG_SLOT_FLAG_PAUSED) {
+        if (status->flags & MSG_SLOT_SWEEPING) {
             return;
         }
     }
@@ -84,11 +86,11 @@ void msgWindowStartClosingSlot(MsgWindow *window, int index)
         return;
     }
     status = &entries[index];
-    switch (status->state) {
-    case MSG_SLOT_STATE_TEXT: interpRewind(status); break;
-    case MSG_SLOT_STATE_WINDOW: msgWindowClose(status); break;
-    case MSG_SLOT_STATE_TIMECODE: timecodeBeginClose(status); break;
-    case MSG_SLOT_STATE_ITEM: msgSlotStartClosing(status); break;
+    switch (status->slot_type) {
+    case MSG_SLOT_TYPE_TEXT: interpRewind(status); break;
+    case MSG_SLOT_TYPE_WINDOW: msgWindowClose(status); break;
+    case MSG_SLOT_TYPE_TIMECODE: timecodeBeginClose(status); break;
+    case MSG_SLOT_TYPE_ITEM: msgSlotStartClosing(status); break;
     }
 }
 
@@ -99,10 +101,10 @@ void msgWindowCloseAll(MsgWindow *window)
     int flags;
 
     flags = window->slots[window->current_index].flags;
-    if (flags & MSG_SLOT_FLAG_DONE) {
+    if (flags & MSG_SLOT_SLIDING) {
         return;
     }
-    if (flags & MSG_SLOT_FLAG_PAUSED) {
+    if (flags & MSG_SLOT_SWEEPING) {
         return;
     }
     for (index = 0; index < MSG_SLOT_COUNT; index++) {

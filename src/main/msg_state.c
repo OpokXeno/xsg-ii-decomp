@@ -1,7 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "main/pad.h"
-#include "main/script_register_natives.h"
+#include "main/talk_natives.h"
 #include "main/msg_balance.h"
 #include "main/msg_state.h"
 #include "main/effect_request.h"
@@ -9,7 +9,7 @@
 #include "main/msg_window_slot.h"
 #include "main/msg_window_close.h"
 #include "main/timecode_choice.h"
-#include "main/timecode_forward.h"
+#include "main/msg_slot_start.h"
 #include "main/msg_window_open.h"
 #include "main/msg_window_scroll.h"
 #include "main/msg_window_advance.h"
@@ -114,7 +114,7 @@ void msgUpdate(void)
         return;
     }
     if ((PadData[0].pressed & PAD_CIRCLE) && msgSlotTestCurrent(MSG_SLOT_NO_CIRCLE) == 0) {
-        if (msgWindowTestCurrentFlags(&msgWindow, MSG_WINDOW_TYPING) == 1) {
+        if (msgWindowTestCurrentFlags(&msgWindow, MSG_WINDOW_SCANNING) == 1) {
             msgWindowSeekToWindowEnd(&msgWindow);
         } else if (msgWindowHasMore()) {
             if (msgWindowBusy() == 0) {
@@ -127,7 +127,7 @@ void msgUpdate(void)
             msgSlotIndex--;
         }
     }
-    if (msgSlotTestCurrent(MSG_SLOT_CROSS_CLOSES) && msgWindowTestCurrentFlags(&msgWindow, MSG_WINDOW_LOCKED) == 0
+    if (msgSlotTestCurrent(MSG_SLOT_CROSS_CLOSES) && msgWindowTestCurrentFlags(&msgWindow, MSG_WINDOW_OPENING) == 0
         && (PadData[0].pressed & PAD_CROSS)) {
         msgGameFlagClearUnlessKept();
         msgWindowCloseCurrent(&msgWindow);
@@ -151,8 +151,10 @@ void msgUpdateTimed(void)
 }
 
 
-/* Close the window, the choice and the panel. */
-void msgClose(void) {
+/* Activates the talk when the window is not in status 2 and the current slot has option bit 0x2 (the bit that
+ * suppresses the page cursor), requests the window flush, and queues the choice and the panel objects for this
+ * frame's update and draw. Nothing is closed here. */
+void msgQueueClose(void) {
     if ((msgWindowCurrentStatus(&msgWindow) != 2) && (msgSlotTestCurrent(2) != 0)) {
         msgWindowActivateTalk();
     }
@@ -184,7 +186,7 @@ void msgChoiceClear(void) {
 }
 
 
-/* Set slot `slot` (1 to 10) of the current message record to `value`. */
+/* Sets text argument `slot` (1 to 10) of the current message record to `value`. */
 void msgWindowSetSlot(int slot, int value) {
     msgWindowSetCurrentSlot(&msgWindow, slot, value);
 }
@@ -249,7 +251,7 @@ int msgPollSelect(void) {
 }
 
 
-/* Show the choice for the item name; its timer runs from 0x5A. */
+/* Show the item notice ("Acquired") for the item name; its timer runs from 0x5A. */
 void msgChoiceShow(char *name) {
     msgChoiceTimer = 0x5A;
     msgChoiceShowSingle(&msgChoice, name);
@@ -257,22 +259,23 @@ void msgChoiceShow(char *name) {
 }
 
 
-/* Show the choice for the item name and count; its timer runs from 0x5A. */
+/* Show the item notice for the item name and count; its timer runs from 0x5A. */
 void msgChoiceShowPair(char *name, int count) {
     msgChoiceTimer = 0x5A;
     msgItemSlotStart(&msgChoice, name, count);
     msgSlotPlaceByState(&msgChoice, 0xA, 0x20);
 }
 
-/* Start the choice's timeline at `frame`, then the second step with `second`. */
-void msgChoiceOpen(int frame, int second) {
-    timecodeStartAtFrame(&msgChoice, frame);
-    msgChoiceSetIndex(&msgChoice, second);
+/* Opens the number entry: its timeline starts at startFrame, then its digit count is set to digitCount. */
+void msgChoiceOpen(int startFrame, int digitCount) {
+    timecodeStartAtFrame(&msgChoice, startFrame);
+    msgChoiceSetIndex(&msgChoice, digitCount);
 }
 
 
 /* Polls the open choice: CIRCLE closes it and returns its frame count; left/right and up/down move the
- * selection. -1 while no choice is open or while one of the choice bits 0x300 (not recovered) is set. */
+ * selection. -1 while no choice is open or while a cursor move or digit roll (TIMECODE_FLAG_CURSOR_MOVE,
+ * TIMECODE_FLAG_DIGIT_ROLL, mask 0x300) is running. */
 int msgChoicePoll(void)
 {
     int frames;
@@ -318,14 +321,14 @@ void msgPanelSetTimecode(int hours, int minutes, int seconds, int frames) {
 }
 
 
-/* Show the panel entry 0x151 in mode 8. */
+/* Show the default panel entry: x 0x151, y 8. */
 void msgPanelShowDefault(void) {
     msgPanelShow(0x151, 8);
 }
 
-/* Show a panel entry with `first` and `second`. */
-void msgPanelShow(int first, int second) {
-    msgSlotPlaceByState(&msgPanel, first, second);
+/* Places the panel at x and y. */
+void msgPanelShow(int x, int y) {
+    msgSlotPlaceByState(&msgPanel, x, y);
 }
 
 /* Clear the panel. */

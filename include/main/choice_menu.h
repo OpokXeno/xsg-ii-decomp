@@ -29,7 +29,7 @@ int choiceMenuOpen(unsigned int index, int x, int y, int width, int height, int 
 void choiceMenuSetActive(int index, int enable);
 TextEntry *textEntryAlloc(int x, int y, int width, int height, signed char style_index, unsigned char **pages);
 void textEntryRemove(TextEntry *entry);
-unsigned char textEntryPlayVoice(TextEntry *entry);
+unsigned char textEntryConfirmPoll(TextEntry *entry);
 void choiceMenuClose(int index);
 int choiceMenuIsOpen(int index);
 int choiceMenuGetResult(int index);

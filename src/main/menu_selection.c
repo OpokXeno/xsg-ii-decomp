@@ -14,7 +14,7 @@
 enum SelectionFlag {
     SELECTION_FLAG_RESTORE_HP = 0x1,      /* useful while hp differs from maxHp */
     SELECTION_FLAG_RESTORE_EP = 0x2,      /* useful while ep differs from maxEp */
-    SELECTION_FLAG_ALWAYS = 0x4,          /* always useful */
+    SELECTION_FLAG_WHOLE_PARTY = 0x4,     /* acts on the whole party; always useful */
     SELECTION_FLAG_RESTRICTED = 0x8,      /* eligible only while ptState.nearbySearchType is 7 or 8 */
     SELECTION_FLAG_DISABLED = 0x10,       /* never eligible */
     SELECTION_FLAG_SPLIT_ONLY = 0x20,     /* eligible only in split mode (without it, only outside) */
@@ -37,22 +37,22 @@ enum SelectionFlag {
 #define SELECTION_POINTS_PER_MAXIMUM 30
 /* cells[group][slot] once its four subs are taken. */
 #define SELECTION_SLOT_ALL_SUBS 0xF
-/* The pair records of specialAttackRecordTable (two members each) that selectionPairRecordCount scans. */
+/* The pair records of attackRecordTable (two members each) that selectionPairRecordCount scans. */
 #define SELECTION_PAIR_RECORD_FIRST 79
 #define SELECTION_PAIR_RECORD_COUNT 16
 
 /* Entry values past the selectionRecordIndex range (0x00..0x6F) that selectionCollectEntries
-   appends: SELECTION_ENTRY_EXTRA_FLAG stands for battle-slot flag SELECTION_EXTRA_FLAG, the entries
-   from SELECTION_ENTRY_EXTRA_CODES for the battle-slot codes SELECTION_EXTRA_CODE_FIRST..END - 1,
+   appends: SELECTION_ENTRY_EXTRA_FLAG stands for skill SELECTION_EXTRA_FLAG, the entries
+   from SELECTION_ENTRY_EXTRA_CODES for Shion's ethers SELECTION_EXTRA_CODE_FIRST..END - 1,
    and SELECTION_ENTRY_NONE is held by nobody. */
 #define SELECTION_ENTRY_EXTRA_FLAG 0x70
 #define SELECTION_ENTRY_EXTRA_CODES 0x71
 #define SELECTION_ENTRY_NONE 0x7F
-/* The flag ptStateInit sets for members 2 and 5 when oldDataMaximaCopy reports saved maxima. */
+/* The skill 0x3F that ptStateInit sets for members 2 and 5 when oldDataMaximaCopy reports saved maxima. */
 #define SELECTION_EXTRA_FLAG 0x3F
 #define SELECTION_EXTRA_CODE_FIRST 0x34
 #define SELECTION_EXTRA_CODE_END 0x3A
-/* Entry value minus battle-slot code (0x3D). */
+/* Entry value minus Shion's first ether code (0x3D). */
 #define SELECTION_EXTRA_CODE_ENTRY_OFFSET (SELECTION_ENTRY_EXTRA_CODES - SELECTION_EXTRA_CODE_FIRST)
 
 /* unsigned: selectionWindowListDropAt reads it with lbu and decrements with addiu 0xFF. */
@@ -70,7 +70,7 @@ void selectionRebuildWindowList(void)
         {
             if (dataBoxChkCategory1(candidate) > 0)
             {
-                selectionWindowList[count] = candidate;
+                selectionUsableItemList[count] = candidate;
                 count += 1;
             }
             candidate += 1;
@@ -83,7 +83,7 @@ void selectionRebuildWindowList(void)
         if ((ptState.splitMode == 0 || (unsigned int) (candidate - SELECTION_SPLIT_ENTRY_FIRST)
              >= SELECTION_SPLIT_ENTRY_END - SELECTION_SPLIT_ENTRY_FIRST) && dataBoxChkCategory1(candidate) > 0)
         {
-            selectionWindowList[count] = candidate;
+            selectionUsableItemList[count] = candidate;
             count += 1;
         }
         candidate += 1;
@@ -97,16 +97,16 @@ int selectionWindowListDropAt(int index)
 {
     int i;
 
-    if (dataBoxChkCategory1(selectionWindowList[index]) <= 0)
+    if (dataBoxChkCategory1(selectionUsableItemList[index]) <= 0)
     {
         for (i = index + 1; i < selectionWindowCount; i++)
         {
-            selectionWindowList[i - 1] = selectionWindowList[i];
+            selectionUsableItemList[i - 1] = selectionUsableItemList[i];
         }
         selectionWindowCount--;
         return 0;
     }
-    return dataBoxChkCategory1(selectionWindowList[index]);
+    return dataBoxChkCategory1(selectionUsableItemList[index]);
 }
 
 void selectionFlagTableInit(void)
@@ -140,7 +140,7 @@ void selectionFlagTableInit(void)
     *flags++ = SELECTION_FLAG_DISABLED;
     *flags++ = SELECTION_FLAG_DISABLED;
     *flags++ = SELECTION_FLAG_DISABLED;
-    *flags++ = SELECTION_FLAG_RESTORE_HP | SELECTION_FLAG_RESTORE_EP | SELECTION_FLAG_ALWAYS;
+    *flags++ = SELECTION_FLAG_RESTORE_HP | SELECTION_FLAG_RESTORE_EP | SELECTION_FLAG_WHOLE_PARTY;
     *flags++ = SELECTION_FLAG_SKILL_POINTS;
     *flags++ = SELECTION_FLAG_SKILL_POINTS;
     *flags++ = SELECTION_FLAG_SKILL_POINTS;
@@ -151,23 +151,23 @@ void selectionFlagTableInit(void)
     *flags++ = SELECTION_FLAG_CLASS_POINTS;
     *flags++ = SELECTION_FLAG_RESTORE_HP | SELECTION_FLAG_RESTORE_EP | SELECTION_FLAG_SPLIT_ONLY;
     *flags++ = SELECTION_FLAG_RESTORE_HP | SELECTION_FLAG_RESTORE_EP | SELECTION_FLAG_SPLIT_ONLY;
-    *flags++ = SELECTION_FLAG_RESTORE_HP | SELECTION_FLAG_RESTORE_EP | SELECTION_FLAG_ALWAYS
+    *flags++ = SELECTION_FLAG_RESTORE_HP | SELECTION_FLAG_RESTORE_EP | SELECTION_FLAG_WHOLE_PARTY
                | SELECTION_FLAG_SPLIT_ONLY;
     *flags++ = SELECTION_FLAG_DISABLED;
     *flags++ = SELECTION_FLAG_DISABLED;
     *flags++ = SELECTION_FLAG_DISABLED;
     *flags++ = SELECTION_FLAG_DISABLED;
-    *flags++ = SELECTION_FLAG_ALWAYS;
-    *flags++ = SELECTION_FLAG_ALWAYS;
-    *flags++ = SELECTION_FLAG_ALWAYS;
-    *flags = SELECTION_FLAG_ALWAYS;
+    *flags++ = SELECTION_FLAG_WHOLE_PARTY;
+    *flags++ = SELECTION_FLAG_WHOLE_PARTY;
+    *flags++ = SELECTION_FLAG_WHOLE_PARTY;
+    *flags = SELECTION_FLAG_WHOLE_PARTY;
 }
 
 int selectionEntryIsEligible(int index)
 {
     int flags;
 
-    flags = selectionFlagTable[selectionWindowList[index]];
+    flags = selectionFlagTable[selectionUsableItemList[index]];
     if (flags & SELECTION_FLAG_DISABLED)
     {
         return 0;
@@ -198,7 +198,7 @@ int selectionEntryIsEligible(int index)
 
 int selectionWindowEntryTargetsParty(int index)
 {
-    if ((selectionFlagTable[selectionWindowList[index]] & SELECTION_FLAG_ALWAYS) != 0) {
+    if ((selectionFlagTable[selectionUsableItemList[index]] & SELECTION_FLAG_WHOLE_PARTY) != 0) {
         return 1;
     }
     return 0;
@@ -214,7 +214,7 @@ int selectionEntryIsUseful(int index, PartyMember *holder)
     /* Holds the 1 every test below stores; with a literal 1 the register allocation differs. */
     int usable;
 
-    flags = selectionFlagTable[selectionWindowList[index]];
+    flags = selectionFlagTable[selectionUsableItemList[index]];
     if (selectionEntryIsEligible(index) == 0)
     {
         return 0;
@@ -251,7 +251,7 @@ int selectionEntryIsUseful(int index, PartyMember *holder)
             useful = usable;
         }
     }
-    if (flags & SELECTION_FLAG_ALWAYS)
+    if (flags & SELECTION_FLAG_WHOLE_PARTY)
     {
         useful = usable;
     }
@@ -262,7 +262,7 @@ u16 selectionWindowEntryMarkedFlags(int index)
 {
     u16 flags;
 
-    flags = selectionFlagTable[selectionWindowList[index]];
+    flags = selectionFlagTable[selectionUsableItemList[index]];
     return (flags & (SELECTION_FLAG_CLASS_POINTS | SELECTION_FLAG_SKILL_POINTS)) ? flags : 0;
 }
 
@@ -330,8 +330,8 @@ int selectionCountedMemberNeedsHpEp(void)
     return 0;
 }
 
-/* Bit c of ptState.progress->eligibility (bit c & 7 of byte c >> 3) marks candidate c; selectionBlockTestBit tests it. */
-void selectionBlockClear(void)
+/* Bit c of ptState.progress->eligibility (bit c & 7 of byte c >> 3) marks candidate c; selectionKeyItemBitTest tests it. */
+void selectionKeyItemBitsClear(void)
 {
     int slot;
 
@@ -343,7 +343,7 @@ void selectionBlockClear(void)
 }
 
 
-void selectionBlockFill(void)
+void selectionKeyItemBitsFill(void)
 {
     int candidate;
     int bit;
@@ -363,7 +363,7 @@ void selectionBlockFill(void)
     while (candidate < 255);
 }
 
-int selectionBlockTestBit(int slot)
+int selectionKeyItemBitTest(int slot)
 {
     unsigned int value;
 
@@ -384,7 +384,7 @@ void selectionRebuildList(void)
     {
         if (dataBoxChkCategory2(candidate) > 0)
         {
-            selectionPlainList[count] = candidate;
+            selectionAccessoryList[count] = candidate;
             count += 1;
         }
         candidate += 1;
@@ -400,17 +400,17 @@ int selectionListDropAt(int index)
 {
     int i;
 
-    dataBoxDecCategory2(selectionPlainList[index]);
-    if (dataBoxChkCategory2(selectionPlainList[index]) <= 0)
+    dataBoxDecCategory2(selectionAccessoryList[index]);
+    if (dataBoxChkCategory2(selectionAccessoryList[index]) <= 0)
     {
         for (i = index + 1; i < selectionPlainCount; i++)
         {
-            selectionPlainList[i - 1] = selectionPlainList[i];
+            selectionAccessoryList[i - 1] = selectionAccessoryList[i];
         }
         selectionPlainCount--;
         return 0;
     }
-    return dataBoxChkCategory2(selectionPlainList[index]);
+    return dataBoxChkCategory2(selectionAccessoryList[index]);
 }
 
 
@@ -423,7 +423,7 @@ void commandRecordTextsBind(void)
     struct LookupRecord *record;
 
     index = 0;
-    record = specialAttackRecordTable;
+    record = attackRecordTable;
     do
     {
         key = index + 0x50;
@@ -453,7 +453,7 @@ int selectionMemberCapacity(int id)
 }
 
 
-/* Counts the pair records of specialAttackRecordTable (SELECTION_PAIR_RECORD_FIRST, 16 of them) that are enabled in
+/* Counts the pair records of attackRecordTable (SELECTION_PAIR_RECORD_FIRST, 16 of them) that are enabled in
    mask (bit attributes[2]), have member as one of their two members and whose other member ptFindSlot
    finds. */
 int selectionPairRecordCount(int member, unsigned short mask)
@@ -464,18 +464,18 @@ int selectionPairRecordCount(int member, unsigned short mask)
     count = 0;
     for (i = SELECTION_PAIR_RECORD_FIRST; i < SELECTION_PAIR_RECORD_FIRST + SELECTION_PAIR_RECORD_COUNT; i++)
     {
-        if ((mask >> specialAttackRecordTable[i].attributes[2]) & 1)
+        if ((mask >> attackRecordTable[i].attributes[2]) & 1)
         {
-            if (specialAttackRecordTable[i].attributes[0] == member)
+            if (attackRecordTable[i].attributes[0] == member)
             {
-                if (ptFindSlot(specialAttackRecordTable[i].attributes[1]) != -1)
+                if (ptFindSlot(attackRecordTable[i].attributes[1]) != -1)
                 {
                     count++;
                 }
             }
-            else if (specialAttackRecordTable[i].attributes[1] == member)
+            else if (attackRecordTable[i].attributes[1] == member)
             {
-                if (ptFindSlot(specialAttackRecordTable[i].attributes[0]) != -1)
+                if (ptFindSlot(attackRecordTable[i].attributes[0]) != -1)
                 {
                     count++;
                 }
@@ -495,11 +495,11 @@ int selectionPairRecordAt(int member, int nth, unsigned short mask)
     found = 0;
     for (i = 0; i < SELECTION_PAIR_RECORD_COUNT; i++)
     {
-        if ((mask >> specialAttackRecordTable[i + SELECTION_PAIR_RECORD_FIRST].attributes[2]) & 1)
+        if ((mask >> attackRecordTable[i + SELECTION_PAIR_RECORD_FIRST].attributes[2]) & 1)
         {
-            if (specialAttackRecordTable[i + SELECTION_PAIR_RECORD_FIRST].attributes[0] == member)
+            if (attackRecordTable[i + SELECTION_PAIR_RECORD_FIRST].attributes[0] == member)
             {
-                if (ptFindSlot(specialAttackRecordTable[i + SELECTION_PAIR_RECORD_FIRST].attributes[1]) != -1)
+                if (ptFindSlot(attackRecordTable[i + SELECTION_PAIR_RECORD_FIRST].attributes[1]) != -1)
                 {
                     found++;
                     if (nth + 1 == found)
@@ -508,9 +508,9 @@ int selectionPairRecordAt(int member, int nth, unsigned short mask)
                     }
                 }
             }
-            else if (specialAttackRecordTable[i + SELECTION_PAIR_RECORD_FIRST].attributes[1] == member)
+            else if (attackRecordTable[i + SELECTION_PAIR_RECORD_FIRST].attributes[1] == member)
             {
-                if (ptFindSlot(specialAttackRecordTable[i + SELECTION_PAIR_RECORD_FIRST].attributes[0]) != -1)
+                if (ptFindSlot(attackRecordTable[i + SELECTION_PAIR_RECORD_FIRST].attributes[0]) != -1)
                 {
                     found++;
                     if (nth + 1 == found)
@@ -529,7 +529,7 @@ int selectionPairRecordAt(int member, int nth, unsigned short mask)
 }
 
 
-/* Counts the records among member's seven (from specialAttackRecordTable[member * 10 - 58]) that are enabled in mask
+/* Counts the records among member's seven (from attackRecordTable[member * 10 - 58]) that are enabled in mask
    (bit attributes[2]) and whose copilot member mask includes a member ptFindRecord finds. */
 int selectionCopilotRecordCount(int member, unsigned short mask)
 {
@@ -550,8 +550,8 @@ int selectionCopilotRecordCount(int member, unsigned short mask)
     count = 0;
     for (i = 0; i < 7; i++)
     {
-        if (((mask >> specialAttackRecordTable[firstRecord + i].attributes[2]) & 1)
-            && (specialAttackRecordTable[firstRecord + i].attributes[1] & present))
+        if (((mask >> attackRecordTable[firstRecord + i].attributes[2]) & 1)
+            && (attackRecordTable[firstRecord + i].attributes[1] & present))
         {
             count++;
         }
@@ -579,8 +579,8 @@ int selectionCopilotRecordAt(int member, int nth, unsigned short mask)
     found = 0;
     for (i = 0; i < 7; i++)
     {
-        if (((mask >> specialAttackRecordTable[firstRecord + i].attributes[2]) & 1)
-            && (specialAttackRecordTable[firstRecord + i].attributes[1] & present))
+        if (((mask >> attackRecordTable[firstRecord + i].attributes[2]) & 1)
+            && (attackRecordTable[firstRecord + i].attributes[1] & present))
         {
             found++;
             if (nth + 1 == found)
@@ -644,7 +644,7 @@ int selectionSubIsTaken(PartyMember *holder, int group, int slot, int sub)
 }
 
 /* Whether holder has entry index: the taken bit of a selectionRecordIndex value, or for the extra entries
-   selectionCollectEntries appends, the battle-slot flag or code it stands for. */
+   selectionCollectEntries appends, the skill 0x3F or Shion's ethers 0x34 to 0x39 that it stands for. */
 int selectionHolderHasEntry(PartyMember *holder, int index)
 {
     if (index == SELECTION_ENTRY_NONE)
@@ -833,7 +833,7 @@ int selectionCanTakeSub(PartyMember *holder, int group, int slot, int sub)
 int selectionTakeSub(PartyMember *holder, int group, int slot, int sub)
 {
     int index;
-    PartyMemberLimits *limits;
+    PartyMemberExpPoints *limits;
     int open;
 
     holder->buffer->cells[group][slot] |= 1 << sub;
@@ -853,7 +853,7 @@ int selectionTakeSub(PartyMember *holder, int group, int slot, int sub)
     return 1;
 }
 
-/* Applies the battle-slot flag or code of the record of (group, slot, sub) to holder's character
+/* Applies the skill or Shion's ether code of the record of (group, slot, sub) to holder's character
    and takes the sub (selectionTakeSub). */
 int selectionApplyEntry(PartyMember *holder, int group, int slot, int sub)
 {
@@ -876,7 +876,7 @@ int selectionApplyEntry(PartyMember *holder, int group, int slot, int sub)
 /* Opens slot bit of group slot and pays its selectionSlotOpenCostTable cost in class points. */
 void selectionSlotOpen(PartyMember *holder, int slot, int bit)
 {
-    PartyMemberLimits *limits;
+    PartyMemberExpPoints *limits;
 
     holder->buffer->header[slot] |= 1 << bit;
     limits = holder->limits;
@@ -961,7 +961,7 @@ void ptStateInit(void)
     ptState.progress->mapId = -1;
     ptProgressRecord.memberMask = 0;
     cursorBufferTablesInit();
-    selectionBlockClear();
+    selectionKeyItemBitsClear();
     if (oldDataMaximaCopy(&maxima) & 3)
     {
         ptMemberRecords[0].limits->skillPoints += maxima.bytes[0] * SELECTION_POINTS_PER_MAXIMUM;
@@ -975,7 +975,7 @@ void ptStateInit(void)
         dataBoxIncCategory3(0x45);
     }
     configScreenStateReset();
-    selectionBlockFill();
+    selectionKeyItemBitsFill();
     xglClockRead(&now);
     ptState.progress->playTime = xglClockDayTime2UInt(&now);
 }

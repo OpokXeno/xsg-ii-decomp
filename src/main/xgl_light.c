@@ -88,7 +88,7 @@ void xglLightSlotsInsert(XglLightSlots *work, Vector4 *vector, Vector4 *directio
 int xglLightPointColor(Vector4 *result, XglLightKey *key, Vector4 *origin);
 int xglLightSpotColor(Vector4 *result, Vector4 *direction, XglLightKey *key, Vector4 *origin);
 int xglLightBoxColor(Vector4 *result, Vector4 *direction, XglLightKey *key, Vector4 *origin);
-int xglLightConeColor(Vector4 *result, Vector4 *direction, XglLightKey *key, Vector4 *origin);
+int xglLightCylinderColor(Vector4 *result, Vector4 *direction, XglLightKey *key, Vector4 *origin);
 
 /* Loads the key's Z, Y, X rotation into the matrix stack (identity first, zero angles skipped).
  * A plain block, not do/while (0): the loop's labels would renumber the output. */
@@ -105,7 +105,7 @@ int xglLightConeColor(Vector4 *result, Vector4 *direction, XglLightKey *key, Vec
             xglMatrixStackRotX((key)->rotation.x); \
         } \
     }
-#define XGL_MOTION_TYPE_COUNT 19
+#define XGL_LIGHT_TYPE_COUNT 19
 
 extern const u64 lightConeEdgeVectorLow[2];
 
@@ -137,7 +137,8 @@ void xglLightPackDebugPoint(XglLightKey *key);
 /* This unit's .sdata (0x69E070-0x69E078) and .sbss (0x69E398), defined before
  * their first use so that every access is $gp-relative. */
 int xglLightSetDefaultReady = 0;
-int xglMotionCacheValid = 0;
+/* 1 while xglLightColorScale holds the light pack colour. */
+int xglLightColorScaleValid = 0;
 
 void xglStudioLightReset(void *light)
 {
@@ -199,7 +200,7 @@ void xglLightSetDefault(XglLightSet *lightSet)
             memcpy(dst, cache, sizeof(XglLightSet));
         }
     }
-    xglMotionCacheValid = 0;
+    xglLightColorScaleValid = 0;
 }
 
 void xglLightPackTableInit(void)
@@ -379,6 +380,7 @@ int xglLightPointColor(Vector4 *color, XglLightKey *key, Vector4 *receiver)
     return 1;
 }
 
+/* Tests the receiver against the light cone: the angle to the cone axis must be within half of coneAngle. */
 int xglLightSpotColor(Vector4 *color, Vector4 *lightDirection, XglLightKey *key, Vector4 *receiver)
 {
     DoublewordVector4 coneAxis = { { 0.0f, 0.0f, -1.0f, 1.0f } };
@@ -454,7 +456,8 @@ int xglLightBoxColor(Vector4 *color, Vector4 *lightDirection, XglLightKey *key, 
     return 1;
 }
 
-int xglLightConeColor(Vector4 *color, Vector4 *lightDirection, XglLightKey *key, Vector4 *receiver)
+/* Tests the receiver against a cylinder around the light axis: radius extent.y, half height extent.z. */
+int xglLightCylinderColor(Vector4 *color, Vector4 *lightDirection, XglLightKey *key, Vector4 *receiver)
 {
     float keyMatrix[4][4];
     Vector4 coneScale;
@@ -535,21 +538,24 @@ int xglLightConeColor(Vector4 *color, Vector4 *lightDirection, XglLightKey *key,
         }
     }
     return 0;
+/* Cached global colour of the light pack (xglLightPackCacheGet). */
 }
 
-static Vector4 xglMotionCache[1];
+/* Colour scale of the light pass: key->color times key->intensity, handed to pxySetColorScale. Valid while
+   xglLightColorScaleValid is 1. */
+static Vector4 xglLightColorScale[1];
 
 void *xglLightPackCacheGet(void)
 {
-    if (xglMotionCacheValid != 0) {
-        return xglMotionCache;
+    if (xglLightColorScaleValid != 0) {
+        return xglLightColorScale;
     }
     return 0;
 }
 
 void xglLightPackCacheInvalidate(void)
 {
-    xglMotionCacheValid = 0;
+    xglLightColorScaleValid = 0;
 }
 
 void xglLightPackBuildLightSet(XglLightPack *pack, XglLightSet *lightSet, Vector4 *receiver)
@@ -564,7 +570,7 @@ void xglLightPackBuildLightSet(XglLightPack *pack, XglLightSet *lightSet, Vector
     for (i = 0; i < pack->entryCount; i++) {
         XglLightEntry *entry = (XglLightEntry *)((u8 *)pack + entryOffsets[i]);
 
-        if (entry->type < XGL_MOTION_TYPE_COUNT) {
+        if (entry->type < XGL_LIGHT_TYPE_COUNT) {
             XglLightKey *key = &((XglLightKey *)((u8 *)pack + pack->keyOffset))[i];
             DoublewordAlignedVector4 axisDir = { 0.0f, 0.0f, -1.0f, 1.0f };
             Vector4 pointColor;
@@ -578,9 +584,9 @@ void xglLightPackBuildLightSet(XglLightPack *pack, XglLightSet *lightSet, Vector
 
             switch (entry->type) {
             case 9:
-                xglVectorScale(xglMotionCache, &key->color, key->intensity);
-                pxySetColorScale(xglMotionCache);
-                xglMotionCacheValid = 1;
+                xglVectorScale(xglLightColorScale, &key->color, key->intensity);
+                pxySetColorScale(xglLightColorScale);
+                xglLightColorScaleValid = 1;
                 break;
             case 1:
                 xglVectorScale(&lightSet->ambientColor, &key->color, key->intensity);
@@ -602,7 +608,7 @@ void xglLightPackBuildLightSet(XglLightPack *pack, XglLightSet *lightSet, Vector
                 xglVectorAddXYZ(&lightSet->ambientColorLower, &lightSet->ambientColorLower, &pointColor);
                 break;
             case 7:
-                if (!xglLightConeColor(&coneColor, &coneDirection, key, receiver)) {
+                if (!xglLightCylinderColor(&coneColor, &coneDirection, key, receiver)) {
                     break;
                 }
                 xglVectorScale(&coneColor, &coneColor, key->intensity);
@@ -655,7 +661,7 @@ void xglLightPackBuildLightSet(XglLightPack *pack, XglLightSet *lightSet, Vector
         for (i = 0; i < pack->entryCount; i++) {
             XglLightEntry *entry = (XglLightEntry *)((u8 *)pack + entryOffsets[i]);
 
-            if (entry->type >= XGL_MOTION_TYPE_COUNT) {
+            if (entry->type >= XGL_LIGHT_TYPE_COUNT) {
                 XglLightKey *key = &((XglLightKey *)((u8 *)pack + pack->keyOffset))[i];
                 Vector4 pointColor;
                 Vector4 pointDirection;
@@ -686,7 +692,7 @@ void xglLightPackBuildLightSet(XglLightPack *pack, XglLightSet *lightSet, Vector
                     xglLightSlotsInsert(&lightSlots, &pointColor, &pointDirection);
                     break;
                 case 24:
-                    if (!xglLightConeColor(&coneColor, &coneDirection, key, receiver)) {
+                    if (!xglLightCylinderColor(&coneColor, &coneDirection, key, receiver)) {
                         break;
                     }
                     xglVectorScale(&coneColor, &coneColor, key->intensity);
@@ -725,7 +731,7 @@ void xglLightPackBuildByName(XglLightSet *light, const char *packName, Vector4 *
 {
     int i;
 
-    xglMotionCacheValid = 0;
+    xglLightColorScaleValid = 0;
     for (i = 0; i < 16; i++) {
         if (xglLightPackTable[i].pack != 0) {
             if (strcmp(xglLightPackTable[i].pack->name, packName) == 0) {

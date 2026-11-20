@@ -27,7 +27,7 @@ void vu0DirectionToAngles(Vector4 *angles, Vector4 *direction, int unusedArg2, i
     angles->y = yaw;
 }
 
-/* Global flag word; sv_get_image_item_161 also reads it with masks. */
+/* Scene flag word: a plain global, not part of the save image. sv_get_image_item.c tests bit 1 (mask 0x2). */
 extern u32 svSceneFlags;
 
 u32 svSceneFlagsTest(u32 mask) {

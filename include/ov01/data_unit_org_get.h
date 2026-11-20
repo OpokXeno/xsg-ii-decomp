@@ -3,8 +3,8 @@
 
 /* Functions of src/ov01/data_unit_org_get.c that other files call. */
 
-/* Header of one heap block (0x40 bytes, the payload follows): word 0 is the flags word (bit 0 set = in use),
-   word 1 the payload size. */
+/* The start of one heap block header (the header is 0x40 bytes; the payload follows it). This struct models only its
+   first 8 bytes: word 0 is the flags word (bit 0 set = in use), word 1 the payload size. */
 typedef struct Ov01HeapBlock {
     unsigned int flags;
     int size;
