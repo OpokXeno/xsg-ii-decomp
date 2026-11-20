@@ -30,6 +30,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # The workspace persists on the self-hosted runner: start from a clean tree, ignored build
+          # outputs included, so no object an earlier run left reaches the report.
+          clean: true
 
       - name: Build, link and compare the three EE files
         run: |

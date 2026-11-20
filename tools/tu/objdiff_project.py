@@ -114,6 +114,37 @@ class Tools:
         run([self.objcopy, '--strip-debug', *options, joined, output], cwd)
         address_constants(output, self.ranges)
 
+    def section_fill(self, target_path, base_path, cwd):
+        """Give a data section of the compiled C the alignment fill splat counted into the target.
+
+        Where the compiled section is a prefix of the target section and every byte past it is zero with no
+        target label in it, that span is the fill the link places before the next object; the base section
+        is extended to the target size with zeros, so objdiff compares the same extent."""
+        target, base = Elf(Path(target_path).read_bytes()), Elf(Path(base_path).read_bytes())
+        twins = {s.name: s for s in base.sections}
+        grow = []
+        for section in target.sections:
+            twin = twins.get(section.name)
+            if (twin is None or section.name == '.text' or section.flags & 2 == 0 or section.type == 8
+                    or twin.type == 8 or twin.size >= section.size):
+                continue
+            theirs, mine = target.section_bytes(section), base.section_bytes(twin)
+            if theirs[:len(mine)] != mine or any(theirs[len(mine):]):
+                continue
+            if any(s.shndx == section.index and s.value >= len(mine) and s.type == 1
+                   and not s.name.endswith('.NON_MATCHING') for s in target.symbols):
+                continue
+            grow.append((section.name, section.size))
+        if not grow:
+            return set()
+        script = Path(base_path).with_suffix('.fill.ld')
+        script.write_text('SECTIONS {\n' + ''.join(
+            f'  {name} 0 : SUBALIGN(1) {{ *({name}) . = {size:#x}; }}\n' for name, size in grow) + '}\n')
+        filled = Path(base_path).with_suffix('.filled.o')
+        run([self.ld, '-EL', '-m', 'elf32lr5900', '-r', '-T', script, '-o', filled, base_path], cwd)
+        filled.replace(base_path)
+        return {name for name, _size in grow}
+
     def base(self, compiled, scaffold_functions, output, cwd, target=None, unit=None):
         """The compiled C object, debug-stripped, scaffold functions renamed.
 
@@ -145,6 +176,20 @@ class Tools:
             named.replace(output)
             symbol_sizes(output, {name: size for name, _, _, size in added if size})
         named_words(output)
+        grown = self.section_fill(target, output, cwd)
+        if grown:
+            # The fill gives both sides one extent: a grown section that holds no named object of the compiled
+            # C (an anonymous literal) can have its span named now, like the naming passes above.
+            filled = Elf(output.read_bytes())
+            unnamed = {sec.name for sec in filled.sections if sec.name in grown and not any(
+                sym.shndx == sec.index and sym.type == 1 for sym in filled.symbols)}
+            added = [entry for entry in span_labels(target, output) if entry[1] in unnamed]
+            if added:
+                named = output.with_suffix('.named.o')
+                run([self.objcopy, *[f'--add-symbol={name}={section}:{offset:#x},local' + (',object' if size else '')
+                                     for name, section, offset, size in added], output, named], cwd)
+                named.replace(output)
+                symbol_sizes(output, {name: size for name, _, _, size in added if size})
         data_words(target, output, self.addresses(unit))
         gp_relocation_kinds(target, output)
         data_padding(target, output)
@@ -381,13 +426,34 @@ def section_words(path):
     path.write_bytes(bytes(data))
 
 
+NINJA_OUTPUTS = {}
+
+
+def built_now(path):
+    """Whether the unit's build.ninja still produces `path`.
+
+    A carved object an older build left behind (the TU is no longer carved, or was renamed) is not what the link
+    uses now; only the outputs of the current build file count. Without a build file the file itself counts."""
+    path = Path(path).resolve()
+    for directory in path.parents:
+        ninja = directory / 'build.ninja'
+        if ninja.is_file():
+            if directory not in NINJA_OUTPUTS:
+                outputs = set()
+                for match in re.finditer(r'^build (.*?):', ninja.read_text(errors='replace'), re.M):
+                    outputs.update((directory / name).resolve() for name in match[1].replace('|', ' ').split())
+                NINJA_OUTPUTS[directory] = outputs
+            return path in NINJA_OUTPUTS[directory]
+    return True
+
+
 def carve_report(compiled):
     """The split report of a compiled object: {input section: [placed piece]}, or None."""
     for name in (compiled.with_suffix('.carved.o.json'), compiled.with_suffix('.allocated.carved.o.json')):
-        if name.is_file():
+        if name.is_file() and built_now(name.with_suffix('')):
             return name.with_suffix(''), read(name)
     allocated = compiled.parents[3] / 'c' / compiled.parent.name / f'{compiled.stem}.allocated.carved.o.json'
-    if allocated.is_file():
+    if allocated.is_file() and built_now(allocated.with_suffix('')):
         return allocated.with_suffix(''), read(allocated)
     return None
 
@@ -513,13 +579,25 @@ def span_labels(target_path, base_path):
 
 
 def linked_addresses(root, unit):
-    """{name: address} of the symbols with one address in a linked image."""
+    """{name: address} of the symbols with one address in a linked image.
+
+    A target label the link no longer has (splat named a span of data that C now owns under another name,
+    `_ptAllocPart16` inside `.bss`) takes its address from the unit's symbol table, and from main's for an
+    overlay; a linked symbol of the same name wins."""
     elf = Elf((root / 'build' / unit / 'build' / f'{unit}.elf').read_bytes())
     seen = {}
     for symbol in elf.symbols:
         if symbol.shndx and symbol.name:
             seen.setdefault(symbol.name, set()).add(symbol.value)
-    return {name: values.pop() for name, values in seen.items() if len(values) == 1}
+    linked = {name: values.pop() for name, values in seen.items() if len(values) == 1}
+    # The target objects carry splat's labels: a label no linked symbol keeps (data now owned by C) still has
+    # its original address in the unit's symbol table.
+    merged = {}
+    for table in [root / 'config/symbols' / f'{unit}.txt'] + ([root / 'config/symbols/main.txt'] if unit != 'main' else []):
+        for match in re.finditer(r'^\s*([A-Za-z_][\w.]*)\s*=\s*(0x[0-9A-Fa-f]+)', table.read_text(errors='replace'), re.M):
+            merged.setdefault(match[1], int(match[2], 16))
+    merged.update(linked)
+    return merged
 
 
 def data_words(target_path, base_path, addresses):
@@ -716,6 +794,11 @@ def anonymous_labels(target_path, base_path):
                 foreign = any(position <= o < position + size
                               and label.value + o - position not in target_relocations.get(label.shndx, {})
                               for o in compiled)
+                # A word splat made a pointer (`.word D_...` over string or number bytes) is a relocation
+                # field of the target: it is set aside on the compiled side too.
+                compiled = {**{position + o - label.value: entry
+                               for o, entry in target_relocations.get(label.shndx, {}).items()
+                               if label.value <= o < label.value + size}, **compiled}
                 if foreign or masked(base, section, position, size, compiled) != original:
                     # splat sizes a label up to the next one, alignment fill included:
                     # a string keeps its terminator, a table its last relocated
