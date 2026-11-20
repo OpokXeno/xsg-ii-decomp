@@ -2,27 +2,32 @@
 #include "shared.h"
 #include "main/cfePlugIn.h"
 #include "main/sef.h"
-#include "main/sdv_033.h"
-#include "main/tu021.h"
-#include "main/tu138.h"
-#include "main/tu256.h"
+#include "main/xgl_camera.h"
+#include "main/se_bank_load.h"
+#include "main/cfe_entry.h"
+#include "main/xgl_cur_mul.h"
 #include "gs.h"
-#include "main/tu045.h"
+#include "main/pxy_packet_state.h"
 #include "main/cfeEvaluate.h"
-#include "main/tu145.h"
+#include "main/cfe_track.h"
 #include "main/xgl_studio.h"
 #include "main/nml_model_set.h"
-#include "main/tu093.h"
-#include "main/tu255.h"
+#include "main/gr_screen.h"
+#include "main/xgl_cur_matrix.h"
 #include "main/xgl_2.h"
-#include "main/tu026.h"
-#include "main/tu051.h"
+#include "main/xgl_light.h"
+#include "main/assert_fail.h"
+#include "main/game_camera.h"
 #include "main/xenoActor.h"
 #include "main/TiGlobalColl.h"
+#include "main/TiMRPackage.h"
+#include "main/ti_dynamics_node.h"
+#include "main/nml_packet_add.h"
 
 
+#include "main/cur_matrix_asm.h"
 /* 1 when the list exists and has items. */
-int cfeListHasItems(CfePackHeader *list)
+int cfePackHasGeometries(CfePackHeader *list)
 {
     if (list != 0 && list->geometryCount != 0) {
         return 1;
@@ -54,17 +59,13 @@ void cfeRecordListSample(int time, struct XenoActor *owner, CfeFlagRecord *recor
     CfePackHeader *list = (CfePackHeader *) owner->rsrc[XAct_Rsrc_MDL];
     int i;
 
-    if (cfeListHasItems(list)) {
+    if (cfePackHasGeometries(list)) {
         for (i = 0; i < list->geometryCount; i++) {
             cfeRecordSample(time, owner, &records[i], i);
         }
     }
 }
 
-int XenoActorReleaseChild(struct XenoActor *parent, struct XenoActor *child);
-int XenoActorAppendChildOnJoint(struct XenoActor *parent, struct XenoActor *child, int joint);
-/* TiMRPackage.c takes its own view of the state (TiMRState). */
-void tiMRStateSetSpeed(XenoMotionState *state, float value);
 
 
 /* XenoActor's vector at +0x90 as the node's scale tracks write it. The original reaches it through a
@@ -85,7 +86,7 @@ typedef struct CfeActorScale {
 /* Evaluates one entry of cfeEntries at `time`: every track that is set drives its value (the actor's transform,
  * channel values, mode, selector, play range, speeds, draw state and attachment, the flag records and the entry
  * position), and the entry position is moved from the world into the space in front of the actor. */
-void cfeEvaluateNode(CfeActor *entry, int time)
+void cfeActorEvaluate(CfeActor *entry, int time)
 {
     struct XenoActor *actor;
     struct XenoActor *shown;
@@ -143,11 +144,11 @@ void cfeEvaluateNode(CfeActor *entry, int time)
     }
     if (entry->track[CFE_ACTOR_TRACK_SPEED_A] != 0) {
         entry->speedA = cfeTrackSampleStep(entry->track[CFE_ACTOR_TRACK_SPEED_A], time);
-        tiMRStateSetSpeed(&entry->actor->motion[0], entry->speedA);
+        tiMRStateSetSpeed(XenoActorMotionState(entry->actor, 0), entry->speedA);
     }
     if (entry->track[CFE_ACTOR_TRACK_SPEED_B] != 0) {
         entry->speedB = cfeTrackSampleStep(entry->track[CFE_ACTOR_TRACK_SPEED_B], time);
-        tiMRStateSetSpeed(&entry->actor->motion[1], entry->speedB);
+        tiMRStateSetSpeed(XenoActorMotionState(entry->actor, 1), entry->speedB);
     }
     if (entry->track[CFE_ACTOR_TRACK_FORCE_MODE] != 0) {
         entry->forceMode = cfeTrackSampleStep(entry->track[CFE_ACTOR_TRACK_FORCE_MODE], time);
@@ -260,8 +261,8 @@ void cfeEvaluateNode(CfeActor *entry, int time)
 }
 
 
-/* Evaluates every actor entry of cfeEntries (cfeEntryCount of them) with cfeEvaluateNode. */
-int cfeEvaluateNodes(int sample_param)
+/* Evaluates every actor entry of cfeEntries (cfeEntryCount of them) with cfeActorEvaluate. */
+int cfeActorTableEvaluate(int sample_param)
 {
     CfeActor *entry;
     int result;
@@ -274,7 +275,7 @@ int cfeEvaluateNodes(int sample_param)
             entry = cfeEntries;
             do {
                 i++;
-                cfeEvaluateNode(entry, sample_param);
+                cfeActorEvaluate(entry, sample_param);
                 entry++;
                 result = i < cfeEntryCount;
             } while (result != 0);
@@ -283,8 +284,6 @@ int cfeEvaluateNodes(int sample_param)
     return result;
 }
 
-void xglCurSetTranslate(const Vector4 *vector);
-void xglCurMulScaleXYZ(const Vector4 *scale);
 
 /* Builds the record's matrix into dest_matrix: translation from evaluated[0], rotations from evaluated[1], scale from evaluated[2]. */
 void cfeRecordBuildMatrix(CfeEvalRecord *record, f32 dest_matrix[4][4]) {
@@ -292,7 +291,7 @@ void cfeRecordBuildMatrix(CfeEvalRecord *record, f32 dest_matrix[4][4]) {
     xglCurMulRotateZ(record->evaluated[1].vector.z);
     xglCurMulRotateY(record->evaluated[1].vector.y);
     xglCurMulRotateX(record->evaluated[1].vector.x);
-    xglCurMulScaleXYZ(&record->evaluated[2].vector);
+    xglCurMulScaleXYZ(&record->evaluated[2].vector.x);
     xglCurMatrixGet(dest_matrix);
 }
 
@@ -329,8 +328,6 @@ void cfeRecordEvaluate(CfeEvalRecord *record, f32 dest_matrix[4][4], int sample_
     cfeRecordBuildMatrix(record, dest_matrix);
 }
 
-void func_001BB3FC(Vector4 *value);
-void func_001BBBD8(void);
 
 
 /* Evaluates every group at `time`: its position from tracks 0..2, the light value from track 4 and the
@@ -359,12 +356,11 @@ void cfeGroupTableEvaluate(int time)
                 cfeGroups[i].object->drawFlags |= CFE_ACTOR_HIDDEN;
             } else {
                 if (cfeGroups[i].light != 0) {
-                    func_001BBBD8();
+                    pxySetTexMapDropAll();
                 }
-                func_001BB3FC(&cfeGroups[i].position);
+                pxySetColorScale(&cfeGroups[i].position);
                 cfeGroups[i].object->drawFlags &= ~CFE_ACTOR_HIDDEN;
-                /* TiGlobalColl.c keeps the handle as an int. */
-                tiGlobalCollSetHandle((int) cfeGroups[i].collision);
+                tiGlobalCollSetHandle(cfeGroups[i].collision);
             }
         }
         if (cfeGroups[i].parts != 0) {
@@ -477,17 +473,13 @@ void cfeCameraEvaluate(int time, int paused)
     xglStudioMove();
 }
 
-/* SefEffectRecord.secondBlock (+0x20) is the effect's scale: sef.c builds the effect matrix with it (as a
- * Vector4 *). The original writes it through a union (alias set 0), hence DoublewordVector4. */
+/* SefEffectRecord.scale (+0x20) is the effect's scale: sef.c builds the effect matrix with it. The original writes
+ * it through a union (alias set 0), hence DoublewordVector4; plain stores to the member change the code. */
 
 /* Effect record flag: the record is drawn without the view-volume test (sv_get_image_item.c's culling
  * skips records with it). */
 #define CFE_EFFECT_NO_CULL 0x10
 
-void sefClearOwnerFlags(unsigned int id, int flags);
-void sefSetOwnerFlags(int owner, int flags);
-void sefExecEffectSteps(SefEffectRecord *effect, float frames, float steps);
-void sefSetRecordOwner(SefEffectRecord *effect, struct XenoActor *owner);
 
 /* Spawns the command's effect (clearing its owner flags first), sets its scale, runs its first
  * frames (one step per 15 frames) and, when the command names an owner entry, hands the effect
@@ -500,20 +492,20 @@ void cfeCommandSpawn(CfeEvalCommand *command)
     if (command->flag != 0) {
         sefClearOwnerFlags((command->page_index << CFE_PAGE_SHIFT) | command->page_offset | CFE_BANK_FLAGGED,
                            CFE_OWNER_FLAGS);
-        effect = sefSpawnEffectRecordById(
-            (command->page_index << CFE_PAGE_SHIFT) | command->page_offset | CFE_BANK_FLAGGED, (int) &command->position,
-            (unsigned char *) &command->rotation);
+        effect = sefCreateEffectCf(
+            (command->page_index << CFE_PAGE_SHIFT) | command->page_offset | CFE_BANK_FLAGGED, &command->position,
+            &command->rotation);
     } else {
         sefClearOwnerFlags((command->page_index << CFE_PAGE_SHIFT) | command->page_offset | CFE_BANK_PLAIN,
                            CFE_OWNER_FLAGS);
-        effect = sefSpawnEffectRecordById(
-            (command->page_index << CFE_PAGE_SHIFT) | command->page_offset | CFE_BANK_PLAIN, (int) &command->position,
-            (unsigned char *) &command->rotation);
+        effect = sefCreateEffectCf(
+            (command->page_index << CFE_PAGE_SHIFT) | command->page_offset | CFE_BANK_PLAIN, &command->position,
+            &command->rotation);
     }
     if (effect != 0) {
-        ((DoublewordVector4 *) effect->secondBlock)->vector.x = command->scale[0];
-        ((DoublewordVector4 *) effect->secondBlock)->vector.y = command->scale[1];
-        ((DoublewordVector4 *) effect->secondBlock)->vector.z = command->scale[2];
+        ((DoublewordVector4 *) &effect->scale)->vector.x = command->scale[0];
+        ((DoublewordVector4 *) &effect->scale)->vector.y = command->scale[1];
+        ((DoublewordVector4 *) &effect->scale)->vector.z = command->scale[2];
         sefExecEffectSteps(effect, command->frames, command->frames / 15 + 1);
         effect->flags |= CFE_EFFECT_NO_CULL;
     }
@@ -537,10 +529,10 @@ void cfeCommandSetOwnerFlags(CfeEvalCommand *command) {
 
 void cfeCommandReleaseRecords(CfeEvalCommand *command) {
     if (command->flag != 0) {
-        sefReleaseOwnedRecords((command->page_index << CFE_PAGE_SHIFT) | command->page_offset | CFE_BANK_FLAGGED);
+        sefKillEffect((command->page_index << CFE_PAGE_SHIFT) | command->page_offset | CFE_BANK_FLAGGED);
         return;
     }
-    sefReleaseOwnedRecords((command->page_index << CFE_PAGE_SHIFT) | command->page_offset | CFE_BANK_PLAIN);
+    sefKillEffect((command->page_index << CFE_PAGE_SHIFT) | command->page_offset | CFE_BANK_PLAIN);
 }
 
 /* The actions of a command (CfeEvalCommand.action). */
@@ -631,7 +623,7 @@ void cfeCommandTableEvaluate(int time)
 
 
 /* Samples the tracks of the four light rows at `time` and rotates each row's direction. */
-void cfeEvaluateDirections(int time)
+void cfeLightTableEvaluate(int time)
 {
     CfeLight *row;
     int i;
@@ -666,7 +658,7 @@ void cfeEvaluateDirections(int time)
             row->angles[2] = cfeTrackSample(row->track[CFE_LIGHT_TRACK_ANGLE + 2], time);
         }
         if (row->direction != 0) {
-            cfeRotateVectorXY(row->direction, row->angles);
+            cfeDirectionFromAngles(row->direction, row->angles);
         }
     }
 }
@@ -813,7 +805,7 @@ void cfeSndRecordEvaluate(CfeSndRecord *record, int time)
 
 /* Sets the target of record 0. The argument's address is taken: the original
    keeps a frame for the call and does not tail-call cfeSndRecordEvaluate. */
-void cfeSndSetTarget(int target)
+void cfeSndTableEvaluate(int target)
 {
   int *target_ref;
   target_ref = &target;
@@ -841,7 +833,7 @@ void cfeDrawLine(int x0, int y0, int x1, int y1, unsigned int color0, unsigned i
     u64 *cursor;
     u64 *start;
 
-    xglDirectQueueBegin();
+    nmlPacketGsInit();
     cursor = (u64 *) &xglDirectQueueBuffer[xglDirectQueueCount];
     start = cursor;
     GS_PUT(cursor, GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
@@ -854,16 +846,6 @@ void cfeDrawLine(int x0, int y0, int x1, int y1, unsigned int color0, unsigned i
     xglDirectQueueCount += ((u32) cursor - (u32) start) >> 4;
     xglDirectQueueDefer(0, 10);
 }
-
-void xglVectorNormal_001A9200(Vector4 *destination, const Vector4 *source);
-void XrgQuaternionFromVectors(Vector4 *quaternion, const Vector4 *from, const Vector4 *to);
-void XrgQuaternionToMatrix(Matrix4 matrix, const Vector4 *quaternion);
-void xglMatrixStackUnit(void);
-void xglMatrixStackRotX(float angle);
-void xglMatrixStackRotY(float angle);
-void xglMatrixStackMul(Matrix4 matrix);
-void xglMatrixStackSave(Matrix4 matrix);
-void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right);
 
 /* A 0..1 float channel scaled to the 0..128 GS range. */
 #define COLOR_BYTE(f) ((unsigned int) ((f) * 128.0f) & 0xFF)
@@ -1015,7 +997,7 @@ void cfeDrawDirectionGrid(int x, int y, Vector4 *direction, float *color0, float
         AlignedVector4 line[4];
         AlignedVector4 tip;
 
-        xglVectorNormal_001A9200(&normal, direction);
+        xglVectorNormal(&normal, direction);
         normal.y = -normal.y;
         XrgQuaternionFromVectors(&quaternion, &axis, &normal);
         XrgQuaternionToMatrix(rotation, &quaternion);
@@ -1073,15 +1055,12 @@ void cfeDrawDirectionGrid(int x, int y, Vector4 *direction, float *color0, float
 
 static const AlignedVector4 cfeDirectionGridForward = { 0.0f, 0.0f, 1.0f, 1.0f };
 
-void _CurMatrixSet(Matrix4 matrix);
-void _CurSetViewScaleTrans(Vector4 *scale, Vector4 *translation);
-int _CurRotTransPersClipScreen(Vector4 *screen, const Vector4 *point);
-void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source, float scale);
 
 /* One scratchpad quadword: written as a vector, read back as raw GS words. */
 typedef union CfeMovieWord {
     Vector4 vector;
     int word[4];
+    ScreenVector4 projected; /* what _CurRotTransPersClipScreen stores */
 } CfeMovieWord;
 
 /* The scratchpad work area of the movie quad: the screen points (x, y, z words and q), the corners in the world
@@ -1123,7 +1102,7 @@ void cfeEntryDrawMovie(CfeEvalEntry *entry)
     xglCurMulRotateZ(entry->evaluated[1].vector.z);
     xglCurMulRotateY(entry->evaluated[1].vector.y);
     xglCurMulRotateX(entry->evaluated[1].vector.x);
-    xglCurMulScaleXYZ(&entry->evaluated[2].vector);
+    xglCurMulScaleXYZ(&entry->evaluated[2].vector.x);
     xglCurApplyVector(&scratch->world[0].vector, &entry->corners[0]);
     xglCurApplyVector(&scratch->world[1].vector, &entry->corners[1]);
     xglCurApplyVector(&scratch->world[2].vector, &entry->corners[2]);
@@ -1142,18 +1121,18 @@ void cfeEntryDrawMovie(CfeEvalEntry *entry)
     scratch->stq[3].vector.y = (float) entry->movie.height / xglRoundUpPow2(entry->movie.height)
                                - CFE_MOVIE_BOTTOM_INSET;
     scratch->stq[3].vector.z = 1.0f;
-    _CurMatrixSet(camera->volume[0].viewMatrix);
+    _CurMatrixSet(&camera->volume[0].viewMatrix);
     _CurSetViewScaleTrans(&camera->screen.screenScale, &camera->screen.screenOffset);
-    if (_CurRotTransPersClipScreen(&scratch->screen[0].vector, &scratch->world[0].vector) != 0) {
+    if (_CurRotTransPersClipScreen(&scratch->screen[0].projected, &scratch->world[0].vector) != 0) {
         return;
     }
-    if (_CurRotTransPersClipScreen(&scratch->screen[1].vector, &scratch->world[1].vector) != 0) {
+    if (_CurRotTransPersClipScreen(&scratch->screen[1].projected, &scratch->world[1].vector) != 0) {
         return;
     }
-    if (_CurRotTransPersClipScreen(&scratch->screen[2].vector, &scratch->world[2].vector) != 0) {
+    if (_CurRotTransPersClipScreen(&scratch->screen[2].projected, &scratch->world[2].vector) != 0) {
         return;
     }
-    if (_CurRotTransPersClipScreen(&scratch->screen[3].vector, &scratch->world[3].vector) != 0) {
+    if (_CurRotTransPersClipScreen(&scratch->screen[3].projected, &scratch->world[3].vector) != 0) {
         return;
     }
     xglVectorScaleXYZ(&scratch->stq[0].vector, &scratch->stq[0].vector,
@@ -1172,47 +1151,47 @@ void cfeEntryDrawMovie(CfeEvalEntry *entry)
     upload[5] = CFE_GIF_TAG_IMAGE;
     upload[6] = 0;
     upload[7] = 0;
-    xglDirectQueueBegin();
-    xglDirectQueuePush(GS_TEXFLUSH, 0);
-    xglDirectQueuePush(GS_BITBLTBUF, GS_SET_BITBLTBUF(0, func_001D2E90(entry->movie.width, 0), 0,
-                                                      sRender.frame_base_1 << 5,
-                                                      func_001D2E90(entry->movie.width, 0), 0));
-    xglDirectQueuePush(GS_TRXPOS, 0);
-    xglDirectQueuePush(GS_TRXREG, GS_SET_TRXREG(entry->movie.width, entry->movie.height));
-    xglDirectQueuePush(GS_TRXDIR, 0);
+    nmlPacketGsInit();
+    packet_gs_entry64(GS_TEXFLUSH, 0);
+    packet_gs_entry64(GS_BITBLTBUF, GS_SET_BITBLTBUF(0, xglPsmBufferWidthEven(entry->movie.width, 0), 0,
+                                                      sRender.vram.second_base << 5,
+                                                      xglPsmBufferWidthEven(entry->movie.width, 0), 0));
+    packet_gs_entry64(GS_TRXPOS, 0);
+    packet_gs_entry64(GS_TRXREG, GS_SET_TRXREG(entry->movie.width, entry->movie.height));
+    packet_gs_entry64(GS_TRXDIR, 0);
     xglDirectQueueDefer(0, 4);
-    pxyAddEntryFlagged(4, upload, 2, 0);
-    pxyAddEntryFull(5, frame, entry->movie.width * entry->movie.height / 4, 0,
+    nmlModelDirectSendFlagged(4, upload, 2, 0);
+    nmlModelDirectSendFull(5, frame, entry->movie.width * entry->movie.height / 4, 0,
                     CFE_VIF_DIRECT | entry->movie.width * entry->movie.height / 4);
-    xglDirectQueueBegin();
-    xglDirectQueuePush(GS_TEXFLUSH, 0);
-    xglDirectQueuePush(GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
-    xglDirectQueuePush(GS_CLAMP_1, 0);
-    xglDirectQueuePush(GS_ALPHA_1, GS_SET_ALPHA(0, 1, 0, 1, 0));
-    xglDirectQueuePush(GS_TEX1_1, GS_SET_TEX1(0, 0, 1, 1, 0, 0, 0));
-    xglDirectQueuePush(GS_TEX0_1, GS_SET_TEX0(sRender.frame_base_1 << 5, func_001D2E90(entry->movie.width, 0), 0,
+    nmlPacketGsInit();
+    packet_gs_entry64(GS_TEXFLUSH, 0);
+    packet_gs_entry64(GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
+    packet_gs_entry64(GS_CLAMP_1, 0);
+    packet_gs_entry64(GS_ALPHA_1, GS_SET_ALPHA(0, 1, 0, 1, 0));
+    packet_gs_entry64(GS_TEX1_1, GS_SET_TEX1(0, 0, 1, 1, 0, 0, 0));
+    packet_gs_entry64(GS_TEX0_1, GS_SET_TEX0(sRender.vram.second_base << 5, xglPsmBufferWidthEven(entry->movie.width, 0), 0,
                                               xglRoundUpLog2(entry->movie.width),
                                               xglRoundUpLog2(entry->movie.height), 1, 0, 0, 0, 0, 0, 1));
-    xglDirectQueuePush(GS_PRIM, GS_SET_PRIM(4, 1, 1, 0, 1, 0, 0, 0, 0));
-    xglDirectQueuePush(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, (int) (entry->evaluated[2].vector.z * 128.0f),
+    packet_gs_entry64(GS_PRIM, GS_SET_PRIM(4, 1, 1, 0, 1, 0, 0, 0, 0));
+    packet_gs_entry64(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, (int) (entry->evaluated[2].vector.z * 128.0f),
                                               scratch->stq[0].word[2]));
-    xglDirectQueuePush(GS_ST, scratch->stq[0].word[0] | (u64) scratch->stq[0].word[1] << 32);
-    xglDirectQueuePush(GS_XYZF2, GS_SET_XYZ(scratch->screen[0].word[0], scratch->screen[0].word[1],
+    packet_gs_entry64(GS_ST, scratch->stq[0].word[0] | (u64) scratch->stq[0].word[1] << 32);
+    packet_gs_entry64(GS_XYZF2, GS_SET_XYZ(scratch->screen[0].word[0], scratch->screen[0].word[1],
                                             scratch->screen[0].word[2]));
-    xglDirectQueuePush(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, (int) (entry->evaluated[2].vector.z * 128.0f),
+    packet_gs_entry64(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, (int) (entry->evaluated[2].vector.z * 128.0f),
                                               scratch->stq[1].word[2]));
-    xglDirectQueuePush(GS_ST, scratch->stq[1].word[0] | (u64) scratch->stq[1].word[1] << 32);
-    xglDirectQueuePush(GS_XYZF2, GS_SET_XYZ(scratch->screen[1].word[0], scratch->screen[1].word[1],
+    packet_gs_entry64(GS_ST, scratch->stq[1].word[0] | (u64) scratch->stq[1].word[1] << 32);
+    packet_gs_entry64(GS_XYZF2, GS_SET_XYZ(scratch->screen[1].word[0], scratch->screen[1].word[1],
                                             scratch->screen[1].word[2]));
-    xglDirectQueuePush(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, (int) (entry->evaluated[2].vector.z * 128.0f),
+    packet_gs_entry64(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, (int) (entry->evaluated[2].vector.z * 128.0f),
                                               scratch->stq[2].word[2]));
-    xglDirectQueuePush(GS_ST, scratch->stq[2].word[0] | (u64) scratch->stq[2].word[1] << 32);
-    xglDirectQueuePush(GS_XYZF2, GS_SET_XYZ(scratch->screen[2].word[0], scratch->screen[2].word[1],
+    packet_gs_entry64(GS_ST, scratch->stq[2].word[0] | (u64) scratch->stq[2].word[1] << 32);
+    packet_gs_entry64(GS_XYZF2, GS_SET_XYZ(scratch->screen[2].word[0], scratch->screen[2].word[1],
                                             scratch->screen[2].word[2]));
-    xglDirectQueuePush(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, (int) (entry->evaluated[2].vector.z * 128.0f),
+    packet_gs_entry64(GS_RGBAQ, GS_SET_RGBAQ(0x80, 0x80, 0x80, (int) (entry->evaluated[2].vector.z * 128.0f),
                                               scratch->stq[3].word[2]));
-    xglDirectQueuePush(GS_ST, scratch->stq[3].word[0] | (u64) scratch->stq[3].word[1] << 32);
-    xglDirectQueuePush(GS_XYZF2, GS_SET_XYZ(scratch->screen[3].word[0], scratch->screen[3].word[1],
+    packet_gs_entry64(GS_ST, scratch->stq[3].word[0] | (u64) scratch->stq[3].word[1] << 32);
+    packet_gs_entry64(GS_XYZF2, GS_SET_XYZ(scratch->screen[3].word[0], scratch->screen[3].word[1],
                                             scratch->screen[3].word[2]));
     xglDirectQueueDefer(0, 4);
 }
@@ -1222,7 +1201,7 @@ void cfeEntryDrawMovie(CfeEvalEntry *entry)
 
 /* Updates the entries: rewinds the movie of each entry with a result, then plays (unless
  * `noPlay`) and draws every entry whose scale is not zero. */
-void cfeUpdateEntries(int noPlay)
+void cfeEntryTableUpdate(int noPlay)
 {
     int i;
 
@@ -1244,19 +1223,19 @@ void cfeUpdateEntries(int noPlay)
     }
 }
 
-const char D_0068D270[16] = "Colorfade2";
-const char D_0068D280[16] = "Colorfade";
-const char D_0068D290[16] = "ColorSet";
+const char fadeNativeNameColorfade2[16] = "Colorfade2";
+const char fadeNativeNameColorfade[16] = "Colorfade";
+const char fadeNativeNameColorSet[16] = "ColorSet";
 
 /* Data of the original .data section, in address order. */
 f32 cfeShakeSigns[4] = { -1.0f, 1.0f, 0.0f, 0.0f };   /* 0x6318B0, 16 bytes; cfeEntries follows at 0x6318C0 */
-CfeActor cfeEntries[64] = { 0 };                       /* 0x6318C0, 0x6C00 = 64 * 0x1B0; inner: 0x6319xx, D_00631A64 */
+CfeActor cfeEntries[64] = { 0 };                       /* 0x6318C0, 0x6C00 = 64 * 0x1B0; inner: 0x6319xx, 0x631A64 */
 CfeStudioView cfeCamera = { 0 };                       /* 0x6384C0, 0x70 */
-CfeEvalCommand cfeCommands[64] = { 0 };                /* 0x638530, 0x2000 = 64 * 0x80; inner: D_0063857C, D_00638xxx */
-CfeLight cfeDirections[4] = { 0 };                     /* 0x63A530, 0x100; inner: D_0063A54C */
+CfeEvalCommand cfeCommands[64] = { 0 };                /* 0x638530, 0x2000 = 64 * 0x80; inner: 0x63857C, 0x638xxx */
+CfeLight cfeDirections[4] = { 0 };                     /* 0x63A530, 0x100; inner: 0x63A54C */
 XglLightSet cfeLightSet = { 0 };                       /* 0x63A630, 0x180 */
-CfeMap cfeGroups[4] = { 0 };                           /* 0x63A7B0, 0x300 = 4 * 0xC0; inner: D_0063A7BC, D_0063A814, D_0063A868 */
-CfeEvalEntry cfeEvalEntries[16] = { 0 };               /* 0x63AAB0, 0x2300 = 16 * 0x230; inner: D_0063ACB4 */
-CfeEvalGlobal cfeEvalGlobal = { 0 };                   /* 0x63CDB0, 0x50; inner: D_0063CDE0 (source[0]) */
-CfeEvalSlot cfeEvalSlots[3] = { 0 };                   /* 0x63CE00, 0x48 = 3 * 0x18; inner: D_0063CE0C */
-CfeSndRecord cfeSndRecords[1] = { 0 };                 /* 0x63CE48, 0x50; inner: D_0063CE90 */
+CfeMap cfeGroups[4] = { 0 };                           /* 0x63A7B0, 0x300 = 4 * 0xC0; inner: 0x63A7BC, 0x63A814, 0x63A868 */
+CfeEvalEntry cfeEvalEntries[16] = { 0 };               /* 0x63AAB0, 0x2300 = 16 * 0x230; inner: 0x63ACB4 */
+CfeEvalGlobal cfeEvalGlobal = { 0 };                   /* 0x63CDB0, 0x50; inner: 0x63CDE0 (source[0]) */
+CfeEvalSlot cfeEvalSlots[3] = { 0 };                   /* 0x63CE00, 0x48 = 3 * 0x18; inner: 0x63CE0C */
+CfeSndRecord cfeSndRecords[1] = { 0 };                 /* 0x63CE48, 0x50; inner: 0x63CE90 */

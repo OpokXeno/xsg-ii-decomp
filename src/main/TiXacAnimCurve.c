@@ -1,14 +1,14 @@
 #include "common.h"
 #include "main/TiXacAnimCurve.h"
-#include "main/tu026.h"
+#include "main/assert_fail.h"
 #include "shared.h"
 
-/* Time first: the calls below keep the original argument order (key first changes the code); tu259.c defines them key first. */
-f32 xacEvalCubicKeys(f32, TiXacKey *, TiXacKey *);
-f32 xacEvalLinearKeys(f32, TiXacKey *, TiXacKey *);
+#include "main/xac_eval.h"
+/* Time first: the calls below keep the original argument order (key first changes the code);
+ * xac_eval.c defines them key first. */
 
 /* Channel bits of a transform header (channelFlags), in the order of the nine values: translation X, Y, Z (0 to 2),
- * rotation X, Y, Z (3 to 5), scale X, Y, Z (6 to 8); the same order as XacTransDynamics. */
+ * rotation X, Y, Z (3 to 5), scale X, Y, Z (6 to 8); the same order as TiHrcDynamics. */
 enum XacChannelBit {
     XAC_CHANNEL_TX = 0x1,
     XAC_CHANNEL_TY = 0x2,
@@ -29,54 +29,14 @@ enum XacChannelBit {
 #define XAC_KEY_END 0x4000
 #define XAC_KEY_LINEAR 0x8000
 
-/* Joint of a transform reader (pTransJoint): the stored default of each channel, used when that channel's flag bit is clear, and a flags word (0x2) the reader sets from headerFlags. */
-typedef struct TiXacTransJoint {
-    u8 unmodeled_00[0x4];
-    f32 channelDefault0;
-    f32 channelDefault1;
-    f32 channelDefault2;
-    u8 unmodeled_10[0xC];
-    f32 channelDefault3;
-    f32 channelDefault4;
-    f32 channelDefault5;
-    f32 channelDefault6;
-    f32 channelDefault7;
-    f32 channelDefault8;
-    u8 unmodeled_34[0x10];
-    int flags;
-} TiXacTransJoint;
-
-/* Locator of a transform reader (pTransLocator): nine stored channel defaults, contiguous from +0x04, and the flags word (0x2) at +0x34. */
-typedef struct TiXacTransLocator {
-    u8 unmodeled_00[0x4];
-    f32 channelDefault[9];
-    u8 unmodeled_28[0xC];
-    int flags;
-} TiXacTransLocator;
-
-/* Face of a transform reader (pTransFace): the flags word (0x2) at +0x08 and nine stored channel defaults at +0x0C to +0x38. */
-typedef struct TiXacTransFace {
-    u8 unmodeled_00[0x8];
-    int flags;
-    f32 channelDefault0;
-    f32 channelDefault1;
-    f32 channelDefault2;
-    u8 unmodeled_18[0xC];
-    f32 channelDefault3;
-    f32 channelDefault4;
-    f32 channelDefault5;
-    f32 channelDefault6;
-    f32 channelDefault7;
-    f32 channelDefault8;
-} TiXacTransFace;
 
 const char xacAssertFile[24] = "../TiXacAnimCurve.euc.c";
-const char D_0068F630[16] = "pKeyHeader";
+const char xacKeyHeaderAssertText[16] = "pKeyHeader";
 
 /* Returns one float of a key header by its key type: types 0 and 1 read +4, 2 and 3 read +8, 5 reads +C, 4 and types above 5 give 0.0; asserts on a null pointer. */
 f32 xacGetKeyValue(TiXacKey *pKeyHeader) {
     if (pKeyHeader == 0) {
-        assertFailed(D_0068F630, xacAssertFile, 78);
+        assertFailed(xacKeyHeaderAssertText, xacAssertFile, 78);
     }
     switch (pKeyHeader->typeFlags & XAC_KEY_TYPE_MASK) {
     case 5:
@@ -92,10 +52,10 @@ f32 xacGetKeyValue(TiXacKey *pKeyHeader) {
     }
 }
 
-const char D_0068F658[24] = "XacKeyType_Hermite";
-const char D_0068F670[24] = "!\"XacKeyType_Hermite\"";
-const char D_0068F688[24] = "IllegalCurveType";
-const char D_0068F6A0[32] = "!\"IllegalCurveType\"";
+const char xacHermiteKeyAssertText[24] = "XacKeyType_Hermite";
+const char xacHermiteKeyAssertExpr[24] = "!\"XacKeyType_Hermite\"";
+const char xacIllegalCurveTypeAssertText[24] = "IllegalCurveType";
+const char xacIllegalCurveTypeAssertExpr[32] = "!\"IllegalCurveType\"";
 
 /* Evaluates a keyframe curve at curveParam: reads keys from *keyCursor, advances it, interpolates through xacEvalLinearKeys; asserts on an illegal curve type. */
 f32 xacEvalCurve(f32 curveParam, u8 **keyCursor) {
@@ -135,8 +95,8 @@ f32 xacEvalCurve(f32 curveParam, u8 **keyCursor) {
             key = nextKey;
             break;
         case 4:
-            if (D_0068F658 != 0) {
-                assertFailed(D_0068F670, xacAssertFile, 154);
+            if (xacHermiteKeyAssertText != 0) {
+                assertFailed(xacHermiteKeyAssertExpr, xacAssertFile, 154);
             }
             break;
         case 2:
@@ -224,8 +184,8 @@ f32 xacEvalCurve(f32 curveParam, u8 **keyCursor) {
             key = nextKey;
             break;
         default:
-            if (D_0068F688 != 0) {
-                assertFailed(D_0068F6A0, xacAssertFile, 293);
+            if (xacIllegalCurveTypeAssertText != 0) {
+                assertFailed(xacIllegalCurveTypeAssertExpr, xacAssertFile, 293);
             }
             lastKey = 0;
             break;
@@ -235,19 +195,19 @@ f32 xacEvalCurve(f32 curveParam, u8 **keyCursor) {
     return value;
 }
 
-const char D_0068F6D8[8] = "res";
-const char D_0068F6E0[16] = "pTransJoint";
+const char xacResAssertText[8] = "res";
+const char xacTransJointAssertText[16] = "pTransJoint";
 
 /* Evaluates the nine channels of a joint transform (pTransJoint) into values[0..8]: each channel is a curve or a stored default, chosen by its flag bit. */
-void xacEvalTransJoint(f32 *values, TiXacTransJoint *pTransJoint, u8 **keyCursor, f32 frame) {
+void xacEvalTransJoint(f32 *values, TiHrcJoint *pTransJoint, u8 **keyCursor, f32 frame) {
     TiXacTransformHeader *header;
     u8 *cursor;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 314);
+        assertFailed(xacResAssertText, xacAssertFile, 314);
     }
     if (pTransJoint == 0) {
-        assertFailed(D_0068F6E0, xacAssertFile, 315);
+        assertFailed(xacTransJointAssertText, xacAssertFile, 315);
     }
     if (*keyCursor != 0) {
         header = (TiXacTransformHeader *) *keyCursor;
@@ -260,59 +220,59 @@ void xacEvalTransJoint(f32 *values, TiXacTransJoint *pTransJoint, u8 **keyCursor
         if (header->channelFlags & XAC_CHANNEL_TX) {
             values[0] = xacEvalCurve(frame, &cursor);
         } else {
-            values[0] = pTransJoint->channelDefault0;
+            values[0] = pTransJoint->translationDefault[0];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_TY) {
             values[1] = xacEvalCurve(frame, &cursor);
         } else {
-            values[1] = pTransJoint->channelDefault1;
+            values[1] = pTransJoint->translationDefault[1];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_TZ) {
             values[2] = xacEvalCurve(frame, &cursor);
         } else {
-            values[2] = pTransJoint->channelDefault2;
+            values[2] = pTransJoint->translationDefault[2];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_RX) {
             values[3] = xacEvalCurve(frame, &cursor);
         } else {
-            values[3] = pTransJoint->channelDefault3;
+            values[3] = pTransJoint->rotationDefault[0];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_RY) {
             values[4] = xacEvalCurve(frame, &cursor);
         } else {
-            values[4] = pTransJoint->channelDefault4;
+            values[4] = pTransJoint->rotationDefault[1];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_RZ) {
             values[5] = xacEvalCurve(frame, &cursor);
         } else {
-            values[5] = pTransJoint->channelDefault5;
+            values[5] = pTransJoint->rotationDefault[2];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_SX) {
             values[6] = xacEvalCurve(frame, &cursor);
         } else {
-            values[6] = pTransJoint->channelDefault6;
+            values[6] = pTransJoint->scaleDefault[0];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_SY) {
             values[7] = xacEvalCurve(frame, &cursor);
         } else {
-            values[7] = pTransJoint->channelDefault7;
+            values[7] = pTransJoint->scaleDefault[1];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_SZ) {
             values[8] = xacEvalCurve(frame, &cursor);
         } else {
-            values[8] = pTransJoint->channelDefault8;
+            values[8] = pTransJoint->scaleDefault[2];
         }
         *keyCursor = cursor;
     } else {
-        values[0] = pTransJoint->channelDefault0;
-        values[1] = pTransJoint->channelDefault1;
-        values[2] = pTransJoint->channelDefault2;
-        values[3] = pTransJoint->channelDefault3;
-        values[4] = pTransJoint->channelDefault4;
-        values[5] = pTransJoint->channelDefault5;
-        values[6] = pTransJoint->channelDefault6;
-        values[7] = pTransJoint->channelDefault7;
-        values[8] = pTransJoint->channelDefault8;
+        values[0] = pTransJoint->translationDefault[0];
+        values[1] = pTransJoint->translationDefault[1];
+        values[2] = pTransJoint->translationDefault[2];
+        values[3] = pTransJoint->rotationDefault[0];
+        values[4] = pTransJoint->rotationDefault[1];
+        values[5] = pTransJoint->rotationDefault[2];
+        values[6] = pTransJoint->scaleDefault[0];
+        values[7] = pTransJoint->scaleDefault[1];
+        values[8] = pTransJoint->scaleDefault[2];
         pTransJoint->flags &= ~XAC_TRANS_OBJ_MODE_BIT;
     }
 }
@@ -372,19 +332,19 @@ void xacEvalTransform(f32 *values, u8 **keyCursor, f32 curveParam) {
     }
 }
 
-const char D_0068F6F0[16] = "pTransLocator";
-const char D_0068F700[16] = "pTransFace";
+const char xacTransLocatorAssertText[16] = "pTransLocator";
+const char xacTransFaceAssertText[16] = "pTransFace";
 
 /* Nine-channel transform reader for pTransLocator; same shape as the pTransJoint reader. */
-void xacEvalTransLocator(f32 *values, TiXacTransLocator *pTransLocator, u8 **keyCursor, f32 frame) {
+void xacEvalTransLocator(f32 *values, TiHrcLocator *pTransLocator, u8 **keyCursor, f32 frame) {
     TiXacTransformHeader *header;
     u8 *cursor;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 419);
+        assertFailed(xacResAssertText, xacAssertFile, 419);
     }
     if (pTransLocator == 0) {
-        assertFailed(D_0068F6F0, xacAssertFile, 420);
+        assertFailed(xacTransLocatorAssertText, xacAssertFile, 420);
     }
     if (*keyCursor != 0) {
         header = (TiXacTransformHeader *) *keyCursor;
@@ -397,73 +357,73 @@ void xacEvalTransLocator(f32 *values, TiXacTransLocator *pTransLocator, u8 **key
         if (header->channelFlags & XAC_CHANNEL_TX) {
             values[0] = xacEvalCurve(frame, &cursor);
         } else {
-            values[0] = pTransLocator->channelDefault[0];
+            values[0] = pTransLocator->translationDefault[0];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_TY) {
             values[1] = xacEvalCurve(frame, &cursor);
         } else {
-            values[1] = pTransLocator->channelDefault[1];
+            values[1] = pTransLocator->translationDefault[1];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_TZ) {
             values[2] = xacEvalCurve(frame, &cursor);
         } else {
-            values[2] = pTransLocator->channelDefault[2];
+            values[2] = pTransLocator->translationDefault[2];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_RX) {
             values[3] = xacEvalCurve(frame, &cursor);
         } else {
-            values[3] = pTransLocator->channelDefault[3];
+            values[3] = pTransLocator->rotationDefault[0];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_RY) {
             values[4] = xacEvalCurve(frame, &cursor);
         } else {
-            values[4] = pTransLocator->channelDefault[4];
+            values[4] = pTransLocator->rotationDefault[1];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_RZ) {
             values[5] = xacEvalCurve(frame, &cursor);
         } else {
-            values[5] = pTransLocator->channelDefault[5];
+            values[5] = pTransLocator->rotationDefault[2];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_SX) {
             values[6] = xacEvalCurve(frame, &cursor);
         } else {
-            values[6] = pTransLocator->channelDefault[6];
+            values[6] = pTransLocator->scaleDefault[0];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_SY) {
             values[7] = xacEvalCurve(frame, &cursor);
         } else {
-            values[7] = pTransLocator->channelDefault[7];
+            values[7] = pTransLocator->scaleDefault[1];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_SZ) {
             values[8] = xacEvalCurve(frame, &cursor);
         } else {
-            values[8] = pTransLocator->channelDefault[8];
+            values[8] = pTransLocator->scaleDefault[2];
         }
         *keyCursor = cursor;
     } else {
-        values[0] = pTransLocator->channelDefault[0];
-        values[1] = pTransLocator->channelDefault[1];
-        values[2] = pTransLocator->channelDefault[2];
-        values[3] = pTransLocator->channelDefault[3];
-        values[4] = pTransLocator->channelDefault[4];
-        values[5] = pTransLocator->channelDefault[5];
-        values[6] = pTransLocator->channelDefault[6];
-        values[7] = pTransLocator->channelDefault[7];
-        values[8] = pTransLocator->channelDefault[8];
+        values[0] = pTransLocator->translationDefault[0];
+        values[1] = pTransLocator->translationDefault[1];
+        values[2] = pTransLocator->translationDefault[2];
+        values[3] = pTransLocator->rotationDefault[0];
+        values[4] = pTransLocator->rotationDefault[1];
+        values[5] = pTransLocator->rotationDefault[2];
+        values[6] = pTransLocator->scaleDefault[0];
+        values[7] = pTransLocator->scaleDefault[1];
+        values[8] = pTransLocator->scaleDefault[2];
         pTransLocator->flags &= ~XAC_TRANS_OBJ_MODE_BIT;
     }
 }
 
 /* Nine-channel transform reader for pTransFace; same shape as the pTransJoint reader. */
-void xacEvalTransFace(f32 *values, TiXacTransFace *pTransFace, u8 **keyCursor, f32 frame) {
+void xacEvalTransFace(f32 *values, TiHrcSkip *pTransFace, u8 **keyCursor, f32 frame) {
     TiXacTransformHeader *header;
     u8 *cursor;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 488);
+        assertFailed(xacResAssertText, xacAssertFile, 488);
     }
     if (pTransFace == 0) {
-        assertFailed(D_0068F700, xacAssertFile, 489);
+        assertFailed(xacTransFaceAssertText, xacAssertFile, 489);
     }
     if (*keyCursor != 0) {
         header = (TiXacTransformHeader *) *keyCursor;
@@ -476,76 +436,76 @@ void xacEvalTransFace(f32 *values, TiXacTransFace *pTransFace, u8 **keyCursor, f
         if (header->channelFlags & XAC_CHANNEL_TX) {
             values[0] = xacEvalCurve(frame, &cursor);
         } else {
-            values[0] = pTransFace->channelDefault0;
+            values[0] = pTransFace->translationDefault[0];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_TY) {
             values[1] = xacEvalCurve(frame, &cursor);
         } else {
-            values[1] = pTransFace->channelDefault1;
+            values[1] = pTransFace->translationDefault[1];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_TZ) {
             values[2] = xacEvalCurve(frame, &cursor);
         } else {
-            values[2] = pTransFace->channelDefault2;
+            values[2] = pTransFace->translationDefault[2];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_RX) {
             values[3] = xacEvalCurve(frame, &cursor);
         } else {
-            values[3] = pTransFace->channelDefault3;
+            values[3] = pTransFace->rotationDefault[0];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_RY) {
             values[4] = xacEvalCurve(frame, &cursor);
         } else {
-            values[4] = pTransFace->channelDefault4;
+            values[4] = pTransFace->rotationDefault[1];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_RZ) {
             values[5] = xacEvalCurve(frame, &cursor);
         } else {
-            values[5] = pTransFace->channelDefault5;
+            values[5] = pTransFace->rotationDefault[2];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_SX) {
             values[6] = xacEvalCurve(frame, &cursor);
         } else {
-            values[6] = pTransFace->channelDefault6;
+            values[6] = pTransFace->scaleDefault[0];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_SY) {
             values[7] = xacEvalCurve(frame, &cursor);
         } else {
-            values[7] = pTransFace->channelDefault7;
+            values[7] = pTransFace->scaleDefault[1];
         }
         if (((TiXacTransformHeader *) *keyCursor)->channelFlags & XAC_CHANNEL_SZ) {
             values[8] = xacEvalCurve(frame, &cursor);
         } else {
-            values[8] = pTransFace->channelDefault8;
+            values[8] = pTransFace->scaleDefault[2];
         }
         *keyCursor = cursor;
     } else {
-        values[0] = pTransFace->channelDefault0;
-        values[1] = pTransFace->channelDefault1;
-        values[2] = pTransFace->channelDefault2;
-        values[3] = pTransFace->channelDefault3;
-        values[4] = pTransFace->channelDefault4;
-        values[5] = pTransFace->channelDefault5;
-        values[6] = pTransFace->channelDefault6;
-        values[7] = pTransFace->channelDefault7;
-        values[8] = pTransFace->channelDefault8;
+        values[0] = pTransFace->translationDefault[0];
+        values[1] = pTransFace->translationDefault[1];
+        values[2] = pTransFace->translationDefault[2];
+        values[3] = pTransFace->rotationDefault[0];
+        values[4] = pTransFace->rotationDefault[1];
+        values[5] = pTransFace->rotationDefault[2];
+        values[6] = pTransFace->scaleDefault[0];
+        values[7] = pTransFace->scaleDefault[1];
+        values[8] = pTransFace->scaleDefault[2];
         pTransFace->flags &= ~XAC_TRANS_OBJ_MODE_BIT;
     }
 }
 
-const char D_0068F710[16] = "pTransDynamics";
+const char xacTransDynamicsAssertText[16] = "pTransDynamics";
 
 /* The channel tests read the header through a cast of *ppCursor on each test: a local header pointer changes the code. */
-void xacEvalTransDynamics(f32 *values, XacTransDynamics *pTransDynamics, u8 **ppCursor, f32 curveParam) {
+void xacEvalTransDynamics(f32 *values, TiHrcDynamics *pTransDynamics, u8 **ppCursor, f32 curveParam) {
     u8 *keyCursor;
     TiXacTransformHeader *header;
     f32 *pWeight;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 555);
+        assertFailed(xacResAssertText, xacAssertFile, 555);
     }
     if (pTransDynamics == 0) {
-        assertFailed(D_0068F710, xacAssertFile, 556);
+        assertFailed(xacTransDynamicsAssertText, xacAssertFile, 556);
     }
     if (*ppCursor != 0) {
         header = (TiXacTransformHeader *) *ppCursor;
@@ -560,74 +520,74 @@ void xacEvalTransDynamics(f32 *values, XacTransDynamics *pTransDynamics, u8 **pp
         if (header->channelFlags & XAC_CHANNEL_TX) {
             values[0] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[0] = pTransDynamics->translation[0];
+            values[0] = pTransDynamics->translationDefault.x;
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_TY) {
             values[1] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[1] = pTransDynamics->translation[1];
+            values[1] = pTransDynamics->translationDefault.y;
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_TZ) {
             values[2] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[2] = pTransDynamics->translation[2];
+            values[2] = pTransDynamics->translationDefault.z;
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_RX) {
             values[3] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[3] = pTransDynamics->rotation[0];
+            values[3] = pTransDynamics->rotationDefault[0];
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_RY) {
             values[4] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[4] = pTransDynamics->rotation[1];
+            values[4] = pTransDynamics->rotationDefault[1];
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_RZ) {
             values[5] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[5] = pTransDynamics->rotation[2];
+            values[5] = pTransDynamics->rotationDefault[2];
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_SX) {
             values[6] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[6] = pTransDynamics->scale[0];
+            values[6] = pTransDynamics->scaleDefault[0];
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_SY) {
             values[7] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[7] = pTransDynamics->scale[1];
+            values[7] = pTransDynamics->scaleDefault[1];
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_SZ) {
             values[8] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[8] = pTransDynamics->scale[2];
+            values[8] = pTransDynamics->scaleDefault[2];
         }
         *ppCursor = keyCursor;
     } else {
         pTransDynamics->weight = 0.0f;
         pTransDynamics->flags &= ~XAC_TRANS_OBJ_MODE_BIT;
-        values[0] = pTransDynamics->translation[0];
-        values[1] = pTransDynamics->translation[1];
-        values[2] = pTransDynamics->translation[2];
-        values[3] = pTransDynamics->rotation[0];
-        values[4] = pTransDynamics->rotation[1];
-        values[5] = pTransDynamics->rotation[2];
-        values[6] = pTransDynamics->scale[0];
-        values[7] = pTransDynamics->scale[1];
-        values[8] = pTransDynamics->scale[2];
+        values[0] = pTransDynamics->translationDefault.x;
+        values[1] = pTransDynamics->translationDefault.y;
+        values[2] = pTransDynamics->translationDefault.z;
+        values[3] = pTransDynamics->rotationDefault[0];
+        values[4] = pTransDynamics->rotationDefault[1];
+        values[5] = pTransDynamics->rotationDefault[2];
+        values[6] = pTransDynamics->scaleDefault[0];
+        values[7] = pTransDynamics->scaleDefault[1];
+        values[8] = pTransDynamics->scaleDefault[2];
     }
 }
 
 /* Second pTransDynamics reader (asserts at lines 625/626); see xacEvalTransDynamics for the difference. */
-void xacEvalTransDynamicsNoWeight(f32 *values, XacTransDynamics *pTransDynamics, u8 **ppCursor, f32 curveParam) {
+void xacEvalTransDynamicsNoWeight(f32 *values, TiHrcDynamics *pTransDynamics, u8 **ppCursor, f32 curveParam) {
     u8 *keyCursor;
     TiXacTransformHeader *header;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 625);
+        assertFailed(xacResAssertText, xacAssertFile, 625);
     }
     if (pTransDynamics == 0) {
-        assertFailed(D_0068F710, xacAssertFile, 626);
+        assertFailed(xacTransDynamicsAssertText, xacAssertFile, 626);
     }
     pTransDynamics->weight = 0.0f;
     if (*ppCursor != 0) {
@@ -641,74 +601,74 @@ void xacEvalTransDynamicsNoWeight(f32 *values, XacTransDynamics *pTransDynamics,
         if (header->channelFlags & XAC_CHANNEL_TX) {
             values[0] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[0] = pTransDynamics->translation[0];
+            values[0] = pTransDynamics->translationDefault.x;
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_TY) {
             values[1] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[1] = pTransDynamics->translation[1];
+            values[1] = pTransDynamics->translationDefault.y;
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_TZ) {
             values[2] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[2] = pTransDynamics->translation[2];
+            values[2] = pTransDynamics->translationDefault.z;
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_RX) {
             values[3] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[3] = pTransDynamics->rotation[0];
+            values[3] = pTransDynamics->rotationDefault[0];
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_RY) {
             values[4] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[4] = pTransDynamics->rotation[1];
+            values[4] = pTransDynamics->rotationDefault[1];
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_RZ) {
             values[5] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[5] = pTransDynamics->rotation[2];
+            values[5] = pTransDynamics->rotationDefault[2];
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_SX) {
             values[6] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[6] = pTransDynamics->scale[0];
+            values[6] = pTransDynamics->scaleDefault[0];
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_SY) {
             values[7] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[7] = pTransDynamics->scale[1];
+            values[7] = pTransDynamics->scaleDefault[1];
         }
         if (((TiXacTransformHeader *) *ppCursor)->channelFlags & XAC_CHANNEL_SZ) {
             values[8] = xacEvalCurve(curveParam, &keyCursor);
         } else {
-            values[8] = pTransDynamics->scale[2];
+            values[8] = pTransDynamics->scaleDefault[2];
         }
         *ppCursor = keyCursor;
     } else {
         pTransDynamics->flags &= ~XAC_TRANS_OBJ_MODE_BIT;
-        values[0] = pTransDynamics->translation[0];
-        values[1] = pTransDynamics->translation[1];
-        values[2] = pTransDynamics->translation[2];
-        values[3] = pTransDynamics->rotation[0];
-        values[4] = pTransDynamics->rotation[1];
-        values[5] = pTransDynamics->rotation[2];
-        values[6] = pTransDynamics->scale[0];
-        values[7] = pTransDynamics->scale[1];
-        values[8] = pTransDynamics->scale[2];
+        values[0] = pTransDynamics->translationDefault.x;
+        values[1] = pTransDynamics->translationDefault.y;
+        values[2] = pTransDynamics->translationDefault.z;
+        values[3] = pTransDynamics->rotationDefault[0];
+        values[4] = pTransDynamics->rotationDefault[1];
+        values[5] = pTransDynamics->rotationDefault[2];
+        values[6] = pTransDynamics->scaleDefault[0];
+        values[7] = pTransDynamics->scaleDefault[1];
+        values[8] = pTransDynamics->scaleDefault[2];
     }
 }
 
-const char D_0068F720[16] = "ppJointHeader";
+const char xacPpJointHeaderAssertText[16] = "ppJointHeader";
 
 /* Reads six curve values from a joint header, starting 4 bytes in, and advances *ppJointHeader. */
 u8 *xacEvalJointPose(f32 *values, u8 **ppJointHeader, f32 curveParam) {
     u8 *keyCursor;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 696);
+        assertFailed(xacResAssertText, xacAssertFile, 696);
     }
     if (ppJointHeader == 0) {
-        assertFailed(D_0068F720, xacAssertFile, 697);
+        assertFailed(xacPpJointHeaderAssertText, xacAssertFile, 697);
     }
     keyCursor = *ppJointHeader + 4;
     values[0] = xacEvalCurve(curveParam, &keyCursor);
@@ -722,14 +682,14 @@ u8 *xacEvalJointPose(f32 *values, u8 **ppJointHeader, f32 curveParam) {
 }
 
 /* Reads one curve value from a joint header, starting 4 bytes in, and advances *ppJointHeader. */
-u8 *xacEvalJointValue(f32 *values, u8 **ppJointHeader, f32 curveParam) {
+u8 *xacEvalJointValue(f32 curveParam, f32 *values, u8 **ppJointHeader) {
     u8 *keyCursor;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 722);
+        assertFailed(xacResAssertText, xacAssertFile, 722);
     }
     if (ppJointHeader == 0) {
-        assertFailed(D_0068F720, xacAssertFile, 723);
+        assertFailed(xacPpJointHeaderAssertText, xacAssertFile, 723);
     }
     keyCursor = *ppJointHeader + 4;
     values[0] = xacEvalCurve(curveParam, &keyCursor);
@@ -742,10 +702,10 @@ u8 *xacReadJointCurves9(f32 *values, u8 **ppJointHeader, f32 curveParam) {
     u8 *keyCursor;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 741);
+        assertFailed(xacResAssertText, xacAssertFile, 741);
     }
     if (ppJointHeader == 0) {
-        assertFailed(D_0068F720, xacAssertFile, 742);
+        assertFailed(xacPpJointHeaderAssertText, xacAssertFile, 742);
     }
     keyCursor = *ppJointHeader + 4;
     values[0] = xacEvalCurve(curveParam, &keyCursor);
@@ -762,17 +722,17 @@ u8 *xacReadJointCurves9(f32 *values, u8 **ppJointHeader, f32 curveParam) {
 }
 
 /* The label text, then four NUL bytes and the two floats that the original .rodata keeps after it (no reader in this TU reaches them). */
-const char D_0068F730[24] = "pJointHeader\0\0\0\0\xab\xaa\xaa\x3e\x54\xda\xae\x4a";
+const char xacJointHeaderAssertText[24] = "pJointHeader\0\0\0\0\xab\xaa\xaa\x3e\x54\xda\xae\x4a";
 
 /* Reads nine curve values from a joint header (pJointHeader, assert lines 772/773). */
 void xacEvalJointCurves9(f32 *values, u8 *pJointHeader, f32 curveParam) {
     u8 *keyCursor;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 772);
+        assertFailed(xacResAssertText, xacAssertFile, 772);
     }
     if (pJointHeader == 0) {
-        assertFailed(D_0068F730, xacAssertFile, 773);
+        assertFailed(xacJointHeaderAssertText, xacAssertFile, 773);
     }
     keyCursor = pJointHeader + 4;
     values[0] = xacEvalCurve(curveParam, &keyCursor);
@@ -791,10 +751,10 @@ void xacReadWindDirCurves(f32 *values, u8 **ppJointHeader, f32 curveParam) {
     u8 *keyCursor;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 801);
+        assertFailed(xacResAssertText, xacAssertFile, 801);
     }
     if (ppJointHeader == 0) {
-        assertFailed(D_0068F720, xacAssertFile, 802);
+        assertFailed(xacPpJointHeaderAssertText, xacAssertFile, 802);
     }
     keyCursor = *ppJointHeader + 4;
     values[0] = xacEvalCurve(curveParam, &keyCursor);
@@ -818,10 +778,10 @@ void xacReadWindDirCurves(f32 *values, u8 **ppJointHeader, f32 curveParam) {
 /* Reads twelve curve values from a joint header (ppJointHeader, assert lines 840/841). */
 void xacReadWindPointCurves(f32 *values, u8 **ppJointHeader, f32 curveParam) {
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 840);
+        assertFailed(xacResAssertText, xacAssertFile, 840);
     }
     if (ppJointHeader == 0) {
-        assertFailed(D_0068F720, xacAssertFile, 841);
+        assertFailed(xacPpJointHeaderAssertText, xacAssertFile, 841);
     }
     {
         u8 *keyCursor;
@@ -852,10 +812,10 @@ void xacReadJointCurves12Padded(f32 *values, u8 **ppJointHeader, f32 curveParam)
     f32 lastValue;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 879);
+        assertFailed(xacResAssertText, xacAssertFile, 879);
     }
     if (ppJointHeader == 0) {
-        assertFailed(D_0068F720, xacAssertFile, 880);
+        assertFailed(xacPpJointHeaderAssertText, xacAssertFile, 880);
     }
     keyCursor = *ppJointHeader + 4;
     values[0] = xacEvalCurve(curveParam, &keyCursor);
@@ -884,10 +844,10 @@ u8 *xacReadJointCurves15(f32 *values, u8 **ppJointHeader, f32 curveParam) {
     u8 *keyCursor;
 
     if (values == 0) {
-        assertFailed(D_0068F6D8, xacAssertFile, 924);
+        assertFailed(xacResAssertText, xacAssertFile, 924);
     }
     if (ppJointHeader == 0) {
-        assertFailed(D_0068F720, xacAssertFile, 925);
+        assertFailed(xacPpJointHeaderAssertText, xacAssertFile, 925);
     }
     keyCursor = *ppJointHeader + 4;
     values[0] = xacEvalCurve(curveParam, &keyCursor);
@@ -910,7 +870,7 @@ u8 *xacReadJointCurves15(f32 *values, u8 **ppJointHeader, f32 curveParam) {
 }
 
 /* Scans a key table (count word, then key times) for the key segment around curveParam; writes a 0/1 flag to its first argument and returns the key pointer. */
-f32 *xacFindCurveKey(int *pFlag, XacCurveKeyTable *pTable, f32 curveParam) {
+f32 *xacFindVisibilityKey(int *pFlag, XacCurveKeyTable *pTable, f32 curveParam) {
     f32 *pKey;
     f32 *pValue;
     f32 prevTime;

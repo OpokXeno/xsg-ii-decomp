@@ -3,10 +3,10 @@
 
 /* Functions of src/main/cfePlugIn.c that other files call. */
 
-#include "main/tu144.h"
+#include "main/cfe_list.h"
 
 void cfeRegisterPlugIn(void);
-void cfeRotateVectorXY(float *result, const float *angles);
+void cfeDirectionFromAngles(float *result, const float *angles);
 
 /* One 0x50-byte sound record of cfeSndRecords: the name is copied to offset 0 and the tween
    fields sit at +0x40..+0x4C (cfeEvaluate.c's cfeSndRecordEvaluate tweens them). */

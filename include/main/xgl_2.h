@@ -2,30 +2,9 @@
 #define INCLUDE_MAIN_XGL_2_H
 
 #include "shared.h"
+#include "main/cur_matrix_asm.h"
 
-/* A vector kept as a plain float[4] (like sceVu0FVECTOR); its w is element 3. Vector4 here changes the
- * address arithmetic of the w stores, so the casts to Vector4 * at the calls stay. */
-typedef float XglFVector[4];
-
-/* Light set built by xglLightPackBuildLightSet, cleared with xglZeroQuadwords18 (0x18 quadwords). The labels
- * lightSetLogDump prints are the original's field names: seven sDir (directions and viewDirection), eight sCol
- * (colors and the two ambient colours), three sSha (shadows), three sPntP and three sPntC. */
-typedef struct XglLightSet {
-    XglFVector directions[6]; /* 0x000: sDir 0-5 */
-    Vector4 viewDirection;  /* 0x060: sDir 6 */
-    XglFVector colors[6];   /* 0x070: sCol 0-5 */
-    Vector4 ambientColor;       /* 0x0D0: sCol 6 */
-    Vector4 ambientColorLower;   /* 0x0E0: sCol 7 */
-    /* 0x0F0: sSha 0-2. One array (was forward + reserved[2]): tu047 runtimeSetLight indexes it with kind - 5;
-     * xgl_2.c builds shadows[0] from light keys 10 and 11. */
-    Vector4 shadows[3];
-    XglFVector pointPositions[3]; /* 0x120: sPntP */
-    XglFVector pointColors[3]; /* 0x150: sPntC */
-} XglLightSet;
-
-/* The copies of the light set tu156 keeps are 16-byte aligned (their copies use ld/sd without an
- * alignment test). */
-typedef XglLightSet AlignedXglLightSet __attribute__((aligned(16)));
+/* Functions of src/main/xgl_2.c that other files call. */
 
 /* A 4x4 matrix as xgl_2.c and nml_model_set.c read it: floats, rows, words or quadwords. */
 typedef unsigned int XglMatrixQuadword __attribute__((mode(TI)));
@@ -35,18 +14,82 @@ typedef union Matrix {
     Matrix4 rows;
     int words[4][4];
     XglMatrixQuadword quadwords[4];
+    Vector4 vectors[4];
 } Matrix;
 
 /* Functions of src/main/xgl_2.c (the whole xgl_2 file) that other files call. */
-void xglMatrixInverse(Matrix *destination, Matrix *source);
 
+/* Random numbers and number conversions. */
 unsigned short xglSRand(void);
-void xglLightPackCacheInvalidate(void);
-void xglMatrixStackUnit(void);
+float xglFRand(void);
+int F2I(float value);
+float I2F(int value);
+
+/* Trigonometry. */
+float xglSin(float angle);
+float xglCos(float angle);
+float xglAtan2(float y, float x);
+void xglEulerFromRotation(Vector4 *euler, Vector4 *rotation);
+void xglGeometryInit(void);
+
+/* Memory copies. */
+void xglMemCopy64(void *destination, const void *source, int count);
+void xglMemCopy16(void *destination, const void *source, int count);
+
+/* Vector helpers. */
+void xglRandSeedInit(void);
+void xglFSrand(float seed);
+void xglVectorDiv(Vector4 *destination, const Vector4 *numerator, const Vector4 *divisor);
+void xglVectorDivXYZ(Vector4 *destination, const Vector4 *numerator, const Vector4 *divisor);
+void xglVectorMulAddXYZ(Vector4 *destination, const Vector4 *left, const Vector4 *right, const Vector4 *addend);
+void xglVectorMulSub(Vector4 *destination, const Vector4 *left, const Vector4 *right, const Vector4 *subtrahend);
+void xglVectorMulSubXYZ(Vector4 *destination, const Vector4 *left, const Vector4 *right, const Vector4 *subtrahend);
+void xglVectorDivAdd(Vector4 *destination, const Vector4 *numerator, const Vector4 *divisor, const Vector4 *addend);
+void xglVectorDivAddXYZ(Vector4 *destination, const Vector4 *numerator, const Vector4 *divisor, const Vector4 *addend);
+void xglVectorDivSub(Vector4 *destination, const Vector4 *numerator, const Vector4 *divisor, const Vector4 *subtrahend);
+void xglVectorDivSubXYZ(Vector4 *destination, const Vector4 *numerator, const Vector4 *divisor, const Vector4 *subtrahend);
+void xglVectorSubXYZ(Vector4 *destination, const Vector4 *left, const Vector4 *right);
+void xglVectorMulAdd(Vector4 *destination, const Vector4 *left, const Vector4 *right, const Vector4 *addend);
 void xglVectorScale(Vector4 *destination, const Vector4 *source, float scale);
+void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source, float scale);
+void xglVectorScaleAddXYZ(Vector4 *destination, const Vector4 *source, float scale, const Vector4 *addend);
+void xglVectorInner(float *destination, const Vector4 *left, const Vector4 *right);
+void xglVectorOuter(Vector4 *destination, const Vector4 *first, const Vector4 *second);
+void xglVectorLength(float *destination, const Vector4 *vector);
+float xglPointLength(Vector4 *from, Vector4 *to);
+float xglPointLengthXZ(Vector4 *from, Vector4 *to);
+void xglVectorNormal(Vector4 *destination, const Vector4 *source);
+void xglPlaneParameter(Vector4 *plane, const Vector4 *a, const Vector4 *b, const Vector4 *c);
 void xglVectorMulMat(Vector4 *destination, Matrix4 matrix, const Vector4 *vector);
+void xglRotTransPersN(ScreenVector4 *destination, Matrix4 matrix, const Vector4 *source, int count, int cameraId);
+
+/* Matrix helpers. */
+extern Matrix4 xglIdentityMatrix;
+extern Matrix4 xglUnit4sMatrix;
+void xglMatrixUnit(Matrix4 destination);
+void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right);
+void xglMatrixInverse(Matrix *destination, Matrix *source);
+void xglMatrixScale(Matrix *destination, Matrix *source, const Vector4 *scale);
+void xglMatrixTrans(Matrix *destination, Matrix *source, const Vector4 *translation);
+void xglMatrixRotX(Matrix4 destination, Matrix4 source, float angle);
 void xglMatrixRotY(Matrix4 destination, Matrix4 source, float angle);
-void xglRotTransPersN(Vector4 *destination, Matrix4 matrix, const Vector4 *source,
-                      int count, int cameraId);
+void xglMatrixRotZ(Matrix4 destination, Matrix4 source, float angle);
+
+/* The VU0 matrix stack. */
+void xglMatrixStackUnit(void);
+void xglMatrixStackMul(Matrix4 matrix);
+void xglMatrixStackInverse(void);
+void xglMatrixStackScale(const Vector4 *vector);
+void xglMatrixStackTrans(const Vector4 *vector);
+void xglMatrixStackRotX(float angle);
+void xglMatrixStackRotY(float angle);
+void xglMatrixStackRotZ(float angle);
+void xglMatrixStackFrustum(float left, float right, float bottom, float top, float nearPlane, float farPlane);
+void xglMatrixStackSave(Matrix4 matrix);
+void xglMatrixStackLoad(Matrix4 matrix);
+void xglMatrixStackPush(void);
+void xglMatrixStackPop(u32 value);
+void xglMatrixStackMulVector(Vector4 *destination, const Vector4 *source);
+void xglMatrixStackRTPS(ScreenVector4 *destination, const Vector4 *point, Vector4 *screenScale, Vector4 *screenOffset);
 
 #endif /* INCLUDE_MAIN_XGL_2_H */

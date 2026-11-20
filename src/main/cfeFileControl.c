@@ -1,6 +1,7 @@
 #include "common.h"
-#include "main/tu005.h"
-#include "main/tu026.h"
+#include "main/cfeFileControl.h"
+#include "main/xgl_debug_file.h"
+#include "main/assert_fail.h"
 
 typedef char *va_list;
 
@@ -8,7 +9,7 @@ typedef char *va_list;
 #define va_end(ap) ((void)0)
 
 int sceClose(int fd);
-void strcat(char *destination, const char *source);
+char *strcat(char *destination, const char *source);
 void *memset(void *destination, int value, unsigned int size);
 int strlen(const char *text);
 int vsprintf(char *buffer, const char *format, va_list args);
@@ -124,9 +125,9 @@ void cfeFileLogBlockEnd(void) {
     cfeFileLogf("}\n");
 }
 
-/* Data items of this file: the log indent counter, the indent string pointer (to the "\t" string of main/tu141's
+/* Data items of this file: the log indent counter, the indent string pointer (to the "\t" string of main/cfe_init.c's
  * rodata) and the pFileTemp buffer pointer. */
 int cfeFileLogIndent = 0;
-extern const char D_0068D0C0[];
-const char *cfeFileLogIndentStr = D_0068D0C0;
+extern const char cfeFileLogIndentTab[];
+const char *cfeFileLogIndentStr = cfeFileLogIndentTab;
 char *cfeFileTemp = 0;

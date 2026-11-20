@@ -6,8 +6,8 @@
 void srsChangeSeparator(char *path);
 void srsInitCdRead(void);
 int srsLeaveCdRead(void);
-void srsResetKeyTable(void);
-void srsReleaseRecords(void);
+void sresInitMemoryRes(void);
+void sresFreeReloaderMemory(void);
 int srsIsEffectImageKey(int queryKey);
 int fileLoad(void *buffer, const char *name, int mode);
 
@@ -82,7 +82,7 @@ enum SrsRecordKind {
     SRS_KIND_CALLER_BUFFER = 2
 };
 
-/* srsRecordTable (0x5E66D0..0x5E6D28): 58 records (srsResetKeyTable clears 0x658 bytes), each
+/* srsRecordTable (0x5E66D0..0x5E6D28): 58 records (sresInitMemoryRes clears 0x658 bytes), each
  * registered as the image mapper of its record number. Record 0 holds the effect package (default.esp
  * or cfdef.esp), records 1..8 the .esp packages of the eight wait slots of sefSlotTable, records 9..56
  * the effect slots; record 57 is a sentinel slot whose stamp (+0x650) srsEvictEffectSlot sets to the
@@ -106,11 +106,14 @@ char *srsAnalyzeEftNo(int effectNo, int *charNo, int *effectType);
 void srsFormatEffectStem(int effectNo, char *buffer, int withSubNo);
 extern int srsEffectStamp;
 
-int scGetKeyRecordFirst(int first, int second);
-
 struct SefSlotTable;
 void srsLoadPendingEffects(struct SefSlotTable *slotTable);
 int srsLoadEffectBlock(int effectKey);
 void srsReleaseSlotsByIndex(int index);
+void sresDataMapping(void);
+void srsCdReadCallback(int readStatus, int value, int tag);
+int srsGetEffectSlot(int effectKey);
+void srsLoadEspFile(int reload, int cfdef);
+int srsMakeFileName(char *buffer, const char *fileName);
 
 #endif /* INCLUDE_MAIN_SRS_H */

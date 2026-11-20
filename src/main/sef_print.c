@@ -1,6 +1,6 @@
 #include "common.h"
 #include "shared.h"
-#include "main/control_entry.h"
+#include "main/xgl_thread.h"
 #include "main/pad.h"
 #include "main/sef_print.h"
 #include "main/xgl_font.h"
@@ -19,12 +19,11 @@ extern const char tracePrintFormat[];
 extern int printf(const char *format, ...);
 extern int vsprintf(char *buffer, const char *format, va_list args);
 extern const char tracePrintFormat[8];
-extern PadRecord PadData[];
 
 /* The reset message resetWaitForPad shows. */
 
 /* Word of sefUpdateEntryTransforms (sef.c). */
-int D_0069DAD0 = 0;
+int sefFallbackVectorFlag = 0;
 
 /* Shows the reset message until SELECT and START are held together. */
 void resetWaitForPad(void)
@@ -48,7 +47,7 @@ void tracePrint(const char *format, ...) {
 
 /* Log call sites use this variadic no-op (lightSetLogDump passes a vector, a format and an index): it spills
  * its arguments and returns. */
-void logNoOp(const void *data, const char *format, ...)
+void LOG(const void *data, const char *format, ...)
 {
 }
 

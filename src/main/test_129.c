@@ -1,11 +1,13 @@
 #include "common.h"
-#include "main/tu005.h"
-#include "main/tu026.h"
+#include "main/xgl_debug_file.h"
+#include "main/assert_fail.h"
 #include "main/pad.h"
 #include "main/xgl_font.h"
+#include "main/xgl_cd.h"
 #include "main/TiWater.h"
-#include "main/control_entry.h"
+#include "main/xgl_thread.h"
 #include "main/test_129.h"
+#include "main/glow.h"
 
 /* Opens the .data of this file (0x631140); read by TiWater.c. */
 float tiWaterTwoPi = 6.28318548f;
@@ -19,18 +21,14 @@ float tiWaterTwoPi = 6.28318548f;
 /* Overlay loaded when the menu opens (its name is not known from this file). */
 #define TEST_MENU_OVERLAY 98
 
-extern const char D_0068C788[];
-extern const char D_0068C790[];
-extern PadRecord PadData;
-extern int D_00631144;
-void xglCdLoadOverlay(int overlay);
-void xglFontSetStoredValue(int value);
-void glowRunScene(void);
-void func_00A89428(void);
+extern const char testLoadFileDataAssertText[];
+extern const char testLoadFileSourceName[];
+extern int testMenuFontPrefix;
+void testCfEventToolRun(void);
 
-int D_00631144 = 0x0068C728;
-int D_00631148 = 0;
-int D_0063114C = 0;
+int testMenuFontPrefix = 0x0068C728;
+int testMenuUnusedWord0 = 0;
+int testMenuUnusedWord1 = 0;
 
 int tiWaterSubCount = 0;
 
@@ -42,28 +40,24 @@ float tiWaterCx = 256.0f;
 
 float tiWaterCy = 224.0f;
 
-int tiWaterAlphaType = 0;
+float tiWaterAlphaType = 0.0f;
 
 float tiWaterAlpha = 63.0f;
 
-int tiWaterFbp = 0;
+float tiWaterFbp = 0.0f;
 
 float tiWaterBlur = 10.0f;
 
 float tiWaterDecrease = 0.0133400001f;
 
-int tiWaterIntVals = 0;
-
-int D_0063117C = 0;
-
-float D_00631180 = 50.0f;
-
-float D_00631184 = 100.0f;
+float tiWaterIntVals[4] = {0.0f, 0.0f, 50.0f, 100.0f};
 
 /* Debug test menu: UP and DOWN move the cursor, CIRCLE runs the highlighted entry, SELECT with START leaves it. */
 void testMenuRun(void)
 {
-    void (*callbacks[TEST_MENU_ENTRY_COUNT])(void) = {func_00A89428, glowRunScene, tiWaterSceneLoop, tiWaterSceneLoop};
+    void (*callbacks[TEST_MENU_ENTRY_COUNT])(void) = {testCfEventToolRun, glowRunScene, tiWaterSceneLoop, tiWaterSceneLoop};
+    /* JP: てすと (the fourth label)
+     * EN: Test */
     const char *labels[TEST_MENU_ENTRY_COUNT] = {"CFEventTool", "GlowTest", "WaterTest", "\xa4\xc6\xa4\xb9\xa4\xc8"};
     int selected;
     int slideOffset;
@@ -74,12 +68,12 @@ void testMenuRun(void)
     slideOffset = TEST_MENU_SLIDE_REST;
     xglCdLoadOverlay(TEST_MENU_OVERLAY);
     for (;;) {
-        xglFontSetStoredValue(D_00631144);
-        if ((PadData.heldAndPressed & (PAD_SELECT | ((unsigned long long)PAD_START << 16))) ==
+        xglFontDebugPrefixSet(testMenuFontPrefix);
+        if ((PadData[0].heldAndPressed & (PAD_SELECT | ((unsigned long long)PAD_START << 16))) ==
             (PAD_SELECT | ((unsigned long long)PAD_START << 16))) {
             break;
         }
-        pressed = PadData.pressed;
+        pressed = PadData[0].pressed;
         if (pressed & PAD_UP) {
             selected -= 1;
             slideOffset = 0;
@@ -126,7 +120,7 @@ int testLoadFile(int *bufferCursor, const char *name) {
         buffer = *bufferCursor;
         *bufferCursor = (buffer + size + 0xF) & ~0xF;
         if (buffer == 0) {
-            assertFailed(D_0068C788, D_0068C790, 95);
+            assertFailed(testLoadFileDataAssertText, testLoadFileSourceName, 95);
         }
         /* The test heap keeps its cursor as an address word. */
         xglDebFileRead(name, (void *) buffer);
@@ -184,44 +178,44 @@ int testHeapAlloc(int size) {
     return buffer;
 }
 
-const char D_0068C788[8] = "pData";
+const char testLoadFileDataAssertText[8] = "pData";
 
-const char D_0068C790[16] = "../test.euc.c";
+const char testLoadFileSourceName[16] = "../test.euc.c";
 
-const char D_0068C7A0[16] = "\015\002IntVal4   %f";
+const char tiWaterDebugIntVal4Format[16] = "\015\002IntVal4   %f";
 
-const char D_0068C7B0[16] = "\015\002IntVal3   %f";
+const char tiWaterDebugIntVal3Format[16] = "\015\002IntVal3   %f";
 
-const char D_0068C7C0[16] = "\015\002IntVal2   %f";
+const char tiWaterDebugIntVal2Format[16] = "\015\002IntVal2   %f";
 
-const char D_0068C7D0[16] = "\015\002IntVal1   %f";
+const char tiWaterDebugIntVal1Format[16] = "\015\002IntVal1   %f";
 
-const char D_0068C7E0[16] = "\015\002Decrease  %f";
+const char tiWaterDebugDecreaseFormat[16] = "\015\002Decrease  %f";
 
-const char D_0068C7F0[16] = "\015\002Blur      %f";
+const char tiWaterDebugBlurFormat[16] = "\015\002Blur      %f";
 
-const char D_0068C800[16] = "\015\002FBP       %f";
+const char tiWaterDebugFbpFormat[16] = "\015\002FBP       %f";
 
-const char D_0068C810[16] = "\015\002Alpha     %f";
+const char tiWaterDebugAlphaFormat[16] = "\015\002Alpha     %f";
 
-const char D_0068C820[16] = "\015\002AlphaType %f";
+const char tiWaterDebugAlphaTypeFormat[16] = "\015\002AlphaType %f";
 
-const char D_0068C830[16] = "\015\002cy        %f";
+const char tiWaterDebugCyFormat[16] = "\015\002cy        %f";
 
-const char D_0068C840[16] = "\015\002cx        %f";
+const char tiWaterDebugCxFormat[16] = "\015\002cx        %f";
 
-const char D_0068C850[16] = "\015\002EffectNum %f";
+const char tiWaterDebugEffectNumFormat[16] = "\015\002EffectNum %f";
 
 const char *tiWaterDebugLabels[12] = {
-    D_0068C850, D_0068C840, D_0068C830, D_0068C820, D_0068C810, D_0068C800,
-    D_0068C7F0, D_0068C7E0, D_0068C7D0, D_0068C7C0, D_0068C7B0, D_0068C7A0,
+    tiWaterDebugEffectNumFormat, tiWaterDebugCxFormat, tiWaterDebugCyFormat, tiWaterDebugAlphaTypeFormat, tiWaterDebugAlphaFormat, tiWaterDebugFbpFormat,
+    tiWaterDebugBlurFormat, tiWaterDebugDecreaseFormat, tiWaterDebugIntVal1Format, tiWaterDebugIntVal2Format, tiWaterDebugIntVal3Format, tiWaterDebugIntVal4Format,
 };
 
-unsigned int tiWaterDebugSteps[12] = { 0x3f800000, 0x3f800000, 0x3f800000, 0x3f800000, 0x3f800000, 0x3f800000, 0x3f800000, 0x3c23d70a, 0x3f800000, 0x3f800000, 0x3f800000, 0x3f800000 };
+float tiWaterDebugSteps[12] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.01f, 1.0f, 1.0f, 1.0f, 1.0f };
 
-void *tiWaterDebugValues[14] = {
+float *tiWaterDebugValues[14] = {
     &tiWaterEffectNum, &tiWaterCx, &tiWaterCy, &tiWaterAlphaType, &tiWaterAlpha, &tiWaterFbp, &tiWaterBlur,
-    &tiWaterDecrease, &tiWaterIntVals, &D_0063117C, &D_00631180, &D_00631184, 0, 0,
+    &tiWaterDecrease, &tiWaterIntVals[0], &tiWaterIntVals[1], &tiWaterIntVals[2], &tiWaterIntVals[3], 0, 0,
 };
 
 unsigned int tiWaterStateTemplate[60] = {
@@ -241,4 +235,4 @@ unsigned int tiWaterSurfaceGridHeader[4] = {
 unsigned int tiWaterDepthGridHeader[4] = {
     32768, 0x302E4000u, 1298, 0
 };
-unsigned int tiWaterSubList[66] = { 0 };
+TiWaterSub *tiWaterSubList[66] = { 0 };

@@ -126,19 +126,19 @@
      1
     ],
     [
-     "unitClearAll",
+     "unitSideClearAll",
      11011312,
      72,
      1
     ],
     [
-     "unitRunUpdate",
+     "unitSideRunUpdate",
      11011384,
      100,
      1
     ],
     [
-     "unitRunDraw",
+     "unitSideRunDraw",
      11011488,
      100,
      1
@@ -150,7 +150,7 @@
      1
     ],
     [
-     "unitRelease",
+     "unitSideRelease",
      11011680,
      20,
      1
@@ -276,49 +276,49 @@
      1
     ],
     [
-     "ov01FifoInit",
+     "fifoInit",
      11012984,
      28,
      1
     ],
     [
-     "ov01FifoPush",
+     "fifoPush",
      11013016,
      80,
      1
     ],
     [
-     "ov01FifoPop",
+     "fifoPop",
      11013096,
      64,
      1
     ],
     [
-     "ov01FifoGetTail",
+     "fifoEdGet",
      11013160,
      8,
      1
     ],
     [
-     "ov01FifoGetHead",
+     "fifoStGet",
      11013168,
      8,
      1
     ],
     [
-     "ov01FifoGetUsed",
+     "fifoNumGet",
      11013176,
      8,
      1
     ],
     [
-     "dataLookupReset",
+     "objCmdClear",
      11013184,
      20,
      1
     ],
     [
-     "dataLookupCurrent",
+     "objCmdPtrGet",
      11013208,
      48,
      1
@@ -330,7 +330,7 @@
      1
     ],
     [
-     "dataLookupNext",
+     "objCmdNext",
      11013408,
      84,
      1
@@ -354,7 +354,7 @@
      1
     ],
     [
-     "ov01MatrixBlockInit",
+     "objStdInit",
      11013624,
      72,
      1
@@ -396,7 +396,7 @@
      1
     ],
     [
-     "slideSetStep",
+     "objHatoVec",
      11015336,
      328,
      1
@@ -504,7 +504,7 @@
      1
     ],
     [
-     "dataUnitFilesLoad",
+     "dataModelFilesLoad",
      11017568,
      312,
      1
@@ -546,7 +546,7 @@
      1
     ],
     [
-     "func_00A82368",
+     "dataEntryVoiceLoad",
      11019112,
      8,
      1
@@ -558,7 +558,7 @@
      1
     ],
     [
-     "dataSlotAcquire",
+     "dataUnitFileGet",
      11019200,
      196,
      1
@@ -588,7 +588,7 @@
      1
     ],
     [
-     "dataUnitLoad",
+     "dataUnitFileLoad",
      11019880,
      500,
      1
@@ -612,7 +612,7 @@
      1
     ],
     [
-     "dataSlotReset",
+     "dataSlotVoiceReset",
      11021232,
      68,
      1
@@ -648,7 +648,7 @@
      1
     ],
     [
-     "func_00A82F60",
+     "dataStreamRelease",
      11022176,
      64,
      1
@@ -750,31 +750,31 @@
      1
     ],
     [
-     "ov01CdPendingReads",
+     "dataCdSync",
      11025704,
      12,
      1
     ],
     [
-     "ov01CdPendingReset",
+     "dataCdSyncClear",
      11025720,
      12,
      1
     ],
     [
-     "ov01CdReadCallback",
+     "dataNBreadCB",
      11025736,
      48,
      1
     ],
     [
-     "ov01CdReadFileAsync",
+     "dataFileLoadNB",
      11025784,
      72,
      1
     ],
     [
-     "ov01CdReadFileSync",
+     "dataFileLoad",
      11025856,
      40,
      1
@@ -834,7 +834,7 @@
      1
     ],
     [
-     "func_00A840E8",
+     "ov01HeapDummy",
      11026664,
      8,
      1
@@ -888,7 +888,7 @@
      1
     ],
     [
-     "func_00A84880",
+     "unitDrawNone",
      11028608,
      8,
      1
@@ -1020,13 +1020,13 @@
      1
     ],
     [
-     "unitQueueAppend",
+     "unitCmdSet",
      11030936,
      24,
      1
     ],
     [
-     "unitQueueClear",
+     "unitCmdClear",
      11030960,
      24,
      1
@@ -1116,7 +1116,7 @@
      1
     ],
     [
-     "unitCmdModeDispatch",
+     "unitCmdDmg",
      11033816,
      276,
      1
@@ -1134,31 +1134,31 @@
      1
     ],
     [
-     "func_00A85EA0",
+     "unitCmdEva",
      11034272,
      144,
      1
     ],
     [
-     "func_00A85F30",
+     "unitCmdDef",
      11034416,
      144,
      1
     ],
     [
-     "func_00A85FC0",
+     "unitCmdDead",
      11034560,
      684,
      1
     ],
     [
-     "unitCmdCodeWait",
+     "unitCmdMot",
      11035248,
      100,
      1
     ],
     [
-     "func_00A862D8",
+     "unitCmdTgtSetDummy",
      11035352,
      8,
      1
@@ -1248,31 +1248,31 @@
      1
     ],
     [
-     "unitCmdPhase2CWait",
+     "unitCmdBted",
      11037544,
      128,
      1
     ],
     [
-     "unitCmdClearActive",
+     "unitCmdRec",
      11037672,
      24,
      1
     ],
     [
-     "unitCmdPhase2BWait",
+     "unitCmdWake",
      11037696,
      176,
      1
     ],
     [
-     "func_00A86CB0",
+     "unitCmdStat",
      11037872,
      24,
      1
     ],
     [
-     "unitCmdTurnAim",
+     "unitCmdTurn",
      11037896,
      200,
      1
@@ -1302,19 +1302,19 @@
      1
     ],
     [
-     "func_00A86F20",
+     "unitHitFlagsClear",
      11038496,
      24,
      1
     ],
     [
-     "unitQueueMoveCommands",
+     "unitCmdDeadSet",
      11038520,
      184,
      1
     ],
     [
-     "func_00A86FF0",
+     "unitDeadSpecChk",
      11038704,
      64,
      1
@@ -1326,31 +1326,31 @@
      1
     ],
     [
-     "objPoseSetSteps",
+     "unitCmdVASet",
      11039184,
      212,
      1
     ],
     [
-     "objPoseHorizontalDistance",
+     "unitCmdLenGet",
      11039400,
      24,
      1
     ],
     [
-     "objPoseBlend",
+     "unitCmdDivSet",
      11039424,
      24,
      1
     ],
     [
-     "objPoseStep",
+     "unitCmdMoveCalc",
      11039448,
      64,
      1
     ],
     [
-     "objPoseSlideLimit",
+     "unitColiGet",
      11039512,
      120,
      1
@@ -1380,19 +1380,19 @@
      1
     ],
     [
-     "unitCmdMoveJump",
+     "unitCmdJump",
      11040480,
      588,
      1
     ],
     [
-     "unitCmdHoverFade",
+     "unitCmdHover",
      11041072,
      384,
      1
     ],
     [
-     "objMotionCopyLookup",
+     "unitCmdMoveNext",
      11041456,
      100,
      1
@@ -1434,25 +1434,25 @@
      1
     ],
     [
-     "unitNumFlag4ClearGet",
+     "unitLiveNumGet",
      11042816,
      92,
      1
     ],
     [
-     "unitNumFlag4ClearStatZeroGet",
+     "unitLiveNumGet2",
      11042912,
      152,
      1
     ],
     [
-     "unitNumFlag4SetGet",
+     "unitDownNumGet",
      11043064,
      92,
      1
     ],
     [
-     "unitNumFlag1Flag4ClearGet",
+     "busyUnitChk",
      11043160,
      112,
      1
@@ -1464,13 +1464,13 @@
      1
     ],
     [
-     "unitTblIndexOf",
+     "unitNoGet",
      11043464,
      112,
      1
     ],
     [
-     "unitTblEntryGet",
+     "unitPtrGet",
      11043576,
      76,
      1
@@ -1602,37 +1602,37 @@
      1
     ],
     [
-     "monsTblValueSet",
+     "monsTblMapNoSet",
      11046032,
      12,
      1
     ],
     [
-     "monsTblValueGet",
+     "monsTblMapNoGet",
      11046048,
      12,
      1
     ],
     [
-     "fadeInStart",
+     "monsSlotFadeInStart",
      11046064,
      108,
      1
     ],
     [
-     "fadeInStep",
+     "monsSlotFadeInStep",
      11046176,
      120,
      1
     ],
     [
-     "fadeOutStart",
+     "monsSlotFadeOutStart",
      11046296,
      120,
      1
     ],
     [
-     "fadeOutStep",
+     "monsSlotFadeOutStep",
      11046416,
      96,
      1
@@ -1644,43 +1644,43 @@
      1
     ],
     [
-     "func_00A88E98",
+     "keyBuffClearUnit",
      11046552,
      20,
      1
     ],
     [
-     "dataKeyInputStep",
+     "keyCmdGet",
      11046576,
      388,
      1
     ],
     [
-     "dataKeyCheck",
+     "keyCmdChk",
      11046968,
      388,
      1
     ],
     [
-     "dataKeyValueGet",
+     "keyCmdApGet",
      11047360,
      164,
      1
     ],
     [
-     "dataCountersClear",
+     "keyBuffClear",
      11047528,
      20,
      1
     ],
     [
-     "dataKeyRegister",
+     "keyBuffSet",
      11047552,
      192,
      1
     ],
     [
-     "dataKeyFind",
+     "keyBuffChk",
      11047744,
      264,
      1
@@ -1764,31 +1764,31 @@
      1
     ],
     [
-     "dataObjCreateAtOrigin",
+     "objEnCurCreateAtOrigin",
      11049432,
      44,
      1
     ],
     [
-     "dataObjCreate",
+     "objEnCurCreate",
      11049480,
      180,
      1
     ],
     [
-     "dataObjRemove",
+     "objCurRemove",
      11049664,
      60,
      1
     ],
     [
-     "dataObjUpdate",
+     "objCur",
      11049728,
      260,
      1
     ],
     [
-     "dataObjDraw",
+     "objCurDraw",
      11049992,
      84,
      1
@@ -1800,7 +1800,7 @@
      1
     ],
     [
-     "dataObjDrawSprite",
+     "objDispCurSubEn",
      11050160,
      184,
      1
@@ -1830,73 +1830,73 @@
      1
     ],
     [
-     "dataTargetMatchKey",
+     "curCmdSet",
      11050664,
      96,
      1
     ],
     [
-     "dataTargetApply",
+     "curMove2Pos",
      11050760,
      272,
      1
     ],
     [
-     "dataCursorMove",
+     "curSel",
      11051032,
      244,
      1
     ],
     [
-     "dataStateSetMode",
+     "curSelGrpSet",
      11051280,
      64,
      1
     ],
     [
-     "func_00A8A150",
+     "curSelGrpGet",
      11051344,
      12,
      1
     ],
     [
-     "dataStateModeToggle",
+     "curGrpSel",
      11051360,
      124,
      1
     ],
     [
-     "dataUnitListInit",
+     "curEnProcInit",
      11051488,
      264,
      1
     ],
     [
-     "dataUnitCursorStep",
+     "curEnProc",
      11051752,
      196,
      1
     ],
     [
-     "dataEntryListInit",
+     "curPosProcInit",
      11051952,
      220,
      1
     ],
     [
-     "dataEntryCursorStep",
+     "curPosProc",
      11052176,
      168,
      1
     ],
     [
-     "dataTargetListInit",
+     "curTgtProcInit",
      11052344,
      500,
      1
     ],
     [
-     "dataUnitCursorCycle",
+     "curTgtProc",
      11052848,
      324,
      1
@@ -1920,25 +1920,25 @@
      1
     ],
     [
-     "battleEntryClearReset",
+     "unitEntryTableClear",
      11053496,
      68,
      1
     ],
     [
-     "battleStateClearWords",
+     "calcComboReset",
      11053568,
      16,
      1
     ],
     [
-     "battleMaskWordsStat4",
+     "battleMaskWordsMember",
      11053584,
      124,
      1
     ],
     [
-     "battleMaskWordsStat6",
+     "battleMaskWordsPresent",
      11053712,
      124,
      1
@@ -1956,13 +1956,13 @@
      1
     ],
     [
-     "battleStateClearStatus",
+     "battleEntryRelease",
      11054192,
      32,
      1
     ],
     [
-     "battleSlotExport",
+     "calcCopyParaMake",
      11054224,
      636,
      1
@@ -1974,19 +1974,19 @@
      1
     ],
     [
-     "battleFlushActiveEntries",
+     "calcPara2Org",
      11054912,
      76,
      1
     ],
     [
-     "battleSlotCommit",
+     "calcPara2OrgSub",
      11054992,
      56,
      1
     ],
     [
-     "battleSlotsInit",
+     "dataPlUnitInit",
      11055048,
      440,
      1
@@ -1998,7 +1998,7 @@
      1
     ],
     [
-     "func_00A8B2C8",
+     "dataDummySet_00A8B2C8",
      11055816,
      8,
      1
@@ -2010,49 +2010,49 @@
      1
     ],
     [
-     "battleContextBind",
+     "calcTotalParaMenuSub",
      11056064,
      204,
      1
     ],
     [
-     "battleContextStateGet",
+     "calcTotalParaMenu",
      11056272,
      32,
      1
     ],
     [
-     "battleContextApplyLookup",
+     "calcTakeEpGetMenu",
      11056304,
      68,
      1
     ],
     [
-     "battleAttackResolve",
+     "calcUseEtherMenu",
      11056376,
      348,
      1
     ],
     [
-     "battleItemUse",
+     "calcUseItemMenu",
      11056728,
      196,
      1
     ],
     [
-     "battleSlotFlagSet",
+     "dataEtherLearnSet",
      11056928,
      48,
      1
     ],
     [
-     "battleSlotFlagTest",
+     "dataEtherLearnGet",
      11056976,
      48,
      1
     ],
     [
-     "battleSlotFlagClear",
+     "dataEtherLearnClear",
      11057024,
      48,
      1
@@ -2064,13 +2064,13 @@
      1
     ],
     [
-     "battleSlotCodeSet",
+     "dataSkillLearnSet",
      11057120,
      48,
      1
     ],
     [
-     "battleSlotCodeTest",
+     "dataSkillLearnGet",
      11057168,
      48,
      1
@@ -2094,25 +2094,25 @@
      1
     ],
     [
-     "battleSlotsRefresh",
+     "battleSlotsRestoreAll",
      11057360,
      96,
      1
     ],
     [
-     "battleSlotSetShort",
+     "calcAccEquipOrg",
      11057456,
      108,
      1
     ],
     [
-     "battleSlotSetByte",
+     "calcSkillEquipOrg",
      11057568,
      104,
      1
     ],
     [
-     "battleSlotSetShortLate",
+     "battleSlotLinkedSlotSet",
      11057672,
      96,
      1
@@ -2124,7 +2124,7 @@
      1
     ],
     [
-     "boostAddStock",
+     "calcBc",
      11057840,
      44,
      1
@@ -2136,7 +2136,7 @@
      1
     ],
     [
-     "boostAddProgress",
+     "calcBp",
      11057992,
      44,
      1
@@ -2160,19 +2160,19 @@
      1
     ],
     [
-     "calcHpAdjust",
+     "calcHp",
      11058272,
      60,
      1
     ],
     [
-     "calcEpAdjust",
+     "calcEp",
      11058336,
      52,
      1
     ],
     [
-     "calcHitRateGet",
+     "calcHitParaGet",
      11058392,
      112,
      1
@@ -2226,61 +2226,61 @@
      1
     ],
     [
-     "calcEpCost",
+     "calcTakeEpGet",
      11060016,
      148,
      1
     ],
     [
-     "calcHitRecordFill",
+     "calcHitDmg",
      11060168,
      244,
      1
     ],
     [
-     "calcHitRoll",
+     "calcHitRate",
      11060416,
      388,
      1
     ],
     [
-     "calcHitMode",
+     "calcHit",
      11060808,
      304,
      1
     ],
     [
-     "calcAttackDamage",
+     "calcDmg",
      11061112,
      2064,
      1
     ],
     [
-     "calcCritDamage",
+     "calcCrit",
      11063176,
      388,
      1
     ],
     [
-     "calcHitInflict",
+     "calcStatAtk",
      11063568,
      304,
      1
     ],
     [
-     "calcHitCure",
+     "calcStatClr",
      11063872,
      224,
      1
     ],
     [
-     "calcKindHitMode",
+     "calcHitItem",
      11064096,
      92,
      1
     ],
     [
-     "calcRestoreValue",
+     "calcDmgItem",
      11064192,
      420,
      1
@@ -2352,7 +2352,7 @@
      1
     ],
     [
-     "calcHitApply",
+     "calcUseItem",
      11066624,
      752,
      1
@@ -2376,7 +2376,7 @@
      1
     ],
     [
-     "calcStatAltSet",
+     "calcStatProtectSet",
      11068392,
      52,
      1
@@ -2388,7 +2388,7 @@
      1
     ],
     [
-     "calcStatAltReset",
+     "calcStatProtectReset",
      11068576,
      52,
      1
@@ -2436,43 +2436,43 @@
      1
     ],
     [
-     "unitStatsRefresh",
+     "calcSkillInit",
      11069448,
      424,
      1
     ],
     [
-     "unitApplyStatBonus",
+     "calcSkillInitSub",
      11069872,
      984,
      1
     ],
     [
-     "calcStatEffectSum",
+     "calcSkill",
      11070856,
      344,
      1
     ],
     [
-     "calcStatEffectValue",
+     "calcSkillSub",
      11071200,
      92,
      1
     ],
     [
-     "unitHasEquipId",
+     "calcAccEquChk",
      11071296,
      64,
      1
     ],
     [
-     "unitHasEffectCode",
+     "calcSkillEquChk",
      11071360,
      236,
      1
     ],
     [
-     "partyHasEffectCode",
+     "calcSkillEquChkAll",
      11071600,
      144,
      1
@@ -2550,19 +2550,19 @@
      1
     ],
     [
-     "battleResultReset",
+     "monsGainInit",
      11073112,
      36,
      1
     ],
     [
-     "battleResultGet",
+     "monsGainPtrGet",
      11073152,
      12,
      1
     ],
     [
-     "battleResultAdd",
+     "monsGainSet",
      11073168,
      396,
      1
@@ -2580,13 +2580,13 @@
      1
     ],
     [
-     "battleReviveDownedParty",
+     "calcDeadReset",
      11073864,
      204,
      1
     ],
     [
-     "battleResultApply",
+     "calcResult",
      11074072,
      536,
      1
@@ -2598,13 +2598,13 @@
      1
     ],
     [
-     "battleGainsAdd",
+     "calcResultSub",
      11075176,
      468,
      1
     ],
     [
-     "unitExpGain",
+     "calcLvUp",
      11075648,
      216,
      1
@@ -2616,13 +2616,13 @@
      1
     ],
     [
-     "func_00A90368",
+     "calcTurnStart",
      11076456,
      76,
      1
     ],
     [
-     "unitValueRefresh",
+     "calcTurnEnd",
      11076536,
      64,
      1
@@ -2634,13 +2634,13 @@
      1
     ],
     [
-     "unitValueCalc",
+     "calcWct",
      11076656,
      204,
      1
     ],
     [
-     "unitValueDecay",
+     "calcWctDec",
      11076864,
      100,
      1
@@ -2658,7 +2658,7 @@
      1
     ],
     [
-     "unitCanAct",
+     "calcBattleChk",
      11077096,
      120,
      1
@@ -2676,7 +2676,7 @@
      1
     ],
     [
-     "tgtSideOf",
+     "calcTrg2PE",
      11077640,
      80,
      1
@@ -2706,19 +2706,19 @@
      1
     ],
     [
-     "tgtCollectUnits",
+     "calcTgtUnitTbl",
      11078616,
      252,
      1
     ],
     [
-     "calcEntryUsable",
+     "calcEthEnableChk",
      11078872,
      184,
      1
     ],
     [
-     "tgtRecordCanTarget",
+     "calcItmEnableChk",
      11079056,
      116,
      1
@@ -2796,7 +2796,7 @@
      1
     ],
     [
-     "tgtCmdAccepts",
+     "tgtFindChk",
      11081440,
      40,
      1
@@ -2820,13 +2820,13 @@
      1
     ],
     [
-     "calcBoostOk",
+     "calcBoostChk",
      11081616,
      284,
      1
     ],
     [
-     "calcActStockSet",
+     "calcBoost",
      11081904,
      92,
      1
@@ -2892,19 +2892,19 @@
      1
     ],
     [
-     "func_00A91B68",
+     "calcEtherDisableSet",
      11082600,
      36,
      1
     ],
     [
-     "func_00A91B90",
+     "calcEtherDisableGet",
      11082640,
      36,
      1
     ],
     [
-     "actStockReset",
+     "actStockInit",
      11082680,
      128,
      1
@@ -2976,7 +2976,7 @@
      1
     ],
     [
-     "cmdListRunHead",
+     "battleExecNorm",
      11084392,
      148,
      1
@@ -3006,25 +3006,25 @@
      1
     ],
     [
-     "func_00A92C18",
+     "cmdAttackQueueAndSpend",
      11086872,
      380,
      1
     ],
     [
-     "func_00A92D98",
+     "cmdTechniqueAttackQueue",
      11087256,
      88,
      1
     ],
     [
-     "func_00A92DF0",
+     "cmdItemAttackQueue",
      11087344,
      64,
      1
     ],
     [
-     "attackQueue",
+     "unitJobTypeAtk",
      11087408,
      588,
      1
@@ -3036,25 +3036,25 @@
      1
     ],
     [
-     "func_00A93128",
+     "attackSefFlag1Check",
      11088168,
      60,
      1
     ],
     [
-     "unitCmdRequestQueue",
+     "scenarioBatExecDst",
      11088232,
      284,
      1
     ],
     [
-     "func_00A93288",
+     "attackEffectsFinished",
      11088520,
      84,
      1
     ],
     [
-     "func_00A932E0",
+     "hitPopNumCreate",
      11088608,
      36,
      1
@@ -3072,31 +3072,31 @@
      1
     ],
     [
-     "eventQueueFindKind4",
+     "eventQueueFindAttackAction",
      11088768,
      104,
      1
     ],
     [
-     "eventQueueFindKind5",
+     "eventQueueFindAttackHit",
      11088872,
      104,
      1
     ],
     [
-     "eventQueueAddKind1",
+     "eventQueueAddUnitCommand",
      11088976,
      128,
      1
     ],
     [
-     "eventQueueAddKind4",
+     "eventQueueAddAttackAction",
      11089104,
      96,
      1
     ],
     [
-     "eventQueueAddKind5",
+     "eventQueueAddAttackHit",
      11089200,
      152,
      1
@@ -3114,7 +3114,7 @@
      1
     ],
     [
-     "func_00A93708",
+     "eventNoneRun",
      11089672,
      8,
      1
@@ -3144,7 +3144,7 @@
      1
     ],
     [
-     "func_00A93CF0",
+     "unitsUninvolvedClear",
      11091184,
      96,
      1
@@ -3156,7 +3156,7 @@
      1
     ],
     [
-     "unitTryActStock",
+     "counterProc",
      11092232,
      344,
      1
@@ -3168,31 +3168,31 @@
      1
     ],
     [
-     "attackSpecialResolve",
+     "flowSpecProcInit",
      11093248,
      448,
      1
     ],
     [
-     "attackSpecialStep",
+     "flowSpecProc",
      11093696,
      1112,
      1
     ],
     [
-     "itemRandomPick",
+     "specInoriProc",
      11094808,
      264,
      1
     ],
     [
-     "unitStatusTextShow",
+     "specAnalyzeProc",
      11095072,
      260,
      1
     ],
     [
-     "unitDataBoxDrop",
+     "specNusumuProc",
      11095336,
      388,
      1
@@ -3204,7 +3204,7 @@
      1
     ],
     [
-     "func_00A95018",
+     "attackHitsShowAndWait",
      11096088,
      40,
      1
@@ -3252,25 +3252,25 @@
      1
     ],
     [
-     "func_00A955C8",
+     "statEffOn",
      11097544,
      64,
      1
     ],
     [
-     "func_00A95608",
+     "statEffOff",
      11097608,
      116,
      1
     ],
     [
-     "unitStatusAuraUpdate",
+     "statEffProc",
      11097728,
      400,
      1
     ],
     [
-     "func_00A95810",
+     "scenarioMtd",
      11098128,
      792,
      1
@@ -3312,25 +3312,25 @@
      1
     ],
     [
-     "func_00A95CB0",
+     "unitSlotFadeInStart",
      11099312,
      20,
      1
     ],
     [
-     "func_00A95CC8",
+     "unitSlotFadeOutStart",
      11099336,
      20,
      1
     ],
     [
-     "func_00A95CE0",
+     "eventAttackActionSkip",
      11099360,
      8,
      1
     ],
     [
-     "func_00A95CE8",
+     "eventAttackHitSkip",
      11099368,
      8,
      1
@@ -3366,7 +3366,7 @@
      1
     ],
     [
-     "unitsRemoveDefeated",
+     "battleExecDead",
      11100240,
      644,
      1
@@ -3378,7 +3378,7 @@
      1
     ],
     [
-     "unitStepStatusApply",
+     "stat1Proc",
      11101456,
      764,
      1
@@ -3390,7 +3390,7 @@
      1
     ],
     [
-     "unitsReviveDown",
+     "stat2Proc",
      11102408,
      364,
      1
@@ -3420,7 +3420,7 @@
      1
     ],
     [
-     "func_00A97110",
+     "eventStockBegin",
      11104528,
      8,
      1
@@ -3450,7 +3450,7 @@
      1
     ],
     [
-     "battleEndCheck",
+     "battleAfter",
      11104904,
      404,
      1
@@ -3486,13 +3486,13 @@
      1
     ],
     [
-     "tgtSelectStatusUpdate",
+     "battleEndChk",
      11106208,
      224,
      1
     ],
     [
-     "tgtSelectStatusGet",
+     "battleRetCodeGet",
      11106432,
      12,
      1
@@ -3504,7 +3504,7 @@
      1
     ],
     [
-     "tgtSelectPadInput",
+     "battleCtrlBoostPl",
      11106912,
      256,
      1
@@ -3516,7 +3516,7 @@
      1
     ],
     [
-     "tgtSelectAuto",
+     "battleCtrlThink",
      11107216,
      216,
      1
@@ -3528,7 +3528,7 @@
      1
     ],
     [
-     "tgtSelectManual",
+     "battleCtrlMan",
      11107448,
      236,
      1
@@ -3558,7 +3558,7 @@
      1
     ],
     [
-     "func_00A98180",
+     "tecMenuClose",
      11108736,
      56,
      1
@@ -3576,7 +3576,7 @@
      1
     ],
     [
-     "func_00A98408",
+     "levelMenuClose",
      11109384,
      56,
      1
@@ -3594,7 +3594,7 @@
      1
     ],
     [
-     "func_00A98690",
+     "pairMenuClose",
      11110032,
      56,
      1
@@ -3630,7 +3630,7 @@
      1
     ],
     [
-     "func_00A98BB0",
+     "tgtIdMenuClose",
      11111344,
      56,
      1
@@ -3642,7 +3642,7 @@
      1
     ],
     [
-     "statBitValueGet",
+     "statBitTextIdGet",
      11111560,
      112,
      1
@@ -3660,19 +3660,19 @@
      1
     ],
     [
-     "objCurRemove",
+     "enemyCursorTextRemove",
      11112240,
      60,
      1
     ],
     [
-     "battleSelectStep",
+     "manInput",
      11112304,
      2852,
      1
     ],
     [
-     "battleSelectionGet",
+     "convKey2unit",
      11115160,
      516,
      1
@@ -3702,7 +3702,7 @@
      1
     ],
     [
-     "battleStateGet",
+     "manWorkGet",
      11115928,
      12,
      1
@@ -3792,7 +3792,7 @@
      1
     ],
     [
-     "func_00A9A138",
+     "pauseProc",
      11116856,
      8,
      1
@@ -3822,7 +3822,7 @@
      1
     ],
     [
-     "unitSelectPlTarget",
+     "selectPL",
      11117024,
      280,
      1
@@ -3882,7 +3882,7 @@
      1
     ],
     [
-     "ov01StepInit",
+     "ov01StepLoadBattleFiles",
      11118392,
      96,
      1
@@ -4002,7 +4002,7 @@
      1
     ],
     [
-     "func_00A9B0F8",
+     "ov01SceneInitDummy",
      11120888,
      8,
      1
@@ -4050,13 +4050,13 @@
      1
     ],
     [
-     "func_00A9B298",
+     "dataMotNameIndexGet",
      11121304,
      8,
      1
     ],
     [
-     "func_00A9B2A0",
+     "dataVoiceNameIndexGet",
      11121312,
      8,
      1
@@ -4122,13 +4122,13 @@
      1
     ],
     [
-     "func_00A9B580",
+     "dataBoxCategory4RecordGet",
      11122048,
      52,
      1
     ],
     [
-     "func_00A9B5B8",
+     "dataBoxCategory3RecordGet",
      11122104,
      52,
      1
@@ -4152,13 +4152,13 @@
      1
     ],
     [
-     "tableKeyRecordGet",
+     "enemyRewardRecordGet",
      11122328,
      56,
      1
     ],
     [
-     "unitExpTblGet",
+     "dataExpTblGet",
      11122384,
      24,
      1
@@ -4200,13 +4200,13 @@
      1
     ],
     [
-     "func_00A9B950",
+     "dataBoxCategory4TextGet",
      11123024,
      116,
      1
     ],
     [
-     "func_00A9B9C8",
+     "dataBoxCategory3TextGet",
      11123144,
      116,
      1
@@ -4296,7 +4296,7 @@
      1
     ],
     [
-     "effectSendValue",
+     "effectStartAtPosition",
      11125448,
      96,
      1
@@ -4320,7 +4320,7 @@
      1
     ],
     [
-     "msgIsIdle",
+     "battleMsgEndChk",
      11126048,
      16,
      1
@@ -4512,7 +4512,7 @@
      1
     ],
     [
-     "func_00A9CD30",
+     "sbSlotJumpUnhandledKey",
      11128112,
      60,
      1
@@ -4680,7 +4680,7 @@
      1
     ],
     [
-     "sbChainPreviousState",
+     "sbChainCountGet",
      11131136,
      12,
      1
@@ -4770,7 +4770,7 @@
      1
     ],
     [
-     "func_00A9DDE0",
+     "sbOpNopOperand02",
      11132384,
      60,
      1
@@ -4782,25 +4782,25 @@
      1
     ],
     [
-     "func_00A9DE80",
+     "sbOpPushWord04",
      11132544,
      96,
      1
     ],
     [
-     "func_00A9DEE0",
+     "sbOpNopOperand05",
      11132640,
      60,
      1
     ],
     [
-     "func_00A9DF20",
+     "sbOpPushWord06",
      11132704,
      96,
      1
     ],
     [
-     "func_00A9DF80",
+     "sbOpPushWord07",
      11132800,
      96,
      1
@@ -4992,7 +4992,7 @@
      1
     ],
     [
-     "func_00A9EE78",
+     "sbPushConst0Op27",
      11136632,
      80,
      1
@@ -5076,13 +5076,13 @@
      1
     ],
     [
-     "func_00A9F2E0",
+     "sbFatalReport",
      11137760,
      8,
      1
     ],
     [
-     "func_00A9F2E8",
+     "wordCopyUnaligned",
      11137768,
      24,
      1
@@ -5268,19 +5268,19 @@
      1
     ],
     [
-     "unitBodySetPosDir",
+     "unitBodySetFog",
      11141896,
      132,
      1
     ],
     [
-     "unitTblBodySetPosDir",
+     "unitTblBodySetFog",
      11142032,
      168,
      1
     ],
     [
-     "runtimeVecPtrGet",
+     "runtimeFogPtrGet",
      11142200,
      28,
      1
@@ -5460,7 +5460,7 @@
      1
     ],
     [
-     "objx",
+     "batScale",
      11146248,
      168,
      1
@@ -5526,7 +5526,7 @@
      1
     ],
     [
-     "put",
+     "debPut",
      11147736,
      8,
      1
@@ -5562,61 +5562,61 @@
      1
     ],
     [
-     "grPutF2Open",
+     "grOpenF2",
      11148272,
      104,
      1
     ],
     [
-     "grPutF2Close",
+     "grCloseF2",
      11148376,
      32,
      1
     ],
     [
-     "grPutF4Open",
+     "grOpenF4",
      11148408,
      104,
      1
     ],
     [
-     "grPutF4Close",
+     "grCloseF4",
      11148512,
      32,
      1
     ],
     [
-     "grPutFT4Open",
+     "grOpenFT4",
      11148544,
      104,
      1
     ],
     [
-     "grPutFT4Close",
+     "grCloseFT4",
      11148648,
      32,
      1
     ],
     [
-     "grPutFT4STQOpen",
+     "grOpenFT4STQ",
      11148680,
      104,
      1
     ],
     [
-     "grPutFT4STQClose",
+     "grCloseFT4STQ",
      11148784,
      32,
      1
     ],
     [
-     "grPutSprOpen",
+     "grOpenSpr",
      11148816,
      104,
      1
     ],
     [
-     "grPutSprClose",
+     "grCloseSpr",
      11148920,
      32,
      1
@@ -5688,7 +5688,7 @@
      1
     ],
     [
-     "grVramCopyBuffers",
+     "grVramCopyFBtoFB",
      11152032,
      152,
      1
@@ -5724,13 +5724,13 @@
      1
     ],
     [
-     "menuTexFlushTaskStart",
+     "menuStatPreObjCreate",
      11152848,
      60,
      1
     ],
     [
-     "menuTexFlushDraw",
+     "menuStatPreObjDraw",
      11152912,
      20,
      1
@@ -5742,139 +5742,139 @@
      1
     ],
     [
-     "menuStatGaugeStep",
+     "menuStatObj",
      11153248,
      908,
      1
     ],
     [
-     "menuStatRecordSubmit",
+     "menuStatObjDraw",
      11154160,
      60,
      1
     ],
     [
-     "menuStatRecordDraw",
+     "menuPlStatPut",
      11154224,
      1528,
      1
     ],
     [
-     "objPathInit",
+     "menuStockObjCreate",
      11155752,
      248,
      1
     ],
     [
-     "objMoveUpdate",
+     "menuStockObj",
      11156000,
      124,
      1
     ],
     [
-     "objPathDraw",
+     "menuStockObjDraw",
      11156128,
      344,
      1
     ],
     [
-     "objPathReset",
+     "menuStockStart",
      11156472,
      124,
      1
     ],
     [
-     "objPathStep",
+     "menuStockNext",
      11156600,
      128,
      1
     ],
     [
-     "objPathSendLast",
+     "menuStockBoost",
      11156728,
      92,
      1
     ],
     [
-     "objPathShift",
+     "menuStockDead",
      11156824,
      208,
      1
     ],
     [
-     "menuCursorCreate",
+     "menuBoostObjCreate",
      11157032,
      136,
      1
     ],
     [
-     "menuCursorUpdate",
+     "menuBoostObj",
      11157168,
      92,
      1
     ],
     [
-     "menuCursorDraw",
+     "menuBoostObjDraw",
      11157264,
      124,
      1
     ],
     [
-     "menuUnitListDraw",
+     "menuBoostObjDrawSel",
      11157392,
      436,
      1
     ],
     [
-     "menuCursorTargetDraw",
+     "menuBoostObjDrawCha",
      11157832,
      308,
      1
     ],
     [
-     "menuCursorShow",
+     "menuBoostDispOn",
      11158144,
      100,
      1
     ],
     [
-     "menuCursorHide",
+     "menuBoostDispOff",
      11158248,
      44,
      1
     ],
     [
-     "menuIconListCreate",
+     "menuKeyGuideObjCreate",
      11158296,
      132,
      1
     ],
     [
-     "menuIconListUpdate",
+     "menuKeyGuideObj",
      11158432,
      8,
      1
     ],
     [
-     "menuIconTableDraw",
+     "menuKeyGuideDisp",
      11158440,
      708,
      1
     ],
     [
-     "menuValuePanelCreate",
+     "menuBoostGaugeCreate",
      11159152,
      140,
      1
     ],
     [
-     "menuValueSlideUpdate",
+     "menuBoostGaugeStep",
      11159296,
      440,
      1
     ],
     [
-     "menuValuePanelDraw",
+     "menuBoostGaugeDraw",
      11159736,
      800,
      1
@@ -5904,25 +5904,25 @@
      1
     ],
     [
-     "menuPopNumCreate",
+     "objDmgNumCreate",
      11161016,
      360,
      1
     ],
     [
-     "menuPopNumUpdate",
+     "objDmgNum",
      11161376,
      172,
      1
     ],
     [
-     "menuPopNumDraw",
+     "objDmgNumDraw",
      11161552,
      124,
      1
     ],
     [
-     "menuPopNumDrawDigits",
+     "dmgNumPut",
      11161680,
      504,
      1
@@ -5934,7 +5934,7 @@
      1
     ],
     [
-     "func_00AA52D0",
+     "actStepIconUpdate",
      11162320,
      8,
      1
@@ -6024,7 +6024,7 @@
      1
     ],
     [
-     "func_00AA5B58",
+     "menuTgtStatusStep",
      11164504,
      8,
      1
@@ -6138,49 +6138,49 @@
      1
     ],
     [
-     "menuTimedSeqNew",
+     "menuComboPanelNew",
      11168760,
      104,
      1
     ],
     [
-     "menuTimedSeqStep",
+     "menuComboPanelStep",
      11168864,
      188,
      1
     ],
     [
-     "menuTimedPanelDraw",
+     "menuComboPanelDraw",
      11169056,
      392,
      1
     ],
     [
-     "menuTimedSeqStart",
+     "menuComboPanelStart",
      11169448,
      288,
      1
     ],
     [
-     "menuTimedSeqArmTick",
+     "menuComboPanelArmTick",
      11169736,
      20,
      1
     ],
     [
-     "menuTimedSeqShow",
+     "menuComboPanelShow",
      11169760,
      264,
      1
     ],
     [
-     "menuTimedPanelNew",
+     "menuComboPanelExtraNew",
      11170024,
      104,
      1
     ],
     [
-     "menuTimedPanelStep",
+     "menuComboPanelExtraStep",
      11170128,
      144,
      1
@@ -6252,7 +6252,7 @@
      1
     ],
     [
-     "func_00AA7900",
+     "menuKeyFaceDefaultSheetChk",
      11172096,
      148,
      1
@@ -6270,13 +6270,13 @@
      1
     ],
     [
-     "func_00AA7A48",
+     "menuNumDrawTargetEp",
      11172424,
      24,
      1
     ],
     [
-     "menuNumDrawMode",
+     "menuNumPut",
      11172448,
      492,
      1
@@ -6288,7 +6288,7 @@
      1
     ],
     [
-     "menuIconPut",
+     "keyGideDisp",
      11172976,
      144,
      1
@@ -6384,25 +6384,25 @@
      1
     ],
     [
-     "func_00AA8490",
+     "menuGaugeTexState",
      11175056,
      28,
      1
     ],
     [
-     "func_00AA84B0",
+     "dataObjSpriteTexState",
      11175088,
      28,
      1
     ],
     [
-     "func_00AA84D0",
+     "menuUnitSlotTexState",
      11175120,
      28,
      1
     ],
     [
-     "func_00AA84F0",
+     "menuHighlightTexState",
      11175152,
      28,
      1
@@ -6414,13 +6414,13 @@
      1
     ],
     [
-     "func_00AA8530",
+     "menuStepIconTexState",
      11175216,
      28,
      1
     ],
     [
-     "func_00AA8550",
+     "menuRowCursorTexState",
      11175248,
      28,
      1
@@ -6432,37 +6432,37 @@
      1
     ],
     [
-     "screenFadeInStart",
+     "fadeIn",
      11175312,
      104,
      1
     ],
     [
-     "screenFadeOutStart",
+     "fadeOut",
      11175416,
      108,
      1
     ],
     [
-     "screenFadeIdle",
+     "fadeEndChk",
      11175528,
      16,
      1
     ],
     [
-     "screenFadeInStep",
+     "fadeInObj",
      11175544,
      64,
      1
     ],
     [
-     "screenFadeOutStep",
+     "fadeOutObj",
      11175608,
      60,
      1
     ],
     [
-     "screenFadeDraw",
+     "fadeObjDraw",
      11175672,
      564,
      1
@@ -6636,25 +6636,25 @@
      1
     ],
     [
-     "func_00AA9360",
+     "configDummy",
      11178848,
      8,
      1
     ],
     [
-     "func_00AA9368",
+     "configDummy_00AA9368",
      11178856,
      8,
      1
     ],
     [
-     "func_00AA9370",
+     "configDummy_00AA9370",
      11178864,
      8,
      1
     ],
     [
-     "func_00AA9378",
+     "configDummy_00AA9378",
      11178872,
      8,
      1
@@ -6732,7 +6732,7 @@
      1
     ],
     [
-     "configSelectPressed",
+     "configStart",
      11181968,
      20,
      1
@@ -6834,7 +6834,7 @@
      1
     ],
     [
-     "configCFFlag",
+     "configCFEvent",
      11182776,
      68,
      1
@@ -6864,7 +6864,7 @@
      1
     ],
     [
-     "configEquipSkill",
+     "equipSkill",
      11183176,
      236,
      1
@@ -6918,19 +6918,19 @@
      1
     ],
     [
-     "debugValUD",
+     "valUD",
      11184736,
      116,
      1
     ],
     [
-     "debugValLR",
+     "valLR",
      11184856,
      168,
      1
     ],
     [
-     "ov01SceneRun",
+     "YamamotoTest",
      11185024,
      248,
      1
@@ -6942,7 +6942,7 @@
      1
     ],
     [
-     "func_00AAAD50",
+     "ov01Dummy",
      11185488,
      8,
      1
@@ -6960,13 +6960,13 @@
      1
     ],
     [
-     "ov01LastValueSet",
+     "ov01EffectPauseSet",
      11185600,
      32,
      1
     ],
     [
-     "ov01LastValueGet",
+     "ov01EffectPauseGet",
      11185632,
      12,
      1
@@ -7002,7 +7002,7 @@
      1
     ],
     [
-     "ov01RecordInit",
+     "MEfHermitePathInit",
      11186192,
      60,
      1
@@ -7080,13 +7080,13 @@
      1
     ],
     [
-     "func_00AABDF0",
+     "MEfWaitPhaseFlagsDummy",
      11189744,
      8,
      1
     ],
     [
-     "MEfMakeCornerMatrix",
+     "MEfMakeTranslationMatrix",
      11189752,
      84,
      1
@@ -7188,7 +7188,7 @@
      1
     ],
     [
-     "MEfDrawStencilA",
+     "MEfDrawSwayMissiles",
      11198632,
      160,
      1
@@ -7206,19 +7206,19 @@
      1
     ],
     [
-     "MEfCreateStencilB",
+     "MEfCreateMissileTrail",
      11200328,
      496,
      1
     ],
     [
-     "MEfUpdateStencilB",
+     "MEfUpdateMissileTrail",
      11200824,
      272,
      1
     ],
     [
-     "MEfDrawStencilB",
+     "MEfDrawTrailMissiles",
      11201096,
      160,
      1
@@ -7230,49 +7230,49 @@
      1
     ],
     [
-     "MEfAdvanceStencilB",
+     "MEfAdvanceMissileTrail",
      11202048,
      228,
      1
     ],
     [
-     "MEfCreateCounter",
+     "MEfCreateSpiral",
      11202280,
      216,
      1
     ],
     [
-     "MEfBuildCounterCurve",
+     "MEfBuildSpiralCurve",
      11202496,
      312,
      1
     ],
     [
-     "MEfFillCounterKeys",
+     "MEfFillSpiralKeys",
      11202808,
      368,
      1
     ],
     [
-     "MEfSetCounterPhaseFlags",
+     "MEfSetSpiralPhaseFlags",
      11203176,
      104,
      1
     ],
     [
-     "MEfDrawCounterStrips",
+     "MEfDrawSpiralStrips",
      11203280,
      956,
      1
     ],
     [
-     "MEfAdvanceCounter",
+     "MEfAdvanceSpiral",
      11204240,
      132,
      1
     ],
     [
-     "MEfCreatePathEffect25",
+     "MEfCreateThunder25",
      11204376,
      216,
      1
@@ -7284,37 +7284,37 @@
      1
     ],
     [
-     "MEfFillHermiteSamples25",
+     "MEfFillThunderSamples25",
      11204904,
      296,
      1
     ],
     [
-     "MEfAppendTexturedQuad25",
+     "MEfAppendThunderQuad25",
      11205200,
      424,
      1
     ],
     [
-     "MEfDrawSparkModels25",
+     "MEfDrawThunderSparks25",
      11205624,
      492,
      1
     ],
     [
-     "MEfDrawQuadPacket25",
+     "MEfDrawThunderQuads25",
      11206120,
      572,
      1
     ],
     [
-     "MEfTickLifetime28",
+     "MEfAdvanceThunder25",
      11206696,
      92,
      1
     ],
     [
-     "MEfCreatePathEffect31",
+     "MEfCreateThunder31",
      11206792,
      184,
      1
@@ -7326,61 +7326,61 @@
      1
     ],
     [
-     "MEfFillHermiteSamples31",
+     "MEfFillThunderSamples31",
      11207568,
      316,
      1
     ],
     [
-     "MEfAppendTexturedQuad31",
+     "MEfAppendThunderQuad31",
      11207888,
      424,
      1
     ],
     [
-     "MEfDrawSparkModels31",
+     "MEfDrawThunderSparks31",
      11208312,
      260,
      1
     ],
     [
-     "MEfDrawQuadPacket31",
+     "MEfDrawThunderQuads31",
      11208576,
      596,
      1
     ],
     [
-     "MEfTickLifetime34",
+     "MEfAdvanceThunder31",
      11209176,
      92,
      1
     ],
     [
-     "MEfCreatePathEffect29",
+     "MEfCreateTepodon",
      11209272,
      440,
      1
     ],
     [
-     "MEfStepTrailPoints",
+     "MEfBuildTepodonArcKeys",
      11209712,
      248,
      1
     ],
     [
-     "MEfFillHermiteSamples29",
+     "MEfFillTepodonSamples",
      11209960,
      392,
      1
     ],
     [
-     "MEfStepSmokeTrails",
+     "updateSmoke",
      11210352,
      476,
      1
     ],
     [
-     "MEfDrawTrailModel",
+     "MEfDrawTepodonModel",
      11210832,
      160,
      1
@@ -7392,13 +7392,13 @@
      1
     ],
     [
-     "MEfTickTrailSample",
+     "MEfAdvanceTepodon",
      11211856,
      144,
      1
     ],
     [
-     "MEfCreateFlagWindowEffect30",
+     "MEfCreateFlagWindow",
      11212000,
      216,
      1
@@ -7416,7 +7416,7 @@
      1
     ],
     [
-     "MEfSetStepFlags30",
+     "MEfSetFlagWindowPhaseFlags",
      11212944,
      104,
      1
@@ -7488,7 +7488,7 @@
      1
     ],
     [
-     "MEfTickLifetime121",
+     "MEfAdvanceSpray",
      11219376,
      92,
      1
@@ -7578,13 +7578,13 @@
      1
     ],
     [
-     "func_00A80040",
+     "hdd_check",
      11010112,
      8,
      1
     ],
     [
-     "logoMcCheck",
+     "mc_check",
      11010120,
      876,
      1
@@ -7608,13 +7608,13 @@
      1
     ],
     [
-     "func_00A80790",
+     "BootDisplay",
      11011984,
      8,
      1
     ],
     [
-     "func_00A80798",
+     "titleGroupMinus2Dummy",
      11011992,
      8,
      1
@@ -7626,7 +7626,7 @@
      1
     ],
     [
-     "func_00A808C8",
+     "titleFrameHookDummy",
      11012296,
      8,
      1
@@ -7668,7 +7668,7 @@
      1
     ],
     [
-     "titleResetState",
+     "TitleGameInit",
      11017272,
      64,
      1
@@ -10026,7 +10026,7 @@
      2
     ],
     [
-     "func_00129C28",
+     "sceGsResetPath",
      1219624,
      104,
      2
@@ -10044,13 +10044,13 @@
      2
     ],
     [
-     "func_00129D40",
+     "sceGsSetDefDispEnv",
      1219904,
      884,
      2
     ],
     [
-     "func_0012A0B8",
+     "sceGsPutDispEnv",
      1220792,
      188,
      2
@@ -10074,7 +10074,7 @@
      2
     ],
     [
-     "func_0012A510",
+     "sceGsSyncV",
      1221904,
      148,
      2
@@ -10170,25 +10170,25 @@
      2
     ],
     [
-     "func_0012B498",
+     "sceVif1PkInit",
      1225880,
      16,
      2
     ],
     [
-     "func_0012B4A8",
+     "sceVif1PkReset",
      1225896,
      16,
      2
     ],
     [
-     "func_0012B4B8",
+     "sceVif1PkTerminate",
      1225912,
      88,
      2
     ],
     [
-     "func_0012B510",
+     "sceVif1PkSize",
      1226000,
      20,
      2
@@ -10206,37 +10206,37 @@
      2
     ],
     [
-     "func_0012B618",
+     "sceVif1PkCall",
      1226264,
      112,
      2
     ],
     [
-     "func_0012B688",
+     "sceVif1PkEnd",
      1226376,
      88,
      2
     ],
     [
-     "func_0012B6E0",
+     "sceVif1PkOpenUpkCode",
      1226464,
      144,
      2
     ],
     [
-     "func_0012B770",
+     "sceVif1PkCloseUpkCode",
      1226608,
      80,
      2
     ],
     [
-     "func_0012B7C0",
+     "sceVif1PkOpenDirectCode",
      1226688,
      88,
      2
     ],
     [
-     "func_0012B818",
+     "sceVif1PkCloseDirectCode",
      1226776,
      44,
      2
@@ -10278,7 +10278,7 @@
      2
     ],
     [
-     "func_0012B9F8",
+     "sceVif1PkAddUpkData128",
      1227256,
      80,
      2
@@ -10290,7 +10290,7 @@
      2
     ],
     [
-     "func_0012BA78",
+     "sceVif1PkRefLoadImage",
      1227384,
      488,
      2
@@ -10308,7 +10308,7 @@
      2
     ],
     [
-     "func_0012BCE8",
+     "sceVif1PkAddUpkData128N",
      1228008,
      116,
      2
@@ -10782,7 +10782,7 @@
      2
     ],
     [
-     "func_0012F868",
+     "sceMcInit",
      1243240,
      460,
      2
@@ -10986,7 +10986,7 @@
      2
     ],
     [
-     "func_00131450",
+     "sceIpuInit",
      1250384,
      568,
      2
@@ -11790,13 +11790,13 @@
      2
     ],
     [
-     "func_00138300",
+     "korgEvagBind",
      1278720,
      296,
      2
     ],
     [
-     "func_00138428",
+     "korgEvagInit",
      1279016,
      144,
      2
@@ -11838,7 +11838,7 @@
      2
     ],
     [
-     "func_00138780",
+     "korgEvagAllocVagParam",
      1279872,
      144,
      2
@@ -11850,13 +11850,13 @@
      2
     ],
     [
-     "func_001388E8",
+     "korgEvagMidiProc",
      1280232,
      160,
      2
     ],
     [
-     "func_00138988",
+     "korgEvagInitSpu2",
      1280392,
      128,
      2
@@ -11874,7 +11874,7 @@
      2
     ],
     [
-     "func_00138B48",
+     "korgEvagSetUnitVolume",
      1280840,
      144,
      2
@@ -11898,7 +11898,7 @@
      2
     ],
     [
-     "func_00138D78",
+     "korgEvagFreeBank",
      1281400,
      120,
      2
@@ -11934,7 +11934,7 @@
      2
     ],
     [
-     "func_00139060",
+     "korgEvagLoadVsfCdSector",
      1282144,
      160,
      2
@@ -11946,7 +11946,7 @@
      2
     ],
     [
-     "func_001391D8",
+     "korgEvagLoadPrjCdSector",
      1282520,
      160,
      2
@@ -11964,19 +11964,19 @@
      2
     ],
     [
-     "func_001393D0",
+     "korgEvagAllUnitsSoundOff",
      1283024,
      96,
      2
     ],
     [
-     "func_00139430",
+     "korgEvagSetFxType",
      1283120,
      136,
      2
     ],
     [
-     "func_001394B8",
+     "korgEvagSetFxVolume",
      1283256,
      136,
      2
@@ -12000,7 +12000,7 @@
      2
     ],
     [
-     "func_001396D8",
+     "korgEvagSetChannelPriority",
      1283800,
      160,
      2
@@ -12024,7 +12024,7 @@
      2
     ],
     [
-     "func_00139978",
+     "korgEvagLoadSmfCdSector",
      1284472,
      160,
      2
@@ -12036,31 +12036,31 @@
      2
     ],
     [
-     "func_00139AF0",
+     "korgEvagFreeSeq",
      1284848,
      128,
      2
     ],
     [
-     "func_00139B70",
+     "korgEvagPlaySeq",
      1284976,
      176,
      2
     ],
     [
-     "func_00139C20",
+     "korgEvagStopSeq",
      1285152,
      136,
      2
     ],
     [
-     "func_00139CA8",
+     "korgEvagStopAllSeq",
      1285288,
      96,
      2
     ],
     [
-     "func_00139D08",
+     "korgEvagInitChannel",
      1285384,
      144,
      2
@@ -12072,7 +12072,7 @@
      2
     ],
     [
-     "func_00139E18",
+     "korgEvagSuspend",
      1285656,
      104,
      2
@@ -12102,19 +12102,19 @@
      2
     ],
     [
-     "func_0013A098",
+     "korgEvagLoadVsfFromEe",
      1286296,
      144,
      2
     ],
     [
-     "func_0013A128",
+     "korgEvagLoadPrjFromEe",
      1286440,
      144,
      2
     ],
     [
-     "func_0013A1B8",
+     "korgEvagLoadSmfFromEe",
      1286584,
      144,
      2
@@ -12126,7 +12126,7 @@
      2
     ],
     [
-     "func_0013A338",
+     "korgEvagLoadVsfCdSector2",
      1286968,
      176,
      2
@@ -12144,13 +12144,13 @@
      2
     ],
     [
-     "func_0013A578",
+     "korgEvagLoadVsfFromEe2",
      1287544,
      160,
      2
     ],
     [
-     "func_0013A618",
+     "korgEvagPauseSeq",
      1287704,
      144,
      2
@@ -12168,7 +12168,7 @@
      2
     ],
     [
-     "func_0013A7B8",
+     "korgEvagSetGlobalOutputMode",
      1288120,
      128,
      2
@@ -12180,13 +12180,13 @@
      2
     ],
     [
-     "func_0013A8A0",
+     "korgEvagSetDmaTransCallback",
      1288352,
      148,
      2
     ],
     [
-     "func_0013A938",
+     "korgEvagMidiProcBatchAdd",
      1288504,
      172,
      2
@@ -12288,7 +12288,7 @@
      2
     ],
     [
-     "func_0013B488",
+     "korgEvagMidiProcBatchFlush",
      1291400,
      192,
      2
@@ -13692,13 +13692,13 @@
      2
     ],
     [
-     "func_0014E8A8",
+     "mwPlyCreateStm",
      1370280,
      24,
      2
     ],
     [
-     "func_0014E8C0",
+     "mwPlyDestroyStm",
      1370304,
      20,
      2
@@ -13824,7 +13824,7 @@
      2
     ],
     [
-     "func_0014EF18",
+     "mwPlyCalcWorkCprmSfd",
      1371928,
      92,
      2
@@ -13902,7 +13902,7 @@
      2
     ],
     [
-     "func_0014FD80",
+     "mwPlyCreateSofdec",
      1375616,
      884,
      2
@@ -14034,7 +14034,7 @@
      2
     ],
     [
-     "func_00150988",
+     "mwPlyGetCurFrm",
      1378696,
      352,
      2
@@ -14166,7 +14166,7 @@
      2
     ],
     [
-     "func_00151438",
+     "mwPlyRelCurFrm",
      1381432,
      164,
      2
@@ -14238,7 +14238,7 @@
      2
     ],
     [
-     "func_00151988",
+     "mwPlyInitSfdFx",
      1382792,
      372,
      2
@@ -14292,7 +14292,7 @@
      2
     ],
     [
-     "func_00151CE8",
+     "mwPlyFinishSfdFx",
      1383656,
      240,
      2
@@ -14580,7 +14580,7 @@
      2
     ],
     [
-     "func_00152EA8",
+     "mwPlyExecServer",
      1388200,
      36,
      2
@@ -15618,7 +15618,7 @@
      2
     ],
     [
-     "func_001561C8",
+     "mwPlyCalcWorkStm",
      1401288,
      36,
      2
@@ -23214,7 +23214,7 @@
      2
     ],
     [
-     "func_0017A2E8",
+     "ADXF_Open",
      1549032,
      160,
      2
@@ -23274,19 +23274,19 @@
      2
     ],
     [
-     "func_0017A9C0",
+     "ADXF_ReadNw",
      1550784,
      60,
      2
     ],
     [
-     "func_0017AA00",
+     "ADXF_Stop",
      1550848,
      236,
      2
     ],
     [
-     "func_0017AAF0",
+     "ADXF_StopNw",
      1551088,
      196,
      2
@@ -23304,7 +23304,7 @@
      2
     ],
     [
-     "func_0017ACE0",
+     "ADXF_Seek",
      1551584,
      276,
      2
@@ -23334,13 +23334,13 @@
      2
     ],
     [
-     "func_0017AF10",
+     "ADXF_GetNumReadSct",
      1552144,
      48,
      2
     ],
     [
-     "func_0017AF40",
+     "ADXF_GetStat",
      1552192,
      48,
      2
@@ -23460,7 +23460,7 @@
      2
     ],
     [
-     "func_0017B3E0",
+     "ADXT_Init",
      1553376,
      380,
      2
@@ -23472,7 +23472,7 @@
      2
     ],
     [
-     "func_0017B580",
+     "ADXT_Finish",
      1553792,
      208,
      2
@@ -23730,7 +23730,7 @@
      2
     ],
     [
-     "func_0017C890",
+     "ADXM_Setup",
      1558672,
      372,
      2
@@ -23808,13 +23808,13 @@
      2
     ],
     [
-     "func_0017D138",
+     "ADXM_ExecVint",
      1560888,
      20,
      2
     ],
     [
-     "func_0017D150",
+     "ADXM_ExecMain",
      1560912,
      20,
      2
@@ -23952,13 +23952,13 @@
      2
     ],
     [
-     "func_0017D850",
+     "ADXM_Lock",
      1562704,
      20,
      2
     ],
     [
-     "func_0017D868",
+     "ADXM_Unlock",
      1562728,
      20,
      2
@@ -25302,7 +25302,7 @@
      2
     ],
     [
-     "func_00182460",
+     "ADXPS2_Setup",
      1582176,
      264,
      2
@@ -25386,7 +25386,7 @@
      2
     ],
     [
-     "func_00182908",
+     "ADXT_Create",
      1583368,
      780,
      2
@@ -25416,13 +25416,13 @@
      2
     ],
     [
-     "func_00182CE8",
+     "ADXT_Destroy",
      1584360,
      468,
      2
     ],
     [
-     "func_00182EC0",
+     "ADXT_DestroyAll",
      1584832,
      96,
      2
@@ -25458,13 +25458,13 @@
      2
     ],
     [
-     "func_00183220",
+     "ADXT_Stop",
      1585696,
      192,
      2
     ],
     [
-     "func_001832E0",
+     "ADXT_GetStat",
      1585888,
      48,
      2
@@ -25560,7 +25560,7 @@
      2
     ],
     [
-     "func_00183BA8",
+     "ADXT_SetOutVol",
      1588136,
      104,
      2
@@ -25596,7 +25596,7 @@
      2
     ],
     [
-     "func_00183CA8",
+     "ADXT_SetSvrFreq",
      1588392,
      48,
      2
@@ -25614,7 +25614,7 @@
      2
     ],
     [
-     "func_00183E08",
+     "ADXT_SetReloadSct",
      1588744,
      88,
      2
@@ -25686,13 +25686,13 @@
      2
     ],
     [
-     "func_00184220",
+     "ADXT_GetLpCnt",
      1589792,
      48,
      2
     ],
     [
-     "func_00184250",
+     "ADXT_SetLpFlg",
      1589840,
      48,
      2
@@ -25716,7 +25716,7 @@
      2
     ],
     [
-     "func_00184310",
+     "ADXT_Pause",
      1590032,
      300,
      2
@@ -25860,7 +25860,7 @@
      2
     ],
     [
-     "func_00184918",
+     "ADXT_SetOutputMono",
      1591576,
      20,
      2
@@ -25890,7 +25890,7 @@
      2
     ],
     [
-     "func_00184A78",
+     "ADXT_StartFname",
      1591928,
      156,
      2
@@ -29106,7 +29106,7 @@
      2
     ],
     [
-     "func_00194D08",
+     "xglDebFileEmpty",
      1658120,
      8,
      2
@@ -29220,7 +29220,7 @@
      2
     ],
     [
-     "xglFontSetStoredValue",
+     "xglFontDebugPrefixSet",
      1660752,
      12,
      2
@@ -29274,73 +29274,73 @@
      2
     ],
     [
-     "ax",
+     "xglFontCmdAx",
      1663896,
      196,
      2
     ],
     [
-     "rx",
+     "xglFontCmdRx",
      1664096,
      164,
      2
     ],
     [
-     "init",
+     "xglFontCmdInit",
      1664264,
      228,
      2
     ],
     [
-     "col",
+     "xglFontCmdCol",
      1664496,
      108,
      2
     ],
     [
-     "bg",
+     "xglFontCmdBg",
      1664608,
      212,
      2
     ],
     [
-     "shadow",
+     "xglFontCmdShadow",
      1664824,
      160,
      2
     ],
     [
-     "alpha",
+     "xglFontCmdAlpha",
      1664984,
      228,
      2
     ],
     [
-     "zoom",
+     "xglFontCmdZoom",
      1665216,
      152,
      2
     ],
     [
-     "xx",
+     "xglFontCmdXx",
      1665368,
      568,
      2
     ],
     [
-     "ruby",
+     "xglFontCmdRuby",
      1665936,
      1036,
      2
     ],
     [
-     "han",
+     "xglFontCmdHan",
      1666976,
      180,
      2
     ],
     [
-     "mark",
+     "xglFontCmdMark",
      1667160,
      132,
      2
@@ -29352,7 +29352,7 @@
      2
     ],
     [
-     "xglFontResetPrintQueue",
+     "buffer_reset",
      1667512,
      72,
      2
@@ -29370,7 +29370,7 @@
      2
     ],
     [
-     "xglFontNewLine",
+     "xglFontFlushSubCRLF",
      1669472,
      36,
      2
@@ -29412,7 +29412,7 @@
      2
     ],
     [
-     "xglFontCharToEuc",
+     "xglFontAscii2Euc",
      1674128,
      44,
      2
@@ -29634,7 +29634,7 @@
      2
     ],
     [
-     "xglCdQueueNext",
+     "queue_next",
      1681752,
      168,
      2
@@ -29682,7 +29682,7 @@
      2
     ],
     [
-     "xglCdIdentifyDisc",
+     "xglCdDiskCheck",
      1683624,
      512,
      2
@@ -29736,7 +29736,7 @@
      2
     ],
     [
-     "xglCdCheckFile",
+     "xglCdGetFileData",
      1686520,
      108,
      2
@@ -29856,13 +29856,13 @@
      2
     ],
     [
-     "xglCdFileSelectListReload",
+     "FileSelectListReload",
      1690616,
      248,
      2
     ],
     [
-     "xglCdFileSelectSub",
+     "FileSelectSub",
      1690864,
      596,
      2
@@ -30120,13 +30120,13 @@
      2
     ],
     [
-     "moviePlayerInit",
+     "moviePlayerLibraryInit",
      1706296,
      68,
      2
     ],
     [
-     "func_001A0980",
+     "xglRenderAndMovieShutdown",
      1706368,
      52,
      2
@@ -30228,7 +30228,7 @@
      2
     ],
     [
-     "xglFlagsClear",
+     "xglFlagsInitial",
      1707224,
      52,
      2
@@ -30444,7 +30444,7 @@
      2
     ],
     [
-     "func_001A3A18",
+     "seBgmStop",
      1718808,
      48,
      2
@@ -30504,7 +30504,7 @@
      2
     ],
     [
-     "func_001A4010",
+     "soundDriverReset",
      1720336,
      20,
      2
@@ -30522,13 +30522,13 @@
      2
     ],
     [
-     "soundSlotSetLevel",
+     "soundSlotSetPause",
      1720696,
      76,
      2
     ],
     [
-     "soundSlotSetLevelIfUnset",
+     "soundSlotSetPauseIfNotHeld",
      1720776,
      64,
      2
@@ -30564,19 +30564,19 @@
      2
     ],
     [
-     "func_001A43A8",
+     "soundSlotLoopCountGet",
      1721256,
      60,
      2
     ],
     [
-     "func_001A43E8",
+     "soundSlotStartKey",
      1721320,
      20,
      2
     ],
     [
-     "func_001A4400",
+     "soundStereoSet",
      1721344,
      40,
      2
@@ -30648,7 +30648,7 @@
      2
     ],
     [
-     "intrTimerAccumulate",
+     "xglIntcHandlerVif1",
      1722472,
      152,
      2
@@ -30780,7 +30780,7 @@
      2
     ],
     [
-     "xglHddDummyCallback",
+     "xglHddDummyCB",
      1724096,
      8,
      2
@@ -31068,7 +31068,7 @@
      2
     ],
     [
-     "xglFRandSeed",
+     "xglFSrand",
      1734332,
      48,
      2
@@ -31104,7 +31104,7 @@
      2
     ],
     [
-     "xglMemCopy64Backward",
+     "xglMemCopy64b",
      1735944,
      108,
      2
@@ -31332,7 +31332,7 @@
      2
     ],
     [
-     "xglVectorNormal_001A9200",
+     "xglVectorNormal",
      1741312,
      80,
      2
@@ -31554,7 +31554,7 @@
      2
     ],
     [
-     "xglMatrix2Quaternion_001AAD20",
+     "xglMatrix2Quaternion",
      1748256,
      1044,
      2
@@ -31788,7 +31788,7 @@
      2
     ],
     [
-     "xglZeroQuadwords18",
+     "xglLightSetClear",
      1766440,
      108,
      2
@@ -31806,7 +31806,7 @@
      2
     ],
     [
-     "xglCameraReset",
+     "xglCameraControlInit",
      1766796,
      72,
      2
@@ -31824,19 +31824,19 @@
      2
     ],
     [
-     "xglCameraResetDeltas",
+     "xglCameraTravelReset",
      1767556,
      120,
      2
     ],
     [
-     "xglCameraApplyPadZoom",
+     "xglCameraTravelFocus",
      1767676,
      460,
      2
     ],
     [
-     "xglCameraScaleDeltas",
+     "xglCameraTravelScale",
      1768136,
      552,
      2
@@ -31848,7 +31848,7 @@
      2
     ],
     [
-     "xglCameraUpdateLookAt",
+     "xglCameraTravelChase",
      1770452,
      2840,
      2
@@ -31860,7 +31860,7 @@
      2
     ],
     [
-     "xglCameraUpdate",
+     "xglCameraTravelProc",
      1773376,
      404,
      2
@@ -31962,13 +31962,13 @@
      2
     ],
     [
-     "xglPacketSystemInit",
+     "xglPacketInit",
      1778652,
      600,
      2
     ],
     [
-     "xglPacketSwapBuffers",
+     "xglPacketMove",
      1779252,
      168,
      2
@@ -31980,13 +31980,13 @@
      2
     ],
     [
-     "func_001B2724",
+     "studioSceneFlagSet",
      1779492,
      40,
      2
     ],
     [
-     "func_001B274C",
+     "studioSceneFlagClear",
      1779532,
      36,
      2
@@ -32058,7 +32058,7 @@
      2
     ],
     [
-     "xglStudioChangeActive",
+     "xglStudioMainCameraMove",
      1780564,
      68,
      2
@@ -32250,7 +32250,7 @@
      2
     ],
     [
-     "xglRenderGlobalFadeReset",
+     "xglRenderGlobalFadeInit",
      1790796,
      44,
      2
@@ -32532,79 +32532,79 @@
      2
     ],
     [
-     "func_001B7DEC",
+     "_CurMatrixMul33normXYZW",
      1801708,
      292,
      2
     ],
     [
-     "pxyClearEntries",
+     "pxyProfileClearEntries",
      1802000,
      120,
      2
     ],
     [
-     "pxyBegin",
+     "pxyProfileBegin",
      1802120,
      608,
      2
     ],
     [
-     "pxyEnd",
+     "pxyProfileEnd",
      1802728,
      672,
      2
     ],
     [
-     "pxyEndMs",
+     "pxyProfileEndMs",
      1803400,
      568,
      2
     ],
     [
-     "pxyGetMs",
+     "pxyProfileGetMs",
      1803968,
      444,
      2
     ],
     [
-     "pxyGetMsUnchecked",
+     "pxyProfileGetMsUnchecked",
      1804412,
      384,
      2
     ],
     [
-     "pxyDrawEntries",
+     "pxyProfileDrawEntries",
      1804796,
      284,
      2
     ],
     [
-     "pxyDrawChar",
+     "pxyDebugDrawChar",
      1805080,
      1864,
      2
     ],
     [
-     "pxyDrawString",
+     "pxyDebugDrawString",
      1806944,
      240,
      2
     ],
     [
-     "pxyDrawStringShadow",
+     "pxyDebugDrawStringShadow",
      1807184,
      424,
      2
     ],
     [
-     "pxySetTextStyle",
+     "pxyDebugSetTextStyle",
      1807608,
      68,
      2
     ],
     [
-     "pxyPrintf",
+     "pxyDebugPrintf",
      1807676,
      180,
      2
@@ -32616,7 +32616,7 @@
      2
     ],
     [
-     "func_001B9728",
+     "pxyInitBatchTables",
      1808168,
      48,
      2
@@ -32628,7 +32628,7 @@
      2
     ],
     [
-     "func_001B97CC",
+     "pxyInitSlots",
      1808332,
      48,
      2
@@ -32646,7 +32646,7 @@
      2
     ],
     [
-     "func_001B9B44",
+     "pxyInitCounters",
      1809220,
      48,
      2
@@ -32670,25 +32670,25 @@
      2
     ],
     [
-     "pxyInitShadowTextures",
+     "CONSTRUCT_CIRCLR_SHADOW",
      1810116,
      848,
      2
     ],
     [
-     "func_001BA214",
+     "pxySetStateFlag",
      1810964,
      52,
      2
     ],
     [
-     "func_001BA248",
+     "pxySetColorIndexSource",
      1811016,
      48,
      2
     ],
     [
-     "func_001BA278",
+     "pxySetFogWhite",
      1811064,
      52,
      2
@@ -32706,13 +32706,13 @@
      2
     ],
     [
-     "func_001BA320",
+     "pxyResetLightToDefault",
      1811232,
      56,
      2
     ],
     [
-     "func_001BA358",
+     "pxySetShadowCasterMode",
      1811288,
      48,
      2
@@ -32736,49 +32736,49 @@
      2
     ],
     [
-     "func_001BA618",
+     "pxySetFocus",
      1811992,
      64,
      2
     ],
     [
-     "func_001BA658",
+     "pxyRequestTextureCopyPass",
      1812056,
      52,
      2
     ],
     [
-     "func_001BA68C",
+     "pxyRequestOverlayPass",
      1812108,
      52,
      2
     ],
     [
-     "func_001BA6C0",
+     "pxySetOverlayAlphaMaskMode",
      1812160,
      52,
      2
     ],
     [
-     "func_001BA6F4",
+     "pxySkipOverlayDraw",
      1812212,
      52,
      2
     ],
     [
-     "func_001BA728",
+     "pxyRequestFrameClearOnly",
      1812264,
      52,
      2
     ],
     [
-     "func_001BA75C",
+     "pxySetShadowUploadFlag",
      1812316,
      56,
      2
     ],
     [
-     "func_001BA794",
+     "pxyRequestForcedVisibility",
      1812372,
      64,
      2
@@ -32796,73 +32796,73 @@
      2
     ],
     [
-     "func_001BA850",
+     "pxySetShadowProjectOff",
      1812560,
      56,
      2
     ],
     [
-     "func_001BA888",
+     "pxySetSkipTextureUpload",
      1812616,
      52,
      2
     ],
     [
-     "func_001BA8BC",
+     "pxySetBlackFog",
      1812668,
      52,
      2
     ],
     [
-     "func_001BA8F0",
+     "nmlModelSetTexProreal",
      1812720,
      52,
      2
     ],
     [
-     "func_001BA924",
+     "pxySetSourceDrawPass",
      1812772,
      76,
      2
     ],
     [
-     "func_001BA970",
+     "nmlModelSetClip",
      1812848,
      48,
      2
     ],
     [
-     "func_001BA9A0",
+     "pxySetAnimTime",
      1812896,
      68,
      2
     ],
     [
-     "func_001BA9E4",
+     "pxySetShadowFirstPass",
      1812964,
      80,
      2
     ],
     [
-     "func_001BAA34",
+     "nmlModelSetShadowMapEntry",
      1813044,
      56,
      2
     ],
     [
-     "func_001BAA6C",
+     "pxySetFreezeAnimation",
      1813100,
      44,
      2
     ],
     [
-     "func_001BAA98",
+     "pxyLatchActorState",
      1813144,
      64,
      2
     ],
     [
-     "func_001BAAD8",
+     "pxyLatchSecondState",
      1813208,
      64,
      2
@@ -32886,7 +32886,7 @@
      2
     ],
     [
-     "func_001BAC70",
+     "nmlModelSetRenderLevel",
      1813616,
      100,
      2
@@ -32898,7 +32898,7 @@
      2
     ],
     [
-     "func_001BADA8",
+     "pxySetShadowHeightRange",
      1813928,
      64,
      2
@@ -32910,79 +32910,79 @@
      2
     ],
     [
-     "func_001BAE28",
+     "pxySetMotionGlobalMatrices",
      1814056,
      48,
      2
     ],
     [
-     "func_001BAE58",
+     "pxySetPartMatrices",
      1814104,
      48,
      2
     ],
     [
-     "pxySetFogColor",
+     "nmlModelSetFogCol",
      1814152,
      100,
      2
     ],
     [
-     "pxyFogPara",
+     "nmlModelFogPara",
      1814252,
      492,
      2
     ],
     [
-     "pxySetFogDist",
+     "nmlModelSetFogDist",
      1814744,
      108,
      2
     ],
     [
-     "pxyGetFogParaStudio",
+     "nmlModelGetFogParaStudio",
      1814852,
      440,
      2
     ],
     [
-     "pxySetGlobalFogDist",
+     "nmlModelSetGlobalFogDist",
      1815292,
      108,
      2
     ],
     [
-     "pxySetGlobalFogColor",
+     "nmlModelSetGlobalFogCol",
      1815400,
      100,
      2
     ],
     [
-     "func_001BB3CC",
+     "nmlModelSetSortOffset",
      1815500,
      48,
      2
     ],
     [
-     "func_001BB3FC",
+     "pxySetColorScale",
      1815548,
      80,
      2
     ],
     [
-     "func_001BB44C",
+     "pxySetHideMask",
      1815628,
      48,
      2
     ],
     [
-     "func_001BB47C",
+     "pxySetSecondPartMask",
      1815676,
      48,
      2
     ],
     [
-     "pxySetTxyBlock",
+     "nmlModelSetTexture",
      1815724,
      380,
      2
@@ -32994,7 +32994,7 @@
      2
     ],
     [
-     "func_001BB678",
+     "nmlModelSetParent",
      1816184,
      48,
      2
@@ -33006,7 +33006,7 @@
      2
     ],
     [
-     "pxySetModelScale",
+     "nmlModelSetScale",
      1816296,
      208,
      2
@@ -33036,19 +33036,19 @@
      2
     ],
     [
-     "func_001BB96C",
+     "pxySetLightPtr",
      1816940,
      48,
      2
     ],
     [
-     "func_001BB99C",
+     "pxySetLightCopy",
      1816988,
      88,
      2
     ],
     [
-     "func_001BB9F4",
+     "nmlModelSetHumanModel",
      1817076,
      52,
      2
@@ -33060,13 +33060,13 @@
      2
     ],
     [
-     "func_001BBA78",
+     "nmlModelSetDropPass",
      1817208,
      56,
      2
     ],
     [
-     "func_001BBAB0",
+     "nmlModelSetTexMapCircle",
      1817264,
      56,
      2
@@ -33078,19 +33078,19 @@
      2
     ],
     [
-     "func_001BBB18",
+     "pxyAbortModel",
      1817368,
      48,
      2
     ],
     [
-     "func_001BBB48",
+     "pxyGetBoundSphere",
      1817416,
      40,
      2
     ],
     [
-     "func_001BBB70",
+     "pxyIsModelHidden",
      1817456,
      40,
      2
@@ -33102,31 +33102,31 @@
      2
     ],
     [
-     "func_001BBBD8",
+     "pxySetTexMapDropAll",
      1817560,
      52,
      2
     ],
     [
-     "func_001BBC0C",
+     "pxyEnableFrameMaskPass",
      1817612,
      52,
      2
     ],
     [
-     "func_001BBC40",
+     "pxyForceCameraVisibleSet",
      1817664,
      52,
      2
     ],
     [
-     "func_001BBC74",
+     "pxyGlowPendingGet",
      1817716,
      44,
      2
     ],
     [
-     "func_001BBCA0",
+     "pxyWaterReflectionPendingGet",
      1817760,
      44,
      2
@@ -33246,25 +33246,25 @@
      2
     ],
     [
-     "pxyAddEntry",
+     "nmlModelDirectSend",
      1849164,
      80,
      2
     ],
     [
-     "pxyAddEntryWithState",
+     "nmlModelDirectSendWithState",
      1849244,
      84,
      2
     ],
     [
-     "pxyAddEntryFlagged",
+     "nmlModelDirectSendFlagged",
      1849328,
      84,
      2
     ],
     [
-     "pxyAddEntryFull",
+     "nmlModelDirectSendFull",
      1849412,
      356,
      2
@@ -33312,7 +33312,7 @@
      2
     ],
     [
-     "func_001C7500",
+     "pxyDrawFrameMaskParts",
      1864960,
      1500,
      2
@@ -33336,7 +33336,7 @@
      2
     ],
     [
-     "func_001CBCE4",
+     "nmlModelFlushSub",
      1883364,
      1376,
      2
@@ -33348,55 +33348,55 @@
      2
     ],
     [
-     "pxyResetState",
+     "nmlModelFlushClear",
      1885348,
      72,
      2
     ],
     [
-     "func_001CC4EC",
+     "xglRenderFrameBeginFlushEIrq",
      1885420,
      48,
      2
     ],
     [
-     "func_001CC51C",
+     "xglRenderFrameEndFlushEIrq",
      1885468,
      48,
      2
     ],
     [
-     "func_001CC54C",
+     "pxyFlushSubmitCountGet",
      1885516,
      40,
      2
     ],
     [
-     "func_001CC574",
+     "pxyFlushPacketFillPercentGet",
      1885556,
      40,
      2
     ],
     [
-     "func_001CC59C",
+     "pxyFlushPacketBufferPercentGet",
      1885596,
      40,
      2
     ],
     [
-     "func_001CC5C4",
+     "pxyOpaqueEntryUsagePercentGet",
      1885636,
      40,
      2
     ],
     [
-     "func_001CC5EC",
+     "pxyTranslucentEntryUsagePercentGet",
      1885676,
      40,
      2
     ],
     [
-     "func_001CC614",
+     "pxyFrameCopyRequest",
      1885716,
      44,
      2
@@ -33414,7 +33414,7 @@
      2
     ],
     [
-     "pxyInit",
+     "nmlModelConstruct",
      1886492,
      124,
      2
@@ -33450,7 +33450,7 @@
      2
     ],
     [
-     "func_001CCAA0",
+     "pxyResetReflectionState",
      1886880,
      72,
      2
@@ -33468,7 +33468,7 @@
      2
     ],
     [
-     "func_001CCEB4",
+     "pxySetAlphaRef",
      1887924,
      44,
      2
@@ -33498,7 +33498,7 @@
      2
     ],
     [
-     "func_001CCF84",
+     "pxySetGlobalColor",
      1888132,
      80,
      2
@@ -33516,19 +33516,19 @@
      2
     ],
     [
-     "func_001CD108",
+     "pxySetDrawPass",
      1888520,
      44,
      2
     ],
     [
-     "func_001CD134",
+     "nmlPacketClrTextureCache",
      1888564,
      44,
      2
     ],
     [
-     "func_001CD160",
+     "nmlPacketClrMatrixCache",
      1888608,
      36,
      2
@@ -33540,7 +33540,7 @@
      2
     ],
     [
-     "func_001CD1AC",
+     "nmlPacketClrModelCache",
      1888684,
      36,
      2
@@ -33606,7 +33606,7 @@
      2
     ],
     [
-     "xglPacketSelectMode",
+     "nmlPacketAddTransMicrocode",
      1897760,
      292,
      2
@@ -33624,25 +33624,25 @@
      2
     ],
     [
-     "pxyUploadTextureSet",
+     "nmlPacketTextureTrans",
      1899176,
      460,
      2
     ],
     [
-     "pxyUploadModelTextures",
+     "nmlPacketAddTexture",
      1899636,
      768,
      2
     ],
     [
-     "xglDirectQueueFlush",
+     "nmlPacketAddGsFlush",
      1900404,
      348,
      2
     ],
     [
-     "xglDirectQueueFlushWide",
+     "nmlPacketAddGsFlushWide",
      1900752,
      356,
      2
@@ -33672,13 +33672,13 @@
      2
     ],
     [
-     "xglPacketAddFlushEIrq",
+     "nmlPacketAddWaitMicrocodeIrq",
      1902708,
      84,
      2
     ],
     [
-     "xglPacketAddFlushE",
+     "nmlPacketAddWaitMicrocode",
      1902792,
      84,
      2
@@ -33702,13 +33702,13 @@
      2
     ],
     [
-     "func_001D0AE0",
+     "pxyFillFrameAlphaMsbStrip",
      1903328,
      584,
      2
     ],
     [
-     "pxyClearFrame",
+     "nmlPacketAddScreenClear",
      1903912,
      1048,
      2
@@ -33744,31 +33744,31 @@
      2
     ],
     [
-     "xglPacketAppendData",
+     "nmlPacketSetAttributeData",
      1911088,
      124,
      2
     ],
     [
-     "xglPacketAppendMatrix",
+     "nmlPacketSetAttributeData64",
      1911212,
      108,
      2
     ],
     [
-     "xglPacketAppendMatrices",
+     "nmlPacketSetAttributeData64N",
      1911320,
      132,
      2
     ],
     [
-     "xglPacketAppendVectors",
+     "nmlPacketSetAttributeData16N",
      1911452,
      132,
      2
     ],
     [
-     "xglPacketReserve",
+     "nmlPacketSetAttributeAlloc16N",
      1911584,
      184,
      2
@@ -33786,7 +33786,7 @@
      2
     ],
     [
-     "func_001D2E90",
+     "xglPsmBufferWidthEven",
      1912464,
      380,
      2
@@ -33798,13 +33798,13 @@
      2
     ],
     [
-     "xglDirectQueueBegin",
+     "nmlPacketGsInit",
      1913164,
      240,
      2
     ],
     [
-     "xglDirectQueuePush",
+     "packet_gs_entry64",
      1913404,
      104,
      2
@@ -33846,7 +33846,7 @@
      2
     ],
     [
-     "func_001D34C4",
+     "xglPacketQueuedPercent",
      1914052,
      312,
      2
@@ -33858,7 +33858,7 @@
      2
     ],
     [
-     "pxyDrawCircleShadow",
+     "nmlPacketMakeCircleTexture",
      1914692,
      2164,
      2
@@ -33870,13 +33870,13 @@
      2
     ],
     [
-     "func_001D4180",
+     "pxyUploadScreenSampleParams",
      1917312,
      792,
      2
     ],
     [
-     "func_001D4498",
+     "pxySetBlackFogFlag",
      1918104,
      44,
      2
@@ -33924,7 +33924,7 @@
      2
     ],
     [
-     "func_001D5440",
+     "Game_Data_Push",
      1922112,
      844,
      2
@@ -33936,7 +33936,7 @@
      2
     ],
     [
-     "func_001D5820",
+     "Game_Data_Pop",
      1923104,
      1968,
      2
@@ -33948,13 +33948,13 @@
      2
     ],
     [
-     "func_001D6070",
+     "Game",
      1925232,
      4576,
      2
     ],
     [
-     "pauseTitleCallback",
+     "DrawShadow",
      1929808,
      36,
      2
@@ -33978,7 +33978,7 @@
      2
     ],
     [
-     "pauseRefBackdrop",
+     "GamePauseDispBG",
      1930176,
      56,
      2
@@ -33996,19 +33996,19 @@
      2
     ],
     [
-     "pauseDrawTitleAndHints",
+     "GamePauseDispEvent",
      1930416,
      44,
      2
     ],
     [
-     "mainResLoadCallback",
+     "mapResourceLoadCallback",
      1930464,
      1180,
      2
     ],
     [
-     "mainSwitchId",
+     "mapResourceSwitch",
      1931648,
      216,
      2
@@ -34032,7 +34032,7 @@
      2
     ],
     [
-     "func_001D7EB8",
+     "mapBackdropDraw",
      1932984,
      760,
      2
@@ -34044,7 +34044,7 @@
      2
     ],
     [
-     "mainDrawObjects",
+     "mapObjectsDraw",
      1937760,
      288,
      2
@@ -34056,13 +34056,13 @@
      2
     ],
     [
-     "cameraSaveState",
+     "GameCameraStateSave",
      1938200,
      268,
      2
     ],
     [
-     "cameraRestoreState",
+     "GameCameraStateRestore",
      1938472,
      340,
      2
@@ -34086,13 +34086,13 @@
      2
     ],
     [
-     "cameraReset",
+     "GameCameraReset",
      1939136,
      236,
      2
     ],
     [
-     "cameraSetMode",
+     "GameCameraChangeID",
      1939376,
      324,
      2
@@ -34140,7 +34140,7 @@
      2
     ],
     [
-     "cameraOrbitPosition",
+     "GetCameraPos",
      1941032,
      192,
      2
@@ -34254,13 +34254,13 @@
      2
     ],
     [
-     "resPathSlotLoadWithParts",
+     "resPlayerSlotLoadWithParts",
      1950584,
      240,
      2
     ],
     [
-     "resPathSlotsLoadModels",
+     "resPlayerSlotsLoadModels",
      1950824,
      252,
      2
@@ -34308,7 +34308,7 @@
      2
     ],
     [
-     "uwamonoUpdateMidpoints",
+     "uwamonoLightBlendStep",
      1960680,
      752,
      2
@@ -34320,13 +34320,13 @@
      2
     ],
     [
-     "func_001DF088",
+     "uwamonoUnusedReturnZero",
      1962120,
      8,
      2
     ],
     [
-     "func_001DF090",
+     "resUnusedReturnZero",
      1962128,
      8,
      2
@@ -34350,7 +34350,7 @@
      2
     ],
     [
-     "func_001DF170",
+     "gameResNameKey",
      1962352,
      64,
      2
@@ -34452,7 +34452,7 @@
      2
     ],
     [
-     "func_001DF9F0",
+     "GameResourceGetFreeAddr",
      1964528,
      104,
      2
@@ -34572,25 +34572,25 @@
      2
     ],
     [
-     "resResetKindState",
+     "seStateRestore",
      1969352,
      404,
      2
     ],
     [
-     "resResetActState",
+     "seStateRestoreField",
      1969760,
      24,
      2
     ],
     [
-     "resResetAllKinds",
+     "seStateClear",
      1969784,
      28,
      2
     ],
     [
-     "func_001E0E98",
+     "seStateRestoreDefault",
      1969816,
      24,
      2
@@ -34662,13 +34662,13 @@
      2
     ],
     [
-     "GameResArenaReserve",
+     "GameResourceWorkAlloc",
      1972272,
      324,
      2
     ],
     [
-     "GameResArenaReload",
+     "GameResourceWorkReload",
      1972600,
      196,
      2
@@ -34680,19 +34680,19 @@
      2
     ],
     [
-     "func_001E1B10",
+     "cdSlotTestOnStart",
      1973008,
      8,
      2
     ],
     [
-     "resResetSlotTable",
+     "GameResourceReset",
      1973016,
      168,
      2
     ],
     [
-     "resInitPathHeader",
+     "GameResourceInit",
      1973184,
      72,
      2
@@ -34788,13 +34788,13 @@
      2
     ],
     [
-     "resCmdDisk",
+     "command_disk",
      1976520,
      52,
      2
     ],
     [
-     "resCmdSave",
+     "command_save",
      1976576,
      120,
      2
@@ -34884,49 +34884,49 @@
      2
     ],
     [
-     "resPathSlotsInit",
+     "resPlayerSlotsInit",
      1982464,
      224,
      2
     ],
     [
-     "resPathSlotFindByOwner",
+     "resPlayerSlotFindByOwner",
      1982688,
      152,
      2
     ],
     [
-     "func_001E4178",
+     "uwamonoActorsResetByKey",
      1982840,
      164,
      2
     ],
     [
-     "resSetPathSlot",
+     "resPlayerSlotSet",
      1983008,
      472,
      2
     ],
     [
-     "resUpdatePathSlot",
+     "resPlayerSlotUpdate",
      1983480,
      248,
      2
     ],
     [
-     "resPathSlotLoadID",
+     "resPlayerSlotLoadID",
      1983728,
      524,
      2
     ],
     [
-     "resPathSlotBlockReset",
+     "resPlayerSlotBlockReset",
      1984256,
      224,
      2
     ],
     [
-     "resResetPathSlots",
+     "resPlayerSlotsReset",
      1984480,
      172,
      2
@@ -35118,19 +35118,19 @@
      2
     ],
     [
-     "func_001E7B08",
+     "GameMovieFrameCopy1To0",
      1997576,
      252,
      2
     ],
     [
-     "func_001E7C08",
+     "GameMovieFrameCopy0To1",
      1997832,
      252,
      2
     ],
     [
-     "GameMovieCaptionPlay",
+     "GameMpeg2Play",
      1998088,
      1832,
      2
@@ -35208,7 +35208,7 @@
      2
     ],
     [
-     "func_001E95C8",
+     "GameSynopsisCrossfadeWait",
      2004424,
      376,
      2
@@ -35238,7 +35238,7 @@
      2
     ],
     [
-     "func_001E9B28",
+     "PadTest",
      2005800,
      1060,
      2
@@ -35262,13 +35262,13 @@
      2
     ],
     [
-     "func_001EAB08",
+     "HddTest",
      2009864,
      8,
      2
     ],
     [
-     "func_001EAB10",
+     "mt_GetPortName",
      2009872,
      24,
      2
@@ -35280,13 +35280,13 @@
      2
     ],
     [
-     "func_001EAB50",
+     "McOldDataCheckCallback",
      2009936,
      196,
      2
     ],
     [
-     "func_001EAC18",
+     "McIconBoundsReport",
      2010136,
      584,
      2
@@ -35310,7 +35310,7 @@
      2
     ],
     [
-     "func_001EC8E8",
+     "CdSlotEntryTablesView",
      2017512,
      668,
      2
@@ -35334,25 +35334,25 @@
      2
     ],
     [
-     "func_001ED1C0",
+     "KanjiCheckTest",
      2019776,
      404,
      2
     ],
     [
-     "func_001ED358",
+     "EdgeTestLineDraw",
      2020184,
      200,
      2
     ],
     [
-     "func_001ED420",
+     "EdgeTestOrientationSign",
      2020384,
      328,
      2
     ],
     [
-     "func_001ED568",
+     "EdgeTest",
      2020712,
      1260,
      2
@@ -35370,19 +35370,19 @@
      2
     ],
     [
-     "func_001EDC20",
+     "bgmSlotLevelSet",
      2022432,
      28,
      2
     ],
     [
-     "func_001EDC40",
+     "actionSoundSlotLevelSet",
      2022464,
      28,
      2
     ],
     [
-     "func_001EDC60",
+     "streamKeySlotLevelSet",
      2022496,
      28,
      2
@@ -35394,13 +35394,13 @@
      2
     ],
     [
-     "func_001EDCA0",
+     "unitPlayVoiceCueId",
      2022560,
      8,
      2
     ],
     [
-     "func_001EDCA8",
+     "unitActionVoiceCueId",
      2022568,
      8,
      2
@@ -35502,25 +35502,25 @@
      2
     ],
     [
-     "func_001EECD8",
+     "YtachiTest",
      2026712,
      8,
      2
     ],
     [
-     "func_001EECE0",
+     "mapSceneScriptLoad",
      2026720,
      636,
      2
     ],
     [
-     "func_001EEF60",
+     "gameRowFlagsClear",
      2027360,
      52,
      2
     ],
     [
-     "func_001EEF98",
+     "gameEventFlagsClear",
      2027416,
      52,
      2
@@ -35538,19 +35538,19 @@
      2
     ],
     [
-     "func_001EF650",
+     "uwamonoFindIndexByKey",
      2029136,
      80,
      2
     ],
     [
-     "func_001EF6A0",
+     "uwamonoObjectEntryPositionGet",
      2029216,
      60,
      2
     ],
     [
-     "func_001EF6E0",
+     "uwamonoObjectEntryAnglesGet",
      2029280,
      324,
      2
@@ -35592,7 +35592,7 @@
      2
     ],
     [
-     "func_001F0750",
+     "uwamonoStartScale",
      2033488,
      348,
      2
@@ -35712,19 +35712,19 @@
      2
     ],
     [
-     "runtime_001F2DF8",
+     "runtimeItem",
      2043384,
      1256,
      2
     ],
     [
-     "runtime_001F32E0",
+     "runtimeTimeAttack",
      2044640,
      320,
      2
     ],
     [
-     "runtime_001F3420",
+     "runtimeGetAnalogR",
      2044960,
      132,
      2
@@ -36072,31 +36072,31 @@
      2
     ],
     [
-     "uwamonoLadderApproach",
+     "Fly_to_Ladder",
      2064920,
      700,
      2
     ],
     [
-     "uwamonoParabolaMove",
+     "Get_Off_Ladder",
      2065624,
      300,
      2
     ],
     [
-     "uwamonoLadderTryExit",
+     "Ready_Ladder",
      2065928,
      1504,
      2
     ],
     [
-     "uwamonoLadderMove",
+     "On_Ladder",
      2067432,
      3060,
      2
     ],
     [
-     "uwamonoUpdateLadderState",
+     "Ladder_Main",
      2070496,
      328,
      2
@@ -36168,7 +36168,7 @@
      2
     ],
     [
-     "talkReset",
+     "cameraReset",
      2072016,
      32,
      2
@@ -36180,7 +36180,7 @@
      2
     ],
     [
-     "AngleMode",
+     "cameraAngleMode",
      2072160,
      8,
      2
@@ -36198,7 +36198,7 @@
      2
     ],
     [
-     "cfChange",
+     "cameraCfChange",
      2072584,
      324,
      2
@@ -36246,7 +36246,7 @@
      2
     ],
     [
-     "cfNorth",
+     "cameraCfNorth",
      2073824,
      108,
      2
@@ -36264,7 +36264,7 @@
      2
     ],
     [
-     "SetRefActR",
+     "cameraSetRefActR",
      2074472,
      328,
      2
@@ -36276,19 +36276,19 @@
      2
     ],
     [
-     "RefLock",
+     "cameraRefLock",
      2075104,
      64,
      2
     ],
     [
-     "SetRefCamActR",
+     "cameraSetRefCamActR",
      2075168,
      576,
      2
     ],
     [
-     "SetRefCamAct3R",
+     "cameraSetRefCamAct3R",
      2075744,
      836,
      2
@@ -36306,49 +36306,49 @@
      2
     ],
     [
-     "SetCamAct",
+     "cameraSetCamAct",
      2077016,
      280,
      2
     ],
     [
-     "SetCamActR",
+     "cameraSetCamActR",
      2077296,
      288,
      2
     ],
     [
-     "SetCamAct2",
+     "cameraSetCamAct2",
      2077584,
      340,
      2
     ],
     [
-     "SetCamAct2R",
+     "cameraSetCamAct2R",
      2077928,
      368,
      2
     ],
     [
-     "SetCamAct3",
+     "cameraSetCamAct3",
      2078296,
      456,
      2
     ],
     [
-     "OffsCamPos",
+     "cameraOffsCamPos",
      2078752,
      216,
      2
     ],
     [
-     "OffsCamAng",
+     "cameraOffsCamAng",
      2078968,
      256,
      2
     ],
     [
-     "CamLock",
+     "cameraCamLock",
      2079224,
      48,
      2
@@ -36360,7 +36360,7 @@
      2
     ],
     [
-     "MoveCamMode",
+     "cameraMoveCamMode",
      2079336,
      60,
      2
@@ -36372,37 +36372,37 @@
      2
     ],
     [
-     "WaitMoveRef",
+     "cameraWaitMoveRef",
      2079560,
      88,
      2
     ],
     [
-     "WaitMoveCam",
+     "cameraWaitMoveCam",
      2079648,
      88,
      2
     ],
     [
-     "MoveRefStop",
+     "cameraMoveRefStop",
      2079736,
      56,
      2
     ],
     [
-     "MoveCamStop",
+     "cameraMoveCamStop",
      2079792,
      56,
      2
     ],
     [
-     "MovePersStop",
+     "cameraMovePersStop",
      2079848,
      56,
      2
     ],
     [
-     "MoveBankStop",
+     "cameraMoveBankStop",
      2079904,
      56,
      2
@@ -36414,7 +36414,7 @@
      2
     ],
     [
-     "HandShake",
+     "cameraHandShake",
      2080264,
      76,
      2
@@ -36432,13 +36432,13 @@
      2
     ],
     [
-     "MoveBank",
+     "cameraMoveBank",
      2080520,
      168,
      2
     ],
     [
-     "MovePers",
+     "cameraMovePers",
      2080688,
      168,
      2
@@ -36450,19 +36450,19 @@
      2
     ],
     [
-     "GetRefAng",
+     "cameraGetRefAng",
      2081008,
      128,
      2
     ],
     [
-     "GetCamPos",
+     "cameraGetCamPos",
      2081136,
      152,
      2
     ],
     [
-     "GetCamAng",
+     "cameraGetCamAng",
      2081288,
      152,
      2
@@ -36480,25 +36480,25 @@
      2
     ],
     [
-     "math_001FC398",
+     "mathSin",
      2081688,
      160,
      2
     ],
     [
-     "math_001FC438",
+     "mathCos",
      2081848,
      160,
      2
     ],
     [
-     "math_001FC4D8",
+     "mathRandom",
      2082008,
      124,
      2
     ],
     [
-     "mathInit",
+     "mathRegisterNatives",
      2082136,
      36,
      2
@@ -36570,13 +36570,13 @@
      2
     ],
     [
-     "menuInit",
+     "menuRegisterNatives",
      2083792,
      36,
      2
     ],
     [
-     "func_001FCBF8",
+     "menuSceneSetupHook",
      2083832,
      8,
      2
@@ -36606,13 +36606,13 @@
      2
     ],
     [
-     "slotIdRecordCountLeading",
+     "uwamonoStateCountLeading",
      2086504,
      84,
      2
     ],
     [
-     "uwamonoCountState2",
+     "uwamonoCountInReach",
      2086592,
      92,
      2
@@ -36630,7 +36630,7 @@
      2
     ],
     [
-     "uwamonoReleaseHandles",
+     "UnlockMapUnit",
      2087296,
      148,
      2
@@ -36684,13 +36684,13 @@
      2
     ],
     [
-     "uwamonoRestoreRecord",
+     "uwamonoStartPickupMove",
      2092808,
      108,
      2
     ],
     [
-     "uwamonoUpdateCountdowns",
+     "uwamonoUpdateItemPickups",
      2092920,
      1096,
      2
@@ -36720,7 +36720,7 @@
      2
     ],
     [
-     "func_001FFB70",
+     "uwamonoGetNearbySearchType",
      2095984,
      288,
      2
@@ -36750,13 +36750,13 @@
      2
     ],
     [
-     "uwamonoHitCheckRecord",
+     "HitCheckMapUnit",
      2096544,
      160,
      2
     ],
     [
-     "uwamonoHitCheckWithNyuru",
+     "HitCheckMapUnitWithNyuru",
      2096704,
      576,
      2
@@ -36774,7 +36774,7 @@
      2
     ],
     [
-     "uwamonoHitCheckRecordAt",
+     "HitCheckMapUnitAt",
      2097512,
      208,
      2
@@ -36792,7 +36792,7 @@
      2
     ],
     [
-     "uwamonoHitCheckBox",
+     "HitCheckBox",
      2098152,
      484,
      2
@@ -36810,7 +36810,7 @@
      2
     ],
     [
-     "uwamonoHitCheckNyuru",
+     "HitCheckNyuru",
      2099288,
      244,
      2
@@ -36822,37 +36822,37 @@
      2
     ],
     [
-     "uwamonoNyuruCircle",
+     "NyuruCircle",
      2099816,
      156,
      2
     ],
     [
-     "uwamonoNyuruMatrix",
+     "NyuruMatrix",
      2099976,
      968,
      2
     ],
     [
-     "uwamonoCrossPoint",
+     "CrossPointUwamono",
      2100944,
      1388,
      2
     ],
     [
-     "uwamonoCrossPointAt",
+     "CrossPointUwamonoAt",
      2102336,
      64,
      2
     ],
     [
-     "uwamonoCalcNearCrossPointCircle",
+     "CalcNearCrossPointCircle",
      2102400,
      296,
      2
     ],
     [
-     "uwamonoCalcNearCrossPointBox",
+     "CalcNearCrossPointBox",
      2102696,
      840,
      2
@@ -36864,25 +36864,25 @@
      2
     ],
     [
-     "uwamonoAreaCheck",
+     "UwamonoAreaCheck",
      2103760,
      192,
      2
     ],
     [
-     "uwamonoAreaCheckBox",
+     "AreaCheckBox",
      2103952,
      44,
      2
     ],
     [
-     "uwamonoCrossCheck",
+     "CrossCheckMapUnitAim",
      2104000,
      200,
      2
     ],
     [
-     "uwamonoCrossCheckRecordAt",
+     "CrossCheckMapUnitAt",
      2104200,
      116,
      2
@@ -36900,7 +36900,7 @@
      2
     ],
     [
-     "uwamonoCanSeeRecord",
+     "AimMapUnitLookCheck",
      2105224,
      488,
      2
@@ -36912,25 +36912,25 @@
      2
     ],
     [
-     "uwamonoCheckHeight",
+     "CheckUwamonoHeight",
      2105840,
      548,
      2
     ],
     [
-     "uwamonoHitCheckOther",
+     "HitCheckUwamono",
      2106392,
      176,
      2
     ],
     [
-     "uwamonoHitCheckOtherAt",
+     "HitCheckUwamonoAt",
      2106568,
      176,
      2
     ],
     [
-     "uwamonoHitCheckOtherBox",
+     "HitCheckBoxUwamono",
      2106744,
      52,
      2
@@ -36960,7 +36960,7 @@
      2
     ],
     [
-     "func_00202C78",
+     "uwamonoDrawPursuitDebug",
      2108536,
      84,
      2
@@ -36972,7 +36972,7 @@
      2
     ],
     [
-     "func_00202E60",
+     "uwamonoDrawLine",
      2109024,
      8,
      2
@@ -37008,73 +37008,73 @@
      2
     ],
     [
-     "uwamonoInitState",
+     "Enemy_Init",
      2109720,
      532,
      2
     ],
     [
-     "uwamonoAdvanceTimer",
+     "Enemy_Damage_Explosion",
      2110256,
      164,
      2
     ],
     [
-     "uwamonoTickCooldown",
+     "Enemy_Stiff",
      2110424,
      168,
      2
     ],
     [
-     "uwamonoAimAtCurrent",
+     "Enemy_Found",
      2110592,
      168,
      2
     ],
     [
-     "uwamonoPursueFocus",
+     "Enemy_Chase",
      2110760,
      2052,
      2
     ],
     [
-     "uwamonoOrbitAnchor",
+     "Enemy_Route",
      2112816,
      1156,
      2
     ],
     [
-     "uwamonoStepRoute",
+     "Enemy_Escape",
      2113976,
      760,
      2
     ],
     [
-     "uwamonoFollowSpline",
+     "Enemy_Route_Chase",
      2114736,
      544,
      2
     ],
     [
-     "uwamonoNextAction",
+     "Enemy_Pause",
      2115280,
      504,
      2
     ],
     [
-     "uwamonoTickWait",
+     "Enemy_Threat",
      2115784,
      180,
      2
     ],
     [
-     "uwamonoStepScript",
+     "Enemy_Unique",
      2115968,
      220,
      2
     ],
     [
-     "uwamonoUpdateRecord",
+     "ACT_updateEnemy",
      2116192,
      1520,
      2
@@ -37092,7 +37092,7 @@
      2
     ],
     [
-     "uwamonoScanTargets",
+     "TM_Check_Before_Eyes",
      2118664,
      476,
      2
@@ -37104,91 +37104,91 @@
      2
     ],
     [
-     "uwamonoSetAction",
+     "Enemy_ActionReady",
      2119384,
      836,
      2
     ],
     [
-     "uwamonoHaltPursuit",
+     "Enemy_After_Battle",
      2120224,
      204,
      2
     ],
     [
-     "uwamonoFindReadyInReach",
+     "Check_Actor",
      2120432,
      392,
      2
     ],
     [
-     "uwamonoAnyEngaged",
+     "Check_EnemyFound",
      2120824,
      164,
      2
     ],
     [
-     "uwamonoNoticePlayer",
+     "Enemy_FindByEar",
      2120992,
      300,
      2
     ],
     [
-     "uwamonoBeginAim",
+     "Check_Discovery",
      2121296,
      392,
      2
     ],
     [
-     "uwamonoBeginEncounter",
+     "Check_Encount",
      2121688,
      1076,
      2
     ],
     [
-     "uwamonoCompactRoute",
+     "Set_Spline_By_Route",
      2122768,
      180,
      2
     ],
     [
-     "uwamonoRebuildTrail",
+     "Homing_Search",
      2122952,
      1000,
      2
     ],
     [
-     "uwamonoAddRouteNode",
+     "Homing_Add",
      2123952,
      204,
      2
     ],
     [
-     "uwamonoFindNearbyTarget",
+     "Get_MostNear_Actor",
      2124160,
      384,
      2
     ],
     [
-     "uwamonoUpdateTargetVector",
+     "Actor_LookAt",
      2124544,
      256,
      2
     ],
     [
-     "uwamonoOfferTarget",
+     "Actor_LookAt_Set",
      2124800,
      132,
      2
     ],
     [
-     "uwamonoTryClearTarget",
+     "Actor_LookAt_Release",
      2124936,
      80,
      2
     ],
     [
-     "uwamonoClearTarget",
+     "Actor_LookAt_Init",
      2125016,
      48,
      2
@@ -37200,7 +37200,7 @@
      2
     ],
     [
-     "uwamonoPushTrailPoint",
+     "TM_Script_Spline_Add",
      2125328,
      120,
      2
@@ -37212,7 +37212,7 @@
      2
     ],
     [
-     "uwamonoPlayFootEffects",
+     "Sound_FootStep",
      2125864,
      1572,
      2
@@ -37236,19 +37236,19 @@
      2
     ],
     [
-     "func_00207938",
+     "uwamonoSearchTouchHitShape3",
      2128184,
      184,
      2
     ],
     [
-     "func_002079F0",
+     "uwamonoSearchFacingHitShape4",
      2128368,
      328,
      2
     ],
     [
-     "uwamonoSearchCircleFan",
+     "EventCheck_Square_Button_Center",
      2128696,
      356,
      2
@@ -37260,7 +37260,7 @@
      2
     ],
     [
-     "func_00207D58",
+     "EventCheck_Square_Button_Center_00207D58",
      2129240,
      356,
      2
@@ -37272,25 +37272,25 @@
      2
     ],
     [
-     "func_00208008",
+     "uwamonoSearchTouchHitShape7",
      2129928,
      184,
      2
     ],
     [
-     "func_002080C0",
+     "uwamonoSearchTouchHitShape11",
      2130112,
      184,
      2
     ],
     [
-     "func_00208178",
+     "uwamonoSearchPlainHitShape9",
      2130296,
      184,
      2
     ],
     [
-     "uwamonoSelectTarget",
+     "Check_Locater",
      2130480,
      812,
      2
@@ -37302,31 +37302,31 @@
      2
     ],
     [
-     "uwamonoCheckCollision",
+     "Check_InsideID",
      2131480,
      1292,
      2
     ],
     [
-     "vibrationResetFade",
+     "Vibration_Stop",
      2132776,
      36,
      2
     ],
     [
-     "func_00208B50",
+     "Vibration_Set_Weak",
      2132816,
      12,
      2
     ],
     [
-     "vibrationStartFade",
+     "Vibration_Set_Strong",
      2132832,
      28,
      2
     ],
     [
-     "vibrationStepFade",
+     "VibrationEngine",
      2132864,
      128,
      2
@@ -37344,7 +37344,7 @@
      2
     ],
     [
-     "unduCheckMoveSquare",
+     "Check_MoveSquare",
      2133520,
      1136,
      2
@@ -37392,7 +37392,7 @@
      2
     ],
     [
-     "unduCheckStraight",
+     "Check_Straight",
      2136768,
      576,
      2
@@ -37422,7 +37422,7 @@
      2
     ],
     [
-     "unduCheckAngle",
+     "Check_Angle",
      2138072,
      284,
      2
@@ -37446,19 +37446,19 @@
      2
     ],
     [
-     "unduCheckInsideFan",
+     "Check_InsideFan",
      2139144,
      380,
      2
     ],
     [
-     "cursolGetByReduceSpeedAngleLoop",
+     "Get_Cursol_by_Reduce_Speed_Angle_Loop",
      2139528,
      204,
      2
     ],
     [
-     "unduGetEnemyIDPos",
+     "Get_EnemyIDPos",
      2139736,
      572,
      2
@@ -37470,7 +37470,7 @@
      2
     ],
     [
-     "unduGetHeightAttr",
+     "Get_HeightAttr",
      2140432,
      84,
      2
@@ -37482,19 +37482,19 @@
      2
     ],
     [
-     "unduGetAttr",
+     "Get_Attr",
      2140744,
      96,
      2
     ],
     [
-     "unduGetMapAttr",
+     "Get_Attr_NU",
      2140840,
      136,
      2
     ],
     [
-     "unduCheckSweep",
+     "Check_Undu",
      2140976,
      452,
      2
@@ -37530,7 +37530,7 @@
      2
     ],
     [
-     "bsplineGetLoopDummy",
+     "GetBSplineLoopDummy",
      2142216,
      608,
      2
@@ -37674,7 +37674,7 @@
      2
     ],
     [
-     "playTimeClamp",
+     "PartyTimeDispChange",
      2144736,
      88,
      2
@@ -37758,13 +37758,13 @@
      2
     ],
     [
-     "grAddScissorPacket",
+     "ScissorSet",
      2146248,
      276,
      2
     ],
     [
-     "xglFontScissorReset",
+     "ScissorReset",
      2146528,
      108,
      2
@@ -37854,7 +37854,7 @@
      2
     ],
     [
-     "func_0020CCC0",
+     "swapWords",
      2149568,
      20,
      2
@@ -38148,7 +38148,7 @@
      2
     ],
     [
-     "fontObjSetExtra",
+     "fontObjSetDrawBits",
      2155600,
      8,
      2
@@ -38214,7 +38214,7 @@
      2
     ],
     [
-     "func_0020E950",
+     "fontObjTextBlockNop",
      2156880,
      8,
      2
@@ -38262,7 +38262,7 @@
      2
     ],
     [
-     "func_0020EBF0",
+     "cursorBufferEntryNop",
      2157552,
      8,
      2
@@ -38286,7 +38286,7 @@
      2
     ],
     [
-     "cursorBufferUpdateTracks",
+     "cursorBufferStartClose",
      2158360,
      52,
      2
@@ -38418,7 +38418,7 @@
      2
     ],
     [
-     "textBoxStartTop",
+     "textBoxCloseTop",
      2159912,
      40,
      2
@@ -38502,7 +38502,7 @@
      2
     ],
     [
-     "textBoxStartWindow",
+     "textBoxCloseWindow",
      2162080,
      76,
      2
@@ -38520,13 +38520,13 @@
      2
     ],
     [
-     "textBoxTryOpenWindow",
+     "textBoxConfirmSelection",
      2162568,
      192,
      2
     ],
     [
-     "func_00210048",
+     "textBoxHasSelection",
      2162760,
      32,
      2
@@ -38562,7 +38562,7 @@
      2
     ],
     [
-     "cursorBufferUpdateCurrent",
+     "cursorBufferStartCloseCurrent",
      2163144,
      76,
      2
@@ -38598,7 +38598,7 @@
      2
     ],
     [
-     "func_00210560",
+     "menuSlotSetDirection",
      2164064,
      32,
      2
@@ -38622,7 +38622,7 @@
      2
     ],
     [
-     "xglPacketAddTexturedDraw",
+     "menuUmnImageDraw",
      2164576,
      580,
      2
@@ -38682,7 +38682,7 @@
      2
     ],
     [
-     "func_00211918",
+     "menuLinkSetCurrent",
      2169112,
      52,
      2
@@ -38706,7 +38706,7 @@
      2
     ],
     [
-     "func_00211B88",
+     "menuFocusSlot",
      2169736,
      156,
      2
@@ -38730,7 +38730,7 @@
      2
     ],
     [
-     "xglActiveCameraSetup",
+     "menuSceneCameraSetup",
      2172592,
      88,
      2
@@ -38772,7 +38772,7 @@
      2
     ],
     [
-     "func_00213A78",
+     "menuDrawLabelBarFrame",
      2177656,
      124,
      2
@@ -38796,7 +38796,7 @@
      2
     ],
     [
-     "menuLayoutSubmit",
+     "menuDrawLayoutPage",
      2179720,
      240,
      2
@@ -38820,13 +38820,13 @@
      2
     ],
     [
-     "func_00214C98",
+     "menuPartyFormationDrawNone",
      2182296,
      8,
      2
     ],
     [
-     "menuRecordItemDetail",
+     "menuDrawRecordItemDetail",
      2182304,
      32,
      2
@@ -38886,13 +38886,13 @@
      2
     ],
     [
-     "func_00215598",
+     "menuFormatNumber5",
      2184600,
      56,
      2
     ],
     [
-     "menuSetLayout",
+     "menuPromptSet",
      2184656,
      744,
      2
@@ -38988,7 +38988,7 @@
      2
     ],
     [
-     "menuButtonHandle",
+     "menuButtonGridStep",
      2201664,
      316,
      2
@@ -39024,7 +39024,7 @@
      2
     ],
     [
-     "func_0021A520",
+     "textColorDefaultSet",
      2204960,
      16,
      2
@@ -39042,13 +39042,13 @@
      2
     ],
     [
-     "packetSubmitRequest",
+     "menuDrawCell",
      2205528,
      56,
      2
     ],
     [
-     "packetSubmitRequestEx",
+     "menuDrawCellSized",
      2205584,
      68,
      2
@@ -39192,7 +39192,7 @@
      2
     ],
     [
-     "func_0021C6F8",
+     "menuDrawTabFrame",
      2213624,
      836,
      2
@@ -39204,13 +39204,13 @@
      2
     ],
     [
-     "func_0021CC08",
+     "menuDrawListFrame",
      2214920,
      728,
      2
     ],
     [
-     "func_0021CEE0",
+     "menuDrawOutlineWindow",
      2215648,
      20,
      2
@@ -39240,7 +39240,7 @@
      2
     ],
     [
-     "func_0021D550",
+     "menuDrawThreePieceBar",
      2217296,
      184,
      2
@@ -39420,7 +39420,7 @@
      2
     ],
     [
-     "menuListContains",
+     "menuMemberHasEntry",
      2228672,
      80,
      2
@@ -39534,7 +39534,7 @@
      2
     ],
     [
-     "menuResetRecord",
+     "menuResetItem",
      2245992,
      80,
      2
@@ -39666,7 +39666,7 @@
      2
     ],
     [
-     "menuDraw",
+     "menuDrawObject",
      2254872,
      300,
      2
@@ -39930,7 +39930,7 @@
      2
     ],
     [
-     "selectionWindowEntryHasFlag4",
+     "selectionWindowEntryTargetsParty",
      2264896,
      40,
      2
@@ -39990,7 +39990,7 @@
      2
     ],
     [
-     "selectionBuildKeyTable",
+     "commandRecordTextsBind",
      2266112,
      96,
      2
@@ -40026,7 +40026,7 @@
      2
     ],
     [
-     "func_00229898",
+     "menuSceneResetStub",
      2267288,
      8,
      2
@@ -40038,19 +40038,19 @@
      2
     ],
     [
-     "selectionRecordSetValue",
+     "selectionRecordTextGet",
      2267320,
      76,
      2
     ],
     [
-     "selectionSetValue",
+     "selectionSubTextGet",
      2267400,
      44,
      2
     ],
     [
-     "selectionGetValue",
+     "selectionSubCostGet",
      2267448,
      60,
      2
@@ -40068,13 +40068,13 @@
      2
     ],
     [
-     "selectionEntryBitCount",
+     "selectionSlotTakenCount",
      2267712,
      172,
      2
     ],
     [
-     "selectionRowBitCount",
+     "selectionGroupTakenCount",
      2267888,
      276,
      2
@@ -40128,13 +40128,13 @@
      2
     ],
     [
-     "selectionHolderCharge",
+     "selectionSlotOpen",
      2269544,
      72,
      2
     ],
     [
-     "selectionInit",
+     "ptStateInit",
      2269616,
      944,
      2
@@ -40146,7 +40146,7 @@
      2
     ],
     [
-     "func_0022A5A0",
+     "ptGetMenuMemberState",
      2270624,
      32,
      2
@@ -40278,7 +40278,7 @@
      2
     ],
     [
-     "func_0022B458",
+     "ptResetSplitReserve",
      2274392,
      64,
      2
@@ -40392,19 +40392,19 @@
      2
     ],
     [
-     "talk_0022D170",
+     "talkCheck",
      2281840,
      84,
      2
     ],
     [
-     "talk_0022D1C8",
+     "talkReset",
      2281928,
      16,
      2
     ],
     [
-     "smsg",
+     "talkSmsg",
      2281944,
      348,
      2
@@ -40416,43 +40416,43 @@
      2
     ],
     [
-     "msgDtl",
+     "talkMsgDtl",
      2282376,
      356,
      2
     ],
     [
-     "talk_0022D4F0",
+     "talkWinClose",
      2282736,
      32,
      2
     ],
     [
-     "resume",
+     "talkResume",
      2282768,
      48,
      2
     ],
     [
-     "objx_0022D540",
+     "talkEnableFlags",
      2282816,
      8,
      2
     ],
     [
-     "objx_0022D548",
+     "talkDisableFlags",
      2282824,
      8,
      2
     ],
     [
-     "talk_0022D550",
+     "talkIsDispMsg",
      2282832,
      20,
      2
     ],
     [
-     "talk_0022D568",
+     "talkWait",
      2282856,
      52,
      2
@@ -40554,7 +40554,7 @@
      2
     ],
     [
-     "mapObjectClearFlags",
+     "mapObjectClearTalkFlags",
      2285248,
      32,
      2
@@ -40998,7 +40998,7 @@
      2
     ],
     [
-     "func_00233D50",
+     "ysegfDetailLeaveNoop",
      2309456,
      8,
      2
@@ -41010,7 +41010,7 @@
      2
     ],
     [
-     "func_00233D70",
+     "menuSceneResetNoop",
      2309488,
      8,
      2
@@ -41142,7 +41142,7 @@
      2
     ],
     [
-     "objRemove",
+     "textEntryRemove",
      2318960,
      80,
      2
@@ -41202,25 +41202,25 @@
      2
     ],
     [
-     "textBlockClear",
+     "analyzePanelClear",
      2323944,
      20,
      2
     ],
     [
-     "textBlockStart",
+     "analyzePanelStart",
      2323968,
      120,
      2
     ],
     [
-     "textBlockIsActive",
+     "analyzePanelIsActive",
      2324088,
      36,
      2
     ],
     [
-     "textBlockUpdate",
+     "analyzePanelUpdate",
      2324128,
      172,
      2
@@ -41268,19 +41268,19 @@
      2
     ],
     [
-     "sjisStrClear",
+     "eucStrClear",
      2325904,
      8,
      2
     ],
     [
-     "sjisStrcat",
+     "eucStrcat",
      2325912,
      124,
      2
     ],
     [
-     "sjisCharCount",
+     "eucStrLength",
      2326040,
      60,
      2
@@ -41334,7 +41334,7 @@
      2
     ],
     [
-     "saveUiDraw",
+     "savePortSelectDraw",
      2328464,
      320,
      2
@@ -41382,7 +41382,7 @@
      2
     ],
     [
-     "saveMenuUpdate",
+     "savePortSelectUpdate",
      2332672,
      1700,
      2
@@ -41424,13 +41424,13 @@
      2
     ],
     [
-     "saveScreenRun",
+     "MenuFileMain",
      2338072,
      1180,
      2
     ],
     [
-     "saveTextStateReset",
+     "configScreenStateReset",
      2339256,
      84,
      2
@@ -41442,7 +41442,7 @@
      2
     ],
     [
-     "saveTextRaiseMaxima",
+     "oldDataMaximaRaise",
      2340896,
      152,
      2
@@ -41460,7 +41460,7 @@
      2
     ],
     [
-     "saveTextMaximaCopy",
+     "oldDataMaximaCopy",
      2343640,
      44,
      2
@@ -41472,7 +41472,7 @@
      2
     ],
     [
-     "testUiMenuRun",
+     "YosikawaTest",
      2344448,
      1148,
      2
@@ -41490,7 +41490,7 @@
      2
     ],
     [
-     "texUploadTest",
+     "TexturTest",
      2346112,
      120,
      2
@@ -41640,7 +41640,7 @@
      2
     ],
     [
-     "textScaleApplyOptions",
+     "heapWindowMapStrideAdjust",
      2349992,
      124,
      2
@@ -41688,7 +41688,7 @@
      2
     ],
     [
-     "func_0023E950",
+     "testOverlayEntryCall",
      2353488,
      36,
      2
@@ -41928,7 +41928,7 @@
      2
     ],
     [
-     "tiWatSimStoreSourcePos2",
+     "tiWatSimStoreSecondSourcePos",
      2360096,
      24,
      2
@@ -42030,13 +42030,13 @@
      2
     ],
     [
-     "tiWaterCameraUpdate",
+     "tiWaterCameraPadControl",
      2364680,
      708,
      2
     ],
     [
-     "tiWaterCameraUpdateFine",
+     "tiWaterCameraPadControlFine",
      2365392,
      588,
      2
@@ -42078,7 +42078,7 @@
      2
     ],
     [
-     "func_002439C8",
+     "gifStateDrawNone",
      2374088,
      8,
      2
@@ -42090,7 +42090,7 @@
      2
     ],
     [
-     "func_00243B58",
+     "gifStateFlushEmptyPacket",
      2374488,
      72,
      2
@@ -42120,13 +42120,13 @@
      2
     ],
     [
-     "gifStateEffectFrame",
+     "gifStateDrawBreakShards",
      2382416,
      4260,
      2
     ],
     [
-     "func_00246AF8",
+     "gifStateClearDepthAndFlip",
      2386680,
      40,
      2
@@ -42204,7 +42204,7 @@
      2
     ],
     [
-     "func_00246DD8",
+     "gifStateSetDepth",
      2387416,
      12,
      2
@@ -42240,13 +42240,13 @@
      2
     ],
     [
-     "gifStateClearModeValue",
+     "gifStateClearModeHook",
      2387616,
      12,
      2
     ],
     [
-     "func_00246EB0",
+     "gifStateClearScreenAndMessages",
      2387632,
      36,
      2
@@ -42318,7 +42318,7 @@
      2
     ],
     [
-     "func_00247570",
+     "cfeFloatAddDouble",
      2389360,
      68,
      2
@@ -42378,7 +42378,7 @@
      2
     ],
     [
-     "cfeListHasItems",
+     "cfePackHasGeometries",
      2389872,
      32,
      2
@@ -42396,13 +42396,13 @@
      2
     ],
     [
-     "cfeEvaluateNode",
+     "cfeActorEvaluate",
      2390232,
      1788,
      2
     ],
     [
-     "cfeEvaluateNodes",
+     "cfeActorTableEvaluate",
      2392024,
      124,
      2
@@ -42462,7 +42462,7 @@
      2
     ],
     [
-     "cfeEvaluateDirections",
+     "cfeLightTableEvaluate",
      2395520,
      352,
      2
@@ -42504,7 +42504,7 @@
      2
     ],
     [
-     "cfeSndSetTarget",
+     "cfeSndTableEvaluate",
      2396952,
      36,
      2
@@ -42534,7 +42534,7 @@
      2
     ],
     [
-     "cfeUpdateEntries",
+     "cfeEntryTableUpdate",
      2404304,
      280,
      2
@@ -42552,7 +42552,7 @@
      2
     ],
     [
-     "cfeRotateVectorXY",
+     "cfeDirectionFromAngles",
      2405240,
      124,
      2
@@ -42594,181 +42594,181 @@
      2
     ],
     [
-     "cfe_0024BA70",
+     "cfeCmdLoadActor",
      2407024,
      416,
      2
     ],
     [
-     "cfe_0024BC10",
+     "cfeCmdLoadMotion",
      2407440,
      276,
      2
     ],
     [
-     "cfe_0024BD28",
+     "cfeCmdLoadEffect",
      2407720,
      452,
      2
     ],
     [
-     "cfe_0024BEF0",
+     "cfeCmdLoadMap",
      2408176,
      316,
      2
     ],
     [
-     "cfe_0024C030",
+     "cfeCmdLoadMapCollision",
      2408496,
      168,
      2
     ],
     [
-     "cfe_0024C0D8",
+     "cfeCmdLoadMonitor",
      2408664,
      408,
      2
     ],
     [
-     "ldDev",
+     "cfeCmdLoadDev",
      2409072,
      8,
      2
     ],
     [
-     "cfe_0024C278",
+     "cfeCmdLoadSound",
      2409080,
      140,
      2
     ],
     [
-     "cfe_0024C308",
+     "cfeCmdInit",
      2409224,
      504,
      2
     ],
     [
-     "cfe_0024C500",
+     "cfeCmdSetActorKey",
      2409728,
      692,
      2
     ],
     [
-     "cfe_0024C7B8",
+     "cfeCmdSetActorHeadKey",
      2410424,
      388,
      2
     ],
     [
-     "cfe_0024C940",
+     "cfeCmdSetActorPartKey",
      2410816,
      572,
      2
     ],
     [
-     "cfe_0024CB80",
+     "cfeCmdSetCameraKey",
      2411392,
      376,
      2
     ],
     [
-     "cfe_0024CCF8",
+     "cfeCmdSetEffectKey",
      2411768,
      628,
      2
     ],
     [
-     "cfe_0024CF70",
+     "cfeCmdSetLightKey",
      2412400,
      628,
      2
     ],
     [
-     "cfe_0024D1E8",
+     "cfeCmdSetMapKey",
      2413032,
      1012,
      2
     ],
     [
-     "cfe_0024D5E0",
+     "cfeCmdSetFogKey",
      2414048,
      340,
      2
     ],
     [
-     "cfe_0024D738",
+     "cfeCmdSetMonitorKey",
      2414392,
      388,
      2
     ],
     [
-     "cfe_0024D8C0",
+     "cfeCmdSetScreenEffectKey",
      2414784,
      380,
      2
     ],
     [
-     "cfe_0024DA40",
+     "cfeCmdSetSoundKey",
      2415168,
      380,
      2
     ],
     [
-     "cfe_0024DBC0",
+     "cfeCmdAllocMessages",
      2415552,
      184,
      2
     ],
     [
-     "cfe_0024DC78",
+     "cfeCmdSetMessage",
      2415736,
      412,
      2
     ],
     [
-     "setMesScr",
+     "cfeCmdSetMessageScr",
      2416152,
      8,
      2
     ],
     [
-     "cfe_0024DE20",
+     "cfeCmdSetStartFrame",
      2416160,
      96,
      2
     ],
     [
-     "cfe_0024DE80",
+     "cfeCmdSetEndFrame",
      2416256,
      96,
      2
     ],
     [
-     "cfeRunAndWait",
+     "cfeSoundSlotStartWait",
      2416352,
      124,
      2
     ],
     [
-     "cfe_0024DF60",
+     "cfeCmdStepFrame",
      2416480,
      1828,
      2
     ],
     [
-     "cfe_0024E688",
+     "cfeCmdFadeIn",
      2418312,
      76,
      2
     ],
     [
-     "cfe_0024E6D8",
+     "cfeCmdFadeOut",
      2418392,
      96,
      2
     ],
     [
-     "cfe_0024E738",
+     "cfeCmdDestroy",
      2418488,
      572,
      2
@@ -42786,7 +42786,7 @@
      2
     ],
     [
-     "cfeEvalRecordsInit",
+     "cfeActorTableInit",
      2419144,
      176,
      2
@@ -42822,7 +42822,7 @@
      2
     ],
     [
-     "cfePlugInRecordCountReset",
+     "cfeMessageCountReset",
      2420056,
      12,
      2
@@ -42846,7 +42846,7 @@
      2
     ],
     [
-     "cfePlugInTextReset",
+     "cfeSndRecordsReset",
      2420608,
      76,
      2
@@ -42864,7 +42864,7 @@
      2
     ],
     [
-     "func_0024F090",
+     "cfeFileOpenRead",
      2420880,
      24,
      2
@@ -42948,7 +42948,7 @@
      2
     ],
     [
-     "func_0024F3B8",
+     "cfeTextFindLine",
      2421688,
      92,
      2
@@ -43026,7 +43026,7 @@
      2
     ],
     [
-     "cfeNormalizeFixed2",
+     "cfeNormalizeFixedVec2",
      2423368,
      460,
      2
@@ -43248,7 +43248,7 @@
      2
     ],
     [
-     "func_002512B0",
+     "msgGameFlagClearUnlessKept",
      2429616,
      40,
      2
@@ -43362,7 +43362,7 @@
      2
     ],
     [
-     "msgWindowSetValue",
+     "msgSetCurrentText",
      2430928,
      32,
      2
@@ -43410,7 +43410,7 @@
      2
     ],
     [
-     "func_00251B18",
+     "msgPanelShowDefault",
      2431768,
      28,
      2
@@ -43458,7 +43458,7 @@
      2
     ],
     [
-     "msgResetValues",
+     "msgResetBalances",
      2432048,
      28,
      2
@@ -43482,19 +43482,19 @@
      2
     ],
     [
-     "logNoOp",
+     "LOG",
      2432816,
      68,
      2
     ],
     [
-     "func_00251F78",
+     "LOG_00251F78",
      2432888,
      68,
      2
     ],
     [
-     "func_00251FC0",
+     "LOG_00251FC0",
      2432960,
      68,
      2
@@ -43530,7 +43530,7 @@
      2
     ],
     [
-     "vu0CurMatrixMulRight3",
+     "vu0CurMatrixMulRows3",
      2433304,
      68,
      2
@@ -43608,7 +43608,7 @@
      2
     ],
     [
-     "func_00252518",
+     "vu0NoOpUnused",
      2434328,
      8,
      2
@@ -43620,7 +43620,7 @@
      2
     ],
     [
-     "vu0CopyMatrixWithTranslation",
+     "vu0CopyMatrixWithTranslationDist",
      2434584,
      100,
      2
@@ -43632,7 +43632,7 @@
      2
     ],
     [
-     "func_00252838",
+     "mmathNoOpUnused",
      2435128,
      8,
      2
@@ -43650,19 +43650,19 @@
      2
     ],
     [
-     "func_00252980",
+     "MMathIsInFrontRectXZ",
      2435456,
      308,
      2
     ],
     [
-     "func_00252AB8",
+     "MMathIsInFanSectors",
      2435768,
      540,
      2
     ],
     [
-     "func_00252CD8",
+     "MMathActorsInRangeByKind",
      2436312,
      172,
      2
@@ -43674,25 +43674,25 @@
      2
     ],
     [
-     "func_00252E00",
+     "svSceneFlagsTest",
      2436608,
      12,
      2
     ],
     [
-     "func_00252E10",
+     "svSceneFlagsSet",
      2436624,
      16,
      2
     ],
     [
-     "func_00252E20",
+     "svSceneFlagsClear",
      2436640,
      20,
      2
     ],
     [
-     "func_00252E38",
+     "svSceneFlagsToggle",
      2436664,
      16,
      2
@@ -43704,25 +43704,25 @@
      2
     ],
     [
-     "func_00252F78",
+     "sefLightSetActiveGet",
      2436984,
      12,
      2
     ],
     [
-     "func_00252F88",
+     "sefLightSetDefaultGet",
      2437000,
      12,
      2
     ],
     [
-     "func_00252F98",
+     "sefLightSetsResetDefault",
      2437016,
      176,
      2
     ],
     [
-     "func_00253048",
+     "sefLightSetsApply",
      2437192,
      384,
      2
@@ -43938,7 +43938,7 @@
      2
     ],
     [
-     "svDeleteImageMapperByEntryCount",
+     "svDeleteImageMapperID",
      2443640,
      92,
      2
@@ -43950,7 +43950,7 @@
      2
     ],
     [
-     "svDeleteImageMapperByTag",
+     "svDeleteImageMapperData",
      2443840,
      92,
      2
@@ -44004,7 +44004,7 @@
      2
     ],
     [
-     "svGetScriptEntry",
+     "svGetScript",
      2445776,
      332,
      2
@@ -44034,13 +44034,13 @@
      2
     ],
     [
-     "svDrawListAppendRecordC",
+     "svDrawListAppendSpriteRecord",
      2446584,
      336,
      2
     ],
     [
-     "svDrawListAppendRecordCPair",
+     "svDrawListAppendSpriteRecordPair",
      2446920,
      392,
      2
@@ -44244,7 +44244,7 @@
      2
     ],
     [
-     "func_002594E8",
+     "drawListSetFlushCode",
      2462952,
      12,
      2
@@ -44298,19 +44298,19 @@
      2
     ],
     [
-     "func_00259628",
+     "sefDummy",
      2463272,
      8,
      2
     ],
     [
-     "func_00259630",
+     "sefDummy_00259630",
      2463280,
      8,
      2
     ],
     [
-     "func_00259638",
+     "sefEntryCountsEntryGet",
      2463288,
      32,
      2
@@ -44370,7 +44370,7 @@
      2
     ],
     [
-     "sefAdvanceTrackCursor16",
+     "sefAdvanceVectorTrackCursor",
      2464400,
      152,
      2
@@ -44382,7 +44382,7 @@
      2
     ],
     [
-     "sefSampleVectorTrack",
+     "sefLerpVector",
      2464600,
      188,
      2
@@ -44406,19 +44406,19 @@
      2
     ],
     [
-     "sefSampleKeyframeValue",
+     "sefProgressInt",
      2465368,
      44,
      2
     ],
     [
-     "sefSetSlotDirection",
+     "sefGetDirMatrix",
      2465416,
      112,
      2
     ],
     [
-     "sefSetSlotDirectionBetween",
+     "sefGetVecMatrix",
      2465528,
      48,
      2
@@ -44532,7 +44532,7 @@
      2
     ],
     [
-     "sefResetEffectSlot",
+     "sefInitEffectData",
      2477856,
      100,
      2
@@ -44544,7 +44544,7 @@
      2
     ],
     [
-     "sefAddSlotLine",
+     "sefAllocEffectData",
      2478048,
      152,
      2
@@ -44574,7 +44574,7 @@
      2
     ],
     [
-     "sefInitEffectRecords",
+     "sefInitScheduler",
      2480496,
      188,
      2
@@ -44592,55 +44592,55 @@
      2
     ],
     [
-     "sefAllocEffectRecord",
+     "sefAllocScheduler",
      2480920,
      168,
      2
     ],
     [
-     "sefAllocUnownedEffectRecord",
+     "sefAllocUnownedScheduler",
      2481088,
      248,
      2
     ],
     [
-     "sefFreeEffectRecord",
+     "sefFreeSchedulerCf",
      2481336,
      292,
      2
     ],
     [
-     "sefReleaseEffectRecord",
+     "sefFreeScheduler",
      2481632,
      220,
      2
     ],
     [
-     "func_0025DEC0",
+     "sefDummy_0025DEC0",
      2481856,
      8,
      2
     ],
     [
-     "func_0025DEC8",
+     "sefDummy_0025DEC8",
      2481864,
      8,
      2
     ],
     [
-     "sefLoadEffectSlots",
+     "sefInitEffectTbl",
      2481872,
      384,
      2
     ],
     [
-     "sefCreateEffectRecord",
+     "sefCreateScheduler2",
      2482256,
      1112,
      2
     ],
     [
-     "sefCreateEffectRecordDefault",
+     "sefCreateScheduler",
      2483368,
      32,
      2
@@ -44658,7 +44658,7 @@
      2
     ],
     [
-     "func_0025E660",
+     "sefGetMatrixScale",
      2483808,
      20,
      2
@@ -44676,13 +44676,13 @@
      2
     ],
     [
-     "sefStepEffectRecords",
+     "sefExecScheduler",
      2485216,
      1716,
      2
     ],
     [
-     "sefEffectRecordIsFree",
+     "sefIsDeadSchduler",
      2486936,
      56,
      2
@@ -44742,7 +44742,7 @@
      2
     ],
     [
-     "sefEntryHasFlag1",
+     "sefIsHitActor",
      2488392,
      32,
      2
@@ -44796,7 +44796,7 @@
      2
     ],
     [
-     "sefStartWithDefaultMemory",
+     "sefInitEffect",
      2489728,
      88,
      2
@@ -44808,55 +44808,55 @@
      2
     ],
     [
-     "sefStartClipTestDisabled",
+     "sefInitEffectBattle",
      2490008,
      108,
      2
     ],
     [
-     "sefStartClipTestEnabled",
+     "sefInitEffectCf",
      2490120,
      88,
      2
     ],
     [
-     "sefAcquireSlot",
+     "sefSetupPlayer",
      2490208,
      136,
      2
     ],
     [
-     "sefAcquireHighSlot",
+     "sefSetupEnemy",
      2490344,
      144,
      2
     ],
     [
-     "sefReleaseWaitSlot",
+     "sefReleaseID",
      2490488,
      104,
      2
     ],
     [
-     "sefLoadPendingEffects",
+     "sefSetupEffect",
      2490592,
      28,
      2
     ],
     [
-     "sefResetWorkTables",
+     "sefDestroyEffect",
      2490624,
      252,
      2
     ],
     [
-     "sefResetWorkTablesAll",
+     "sefDestroyEffectCf",
      2490880,
      244,
      2
     ],
     [
-     "func_002602F8",
+     "sefLogKeyNoOp",
      2491128,
      8,
      2
@@ -44892,7 +44892,7 @@
      2
     ],
     [
-     "sefExecEffectFrames",
+     "sefProgressEffect",
      2491912,
      28,
      2
@@ -44940,13 +44940,13 @@
      2
     ],
     [
-     "func_00260840",
+     "sefLogRequestNoOp",
      2492480,
      8,
      2
     ],
     [
-     "sefDeleteWaitEffect",
+     "sefDeleteEffectWait",
      2492488,
      256,
      2
@@ -44958,7 +44958,7 @@
      2
     ],
     [
-     "sefStartEffectDefault",
+     "sefCreateEffect",
      2493352,
      24,
      2
@@ -44970,13 +44970,13 @@
      2
     ],
     [
-     "sefCreateDetachedEffect",
+     "sefCreateEffect2",
      2493400,
      328,
      2
     ],
     [
-     "func_00260D20",
+     "sefDeleteEffect2",
      2493728,
      20,
      2
@@ -45006,13 +45006,13 @@
      2
     ],
     [
-     "sefStartEffectByCode",
+     "sefLoadEffectCfName",
      2494208,
      120,
      2
     ],
     [
-     "sefSpawnEffectRecord",
+     "sefCreateEffectCf2",
      2494328,
      540,
      2
@@ -45042,7 +45042,7 @@
      2
     ],
     [
-     "sefSpawnEffectRecordById",
+     "sefCreateEffectCf",
      2494976,
      28,
      2
@@ -45060,7 +45060,7 @@
      2
     ],
     [
-     "sefReleaseRecordHandle",
+     "sefDeleteEffectCf",
      2495152,
      20,
      2
@@ -45084,7 +45084,7 @@
      2
     ],
     [
-     "sefReleaseRecordsByQuery",
+     "sefReleaseImageRecords",
      2495784,
      116,
      2
@@ -45108,49 +45108,49 @@
      2
     ],
     [
-     "func_00261778",
+     "sefHitEffect",
      2496376,
      12,
      2
     ],
     [
-     "sefGetRequestBuffer",
+     "sefGetBattleData",
      2496392,
      12,
      2
     ],
     [
-     "func_00261798",
+     "sevGetPtAllocator",
      2496408,
      36,
      2
     ],
     [
-     "sefGetSlotData",
+     "sevGetPtAllocator2",
      2496448,
      36,
      2
     ],
     [
-     "sefGetLineData",
+     "sefGetLineAdr",
      2496488,
      32,
      2
     ],
     [
-     "sefGetEffectRecords",
+     "sefGetScheduler",
      2496520,
      8,
      2
     ],
     [
-     "sefGetCurrentRecord",
+     "sefGetNowScheduler",
      2496528,
      8,
      2
     ],
     [
-     "sefGetSlotDataChecked",
+     "sefGetParentLine",
      2496536,
      56,
      2
@@ -45234,13 +45234,13 @@
      2
     ],
     [
-     "sefBuildEffectMatrix",
+     "sefCalcRotTransSMatrix",
      2497472,
      284,
      2
     ],
     [
-     "sefGetCameraPos",
+     "sefCalcInvView",
      2497760,
      64,
      2
@@ -45252,7 +45252,7 @@
      2
     ],
     [
-     "sefFindRecordIndex",
+     "sefSearchMapperIndex",
      2497872,
      240,
      2
@@ -45348,7 +45348,7 @@
      2
     ],
     [
-     "sefGetCubePosCenter",
+     "sefGetCubePos",
      2502728,
      64,
      2
@@ -45360,25 +45360,25 @@
      2
     ],
     [
-     "sefGetShapePos",
+     "sefGetOfsRange",
      2503408,
      460,
      2
     ],
     [
-     "sefGetLaneStartPos",
+     "sefGetStartPos",
      2503872,
      144,
      2
     ],
     [
-     "sefGetLaneTargetPos",
+     "sefGetTargetPos",
      2504016,
      144,
      2
     ],
     [
-     "sefResetObjects",
+     "sefResetEntryFlags",
      2504160,
      92,
      2
@@ -45420,7 +45420,7 @@
      2
     ],
     [
-     "sefResetSlotTable",
+     "sefResetEffectSlots",
      2506344,
      32,
      2
@@ -45450,25 +45450,25 @@
      2
     ],
     [
-     "loadWaitAdd",
+     "sefSetLoadQue",
      2507800,
      216,
      2
     ],
     [
-     "loadWaitPoll",
+     "sefExecLoadQue",
      2508016,
      240,
      2
     ],
     [
-     "loadWaitBusy",
+     "sefLoadQueBusy",
      2508256,
      64,
      2
     ],
     [
-     "loadWaitPending",
+     "sefCheckLoad",
      2508320,
      48,
      2
@@ -45480,13 +45480,13 @@
      2
     ],
     [
-     "sefSetOverrideVectors",
+     "sefSetFogOverride",
      2508400,
      116,
      2
     ],
     [
-     "sefOverrideFlagPtr",
+     "sefGetFogOverrideBlock",
      2508520,
      12,
      2
@@ -45522,7 +45522,7 @@
      2
     ],
     [
-     "sefFlagUpdateBit1",
+     "sefPauseControl",
      2508696,
      68,
      2
@@ -45540,37 +45540,37 @@
      2
     ],
     [
-     "sefOwnerValueInUse",
+     "sefOwnerGroupInUse",
      2509000,
      124,
      2
     ],
     [
-     "sefCountOwnerValue",
+     "sefCountOwnerGroupRecords",
      2509128,
      140,
      2
     ],
     [
-     "sefClearOwnerValueFlags",
+     "sefClearOwnerGroupFlags",
      2509272,
      164,
      2
     ],
     [
-     "sefNoOwnerFlaggedRecords",
+     "sefIsFinishEffect",
      2509440,
      160,
      2
     ],
     [
-     "sefOnlyOwnerInUse",
+     "sefIsFinishEffect2",
      2509600,
      112,
      2
     ],
     [
-     "sefReleaseOwnedRecords",
+     "sefKillEffect",
      2509712,
      152,
      2
@@ -45642,7 +45642,7 @@
      2
     ],
     [
-     "func_00265400",
+     "sefDummy_00265400",
      2511872,
      8,
      2
@@ -45666,13 +45666,13 @@
      2
     ],
     [
-     "sefCollectEffectRecords",
+     "sefPushEffect",
      2512208,
      404,
      2
     ],
     [
-     "sefRestoreEffectRecords",
+     "sefPopEffect",
      2512616,
      240,
      2
@@ -45768,7 +45768,7 @@
      2
     ],
     [
-     "srsGetEspName",
+     "srsGetEffectName2",
      2514968,
      80,
      2
@@ -45804,7 +45804,7 @@
      2
     ],
     [
-     "srsResetKeyTable",
+     "sresInitMemoryRes",
      2515336,
      40,
      2
@@ -45846,19 +45846,19 @@
      2
     ],
     [
-     "srsReleaseRecords",
+     "sresFreeReloaderMemory",
      2516432,
      28,
      2
     ],
     [
-     "srsReleaseEspFile",
+     "sresFreeMemoryRes",
      2516464,
      104,
      2
     ],
     [
-     "srsMapPendingResources",
+     "sresDataMapping",
      2516568,
      336,
      2
@@ -45888,7 +45888,7 @@
      2
     ],
     [
-     "srsEffectKeyFromName",
+     "srsEffectNameToID",
      2517568,
      268,
      2
@@ -45936,7 +45936,7 @@
      2
     ],
     [
-     "func_00266D88",
+     "sdvSaveAmbient",
      2518408,
      8,
      2
@@ -47028,7 +47028,7 @@
      2
     ],
     [
-     "func_00272EC8",
+     "MMathQuatToMatrix_00272EC8",
      2567880,
      112,
      2
@@ -47148,7 +47148,7 @@
      2
     ],
     [
-     "ColorSet",
+     "fadeColorSet",
      2570784,
      136,
      2
@@ -47406,7 +47406,7 @@
      2
     ],
     [
-     "recordDrawType1",
+     "screenBlurDraw",
      2578936,
      756,
      2
@@ -47436,13 +47436,13 @@
      2
     ],
     [
-     "recordDrawType2",
+     "screenTextureDraw",
      2580200,
      132,
      2
     ],
     [
-     "recordDrawType3",
+     "tunnelFanDraw",
      2580336,
      992,
      2
@@ -47460,7 +47460,7 @@
      2
     ],
     [
-     "recordDrawType4",
+     "randomCellsDraw",
      2581592,
      900,
      2
@@ -47478,13 +47478,13 @@
      2
     ],
     [
-     "recordDrawType5",
+     "screenSpreadFanDraw",
      2582584,
      1324,
      2
     ],
     [
-     "recordDrawType6",
+     "screenWarpDraw",
      2583912,
      916,
      2
@@ -47502,7 +47502,7 @@
      2
     ],
     [
-     "recordDrawType7",
+     "ringStripDraw",
      2585256,
      832,
      2
@@ -47520,7 +47520,7 @@
      2
     ],
     [
-     "recordDefaultColor",
+     "recordRingOuterColor",
      2586112,
      12,
      2
@@ -47640,13 +47640,13 @@
      2
     ],
     [
-     "pointFadeColorStep",
+     "pointRadialAngles",
      2592712,
      440,
      2
     ],
     [
-     "intLerp",
+     "angleLerp",
      2593152,
      16,
      2
@@ -47682,19 +47682,19 @@
      2
     ],
     [
-     "randomPointInRect",
+     "pointRandomDisplace",
      2595200,
      308,
      2
     ],
     [
-     "func_00279AB8",
+     "randomSeededIndexX",
      2595512,
      116,
      2
     ],
     [
-     "randomSeededIndex",
+     "randomSeededIndexY",
      2595632,
      116,
      2
@@ -47748,7 +47748,7 @@
      2
     ],
     [
-     "func_0027A620",
+     "angleWrap360Copy",
      2598432,
      60,
      2
@@ -47766,7 +47766,7 @@
      2
     ],
     [
-     "recordDrawType21",
+     "recordDrawNone",
      2598984,
      8,
      2
@@ -47778,7 +47778,7 @@
      2
     ],
     [
-     "func_0027A8B8",
+     "clipRectOffsetSplit",
      2599096,
      168,
      2
@@ -47958,13 +47958,13 @@
      2
     ],
     [
-     "func_0027C7B8",
+     "recordClearAllBanks",
      2607032,
      20,
      2
     ],
     [
-     "func_0027C7D0",
+     "recordUpdatesHold",
      2607056,
      20,
      2
@@ -48018,13 +48018,13 @@
      2
     ],
     [
-     "msgWindowAdvance",
+     "msgWindowOpenNextTextSlot",
      2607784,
      184,
      2
     ],
     [
-     "msgWindowLayoutText",
+     "msgWindowFeedCurrentText",
      2607968,
      76,
      2
@@ -48054,7 +48054,7 @@
      2
     ],
     [
-     "msgWindowSetCurrentValue",
+     "msgWindowSetCurrentText",
      2608392,
      68,
      2
@@ -48066,19 +48066,19 @@
      2
     ],
     [
-     "msgWindowRunCurrentAt",
+     "msgWindowMoveCurrent",
      2608536,
      184,
      2
     ],
     [
-     "msgWindowRunCurrentAnchored",
+     "msgWindowResizeCurrent",
      2608720,
      208,
      2
     ],
     [
-     "msgWindowRunCurrentCell",
+     "msgWindowResizeCurrentCells",
      2608928,
      108,
      2
@@ -48090,7 +48090,7 @@
      2
     ],
     [
-     "msgWindowUpdateCurrent",
+     "msgWindowCloseCurrent",
      2609048,
      116,
      2
@@ -48108,19 +48108,19 @@
      2
     ],
     [
-     "msgWindowRunRecord",
+     "msgWindowStartClosingSlot",
      2609584,
      188,
      2
     ],
     [
-     "msgWindowRunAll",
+     "msgWindowCloseAll",
      2609776,
      132,
      2
     ],
     [
-     "msgWindowRunCurrentValue",
+     "msgWindowAdvanceCurrent",
      2609912,
      124,
      2
@@ -48132,7 +48132,7 @@
      2
     ],
     [
-     "msgWindowStoreValue",
+     "msgWindowSetFrameColor",
      2610184,
      44,
      2
@@ -48162,7 +48162,7 @@
      2
     ],
     [
-     "msgWindowRewindLastState1",
+     "msgWindowRewindLastTextSlot",
      2610552,
      88,
      2
@@ -48174,7 +48174,7 @@
      2
     ],
     [
-     "msgWindowPollCurrent",
+     "msgWindowGetCurrentItemIndex",
      2610720,
      76,
      2
@@ -48186,7 +48186,7 @@
      2
     ],
     [
-     "msgWindowCloseLastState2",
+     "msgWindowCloseLastListSlot",
      2610880,
      88,
      2
@@ -48216,7 +48216,7 @@
      2
     ],
     [
-     "msgEntrySetTalkFlag10",
+     "msgEntrySetTalkScanFlag",
      2611320,
      20,
      2
@@ -48264,13 +48264,13 @@
      2
     ],
     [
-     "func_0027D9D8",
+     "msgChoiceStepSelection",
      2611672,
      20,
      2
     ],
     [
-     "func_0027D9F0",
+     "msgChoiceStepValue",
      2611696,
      20,
      2
@@ -48318,13 +48318,13 @@
      2
     ],
     [
-     "timecodeSetStoredValue",
+     "timecodeSetColorForward",
      2612448,
      20,
      2
     ],
     [
-     "timecodeSetWideValue",
+     "timecodeStartCounterForward",
      2612472,
      20,
      2
@@ -48390,19 +48390,19 @@
      2
     ],
     [
-     "slotBlockSetSlot",
+     "interpSetTextArg",
      2613576,
      48,
      2
     ],
     [
-     "slotBlockSetFirstSlot",
+     "interpSetSpeakerName",
      2613624,
      24,
      2
     ],
     [
-     "slotBlockSetFlag04",
+     "interpSetOpening",
      2613648,
      40,
      2
@@ -48438,7 +48438,7 @@
      2
     ],
     [
-     "interpAdvance",
+     "interpScrollBy",
      2614464,
      144,
      2
@@ -48462,7 +48462,7 @@
      2
     ],
     [
-     "talkSetFlag10",
+     "talkSetScanFlag",
      2614888,
      36,
      2
@@ -48498,19 +48498,19 @@
      2
     ],
     [
-     "func_0027E7A0",
+     "textSkipTwoUnits",
      2615200,
      60,
      2
     ],
     [
-     "interpCursorFrame",
+     "interpLineScrollY",
      2615264,
      20,
      2
     ],
     [
-     "textWrapWidth",
+     "textSlotWrapWidth",
      2615288,
      8,
      2
@@ -48594,7 +48594,7 @@
      2
     ],
     [
-     "talkDrawCursorWindow",
+     "talkDrawListHeaderWindow",
      2616616,
      324,
      2
@@ -48630,7 +48630,7 @@
      2
     ],
     [
-     "talkDrawSlotFrame",
+     "talkDrawListCursorBar",
      2624520,
      1536,
      2
@@ -48738,7 +48738,7 @@
      2
     ],
     [
-     "drawLineList",
+     "msgWindowDrawLineList",
      2630560,
      340,
      2
@@ -48804,7 +48804,7 @@
      2
     ],
     [
-     "drawEmptyNotice",
+     "sellDrawEmptyNotice",
      2632768,
      132,
      2
@@ -48846,13 +48846,13 @@
      2
     ],
     [
-     "drawDigit",
+     "talkBoxDrawDigit",
      2633840,
      152,
      2
     ],
     [
-     "drawSwingingAccent",
+     "talkBoxDrawRollingDigit",
      2633992,
      232,
      2
@@ -48924,7 +48924,7 @@
      2
     ],
     [
-     "valueDigit",
+     "decimalDigitAt",
      2637256,
      92,
      2
@@ -48960,7 +48960,7 @@
      2
     ],
     [
-     "textLastRowY",
+     "textSlotFirstRowY",
      2637912,
      20,
      2
@@ -48978,7 +48978,7 @@
      2
     ],
     [
-     "textFirstRowY",
+     "listSlotFirstRowY",
      2638128,
      20,
      2
@@ -48990,19 +48990,19 @@
      2
     ],
     [
-     "drawPlainText",
+     "talkBoxPrintDigitPlain",
      2638176,
      108,
      2
     ],
     [
-     "drawAccentText",
+     "talkBoxPrintDigitAccent",
      2638288,
      136,
      2
     ],
     [
-     "drawTextFront",
+     "fontPrintFront",
      2638424,
      36,
      2
@@ -49242,7 +49242,7 @@
      2
     ],
     [
-     "timecodeTickIfActive",
+     "timecodeSetGeometry",
      2642192,
      40,
      2
@@ -49266,7 +49266,7 @@
      2
     ],
     [
-     "timecodeSelectPhase",
+     "timecodeUpdateSelection",
      2642728,
      20,
      2
@@ -49284,7 +49284,7 @@
      2
     ],
     [
-     "timecodeSelectPhaseByMode",
+     "timecodeValidateSelection",
      2642928,
      168,
      2
@@ -49332,7 +49332,7 @@
      2
     ],
     [
-     "timecodeSetIndex",
+     "timecodeSetDigits",
      2643952,
      96,
      2
@@ -49350,13 +49350,13 @@
      2
     ],
     [
-     "timecodeEnablePhase",
+     "timecodeEnableSelection",
      2644200,
      36,
      2
     ],
     [
-     "timecodeClearFlag40",
+     "timecodeDisableSelection",
      2644240,
      36,
      2
@@ -49452,13 +49452,13 @@
      2
     ],
     [
-     "msgSlotInitState4",
+     "msgSlotInitItem",
      2646640,
      24,
      2
     ],
     [
-     "msgSlotSetGeometryIfState4",
+     "msgSlotSetGeometryIfItem",
      2646664,
      40,
      2
@@ -49482,7 +49482,7 @@
      2
     ],
     [
-     "msgSlotSetFlag04",
+     "msgSlotStartOpening",
      2646888,
      40,
      2
@@ -49530,13 +49530,13 @@
      2
     ],
     [
-     "textIsNonDecimalEscape",
+     "textIsDecimalEscape",
      2648272,
      44,
      2
     ],
     [
-     "textAppendPairTag",
+     "textAppendStringEscape",
      2648320,
      88,
      2
@@ -49662,13 +49662,13 @@
      2
     ],
     [
-     "sizedRecordCenterX",
+     "msgSlotCenterX",
      2650160,
      20,
      2
     ],
     [
-     "sizedRecordCenterY",
+     "msgSlotCenterY",
      2650184,
      20,
      2
@@ -49686,7 +49686,7 @@
      2
     ],
     [
-     "sizedRecordSetValue",
+     "msgSlotSetZ",
      2650280,
      8,
      2
@@ -49932,7 +49932,7 @@
      2
     ],
     [
-     "func_002885D8",
+     "XenoActorDisableChannel",
      2655704,
      80,
      2
@@ -49944,7 +49944,7 @@
      2
     ],
     [
-     "func_00288678",
+     "XenoActorDisableChannelB",
      2655864,
      80,
      2
@@ -50046,7 +50046,7 @@
      2
     ],
     [
-     "XenoActorUpdateMoveState",
+     "XenoActorUpdateClipSweep",
      2658344,
      1156,
      2
@@ -50148,7 +50148,7 @@
      2
     ],
     [
-     "func_0028AF28",
+     "XenoActorRequestJointShift",
      2666280,
      16,
      2
@@ -50166,7 +50166,7 @@
      2
     ],
     [
-     "func_0028B158",
+     "XenoActorApplyRootOffset",
      2666840,
      268,
      2
@@ -50178,7 +50178,7 @@
      2
     ],
     [
-     "func_0028B2F0",
+     "XenoActorSetInitCode",
      2667248,
      8,
      2
@@ -50298,7 +50298,7 @@
      2
     ],
     [
-     "func_0028D4C8",
+     "tiCameraSolverDummy",
      2675912,
      8,
      2
@@ -50472,13 +50472,13 @@
      2
     ],
     [
-     "func_00291F80",
+     "tiMRPackageSetBlendMat",
      2695040,
      76,
      2
     ],
     [
-     "tiMRPackageSetPamFrame",
+     "tiMRPackageSetPartsMat",
      2695120,
      76,
      2
@@ -50490,31 +50490,31 @@
      2
     ],
     [
-     "tiMRPackageSetEntryA",
+     "tiMRPackageSetAnimData",
      2695216,
      148,
      2
     ],
     [
-     "tiMRPackageSetTableA",
+     "tiMRPackageSetAnimTable",
      2695368,
      76,
      2
     ],
     [
-     "tiMRPackageSetEntryB",
+     "tiMRPackageSetFaceAnimData",
      2695448,
      148,
      2
     ],
     [
-     "tiMRPackageIsEntryValidA",
+     "tiMRPackageIsAnimEntryValid",
      2695600,
      76,
      2
     ],
     [
-     "tiMRPackageSetTableB",
+     "tiMRPackageSetFaceAnimTable",
      2695680,
      76,
      2
@@ -50532,7 +50532,7 @@
      2
     ],
     [
-     "func_002922F0",
+     "tiMRPackageSetEntryTableC",
      2695920,
      76,
      2
@@ -50574,25 +50574,25 @@
      2
     ],
     [
-     "tiMRPackageAdvanceA",
+     "tiMRPackageAdvanceAnim",
      2696352,
      408,
      2
     ],
     [
-     "tiMRPackageAdvanceAUnwrapped",
+     "tiMRPackageAdvanceAnimUnwrapped",
      2696760,
      368,
      2
     ],
     [
-     "tiMRPackageAdvanceB",
+     "tiMRPackageAdvanceFaceAnim",
      2697128,
      284,
      2
     ],
     [
-     "tiMRPackageAdvanceBUnwrapped",
+     "tiMRPackageAdvanceFaceAnimUnwrapped",
      2697416,
      280,
      2
@@ -50604,19 +50604,19 @@
      2
     ],
     [
-     "tiMRPackageSelectEntryA",
+     "tiMRPackageSelectAnimEntry",
      2698304,
      92,
      2
     ],
     [
-     "tiMRPackageSetTableAndEntryA",
+     "tiMRPackageSetAnimTableAndEntry",
      2698400,
      112,
      2
     ],
     [
-     "tiMRPackageSelectEntryB",
+     "tiMRPackageSelectFaceAnimEntry",
      2698512,
      92,
      2
@@ -50640,13 +50640,13 @@
      2
     ],
     [
-     "xglVectorAdd",
+     "xglVectorAddXYZ_00292E38",
      2698808,
      28,
      2
     ],
     [
-     "xglVectorSubXYZKeepW",
+     "xglVectorSubXYZ_00292E58",
      2698840,
      28,
      2
@@ -50658,7 +50658,7 @@
      2
     ],
     [
-     "xglVectorNormal",
+     "xglVectorNormal_00292E90",
      2698896,
      40,
      2
@@ -50670,7 +50670,7 @@
      2
     ],
     [
-     "tiVu0LoadFixedMatrix",
+     "tiVu0LoadIdentityMatrix",
      2698976,
      32,
      2
@@ -50700,7 +50700,7 @@
      2
     ],
     [
-     "func_00292FB8",
+     "xglCurDummy",
      2699192,
      8,
      2
@@ -50784,25 +50784,25 @@
      2
     ],
     [
-     "func_002933D0",
+     "tiVu0AssertUnreachable739",
      2700240,
      40,
      2
     ],
     [
-     "func_002933F8",
+     "tiVu0AssertUnreachable758",
      2700280,
      40,
      2
     ],
     [
-     "xacGetKeyPayloadA",
+     "xacGetKeyOutTangentAngle",
      2700320,
      156,
      2
     ],
     [
-     "xacGetKeyPayloadB",
+     "xacGetKeyInTangentAngle",
      2700480,
      156,
      2
@@ -50904,7 +50904,7 @@
      2
     ],
     [
-     "xacFindCurveKey",
+     "xacFindVisibilityKey",
      2707848,
      212,
      2
@@ -50916,13 +50916,13 @@
      2
     ],
     [
-     "xacGetKeyPair",
+     "xacGetStartKeyValueAngle",
      2708456,
      76,
      2
     ],
     [
-     "xacGetKeyPairB",
+     "xacGetEndKeyValueAngle",
      2708536,
      76,
      2
@@ -50970,7 +50970,7 @@
      2
     ],
     [
-     "tiDrawJointDrawPoints",
+     "tiDrawJointDrawAxes",
      2710304,
      316,
      2
@@ -51084,7 +51084,7 @@
      2
     ],
     [
-     "xglMatrix2Quaternion",
+     "XrgMatrixToQuaternion",
      2716360,
      692,
      2
@@ -51144,13 +51144,13 @@
      2
     ],
     [
-     "tiWindSolveLink",
+     "tiDynamicsSolveLink",
      2719272,
      288,
      2
     ],
     [
-     "tiWindSolveCellPairs",
+     "tiDynamicsSolveCellPairs",
      2719560,
      364,
      2
@@ -51306,19 +51306,19 @@
      2
     ],
     [
-     "tiDrawCollisionFill",
+     "tiDrawCollisionDrawRing",
      2725296,
      184,
      2
     ],
     [
-     "tiDrawCollisionUpdate",
+     "tiDrawCollisionDrawObjectRing",
      2725480,
      96,
      2
     ],
     [
-     "func_002996C8",
+     "tiDrawCollisionDummy",
      2725576,
      8,
      2
@@ -51390,13 +51390,13 @@
      2
     ],
     [
-     "tiDynamicsCollBuildMatrices",
+     "tiDynamicsCollBuildInverseMatrices",
      2730896,
      164,
      2
     ],
     [
-     "tiDynamicsCollBuildWideMatrices",
+     "tiDynamicsCollBuildWideInverseMatrices",
      2731064,
      164,
      2
@@ -51546,7 +51546,7 @@
      2
     ],
     [
-     "mapFixupBlock",
+     "UnduInit",
      2737368,
      368,
      2
@@ -51558,13 +51558,13 @@
      2
     ],
     [
-     "mapFindBlockEntry",
+     "UnduDataGetHeader",
      2738008,
      248,
      2
     ],
     [
-     "mapProbeInit",
+     "UnduParamInit",
      2738256,
      108,
      2
@@ -51582,25 +51582,25 @@
      2
     ],
     [
-     "mapRecordDistance",
+     "UnduCheckSub",
      2739488,
      212,
      2
     ],
     [
-     "mapProbeRecordHit",
+     "UnduCheckSubHeightCheck",
      2739704,
      184,
      2
     ],
     [
-     "mapProbeRecords",
+     "UnduCheckSubCheckAll",
      2739888,
      196,
      2
     ],
     [
-     "mapCrossingBlocked",
+     "CheckWallAttr",
      2740088,
      316,
      2
@@ -51612,7 +51612,7 @@
      2
     ],
     [
-     "mapMoveAlongWalls",
+     "UnduCheckSubCrossCheck",
      2741088,
      1772,
      2
@@ -51624,7 +51624,7 @@
      2
     ],
     [
-     "mapCommitProbeHit",
+     "UnduCheckResultCheck",
      2743040,
      256,
      2
@@ -51654,7 +51654,7 @@
      2
     ],
     [
-     "mapMoveProbe",
+     "UnduCheck",
      2745120,
      808,
      2
@@ -51666,13 +51666,13 @@
      2
     ],
     [
-     "func_0029E690",
+     "uwamonoPlayerUpdateDummy",
      2746000,
      8,
      2
     ],
     [
-     "func_0029E698",
+     "mapDummy",
      2746008,
      8,
      2
@@ -51708,7 +51708,7 @@
      2
     ],
     [
-     "func_0029F008",
+     "sceEENetInit",
      2748424,
      196,
      2
@@ -51798,13 +51798,13 @@
      2
     ],
     [
-     "func_0029FAA8",
+     "sceInetName2Address",
      2751144,
      188,
      2
     ],
     [
-     "func_0029FB68",
+     "sceInetAddress2String",
      2751336,
      156,
      2
@@ -51816,25 +51816,25 @@
      2
     ],
     [
-     "func_0029FCD8",
+     "sceInetCreate",
      2751704,
      112,
      2
     ],
     [
-     "func_0029FD48",
+     "sceInetOpen",
      2751816,
      72,
      2
     ],
     [
-     "func_0029FD90",
+     "sceInetClose",
      2751888,
      72,
      2
     ],
     [
-     "func_0029FDD8",
+     "sceInetRecv",
      2751960,
      200,
      2
@@ -51846,7 +51846,7 @@
      2
     ],
     [
-     "func_0029FFB0",
+     "sceInetSend",
      2752432,
      176,
      2
@@ -51936,7 +51936,7 @@
      2
     ],
     [
-     "func_002A06F0",
+     "sceInetInit",
      2754288,
      216,
      2
@@ -51948,7 +51948,7 @@
      2
     ],
     [
-     "func_002A0848",
+     "sceInetRegisterEventHandler",
      2754632,
      64,
      2
@@ -52014,7 +52014,7 @@
      2
     ],
     [
-     "func_002A0C80",
+     "sceInetWaitGetAddress",
      2755712,
      52,
      2
@@ -52164,7 +52164,7 @@
      2
     ],
     [
-     "func_002A1B30",
+     "floorf",
      2759472,
      240,
      2
@@ -52176,13 +52176,13 @@
      2
     ],
     [
-     "func_002A1D08",
+     "tanf",
      2759944,
      120,
      2
     ],
     [
-     "func_002A1D80",
+     "atan2",
      2760064,
      20,
      2
@@ -52350,7 +52350,7 @@
      2
     ],
     [
-     "func_002A5C88",
+     "__udivdi3",
      2776200,
      1404,
      2
@@ -52452,7 +52452,7 @@
      2
     ],
     [
-     "func_002A7510",
+     "dpcmp",
      2782480,
      76,
      2
@@ -52890,7 +52890,7 @@
      2
     ],
     [
-     "func_002AB1A8",
+     "strncpy",
      2797992,
      444,
      2
@@ -52992,7 +52992,7 @@
      2
     ],
     [
-     "func_002AF028",
+     "vprintf",
      2813992,
      40,
      2
@@ -53364,13 +53364,13 @@
      1
     ],
     [
-     "func_00A80040",
+     "hdd_check",
      11010112,
      8,
      1
     ],
     [
-     "logoMcCheck",
+     "mc_check",
      11010120,
      876,
      1
@@ -53394,13 +53394,13 @@
      1
     ],
     [
-     "func_00A80790",
+     "BootDisplay",
      11011984,
      8,
      1
     ],
     [
-     "func_00A80798",
+     "titleGroupMinus2Dummy",
      11011992,
      8,
      1
@@ -53412,7 +53412,7 @@
      1
     ],
     [
-     "func_00A808C8",
+     "titleFrameHookDummy",
      11012296,
      8,
      1
@@ -53454,7 +53454,7 @@
      1
     ],
     [
-     "titleResetState",
+     "TitleGameInit",
      11017272,
      64,
      1

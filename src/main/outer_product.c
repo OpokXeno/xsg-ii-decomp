@@ -1,23 +1,9 @@
 #include "common.h"
 #include "shared.h"
-
-int CheckPointLine(const Vector4 *first, const Vector4 *second,
-                   const Vector4 *point);
-
-extern void xglVectorLength(float *destination, const Vector4 *vector);
-
-void xglVectorOuter(Vector4 *destination, const Vector4 *left,
-                    const Vector4 *right);
-
-void xglVectorNormal_001A9200(Vector4 *destination, const Vector4 *source);
-void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right);
-
-float CheckDist2D(const Vector4 *first, const Vector4 *second);
+#include "main/outer_product.h"
+#include "main/xgl_2.h"
 
 #include "vu0_macro.h"
-
-extern void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
-                               const Vector4 *third, Vector4 *vertical);
 
 void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
                         const Vector4 *third, Vector4 *vertical)
@@ -39,7 +25,7 @@ float CalcLength(const Vector4 *first, const Vector4 *second, const Vector4 *thi
     float length;
 
     CalcVerticalVector(first, second, third, &vertical);
-    xglVectorNormal_001A9200(&vertical, &vertical);
+    xglVectorNormal(&vertical, &vertical);
     Vu0SubVectorXYZ(&delta, first, third);
     xglVectorInner(&length, &vertical, &delta);
     return length;
@@ -56,12 +42,12 @@ void CalcCrossPoint(const Vector4 *first, const Vector4 *second,
 
     intersection_scale[1] = CalcLength(first, second, third);
     CalcVerticalVector(first, second, third, &normal);
-    xglVectorNormal_001A9200(&normal, &normal);
+    xglVectorNormal(&normal, &normal);
     Vu0SubVectorXYZ(cross_point, fourth, third);
     xglVectorInner(&intersection_scale[0], cross_point, &normal);
     intersection_scale[0] = intersection_scale[1] / intersection_scale[0];
     xglVectorLength(&intersection_scale[1], cross_point);
-    xglVectorNormal_001A9200(cross_point, cross_point);
+    xglVectorNormal(cross_point, cross_point);
     cross_point->x *= intersection_scale[0] * intersection_scale[1];
     cross_point->y *= intersection_scale[0] * intersection_scale[1];
     cross_point->z *= intersection_scale[0] * intersection_scale[1];

@@ -1,6 +1,7 @@
 #include "common.h"
+#include "main/xgl_mc.h"
 #include "shared.h"
-#include "main/tu012.h"
+#include "main/xgl_mc_request.h"
 
 extern u8 *buffer;
 
@@ -94,13 +95,12 @@ int xglMcEasySave(const char *path, const void *buffer, int size)
 }
 
 extern void *memset(void *destination, int value, unsigned int count);
-extern u8 SaveData[0x5160];
-void func_0012F868(void);
+void sceMcInit(void);
 
 /* Memory-card init: the SDK init, the request reset (xglMcReset), then the save buffer clear. Called from InitializeSystem. */
 void xglMcInitial(void)
 {
-    func_0012F868();
+    sceMcInit();
     xglMcReset();
-    memset(SaveData, 0, sizeof(SaveData));
+    memset(&SaveData, 0, sizeof(SaveData));
 }

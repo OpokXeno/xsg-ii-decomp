@@ -1,17 +1,33 @@
 #include "common.h"
 #include "shared.h"
 #include "main/sef.h"
-#include "main/tu151.h"
-#include "main/sdv_180.h"
-#include "main/sdv_181.h"
+#include "main/sv_get_image_item.h"
+#include "main/vu0_vector.h"
+#include "main/sc_get.h"
+#include "main/sdv.h"
 #include "main/srs.h"
-#include "main/tu045.h"
-#include "main/tu155.h"
-#include "main/tu187.h"
+#include "main/pxy_packet_state.h"
+#include "main/sv_scene_flags.h"
+#include "main/m_math.h"
 #include "quadword.h"
 #include "vu0_macro.h"
 #include "main/xgl_cd.h"
-#include "main/tu048.h"
+#include "main/game_data.h"
+#include "main/ytachi_test.h"
+#include "main/sm_initilize.h"
+#include "main/TiDynamicsColl.h"
+#include "main/TiPartsAnim.h"
+#include "main/uwamono_record.h"
+#include "main/xgl_studio.h"
+#include "main/xgl_camera.h"
+#include "main/m_se_obj.h"
+#include "main/xenoActor.h"
+#include "main/sef_print.h"
+#include "main/m_math_geom.h"
+#include "main/vu0_matrix.h"
+#include "main/vu0_rotate.h"
+#include "main/xgl_2.h"
+#include "ov01/unit_tbl.h"
 #define SEF_EFFECT_LINE_COUNT 32
 
 /*
@@ -48,7 +64,6 @@ extern unsigned char _lineData[0x41000];
 /* _ptAlloc's per-record byte size, the same 640 sefCalcLocalMatrix already
  * multiplies _nowParentLocal by. */
 #define SEF_PT_ALLOC_RECORD_SIZE 640
-#define SEF_PT_ALLOCATOR ((SefPtAllocatorState *)(void *)_ptAlloc)
 
 typedef struct SefLineDataEntry {
     unsigned char unmodeled_000[2];
@@ -129,9 +144,8 @@ void sefFreeEffectData(EffectData *effect, unsigned int index);
 /* Frees particle handle `index` of the record when it is in range and * returns -1; out of range, returns the handle's byte offset in the record. */
 int sefFreeLocalData(SefLocalData *data, unsigned int index);
 /* The original local pointer stores the KSEG0 alias of the named table
- * sefAtanTbl inside D_00400360 at +0xF760 (main symbol map: size 0x1004). */
+ * sefAtanTbl inside _imageMapper at +0x22440 (main symbol map: size 0x1004). */
 extern float *atanTbl_0;
-extern unsigned char _ptAlloc[0xA0810];
 void sefDestroyLocalData(SefLocalData *data);
 
 /* One 8-byte key of a keyframe track: frame and next are the key index
@@ -152,11 +166,9 @@ typedef struct SefKeyCursor {
 } SefKeyCursor;
 
 /* File-level prototypes of functions defined later in this file or in another TU. */
-void sdvResetSpecialWork(void);
 void sefFlagSet(int mask);
-void loadWaitAdd(int id, int slot);
-void sefLoadPendingEffects(void);
-void sefDeleteWaitEffect(int key);
+void sefSetupEffect(void);
+void sefDeleteEffectWait(int key);
 
 /* A scratchpad parameter word, read as a float or as an int flag. */
 typedef union SefScratchWord {
@@ -294,14 +306,13 @@ typedef struct SefSlot {
     unsigned char data[0x2C0 - 0x10];
 } SefSlot;
 
-static unsigned char D_00746C40[38056];
-SefSlot *sefPtAllocatorState = (SefSlot *) D_00746C40;
+static unsigned char _ptAlloc[0xBD110];
+SefSlot *sefPtAllocatorState = (SefSlot *) _ptAlloc;
 extern int sefPtAllocCount;
 static short sefPtFreeSlots[1104];
-/* The request buffer: 0x340 bytes (SefRequestBuffer view); D_008046F0 (+0x100) and D_008048F0 (+0x300) are
+/* The request buffer: 0x340 bytes (SefRequestBuffer view); +0x100 (0x8046F0) and sefRequestParentMatrixPointer (+0x300) are
  * labels inside it. */
 static unsigned char sefRequestBuffer[0x340];
-void sefMemZero(void *dest, int size);
 
 void sevInitPtAllocator(void)
 {
@@ -370,9 +381,9 @@ typedef struct SefTrackKey {
     float value;
 } SefTrackKey;
 
-/* A scheduled-effect slot as sefResetEffectSlot re-initializes it: the first 0x20
+/* A scheduled-effect slot as sefInitEffectData re-initializes it: the first 0x20
  * bytes are line handles, the next 0x20 are one tag byte per handle (written
- * by sefAddSlotLine), the rest of the fields are only the ones the reset
+ * by sefAllocEffectData), the rest of the fields are only the ones the reset
  * writes. */
 typedef struct SefEffectSlot {
     unsigned char lineHandles[0x20];
@@ -429,7 +440,7 @@ SefTrackKey *sefAdvanceTrackCursor(SefTrackKey *keys, SefTrackCursor *cursor)
 
 /* The wide-track form of sefAdvanceTrackCursor: advances a cursor over 16-byte records
  * and returns the record it sits on. */
-SefTrackKey16 *sefAdvanceTrackCursor16(SefTrackKey16 *keys, SefTrackCursor *cursor)
+SefTrackKey16 *sefAdvanceVectorTrackCursor(SefTrackKey16 *keys, SefTrackCursor *cursor)
 {
     f32 time;
     int frame;
@@ -481,7 +492,7 @@ typedef struct SefVectorTrackCursor {
 
 /* Samples a vector track at the cursor's time into cursor->value. Returns 0 when
  * the cursor sits on the last key, 1 otherwise. */
-int sefSampleVectorTrack(SefTrackKey16 *keys, SefVectorTrackCursor *cursor)
+int sefLerpVector(SefTrackKey16 *keys, SefVectorTrackCursor *cursor)
 {
     Vector4 *value;
     SefTrackKey16 *key;
@@ -494,7 +505,7 @@ int sefSampleVectorTrack(SefTrackKey16 *keys, SefVectorTrackCursor *cursor)
         return 0;
     }
     value = &cursor->value;
-    key = sefAdvanceTrackCursor16(keys, &cursor->track);
+    key = sefAdvanceVectorTrackCursor(keys, &cursor->track);
     start = key->key;
     span = (key + 1)->key - start;
     if (span != 0) {
@@ -538,7 +549,7 @@ void sefSampleColorTrack(SefTrackKey16 *keys, SefColorTrackCursor *cursor, const
     key = &keys[cursor->track.index];
     if ((key + 1)->key != SEF_TRACK_END_KEY) {
         lanes = cursor->color;
-        key = sefAdvanceTrackCursor16(keys, &cursor->track);
+        key = sefAdvanceVectorTrackCursor(keys, &cursor->track);
         start = key->key;
         end = (key + 1)->key;
         if (start != end) {
@@ -611,16 +622,14 @@ void sefSampleTrackTruncated(SefTrackKey *keys, SefTrackCursor *cursor)
     cursor->sampled_s16 = (short)sample;
 }
 
-void sefSampleKeyframeValue(SefKeyframe *keys, SefKeyCursor *cursor) {
+void sefProgressInt(SefKeyframe *keys, SefKeyCursor *cursor) {
     cursor->value = ((SefKeyframe *)sefAdvanceTrackCursor((SefTrackKey *)keys, (SefTrackCursor *)cursor))->value;
 }
 
-void *MMathNormalizeVector2(void *destination, const Vector4 *source);
-int MMathMatrixBetweenVectors(Matrix4 *destination, const Vector4 *from, const Vector4 *to);
 
 /* Builds in destination the rotation that turns axis onto the normalized direction (MMathMatrixBetweenVectors);
  * returns 0 without touching destination for a zero direction. */
-int sefSetSlotDirection(Matrix4 *destination, const Vector4 *direction, const Vector4 *axis)
+int sefGetDirMatrix(Matrix4 *destination, const Vector4 *direction, const Vector4 *axis)
 {
     Vector4 normalized;
     int is_zero;
@@ -634,17 +643,17 @@ int sefSetSlotDirection(Matrix4 *destination, const Vector4 *direction, const Ve
     return 1;
 }
 
-void sefSetSlotDirectionBetween(void *state, Vector4 *minuend, Vector4 *subtrahend, const Vector4 *axis) {
+void sefGetVecMatrix(void *state, Vector4 *minuend, Vector4 *subtrahend, const Vector4 *axis) {
     Vector4 delta;
 
     Vu0SefSubVectorXYZ(&delta, minuend, subtrahend);
-    sefSetSlotDirection(state, &delta, axis);
+    sefGetDirMatrix(state, &delta, axis);
 }
 
 /* result = the normalized (first - second) when flags has 0x400, else the
  * normalized (second - first); xyz only. The normalizing subroutine works on
  * vf20 in place. */
-void sefNormalizeDifference(Vector4 *result, Vector4 *first, Vector4 *second, int flags) {
+void sefNormalizeDifference(Vector4 *result, const Vector4 *first, const Vector4 *second, int flags) {
     __asm__ __volatile__(
         "lqc2 vf20, 0(%0)\n"
         "lqc2 vf1, 0(%1)\n"
@@ -667,8 +676,13 @@ typedef union SefWord {
 
 typedef struct SefTransformState {
     Matrix4 matrix;                                  /* +0x000 */
-    Vector4 local_rows[3];                           /* +0x040 */
-    Vector4 velocity;                                /* +0x070 */
+    union {
+        Matrix4 local_matrix;                        /* +0x040: MMathRotateMatrixYXZ fills all four rows */
+        struct {
+            Vector4 local_rows[3];                   /* +0x040 */
+            Vector4 velocity;                        /* +0x070: row 3 of local_matrix */
+        };
+    };
     Vector4 rotated_rows[3];                         /* +0x080 */
     Vector4 origin;                                  /* +0x0b0: the start position at creation */
     Matrix4 cached_matrix;                           /* +0x0c0 */
@@ -710,17 +724,10 @@ typedef struct SefTransformState {
     short textureFrame;                              /* +0x2ba */
 } SefTransformState;
 
-extern void *D_008048F0[];
-void vu0CurMatrixMul(void *matrix);
-void vu0RotateCurrentYXZ(Vector4 *angles);
-void vu0SetCurrentRotationYXZ(Vector4 *angles);
-void vu0SetCurrentRotationZ(float angle);
+extern Matrix4 *sefRequestParentMatrixPointer[];
 const Vector4 sefDefaultOffset = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
-extern Vector4 vu0IdentityMatrix[3];
 extern SefTransformState *sefLinkedPoint;
 void sefGetKindMatrix(Matrix4 *dest, int unused, int matrixIndex, int kind);
-void vu0CurMatrixMulRight(Vector4 *rows);
-int vu0SetRotationFromDirection(void *matrix, Vector4 *direction, Vector4 *aux);
 
 /* The request block sefRequestBuffer as the transform reads it: kind1Key is its first word; the kind matrices sit at
  * +0x80 (kind 64), +0xc0 (kind 256), +0x100 (kind 128) and +0x240 (kind 161). */
@@ -739,7 +746,7 @@ typedef struct SefRequestMatrices {
 typedef struct SefMotionCurve {
     unsigned char unmodeled_00[0x16];
     short hasCurve;                                  /* +0x16 */
-    void *keys;                                      /* +0x18 */
+    MMathHermiteKey *keys;                           /* +0x18 */
 } SefMotionCurve;
 
 typedef struct SefPointMotion {
@@ -755,11 +762,7 @@ typedef struct SefPointMotion {
 } SefPointMotion;
 
 SefPointMotion sefPointMotion = { 0 };
-float MMathEvalHermiteKeys(Vector4 *destination, void *keys, float time);
 const Vector4 sefDirectionAxes[2] = { { .x = 0.0f, .y = 0.0f, .z = 1.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -1.0f, .w = 1.0f } };
-/* Copies rows 0-2 of src and the translation into dst; returns the distance
- * the translation step measured. */
-float vu0CopyMatrixWithTranslation(Vector4 *dst, Matrix4 src, Vector4 *aux, int value);
 
 /* Clears a vector to the origin (0, 0, 0, 1). */
 static inline void sefClearVector(Vector4 *vector)
@@ -807,9 +810,9 @@ int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float
 
         if (!(state->flags & 2)) {
             state->flags |= 2;
-            vu0SetRotationFromDirection(&state->cached_matrix, &state->rotation_direction, &state->origin);
+            vu0SetRotationFromDirection(state->cached_matrix, &state->rotation_direction, &state->origin);
         }
-        length = vu0CopyMatrixWithTranslation((Vector4 *)0x70000000, state->cached_matrix, &state->origin, (int)&state->rotation_direction);
+        length = vu0CopyMatrixWithTranslationDist((Vector4 *)0x70000000, state->cached_matrix, &state->origin, &state->rotation_direction);
         MMathEvalHermiteKeys((Vector4 *)0x70000040, curve->keys, state->time);
         __asm__ __volatile__(
             "lqc2 $vf26, 0(%0)\n\t"
@@ -873,7 +876,7 @@ int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float
                 sefNormalizeDifference((Vector4 *)0x70000090, &state->rotation_direction, &state->rotation_aux, flags);
             } else {
                 matrix = &state->cached_matrix;
-                if (vu0SetRotationFromDirection(matrix, &state->rotation_direction, &state->rotation_aux) == 0) {
+                if (vu0SetRotationFromDirection(*matrix, &state->rotation_direction, &state->rotation_aux) == 0) {
                     matrix = 0;
                     sefClearVector((Vector4 *)0x70000090);
                 }
@@ -888,7 +891,7 @@ int sefGetSpeed(Vector4 *displacement, SefTransformState *state, int mode, float
                     sefNormalizeDifference((Vector4 *)0x70000090, &linkedPoint->slot_offset, &sefDefaultOffset, flags);
                 } else {
                     matrix = &state->cached_matrix;
-                    if ((short)sefSetSlotDirection(matrix, &linkedPoint->slot_offset, sefDirectionAxes) != 0) {
+                    if ((short)sefGetDirMatrix(matrix, &linkedPoint->slot_offset, sefDirectionAxes) != 0) {
                         matrix = 0;
                         sefClearVector((Vector4 *)0x70000090);
                     }
@@ -1022,7 +1025,7 @@ void sefMoveParticle(SefTransformState *state, int mode, int life, float blend)
     } while (0)
 
 /* Copies rows 0..2 of src into dest; row 3 of dest is left alone. */
-static inline void sefCopyRows3(Matrix4 *dest, Vector4 *src)
+static inline void sefCopyRows3(Matrix4 *dest, const Vector4 *src)
 {
     __asm__ __volatile__(
         "lqc2 $vf26, 0(%1)\n\t"
@@ -1094,7 +1097,7 @@ void sefCalcLocalMatrix(SefTransformState *state, int kind, int mode, int flags)
                     : "r"(&state->slot_offset), "r"(scratch)
                     : "memory");
             }
-            sefSetSlotDirection(&state->part_matrix, scratch, sefDirectionAxes);
+            sefGetDirMatrix(&state->part_matrix, scratch, sefDirectionAxes);
         } else if (mode == 0x3000) {
             state->flags |= 0x8000;
             sefGetKindMatrix(&state->part_matrix, request->kind1Key, kind & 31, 1);
@@ -1104,7 +1107,7 @@ void sefCalcLocalMatrix(SefTransformState *state, int kind, int mode, int flags)
                 if (flags & 1) {
                     QuadwordCopyMatrixT0(&state->part_matrix, &state->cached_matrix);
                 } else {
-                    sefSetSlotDirection(&state->part_matrix, &sefLinkedPoint->slot_offset, sefDirectionAxes);
+                    sefGetDirMatrix(&state->part_matrix, &sefLinkedPoint->slot_offset, sefDirectionAxes);
                 }
             }
         } else if (kind == 0x40 && mode == kind) {
@@ -1128,9 +1131,9 @@ void sefCalcLocalMatrix(SefTransformState *state, int kind, int mode, int flags)
                 }
             }
             if (kind == 0x21) {
-                vu0SetRotationFromDirection(&state->part_matrix, &state->rotation_direction, aux);
+                vu0SetRotationFromDirection(state->part_matrix, &state->rotation_direction, aux);
             } else {
-                vu0SetRotationFromDirection(&state->part_matrix, (Vector4 *) 0x700000B0, aux);
+                vu0SetRotationFromDirection(state->part_matrix, (Vector4 *) 0x700000B0, aux);
             }
         } else {
             sefLoadRotatedRows(state);
@@ -1167,18 +1170,18 @@ void sefSetTransformRotation(SefTransformState *state, int mode)
                 :
                 : "r"(state->local_rows)
                 : "memory");
-            if (D_008048F0[0] != 0) {
-                vu0CurMatrixMul(D_008048F0[0]);
+            if (sefRequestParentMatrixPointer[0] != 0) {
+                vu0CurMatrixMul(*sefRequestParentMatrixPointer[0]);
             }
             vu0RotateCurrentYXZ(angles);
-        } else if (D_008048F0[0] != 0) {
+        } else if (sefRequestParentMatrixPointer[0] != 0) {
             __asm__ __volatile__(
                 "lqc2 $vf26, 0(%0)\n\t"
                 "lqc2 $vf27, 16(%0)\n\t"
                 "lqc2 $vf28, 32(%0)\n\t"
                 "lqc2 $vf29, 48(%0)"
                 :
-                : "r"(D_008048F0[0])
+                : "r"(sefRequestParentMatrixPointer[0])
                 : "memory");
             vu0RotateCurrentYXZ(angles);
         } else {
@@ -1250,7 +1253,7 @@ typedef struct SefCurveState {
     SefCurveSegment segments_b[30];                  /* +0x570 */
 } SefCurveState;
 
-extern int D_008048F8[];
+extern int sefRequestFlags[];
 
 /* Steps a curve track by one tick: with advance < 0 the cursor is reset to the first segments and the time to 0.
  * Otherwise, when the scan flag 8 is set, the cursor moves to the first key with a negative link from the current one;
@@ -1262,7 +1265,7 @@ int sefStepCurveTrack(SefCurveState *state, SefCurveTrack *track, int advance, f
     SefCurveCursor *cursor = &track->cursor;
     float time = track->time.value;
     int frame = (int)time;
-    unsigned int curveFlags = D_008048F8[0];
+    unsigned int curveFlags = sefRequestFlags[0];
     SefCurveKey *keys = state->keys;
     int key = cursor->index;
     SefCurveKey *current = keys + key;
@@ -1331,26 +1334,25 @@ int sefStepCurveTrack(SefCurveState *state, SefCurveTrack *track, int advance, f
     return result;
 }
 
-f32 MMathVectorDotProduct(f32 *, f32 *);
 
 /* Segment-sphere test: segment is end - start, offset is start - anchor, and
  * the discriminant of the quadratic in the segment parameter decides whether
  * the segment reaches the sphere of the given radius. */
 int sefSegmentHitsSphere(void *anchor, void *start, void *end, f32 radius)
 {
-    f32 offset[4];
-    f32 segment[4];
-    f32 *segment_ptr;
+    Vector4 offset;
+    Vector4 segment;
+    Vector4 *segment_ptr;
     f32 segment_sq;
     f32 segment_dot_offset;
 
-    segment_ptr = &segment[0];
+    segment_ptr = &segment;
     Vu0SefSubVectorXYZ(segment_ptr, end, start);
-    Vu0SefSubVectorXYZ(offset, start, anchor);
+    Vu0SefSubVectorXYZ(&offset, start, anchor);
     segment_sq = MMathVectorDotProduct(segment_ptr, segment_ptr);
-    segment_dot_offset = MMathVectorDotProduct(segment_ptr, offset);
+    segment_dot_offset = MMathVectorDotProduct(segment_ptr, &offset);
     if (((segment_dot_offset * segment_dot_offset)
-         - (segment_sq * 4.0f * (MMathVectorDotProduct(offset, offset) - (radius * radius)))) >= 0.0f) {
+         - (segment_sq * 4.0f * (MMathVectorDotProduct(&offset, &offset) - (radius * radius)))) >= 0.0f) {
         return 1;
     }
     return 0;
@@ -1475,20 +1477,20 @@ typedef struct SefPointState {
     SefTrackCursor alphaTrack;                       /* +0x2b8 */
 } SefPointState;
 
-int D_0069DB48 = 0;
+int sefLineFlag4000Count = 0;
 int sefVectorMode = 0;
-int D_0069DB54 = 0;
+int sefCameraOwnerRecord = 0;
 int sefEffectRecordCount = 64;
 int sefLineDataCount = 192;
 int sefPtAllocCount = 1100;
-int D_0069DB6C = 0;
+int sefEffectListSavedFlag = 0;
 int sefParentLine = -1;
 s16 sefInitialized = 0;
-int D_0069DB78 = 0;
-s16 D_0069DB80 = 0;
+int sefGateOwnerZeroFlag = 0;
+s16 _hitFlag = 0;
 s16 _hitSignal = 0;
-s16 D_0069DB84 = 0;
-s16 sefClipTestDisabled = 0;
+s16 _seSignal = 0;
+s16 _sefBattleMode = 0;
 float sefTimeScale = 1.0f;
 float sefPointTimeScale = 1.0f;
 f32 sefTrackTimeStep = 1.0f;
@@ -1496,14 +1498,12 @@ float sefStepScale = 1.0f;
 float *atanTbl_0 = (float *) 0x20470d80;
 int sefEffectRecordHead = 0;
 extern int sefParentLine;
-extern int D_0069DBB0;
+extern int sefLinkedPointHandle;
 
-float D_0069B2DC = -0.100000001f;
+float sefIdleStartFrame = -0.100000001f;
 extern SefEffectRecord *sefCurrentRecord;
-Matrix4 *sefGetPoint(Vector4 *dest, Vector4 *source, int kind);
-struct SefPartTransform;
 struct SefPartPlacement;
-void sefTransformPartPoint(struct SefPartTransform *part, Vector4 *out, int mode, Vector4 *in);
+void sefTransformPartPoint(SefTransformState *part, Vector4 *out, int mode, const Vector4 *in);
 float sefPlacePart(struct SefPartPlacement *instance, Vector4 *out, int mode);
 void sefAccumulateEntryInfluence(Vector4 *position, int *offset, float radius);
 
@@ -1605,7 +1605,7 @@ int sefExecLineLocalData(SefLocalData *data, int frame)
             spin = 0.0f;
             pointFlags = scratch->sameKind;
             if (scratch->partPlaced) {
-                sefTransformPartPoint((struct SefPartTransform *) point, &scratch->position, scratch->partMode, 0);
+                sefTransformPartPoint((SefTransformState *) point, &scratch->position, scratch->partMode, 0);
             } else {
                 QuadwordCopyT0(&scratch->position, &point->position);
             }
@@ -1620,18 +1620,18 @@ int sefExecLineLocalData(SefLocalData *data, int frame)
                 sefSampleTrack((SefTrackKey *) scratch->sizeKeys, &point->sizeTrack);
             }
             if (keys->partKeys != 0) {
-                sefSampleVectorTrack(keys->partKeys, (SefVectorTrackCursor *) &point->partTrack);
+                sefLerpVector(keys->partKeys, (SefVectorTrackCursor *) &point->partTrack);
             }
             if (!scratch->constAngle &&
-                sefSampleVectorTrack(scratch->angleKeys, (SefVectorTrackCursor *) &point->angleTrack)) {
+                sefLerpVector(scratch->angleKeys, (SefVectorTrackCursor *) &point->angleTrack)) {
                 sefSetTransformRotation((SefTransformState *) point, scratch->rotate);
             }
             if (!scratch->constDirection &&
-                sefSampleVectorTrack(scratch->directionKeys, (SefVectorTrackCursor *) &point->directionIndex)) {
+                sefLerpVector(scratch->directionKeys, (SefVectorTrackCursor *) &point->directionIndex)) {
                 MMathNormalizeVector2(&point->direction, &point->direction);
             }
             link = point->link;
-            D_0069DBB0 = link;
+            sefLinkedPointHandle = link;
             if (sefParentLine >= 0 && link >= 0) {
                 linked = (SefPointState *) sefPtAllocatorState[link].data;
             } else {
@@ -1639,12 +1639,12 @@ int sefExecLineLocalData(SefLocalData *data, int frame)
             }
             sefLinkedPoint = (SefTransformState *) linked;
             if (linked != 0 && linked->life == 0.0f) {
-                D_0069DBB0 = -1;
+                sefLinkedPointHandle = -1;
                 point->link = -1;
                 sefLinkedPoint = 0;
             }
             if (!scratch->constScale &&
-                sefSampleVectorTrack(scratch->scaleKeys, (SefVectorTrackCursor *) &point->scaleTrack)) {
+                sefLerpVector(scratch->scaleKeys, (SefVectorTrackCursor *) &point->scaleTrack)) {
                 Vu0SefMulVectorXYZ(&point->scale, &point->scaleValue, &point->baseScale);
             }
             point->color.quad = point->colorValue.quad;
@@ -1691,7 +1691,7 @@ int sefExecLineLocalData(SefLocalData *data, int frame)
                               pointFlags);
             }
             if (scratch->partPlaced) {
-                sefTransformPartPoint((struct SefPartTransform *) point, &scratch->target, scratch->partMode, 0);
+                sefTransformPartPoint((SefTransformState *) point, &scratch->target, scratch->partMode, 0);
                 SefSubVectorXYZ(&point->offset, &scratch->target, &scratch->position);
             } else {
                 SefSubVectorXYZ(&point->offset, &point->position, &scratch->position);
@@ -1722,7 +1722,7 @@ int sefExecLineLocalData(SefLocalData *data, int frame)
         return 1;
     }
     if ((*(int *) (requestBytes + 0x308) & 0x800) && count <= 0) {
-        data->startFrame = D_0069B2DC;
+        data->startFrame = sefIdleStartFrame;
     }
     return count;
 }
@@ -1792,17 +1792,11 @@ typedef struct SefLineScript {
 } SefLineScript;
 
 static int sefCurrentLoadTag;
-float D_0069B2E0 = 9.99999975e-06f;
-/* The z rotations for the two axis-aligned directions D_00471D90 and D_00471DA0. */
+float sefStartFrameEpsilon = 9.99999975e-06f;
+/* The z rotations for the two axis-aligned directions sefDiagonalPositiveDirection and sefDiagonalNegativeDirection. */
 extern int sefVectorMode;
-Vector4 D_00471D90 = { .x = 1.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f };
-Vector4 D_00471DA0 = { .x = 1.0f, .y = -1.0f, .z = 0.0f, .w = 0.0f };
-extern unsigned char MMathUnitMatrix[];
-int scGetImmAdrImmIdx2(int base, unsigned short *table, int index);
-void sefNoiseNextVector(Vector4 *pos);
-void sefGetPosition(Vector4 *dest, Vector4 *source, int kind);
-short MMathIsVectorEqual(const Vector4 *first, const Vector4 *second);
-Matrix4 *MMathRotateMatrixZ(Matrix4 *out, const Matrix4 *matrix, float angle);
+Vector4 sefDiagonalPositiveDirection = { .x = 1.0f, .y = 1.0f, .z = 0.0f, .w = 0.0f };
+Vector4 sefDiagonalNegativeDirection = { .x = 1.0f, .y = -1.0f, .z = 0.0f, .w = 0.0f };
 struct SefAnimObject;
 int sefAnalyzeAnim(struct SefAnimObject *object);
 
@@ -1863,7 +1857,7 @@ void sefInitLineData(SefLocalData *line, int startTime, int frame, SefLineScript
     line->in_use = line->in_use | flags | 0x20;
     line->count = 0;
     if (frame != 0) {
-        line->startFrame = (float)(frame - startTime) - D_0069B2E0;
+        line->startFrame = (float)(frame - startTime) - sefStartFrameEpsilon;
     }
     if (noAttach != 0) {
         line->in_use |= 0x100;
@@ -1917,13 +1911,13 @@ void sefInitLineData(SefLocalData *line, int startTime, int frame, SefLineScript
         origin = (Vector4 *)&line->directionKeys[-2];
         hasDirection = (*(int *)&origin->z | *(u64 *)origin) != 0;
         if (hasDirection) {
-            if (MMathIsVectorEqual(origin, &D_00471D90)) {
+            if (MMathIsVectorEqual(origin, &sefDiagonalPositiveDirection)) {
                 line->in_use |= 0x40;
                 MMathRotateMatrixZ(&line->matrix, 0, SEF_QUARTER_PI);
-            } else if (MMathIsVectorEqual(origin, &D_00471DA0)) {
+            } else if (MMathIsVectorEqual(origin, &sefDiagonalNegativeDirection)) {
                 line->in_use |= 0x40;
                 MMathRotateMatrixZ(&line->matrix, 0, -SEF_QUARTER_PI);
-            } else if ((short)sefSetSlotDirection(&line->matrix, (Vector4 *)&line->directionKeys[-2],
+            } else if ((short)sefGetDirMatrix(&line->matrix, (Vector4 *)&line->directionKeys[-2],
                                                   sefDirectionAxes) != 0) {
                 line->in_use |= 0x40;
             }
@@ -2045,28 +2039,13 @@ typedef struct SefAnalyzeRecord {
     short altImageId2;                               /* +0x0a */
 } SefAnalyzeRecord;
 
-/* The fields this function reads of an image-list entry (tu158 SvTypeListEntry). */
-typedef struct SefImageItem {
-    void *data;                                      /* +0x00 */
-    unsigned char unmodeled_004[0x0c - 0x04];
-    unsigned short resourceKind;                     /* +0x0c */
-    unsigned char unmodeled_00e[0x12 - 0x0e];
-    unsigned short basePointer;                      /* +0x12 */
-    unsigned short bitsPerPixel;                     /* +0x14 */
-    unsigned short bufferWidthPixels;                /* +0x16 */
-    unsigned short width;                            /* +0x18 */
-    unsigned short height;                           /* +0x1a */
-    unsigned short textureWidthExponent;             /* +0x1c */
-    unsigned short textureHeightExponent;            /* +0x1e */
-} SefImageItem;
-
 /* One 32-byte image packet: the first table has time, flags and resourceKind,
  * the second table only the image pair and the size. */
 typedef struct SefImagePacket {
     float scaledWidth;                               /* +0x00 */
     float scaledHeight;                              /* +0x04 */
-    void *image;                                     /* +0x08 */
-    void *palette;                                   /* +0x0c */
+    const void *image;                               /* +0x08 */
+    const void *palette;                             /* +0x0c */
     unsigned long long tex0;                         /* +0x10 */
     float time;                                      /* +0x18 */
     unsigned short flags;                            /* +0x1c */
@@ -2084,7 +2063,6 @@ typedef struct SefAnimObject {
 } SefAnimObject;
 
 void *memset(void *destination, int value, unsigned int size);
-SefImageItem *svGetImageListItem(int type, short imageId);
 
 int sefAnalyzeAnim(SefAnimObject *object)
 {
@@ -2104,8 +2082,8 @@ int sefAnalyzeAnim(SefAnimObject *object)
         int flags;
         short mapperIndex;
         float animScale;
-        SefImageItem *image;
-        SefImageItem *palette;
+        SvTypeListEntry *image;
+        SvTypeListEntry *palette;
 
         flags = records->flags;
         mapperIndex = sefCurrentRecord->entryId;
@@ -2197,16 +2175,12 @@ typedef struct SefMotionState {
     short state;
 } SefMotionState;
 
-static Vector4 D_00804960;
-f32 D_0069B2F0 = 0.00999999978f;
-f32 D_0069B2F4 = 0.0174532924f;
-f32 sefNoiseNext(void);
-f32 sefRandf(void);
+static Vector4 sefLinkedPositionVector;
+f32 sefFrameJitterScale = 0.00999999978f;
+f32 sefParticleDegToRad = 0.0174532924f;
 struct SefLaneObject;
-void sefGetLaneStartPos(Vector4 *pos, struct SefLaneObject *object);
-void sefGetLaneTargetPos(Vector4 *pos, struct SefLaneObject *object);
-/* Local views of the rotation helpers (main/m_math_193.h): the particle keeps its matrix as three Vector4 rows. */
-Vector4 *MMathRotateMatrixYXZ(Vector4 *matrix, int mode, Vector4 *angles);
+void sefGetStartPos(Vector4 *pos, struct SefLaneObject *object);
+void sefGetTargetPos(Vector4 *pos, struct SefLaneObject *object);
 
 /* Copies a key vector with w = 1. */
 #define SefCopyKeyPoint(destination, source) \
@@ -2295,16 +2269,16 @@ int sefCreateParticle(SefLineSpawnData *data, int kind)
         if (particle != 0) {
             sefMemZero(particle, 0x2C0);
             particle->kind = kind;
-            sefGetLaneStartPos(&particle->rotation_aux, (struct SefLaneObject *) data);
+            sefGetStartPos(&particle->rotation_aux, (struct SefLaneObject *) data);
             rotationKeyMode = 0;
-            sefGetLaneTargetPos(&particle->rotation_direction, (struct SefLaneObject *) data);
-            QuadwordCopyT0(&particle->colorBase, &D_00804960);
+            sefGetTargetPos(&particle->rotation_direction, (struct SefLaneObject *) data);
+            QuadwordCopyT0(&particle->colorBase, &sefLinkedPositionVector);
             origin = &particle->origin;
             __asm__ __volatile__("lq $8, 0(%2)\nsq $8, 0(%1)\n" : "=m"(*origin) : "r"(origin), "r"(&particle->rotation_aux) : "$8", "memory");
             particle->speed = 1.0f;
             particle->frame.f = data->frameBase;
             if (data->frameJitter != 0) {
-                particle->speed += sefNoiseNext() * (data->frameJitter * D_0069B2F0);
+                particle->speed += sefNoiseNext() * (data->frameJitter * sefFrameJitterScale);
             }
             sefStepCurveTrack((SefCurveState *) data, (SefCurveTrack *) particle, -1, 1.0f);
             if (keys[1] != 0) {
@@ -2319,7 +2293,7 @@ int sefCreateParticle(SefLineSpawnData *data, int kind)
                 Vu0SefMulVectorXYZ(&rotation, &rotation, &data->keys[1][-1].vector);
                 particle->angle_base = rotation.z;
                 if (updateMatrix != 0 && sefVectorIsSet(&rotation)) {
-                    MMathRotateMatrixYXZ(particle->local_rows, 0, &rotation);
+                    MMathRotateMatrixYXZ(&particle->local_matrix, 0, &rotation);
                     particle->flags |= 8;
                 }
             }
@@ -2343,7 +2317,7 @@ int sefCreateParticle(SefLineSpawnData *data, int kind)
                                          "qmtc2.ni $8, vf1\n"
                                          "vmulx.xyz vf20, vf20, vf1x"
                                          :
-                                         : "f"(D_0069B2F4)
+                                         : "f"(sefParticleDegToRad)
                                          : "$8");
                     __asm__ __volatile__("sqc2 vf20, 0(%0)" : : "r"(&particle->velocity));
                 }
@@ -2466,11 +2440,21 @@ typedef struct SefLineKeys {
     struct SefTrackKey16 *more[4];
 } SefLineKeys;
 
-extern short D_0069DBB8;
-extern AlignedVector4 D_00471EA0;
-unsigned short D_00471DB0[32] = { 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 0, 0, 0, 0 };
-unsigned short D_00471DF0[24] = { 70, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 0, 0, 0, 0, 0, 0, 0, 0 };
-int sefGetLinkedFlag();
+extern short sefLinkedPartIndex;
+/* The camera pair the effect update keeps: the active camera's transform of this frame and of the previous one, the
+ * motion of its translation row between them and the camera's inverse transform. */
+typedef struct SefCameraState {
+    Matrix4 current;      /* +0x00 */
+    Matrix4 previous;     /* +0x40 */
+    Vector4 motion;       /* +0x80: current[3] - previous[3] (xyz) */
+    Matrix4 *inverse;     /* +0x90 */
+    int valid;            /* +0x94: previous holds a transform */
+    unsigned char unmodeled_98[0xA0 - 0x98];
+} SefCameraState;
+
+extern SefCameraState sefCameraState;
+unsigned short sefLinkedIdTable61[32] = { 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 0, 0, 0, 0 };
+unsigned short sefLinkedIdTable62[24] = { 70, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 /* result = first + second in x, y and z (w keeps first's). */
 static inline void sefAddVectorXYZ(Vector4 *result, Vector4 *first, Vector4 *second)
@@ -2557,10 +2541,10 @@ int sefExecLineGlobalData(SefLineEmitData *data, int frame)
         sefCurrentRecord->flags |= 0x10;
     }
     sefLinkedPoint = 0;
-    D_0069DBB8 = -1;
+    sefLinkedPartIndex = -1;
     __asm__ __volatile__("sqc2 vf0, 0(%1)" : "=m"(data->emitOffset) : "r"(&data->emitOffset));
     if (!fromPoint) {
-        sefGetPosition(&D_00804960, 0, keys->position[-1].key);
+        sefGetPosition(&sefLinkedPositionVector, 0, keys->position[-1].key);
         sefGetPosition(&data->emitPosition, &data->positionValue, keys->position[-1].key);
         sefAddVectorXYZ(&data->emitPosition, &data->emitPosition, &data->noise);
     }
@@ -2569,11 +2553,11 @@ int sefExecLineGlobalData(SefLineEmitData *data, int frame)
     }
     positionKey = keys->position;
     if (positionKey[-1].key == 1) {
-        __asm__ __volatile__("lq $8, 0(%2)\nsq $8, 0(%1)\n" : "=m"(data->emitOffset) : "r"(&data->emitOffset), "r"(&D_00471EA0) : "$8");
+        __asm__ __volatile__("lq $8, 0(%2)\nsq $8, 0(%1)\n" : "=m"(data->emitOffset) : "r"(&data->emitOffset), "r"(&sefCameraState.motion) : "$8");
     } else if (positionKey[-1].key == 2 || positionKey[-1].key == 7) {
         __asm__ __volatile__("sqc2 vf0, 0(%1)" : "=m"(data->emitOffset) : "r"(&data->emitOffset));
     }
-    if (emitInterval <= 0 || (D_008048F8[0] & 0x80)) {
+    if (emitInterval <= 0 || (sefRequestFlags[0] & 0x80)) {
         return result;
     }
     framesSinceEmit = frame - data->emitFrame;
@@ -2592,24 +2576,24 @@ int sefExecLineGlobalData(SefLineEmitData *data, int frame)
             for (pointIndex = 0; pointIndex < SEF_LINE_PARTICLE_COUNT; pointIndex++) {
                 pointHandle = line->pointHandles[pointIndex];
                 if (pointHandle >= 0) {
-                    D_0069DBB0 = pointHandle;
+                    sefLinkedPointHandle = pointHandle;
                     sefLinkedPoint = ((SefWordView *) &sefParentLine)->value >= 0 ? (SefTransformState *) sefPtAllocatorState[pointHandle].data : 0;
                     if (keys->position[-1].key == 0x11) {
-                        D_0069DBB8 = -1;
+                        sefLinkedPartIndex = -1;
                         if (line->table684 != 0) {
-                            D_0069DBB8 = (signed char) line->table684->unmodeled_00f[0];
+                            sefLinkedPartIndex = (signed char) line->table684->unmodeled_00f[0];
                         }
                     }
                     if (fromPoint) {
                         pointKind = keys->position[-1].key;
                         if ((unsigned int) (pointKind - 16) < 2) {
                             if (sefLinkedPoint != 0) {
-                                sefCopyVector(&D_00804960, &sefLinkedPoint->colorBase);
+                                sefCopyVector(&sefLinkedPositionVector, &sefLinkedPoint->colorBase);
                             } else {
-                                sefGetPosition(&D_00804960, 0, line->keys.position[-1].key);
+                                sefGetPosition(&sefLinkedPositionVector, 0, line->keys.position[-1].key);
                             }
                         } else {
-                            sefGetPosition(&D_00804960, 0, (short) pointKind);
+                            sefGetPosition(&sefLinkedPositionVector, 0, (short) pointKind);
                         }
                         sefGetPosition(&data->emitPosition, &data->positionValue, keys->position[-1].key);
                         sefAddVectorXYZ(&data->emitPosition, &data->emitPosition, &data->noise);
@@ -2628,11 +2612,11 @@ int sefExecLineGlobalData(SefLineEmitData *data, int frame)
         } else {
             tableSource = positionKey[-1].key;
             if ((unsigned int) (tableSource - 0x61) < 2) {
-                idTable = (short) tableSource == 0x61 ? D_00471DB0 : D_00471DF0;
+                idTable = (short) tableSource == 0x61 ? sefLinkedIdTable61 : sefLinkedIdTable62;
                 for (tableIndex = 0; idTable[tableIndex] != 0; tableIndex++) {
                     linkedId = idTable[tableIndex];
                     if (sefGetLinkedFlag(linkedId - 0x41)) {
-                        sefGetPosition(&D_00804960, 0, linkedId);
+                        sefGetPosition(&sefLinkedPositionVector, 0, linkedId);
                         sefGetPosition(&data->emitPosition, &data->positionValue, linkedId);
                         sefAddVectorXYZ(&data->emitPosition, &data->emitPosition, &data->noise);
                         if (pointsPerEmit > 0) {
@@ -2661,11 +2645,9 @@ int sefExecLineGlobalData(SefLineEmitData *data, int frame)
                          : "r"(destination), "r"(source) \
                          : "$8", "memory")
 
-extern int D_0069DB48;
-float D_0069B2F8 = 0.00999999978f;
+extern int sefLineFlag4000Count;
+float sefPointMotionScale = 0.00999999978f;
 
-struct SvDrawItem;
-void svInitItemDrawKind(struct SefPartTransform *part, struct SvDrawItem *item, int scaleKey40, int scaleKey80, int scaleKey100);
 
 /* The request block fields the line step reads and writes. */
 typedef struct SefLineRequest {
@@ -2778,21 +2760,21 @@ int sefExecLineData(SefLineStepData *data, int slotFrame)
         data->startFrame = -1.0f;
     }
     sefPointMotion.fixedGravity = (unsigned short) data->in_use & 0x100;
-    sefPointMotion.gravity = data->gravity * sefPointTimeScale * D_0069B2F8;
-    sefPointMotion.bounce = data->collision * D_0069B2F8;
+    sefPointMotion.gravity = data->gravity * sefPointTimeScale * sefPointMotionScale;
+    sefPointMotion.bounce = data->collision * sefPointMotionScale;
     sefPointMotion.keys = data->keys[4];
     sefPointMotion.floor = data->height + sefPointMotion.floorBase;
     sefPointMotion.keyParameter = sefPointMotion.keys != 0 ? ((unsigned short *) sefPointMotion.keys)[-1] : 0;
     sefLineRequest()->owner = (data->in_use & 0x40) ? (SefLocalData *) data : 0;
     if (data->in_use & 0x4000) {
-        D_0069DB48++;
+        sefLineFlag4000Count++;
     }
-    sefSampleVectorTrack(data->keys[0], (SefVectorTrackCursor *) ((unsigned char *) data + 0xD0));
-    sefSampleVectorTrack(data->keys[2], (SefVectorTrackCursor *) ((unsigned char *) data + 0xF0));
-    sefSampleVectorTrack(data->keys[1], (SefVectorTrackCursor *) ((unsigned char *) data + 0x130));
-    sefSampleVectorTrack(data->keys[3], (SefVectorTrackCursor *) ((unsigned char *) data + 0x150));
-    sefSampleKeyframeValue((SefKeyframe *) data->keys[5], (SefKeyCursor *) ((unsigned char *) data + 0x170));
-    sefSampleKeyframeValue((SefKeyframe *) data->keys[6], (SefKeyCursor *) ((unsigned char *) data + 0x178));
+    sefLerpVector(data->keys[0], (SefVectorTrackCursor *) ((unsigned char *) data + 0xD0));
+    sefLerpVector(data->keys[2], (SefVectorTrackCursor *) ((unsigned char *) data + 0xF0));
+    sefLerpVector(data->keys[1], (SefVectorTrackCursor *) ((unsigned char *) data + 0x130));
+    sefLerpVector(data->keys[3], (SefVectorTrackCursor *) ((unsigned char *) data + 0x150));
+    sefProgressInt((SefKeyframe *) data->keys[5], (SefKeyCursor *) ((unsigned char *) data + 0x170));
+    sefProgressInt((SefKeyframe *) data->keys[6], (SefKeyCursor *) ((unsigned char *) data + 0x178));
     directionKey = (short *) data->directionKeys;
     sefPointMotion.sameDirection = 0;
     value = directionKey[-2];
@@ -2807,7 +2789,7 @@ int sefExecLineData(SefLineStepData *data, int slotFrame)
             __asm__ __volatile__("lq $8, 0(%2)\n"
                                  "sq $8, 0(%1)\n"
                                  : "=m"(data->velocity)
-                                 : "r"(&data->velocity), "r"(&D_00471EA0)
+                                 : "r"(&data->velocity), "r"(&sefCameraState.motion)
                                  : "$8", "memory");
         } else if (velocityMode == 2 || velocityMode == 7) {
             Vu0SetOrigin(&data->velocity);
@@ -2821,8 +2803,8 @@ int sefExecLineData(SefLineStepData *data, int slotFrame)
     }
     sefGlobalTransform.scaled = 0;
     if (data->in_use & 0x2000) {
-        svInitItemDrawKind((struct SefPartTransform *) &sefGlobalTransform, (struct SvDrawItem *) data, sefCurrentRecord->owner, (int) sefCurrentRecord->object,
-                           *(int *) sefCurrentRecord->unmodeled_054);
+        svInitItemDrawKind(&sefGlobalTransform, (struct SvDrawItem *) data, sefCurrentRecord->owner, (int) sefCurrentRecord->object,
+                           (int) sefCurrentRecord->ownerHigh);
         value = sefGlobalTransform.scaled;
         if (value != 0) {
             sefPointMotion.floor += sefGlobalTransform.position.y - sefGlobalTransform.position.y / sefGlobalTransform.scale;
@@ -2853,7 +2835,7 @@ int sefExecLineData(SefLineStepData *data, int slotFrame)
 
 /* Re-initializes a slot: the line handles go to 0xff (free), the id and kind
  * are set from the arguments, bit 31 of flags is cleared and lineCount is zeroed. */
-void sefResetEffectSlot(SefEffectSlot *slot, int id, int kind)
+void sefInitEffectData(SefEffectSlot *slot, int id, int kind)
 {
     int flags;
 
@@ -2877,7 +2859,7 @@ void sefDestroyEffectData(EffectData *effect)
     *(int *)((unsigned char *)effect + 0x40) = 0;
 }
 
-SefLocalData *sefAddSlotLine(SefEffectSlot *slot, int tag)
+SefLocalData *sefAllocEffectData(SefEffectSlot *slot, int tag)
 {
     int lineSlot;
     int lineHandle;
@@ -2937,7 +2919,7 @@ void sefApplySlotFlags(int wordMask, int flagBits, int setBits)
 }
 
 /* One 16-byte entry of a slot's line script (the table at the slot's id): the script index scGetImmAdrImmIdx2 reads,
- * the start time and the sefInitLineData arguments, the tag sefAddSlotLine records and whether the new line inherits
+ * the start time and the sefInitLineData arguments, the tag sefAllocEffectData records and whether the new line inherits
  * its count from the linked line. */
 typedef struct SefSlotEntry {
     unsigned short script;
@@ -3003,6 +2985,15 @@ int sefExecEffectData(SefEffectSlot *slot, int frame, short *hit)
     SefLocalData *linkSource;
     SefSlotEntry *slotEntries;
 
+    /* The gotos below stay (pass 3, eleven structured forms compiled against the original object):
+       - break for update/wait (or a static inline helper that returns) makes the loop a normal one with an exit: gcc
+         rotates it, putting the loop head at the bottom, and the wait store moves in front of the loop;
+       - an inline helper writing aliveLines through a pointer makes it an addressable local, so its stack slot is
+         allocated before the localFrame spill (slots 0/4 swap), and a returned value lands in a2 and grows the frame;
+       - dropping `goto first`/`again` for a plain for (;;) with continue is the closest form: the code is identical
+         except that slot and startTime swap s4/s5. The original's goto again leaves the loop notes and re-enters
+         through the preheader, which shifts slot's allocation priority; keeping a label only for again, with
+         the loop entered by falling in, changes the delay-slot reload (size differs). */
     slot->flags &= 0x7FFFFFFF;
     if (slot->id == 0) {
         return 0;
@@ -3105,7 +3096,7 @@ first:
         if (script == 0) {
             goto update;
         }
-        line = sefAddSlotLine(slot, tag);
+        line = sefAllocEffectData(slot, tag);
         if (line == 0) {
             goto update;
         }
@@ -3182,51 +3173,39 @@ pending:
 static unsigned char sefLineDataPool[0x68400];
 
 /* Clears the static 0x68400-byte block sefLineDataPool (192 records of the 0x8B0 line-data stride); both start chains run it
-   right after sefInitEffectRecords. */
+   right after sefInitScheduler. */
 void sefClearLineDataRecords(void) {
     sefMemClear(sefLineDataPool, 0x68400);
 }
 
-extern SefEffectRecord *sefEffectRecords;   /* scaffold .sdata item 0x69DB50; defining it changes sefCreateEffectRecord (blocked-b01.md) */
-extern int D_0069DB54;
+extern SefEffectRecord *sefEffectRecords;   /* scaffold .sdata item 0x69DB50; defining it changes sefCreateScheduler2 (blocked-b01.md) */
+extern int sefCameraOwnerRecord;
 
-void sefInitEffectRecords(void)
+void sefInitScheduler(void)
 {
     int recordIndex;
     int slotIndex;
 
     sefMemZero(sefEffectRecords, 4);
-    D_0069DB54 = 0;
+    sefCameraOwnerRecord = 0;
     for (recordIndex = 0; recordIndex < sefEffectRecordCount; recordIndex++) {
         sefEffectRecords[recordIndex].linkValue = -1;
         for (slotIndex = 0; slotIndex < 32; slotIndex++) {
-            sefResetEffectSlot((SefEffectSlot *)&sefEffectRecords[recordIndex].entries[slotIndex], 0, 0);
+            sefInitEffectData((SefEffectSlot *)&sefEffectRecords[recordIndex].entries[slotIndex], 0, 0);
         }
     }
 }
 
 /* The owner whose 0x74 word is non-zero while it has entries in the table. */
-typedef struct SefOwner {
+struct SefOwner {
     unsigned char unmodeled_000[0x74];
     int tracked;
-} SefOwner;
+};
 
-/* One 0x870-byte entry of the 256-entry table: its kind byte and the owner
- * it was registered under. */
-typedef struct SefOwnedRecord {
-    unsigned char unmodeled_000[2];
-    unsigned char kind;
-    unsigned char unmodeled_003[0x638 - 0x3];
-    void *owner;
-    unsigned char unmodeled_63c[0x870 - 0x63c];
-} SefOwnedRecord;
-
-void uwamonoReleaseRecord(int index);
-extern SefOwnedRecord uwamonoRecords[];
 
 int uwamonoOwnsRecord(void *owner)
 {
-    SefOwnedRecord *record;
+    UwamonoRecord *record;
     int recordIndex;
 
     if (owner == 0) {
@@ -3234,7 +3213,7 @@ int uwamonoOwnsRecord(void *owner)
     }
     record = uwamonoRecords;
     for (recordIndex = 0; recordIndex < 0x100; recordIndex++) {
-        if (record->kind == 6 && owner == record->owner) {
+        if (record->kind == 6 && owner == record->handles[0]) {
             return 1;
         }
         record++;
@@ -3245,14 +3224,14 @@ int uwamonoOwnsRecord(void *owner)
 /* Detaches every kind-6 entry registered under owner and releases it by index. */
 void uwamonoReleaseOwnedRecords(SefOwner *owner)
 {
-    SefOwnedRecord *record;
+    UwamonoRecord *record;
     int index;
 
     if (owner != 0 && owner->tracked != 0) {
         record = uwamonoRecords;
         for (index = 0; index < 0x100; index++) {
-            if (record->kind == 6 && record->owner == owner) {
-                record->owner = 0;
+            if (record->kind == 6 && record->handles[0] == owner) {
+                record->handles[0] = 0;
                 uwamonoReleaseRecord(index);
             }
             record++;
@@ -3262,7 +3241,7 @@ void uwamonoReleaseOwnedRecords(SefOwner *owner)
 
 extern int sefEffectRecordHead;
 
-int sefAllocEffectRecord(int owner)
+int sefAllocScheduler(int owner)
 {
     int recordCount;
     int lastIndex;
@@ -3289,7 +3268,7 @@ int sefAllocEffectRecord(int owner)
     return -1;
 }
 
-int sefAllocUnownedEffectRecord(int owner)
+int sefAllocUnownedScheduler(int owner)
 {
     int recordCount;
     int lastIndex;
@@ -3318,11 +3297,21 @@ int sefAllocUnownedEffectRecord(int owner)
 }
 
 extern unsigned char sefResourceTable[];
-void sefReleaseCellSlot(SefEffectRecord *record);
-void sdvFreeSpecialSlots(void *slots);
-void sdvDestroyOwnerAlters(int index);
 
-void sefFreeEffectRecord(SefEffectRecord *record)
+/* A cell record (cellSlot set) is the head of a ResourceSlot of sefResourceTable, and the sdv.c cell functions
+ * take it as one. */
+static inline struct ResourceSlot *sefCellOf(SefEffectRecord *record)
+{
+    return (struct ResourceSlot *) record;
+}
+
+/* The reverse view: the record that sefCreateKindResourceSlot's slot is the head of. */
+static inline SefEffectRecord *sefRecordOfCell(struct ResourceSlot *slot)
+{
+    return (SefEffectRecord *) slot;
+}
+
+void sefFreeSchedulerCf(SefEffectRecord *record)
 {
     int effectIndex;
 
@@ -3330,13 +3319,13 @@ void sefFreeEffectRecord(SefEffectRecord *record)
         return;
     }
     if (record->cellSlot != 0) {
-        sefReleaseCellSlot(record);
+        sefReleaseCellSlot(sefCellOf(record));
         return;
     }
     if ((record < sefEffectRecords) || (sefEffectRecords + sefEffectRecordCount < record)) {
         if (((unsigned char *)record < sefResourceTable) ||
             (sefResourceTable + 0x13800 < (unsigned char *)record)) {
-            sefReleaseCellSlot(record);
+            sefReleaseCellSlot(sefCellOf(record));
         }
         return;
     }
@@ -3353,9 +3342,9 @@ void sefFreeEffectRecord(SefEffectRecord *record)
     record->ownerKey = 0;
 }
 
-/* Releases the record at index when it is in use: a record with flag bits 0x102 goes to sefFreeEffectRecord; otherwise its special
+/* Releases the record at index when it is in use: a record with flag bits 0x102 goes to sefFreeSchedulerCf; otherwise its special
    slots and its 32 effect entries are destroyed, the record is cleared and sdvDestroyOwnerAlters runs. */
-void sefReleaseEffectRecord(int index)
+void sefFreeScheduler(int index)
 {
     int effectIndex;
 
@@ -3369,7 +3358,7 @@ void sefReleaseEffectRecord(int index)
         return;
     }
     if ((sefEffectRecords[index].flags & 0x102) != 0) {
-        sefFreeEffectRecord(sefEffectRecords + index);
+        sefFreeSchedulerCf(sefEffectRecords + index);
         return;
     }
     sdvFreeSpecialSlots(&sefEffectRecords[index].special);
@@ -3383,13 +3372,13 @@ void sefReleaseEffectRecord(int index)
     sefEffectRecords[index].ownerKey = 0;
 }
 
-void func_0025DEC0(void) {
+void sefDummy_0025DEC0(void) {
 }
 
-void func_0025DEC8(void) {
+void sefDummy_0025DEC8(void) {
 }
 
-/* One 10-byte entry of the table sefLoadEffectSlots reads (stride 10, no padding). key < 0 ends the table; address is
+/* One 10-byte entry of the table sefInitEffectTbl reads (stride 10, no padding). key < 0 ends the table; address is
  * the table[1] that scGetImmAdrImmIdx2 reads; flags is copied unaligned into the slot; link < 0 means no link. */
 typedef struct SefEffectLoadEntry {
     short key;                 /* +0x00 */
@@ -3401,7 +3390,7 @@ typedef struct SefEffectLoadEntry {
 
 /* Loads the effect slots of record slotIndex from table: each entry with key >= 0 fills one slot, up to 32; the
  * slots after the last loaded entry get state 0. Returns the number of loaded entries. */
-int sefLoadEffectSlots(SefEffectLoadEntry *table, int slotIndex, unsigned short loadFlags)
+int sefInitEffectTbl(SefEffectLoadEntry *table, int slotIndex, unsigned short loadFlags)
 {
     SefEffectEntry *entries;
     SefEffectLoadEntry *entry;
@@ -3429,7 +3418,7 @@ int sefLoadEffectSlots(SefEffectLoadEntry *table, int slotIndex, unsigned short 
         if (slotId == 0) {
             slotId = defaultId;
         }
-        sefResetEffectSlot((SefEffectSlot *)slot, slotId, entry->key);
+        sefInitEffectData((SefEffectSlot *)slot, slotId, entry->key);
         __builtin_memcpy(&slot->flags, entry->flags, 4);
         slot->signal = entry->signal;
         if (entry->link >= 0) {
@@ -3478,7 +3467,7 @@ typedef struct SefRequestKindSpawn {
     SefRequestSpawn spawn;
 } SefRequestKindSpawn;
 
-/* The 56-byte request sefSpawnRecordChildren copies out of a record and passes to sefCreateDetachedEffect. */
+/* The 56-byte request sefSpawnRecordChildren copies out of a record and passes to sefCreateEffect2. */
 typedef struct SefRecordRequest {
     int owner;                      /* +0x00: the record owner */
     unsigned char unmodeled_04[0x08 - 0x04];
@@ -3494,14 +3483,12 @@ typedef struct SefRecordRequest {
 
 
 extern unsigned short sefGroupKey;
-int sdvSelectCamera(void *camera, int script, int address);
-int sefFindRecordIndex(int key);
 
 /* Binds one script handle: its kind byte, then its script address. */
-static inline void sefBindHandle(SefRecordHandle *handle, int address, int kind)
+static inline void sefBindHandle(SdvSequence *handle, int address, int kind)
 {
-    handle->kind = kind;
-    handle->address = address;
+    handle->stride = kind;
+    handle->keys = (short *) address;
 }
 
 /* Sets the vector to the unit (1, 1, 1, 1). */
@@ -3528,7 +3515,7 @@ static inline SefEffectRecord *sefRecordOf(SefEffectRecord *records, int index)
 /* Creates the effect record of the script `script` for the request: the record `index` when it is not negative,
  * otherwise a fresh (unowned for owner kind 1) one. Copies the request into it, resets its blocks, binds the six
  * script handles, loads its 32 effect slots and looks up its sub kind and entry id. Returns the record index or -1. */
-int sefCreateEffectRecord(unsigned short *table, SefRecordRequest *request, Vector4 *offset, int loadTag, int delayFrames,
+int sefCreateScheduler2(unsigned short *table, SefRecordRequest *request, const Vector4 *offset, int loadTag, int delayFrames,
                           int reuseIndex, int flag)
 {
     SefEffectRecord *record;
@@ -3543,7 +3530,7 @@ int sefCreateEffectRecord(unsigned short *table, SefRecordRequest *request, Vect
     int soundStateHandle;
     int index;
     int selected;
-    Vector4 *source;
+    const Vector4 *source;
     unsigned char requestMode;
     SefEffectRecord *target;
     SefEffectRecord *created;
@@ -3564,9 +3551,9 @@ int sefCreateEffectRecord(unsigned short *table, SefRecordRequest *request, Vect
         reused->inUse = (int) table;
         reused->coord_a = 0.0f;
     } else if (((request->block.kindScale.kind >> 28) & 3) == 1) {
-        index = sefAllocUnownedEffectRecord((int) table);
+        index = sefAllocUnownedScheduler((int) table);
     } else {
-        index = sefAllocEffectRecord((int) table);
+        index = sefAllocScheduler((int) table);
     }
     if (index < 0) {
         return -1;
@@ -3582,7 +3569,7 @@ int sefCreateEffectRecord(unsigned short *table, SefRecordRequest *request, Vect
     target->values[1] = request->values[1];
     target->values[2] = request->values[2];
     target->requestTail = request->tail;
-    *(int *) target->unmodeled_054 = *(int *) request->unmodeled_04;
+    target->ownerHigh = (void *) *(int *) request->unmodeled_04;
     target->requestMode = requestMode;
     record = sefEffectRecords;
     record = sefRecordOf(record, index);
@@ -3594,7 +3581,7 @@ int sefCreateEffectRecord(unsigned short *table, SefRecordRequest *request, Vect
         source = &sefDefaultOffset;
     }
     QuadwordCopyT0(record, source);
-    QuadwordZero(record->firstBlock);
+    QuadwordZero(&record->rotation);
     record->remaining = delayFrames;
     ((SefEffectRecordWords *) record)->record.flags = flag ? SEF_RECORD_SLOTS_LOADED : 0;
     record->fieldA5C = 0.0f;
@@ -3602,8 +3589,8 @@ int sefCreateEffectRecord(unsigned short *table, SefRecordRequest *request, Vect
     record->loadTag = loadTag;
     record->cellSlot = 0;
     record->slotIndex = index;
-    sefSetUnitVector((Vector4 *) record->block);
-    memset(&record->cameraChoice, 0, 0x28);
+    sefSetUnitVector(&record->vertexScale);
+    memset(&record->camera, 0, sizeof(record->camera));
     memset(&SEF_RECORD_AT(index)->special, 0, 0x10);
     memset(&SEF_RECORD_AT(index)->alter, 0, 8);
     memset(&SEF_RECORD_AT(index)->sound, 0, 8);
@@ -3612,31 +3599,31 @@ int sefCreateEffectRecord(unsigned short *table, SefRecordRequest *request, Vect
     sefBindHandle(&SEF_RECORD_AT(index)->sound, soundHandle, 7);
     sefBindHandle(&SEF_RECORD_AT(index)->soundState, soundStateHandle, 7);
     sefBindHandle(&SEF_RECORD_AT(index)->alter, alterHandle, 28);
-    sefBindHandle(&SEF_RECORD_AT(index)->special, specialHandle, 2);
+    sefBindHandle(&SEF_RECORD_AT(index)->special.sequence, specialHandle, 2);
     sefBindHandle(&SEF_RECORD_AT(index)->wind, windHandle, 11);
-    selected = sdvSelectCamera(&sefEffectRecords[index].cameraChoice, loadTag, cameraValue);
+    selected = sdvSelectCamera(&sefEffectRecords[index].camera, loadTag, (unsigned short *) cameraValue);
     if (loadTag != 0 && cameraValue != 0 && selected == 0) {
         ((SefEffectRecordWords *) SEF_RECORD_AT(index))->record.flags |= SEF_RECORD_PENDING;
     }
     created = SEF_RECORD_AT(index);
-    sefSetUnitVector((Vector4 *) created->secondBlock);
+    sefSetUnitVector(&created->scale);
     created->gate = 1;
     created->fieldA60 = 8.0f;
-    if (sefLoadEffectSlots((SefEffectLoadEntry *) table, index, request->block.spawn.loadFlags) == 0) {
+    if (sefInitEffectTbl((SefEffectLoadEntry *) table, index, request->block.spawn.loadFlags) == 0) {
         ((SefEffectRecordWords *) SEF_RECORD_AT(index))->record.flags &= ~SEF_RECORD_SLOTS_LOADED;
     }
     *(unsigned char **) &sefCurrentLoadTag = savedLoadTag;
     srsAnalyzeEftNo(request->block.kindScale.kind, &charNo, &effectType);
     SEF_RECORD_AT(index)->effectType = effectType;
-    SEF_RECORD_AT(index)->entryId = sefFindRecordIndex(request->block.kindScale.kind);
+    SEF_RECORD_AT(index)->entryId = sefSearchMapperIndex(request->block.kindScale.kind);
     return index;
 }
 
-int sefCreateEffectRecordDefault(int first, int second, int third, int fourth, int fifth) {
-    return sefCreateEffectRecord((unsigned short *) first, (SefRecordRequest *) second, (Vector4 *) third, fourth, 0, fifth, 1);
+int sefCreateScheduler(int first, int second, const Vector4 *offset, int fourth, int fifth) {
+    return sefCreateScheduler2((unsigned short *) first, (SefRecordRequest *) second, offset, fourth, 0, fifth, 1);
 }
 
-SefEffectRecord *sefCreateDetachedEffect(void *object);
+SefEffectRecord *sefCreateEffect2(void *object);
 
 void sefSpawnRecordChildren(SefEffectRecord *record)
 {
@@ -3680,14 +3667,14 @@ void sefSpawnRecordChildren(SefEffectRecord *record)
         for (i = 0; i < 8; i++) {
             if (spawnBits & bit) {
                 spawnRequest.block.kindScale.kind = 0x136000 | (8 - i);
-                sefCreateDetachedEffect(&spawnRequest);
+                sefCreateEffect2(&spawnRequest);
             }
             bit <<= 1;
         }
     }
     if (spawnKind < 3) {
         spawnRequest.block.kindScale.kind = 0x136009 + spawnKind;
-        sefCreateDetachedEffect(&spawnRequest);
+        sefCreateEffect2(&spawnRequest);
     }
 }
 
@@ -3710,10 +3697,9 @@ void sefCopyRecordMatrix(Matrix4 *dst, Matrix4 *src)
     }
 }
 
-void MMathCalcLength(void);
 
-void func_0025E660(void) {
-    MMathCalcLength();
+float sefGetMatrixScale(const Vector4 *vector) {
+    return MMathCalcLength(vector);
 }
 
 typedef struct SefEntry {
@@ -3724,11 +3710,11 @@ typedef struct SefEntry {
     signed char slotCounts[16]; /* +0x1600: counted per reset index */
     Vector4 resetVectors[2];    /* +0x1610, +0x1620: VU0 origin written by sefRebuildEntryTable */
     int id;                     /* +0x1630 */
-    int flags;                  /* +0x1634: cleared by sefResetObjects */
+    int flags;                  /* +0x1634: cleared by sefResetEntryFlags */
     float scale;
     signed char slotFlags[0x20]; /* +0x163C: one flag byte per slot, bit 0 = slot set */
     short mode;                 /* +0x165C: value 2 skips the entry; cleared as one halfword by sefRebuildEntryTable */
-    short resetHalf;            /* +0x165E: cleared by sefResetObjects */
+    short resetHalf;            /* +0x165E: cleared by sefResetEntryFlags */
     short resetTail;            /* +0x1660: cleared by sefRebuildEntryTable */
     short slotFlag;             /* +0x1662: set to 1 while the slots are in use */
     unsigned char unmodeled_1664[0x0C];
@@ -3744,7 +3730,7 @@ typedef struct SefRequestBuffer {
     unsigned char unmodeled_280[0x30C - 0x280];
     int flagWord;                   /* +0x30C */
     unsigned char unmodeled_310[0x314 - 0x310];
-    float fieldA5C;                 /* +0x314: the record's fieldA5C, copied by sefStepEffectRecords */
+    float fieldA5C;                 /* +0x314: the record's fieldA5C, copied by sefExecScheduler */
     struct SefEntry *found[7];      /* +0x318: found[0] is the lookup of p0 (zero when p7 is set), found[1..6] those of p1..p6 */
 } SefRequestBuffer;
 
@@ -3759,11 +3745,10 @@ typedef struct SefSpawnSource {
 } SefSpawnSource;
 
 struct SefEntry *sefFindEntryById(int id);
-float sefGetEntryScale(int id);
 int sefGetKindSlotVector(Vector4 *destination, int unused, int slot, int kind);
-float D_0069B2FC = -20000.0f;
-float D_0069B300 = 0.100000001f;
-extern float D_00493B08[];
+float sefHiddenOriginHeight = -20000.0f;
+float sefEntryScaleFactor = 0.100000001f;
+extern Vector4 sefEntryScaleOffsetVector;
 
 /* The unit matrix copy of sefCopyRecordMatrix's null branch, written inline: rows 0..2 from MMathUnitMatrix, row 3 from vf0. */
 static inline void sefCopyUnitMatrix(Matrix4 *dst)
@@ -3815,7 +3800,7 @@ void sefLoadRequestBuffer(int p0, int p1, int p2, int p3, int p4, int p5, int p6
             source = (SefSpawnSource *)p0;
             if (source->flags == 0) {
                 sefCopyUnitMatrix(sefRequestView()->matrix);
-                sefRequestView()->matrix[0][3][1] = D_0069B2FC;
+                sefRequestView()->matrix[0][3][1] = sefHiddenOriginHeight;
             } else if (source->matrixPointer != 0) {
                 QuadwordCopyMatrixT0(sefRequestView()->matrix, source->matrixPointer);
             } else {
@@ -3851,21 +3836,18 @@ void sefLoadRequestBuffer(int p0, int p1, int p2, int p3, int p4, int p5, int p6
         sefGetKindSlotVector(&localB, p2, 1, 0);
         localB.y = 0.0f;
         localA.y = 0.0f;
-        sefSetSlotDirectionBetween(slots + 5, &localA, &localB, sefDirectionAxes);
+        sefGetVecMatrix(slots + 5, &localA, &localB, sefDirectionAxes);
         QuadwordCopyT0(&(slots + 5)[0][3], &slots[0][3]);
     } else {
         QuadwordCopyMatrixT0(slots + 5, slots);
     }
-    D_00493B08[0] = sefGetEntryScale(p2) * D_0069B300;
+    sefEntryScaleOffsetVector.z = sefGetEntryScale(p2) * sefEntryScaleFactor;
 }
 
-typedef struct SefEffectOwner {
-    unsigned char unmodeled_000[0x5f4];
-    float signal_scale;
-} SefEffectOwner;
+/* The signal scale lives in the unnamed +0x5F4 float of studio camera 0 (XglCamera.unknown_5f4). */
+#define SEF_SIGNAL_SCALE (xglStudioGetCamera2(0)->unknown_5f4)
 
-SefEffectOwner *xglStudioGetCamera2(int index);
-float D_0069B304 = 0.00999999978f;
+float sefSignalScale = 0.00999999978f;
 extern float sefTimeScale;
 
 void sefMatchEffectEntries(SefEffectRecord *records)
@@ -3881,7 +3863,7 @@ void sefMatchEffectEntries(SefEffectRecord *records)
 
         matched = 0;
         if (record->inUse != 0 && record->gate != 0 && !(record->flags & (SEF_RECORD_SKIP_STEP | 0x500 | SEF_RECORD_RUNNING)) && record->remaining <= 0) {
-            scale = D_0069B304;
+            scale = sefSignalScale;
             key = (int)((record->coord_a + record->coord_b * sefTimeScale) * 1000.0f);
             if (key % 10 == 9) {
                 key = key + 1;
@@ -3896,7 +3878,7 @@ void sefMatchEffectEntries(SefEffectRecord *records)
                 if (entry->state != 0 && key == entry->key) {
                     matched += entry->flags & 1;
                     if (entry->signal >= 0) {
-                        xglStudioGetCamera2(0)->signal_scale = (float)entry->signal * scale;
+                        SEF_SIGNAL_SCALE = (float)entry->signal * scale;
                     }
                 }
             }
@@ -3907,54 +3889,38 @@ void sefMatchEffectEntries(SefEffectRecord *records)
     }
 }
 
-#include "main/sdv_033.h"
-
-/* The camera pair the effect update keeps: the active camera's transform of this frame and of the previous one, the
- * motion of its translation row between them and the camera's inverse transform. */
-typedef struct SefCameraState {
-    Matrix4 current;      /* +0x00 */
-    Matrix4 previous;     /* +0x40 */
-    Vector4 motion;       /* +0x80: current[3] - previous[3] (xyz) */
-    Matrix4 *inverse;     /* +0x90 */
-    int valid;            /* +0x94: previous holds a transform */
-    unsigned char unmodeled_98[0xA0 - 0x98];
-} SefCameraState;
+#include "main/sef_light_set.h"
+#include "main/srs_file.h"
 
 typedef struct SefRecordOwnerScale {
     unsigned char unmodeled_000[0x14];
     float scale;          /* +0x14 */
 } SefRecordOwnerScale;
 
-/* The current-record globals written as one-member objects: sefStepEffectRecords stores them through these views. */
+/* The current-record globals written as one-member objects: sefExecScheduler stores them through these views. */
 typedef struct SefRecordView {
     SefEffectRecord *record;
 } SefRecordView;
 
-extern SefCameraState D_00471E20;   /* scaffold items 0x471E20/0x471E60/0x471EA0: one struct over three items, see blocked-b01.md */
-extern short D_0069DB80;
+typedef struct SefEntryTable {
+    SefEntry entries[24];
+    AlignedVector4 origin;      /* +0x21A80: the origin vector stored by sefRebuildEntryTable and sefResetEntryFlags */
+    int entryCount;
+    unsigned char unmodeled_21A94[0x0C];
+} SefEntryTable;
+
+extern SefEntryTable sefEntryTable;
+extern short _hitFlag;
 extern float sefStepScale;
 extern int sefActiveOwnerKey;
-extern AlignedVector4 sefOriginVector;
 void sefRebuildEntryTable(void);
 void sefUpdateEntryTransforms(void);
 void sefTickGroupTimers(void);
-void sdvExecAmbient(void);
-void sefResetObjects(void);
-void sdvClearSpecialWork(void);
-void loadWaitPoll(void);
+void sefResetEntryFlags(void);
+void sefExecLoadQue(void);
 void sefUpdateEffectSlots(void);
-XglCamera *xglStudioGetActiveCamera(void);
-int sdvScheduleCamera(void *camera, int frame);
-void sdvExecEffectSeq(void *sound, int entryId);
-void sdvExecShadowSeq(void *sound);
-void tiWindUpdateKeyframes(void *wind, int key, int subkey);
-void tiWindReleaseSlots(int key, int subkey);
-void sdvExecSpecial(void *special, int loadTag);
-void sdvScheduleAlter(void *alter, void *request, int entryId, int index);
-void sdvDrawSpecial(void *special);
 void sefRefreshEntryRows(void);
 void sefGetGroupCenter(float *center, int owner, unsigned short key);
-int sefBuildEffectMatrix(const Vector4 *rotation, const Vector4 *translation, const Vector4 *scale, Matrix4 *out);
 
 /* destination.xyz = minuend.xyz - subtrahend.xyz and destination.w = minuend.w; the destination vector is the
  * statement's memory operand. */
@@ -3973,7 +3939,7 @@ static inline void sefStoreVectorDifferenceXYZ(Vector4 *destination, const float
 /* One effect frame for every record (or only for `only` when it is given): updates the camera pair, then steps each
  * live record's time, request and matrix, runs its 32 effect slots, its camera, sound, wind, special and alter blocks,
  * and restarts or releases the record when no slot is alive. Returns whether a record is still active. */
-int sefStepEffectRecords(int only)
+int sefExecScheduler(SefEffectRecord *only)
 {
     short hit;
     XglCamera *camera;
@@ -3991,39 +3957,39 @@ int sefStepEffectRecords(int only)
     int object;
     int k;
 
-    D_0069DB48 = 0;
+    sefLineFlag4000Count = 0;
     sefVectorMode = 0;
     sefRebuildEntryTable();
     sefUpdateEntryTransforms();
     sefTickGroupTimers();
     sdvExecAmbient();
-    sefResetObjects();
+    sefResetEntryFlags();
     sdvClearSpecialWork();
-    loadWaitPoll();
+    sefExecLoadQue();
     sefUpdateEffectSlots();
     camera = xglStudioGetActiveCamera();
     active = 0;
-    if (D_00471E20.valid != 0) {
-        QuadwordCopyMatrixT0(&D_00471E20.previous, &D_00471E20.current);
+    if (sefCameraState.valid != 0) {
+        QuadwordCopyMatrixT0(&sefCameraState.previous, &sefCameraState.current);
     } else {
-        QuadwordCopyMatrixT0(&D_00471E20.previous, &camera->travel.transform);
-        D_00471E20.valid = 1;
+        QuadwordCopyMatrixT0(&sefCameraState.previous, &camera->travel.transform);
+        sefCameraState.valid = 1;
     }
-    QuadwordCopyMatrixT0(&D_00471E20.current, &camera->travel.transform);
-    D_00471E20.current[3][1] = 0.0f;
-    D_00471E20.inverse = &camera->travel.inverseTransform;
-    D_00471E20.previous[3][1] = 0.0f;
-    sefStoreVectorDifferenceXYZ(&D_00471E20.motion, D_00471E20.current[3], D_00471E20.previous[3]);
-    sefTimeScale = xglStudioGetCamera2(0)->signal_scale * sefStepScale;
+    QuadwordCopyMatrixT0(&sefCameraState.current, &camera->travel.transform);
+    sefCameraState.current[3][1] = 0.0f;
+    sefCameraState.inverse = &camera->travel.inverseTransform;
+    sefCameraState.previous[3][1] = 0.0f;
+    sefStoreVectorDifferenceXYZ(&sefCameraState.motion, sefCameraState.current[3], sefCameraState.previous[3]);
+    sefTimeScale = SEF_SIGNAL_SCALE * sefStepScale;
     if (only == 0) {
         sefMatchEffectEntries(sefEffectRecords);
     }
     for (i = 0; i < sefEffectRecordCount; i++) {
         record = &sefEffectRecords[i];
         alive = 0;
-        hit = D_0069DB80;
+        hit = _hitFlag;
         running = (unsigned short) record->flags & SEF_RECORD_RUNNING;
-        if (only != 0 && (int) record != only) {
+        if (only != 0 && record != only) {
             continue;
         }
         if (record->inUse != 0 && !(record->flags & SEF_RECORD_SKIP_STEP)) {
@@ -4057,15 +4023,15 @@ int sefStepEffectRecords(int only)
             request->flagWord = running;
             request->mode = (signed char) record->requestMode;
             request->fieldA5C = record->fieldA5C;
-            sefLoadRequestBuffer((int) *(SefRecordOwnerScale **) &record->owner, (int) *(void **) record->unmodeled_054, object, record->values[0],
+            sefLoadRequestBuffer((int) *(SefRecordOwnerScale **) &record->owner, (int) record->ownerHigh, object, record->values[0],
                           record->values[1], record->values[2], record->requestTail, record->flags & SEF_RECORD_SKIP_REGISTER);
             sefPointMotion.floorBase = 0.0f;
             if (((sefActiveOwnerKey >> 28) & 3) == 1 && record->owner != 0) {
                 sefPointMotion.floorBase = ((SefRecordOwnerScale *) record->owner)->scale;
             }
-            sefGetGroupCenter((float *) &sefOriginVector, sefActiveOwnerKey, record->value);
+            sefGetGroupCenter((float *) &sefEntryTable.origin, sefActiveOwnerKey, record->value);
             ((Vector4 *) record)->w = 1.0f;
-            if (sefBuildEffectMatrix((Vector4 *) record->firstBlock, (Vector4 *) record, (Vector4 *) record->secondBlock, 0)) {
+            if (sefCalcRotTransSMatrix(&record->rotation, &record->position, &record->scale, 0)) {
                 record->flags |= 0x1000000;
             } else {
                 record->flags &= ~0x1000000;
@@ -4080,10 +4046,10 @@ int sefStepEffectRecords(int only)
                 }
             }
             if (!(sefEffectRecords[i].flags & 0x40) &&
-                (!(sefEffectRecords[i].flags & 0x200) || D_0069DB54 == (int) &sefEffectRecords[i])) {
-                if (sdvScheduleCamera(&sefEffectRecords[i].cameraChoice, frame) != 0) {
+                (!(sefEffectRecords[i].flags & 0x200) || sefCameraOwnerRecord == (int) &sefEffectRecords[i])) {
+                if (sdvScheduleCamera(&sefEffectRecords[i].camera, frame) != 0) {
                     if (!(sefEffectRecords[i].flags & 0x200)) {
-                        D_0069DB54 = (int) &sefEffectRecords[i];
+                        sefCameraOwnerRecord = (int) &sefEffectRecords[i];
                         sefEffectRecords[i].flags |= 0x200;
                     }
                 }
@@ -4094,7 +4060,7 @@ int sefStepEffectRecords(int only)
                 tiWindUpdateKeyframes(&sefEffectRecords[i].wind, record->ownerKey, record->value);
             }
             sdvExecSpecial(&sefEffectRecords[i].special, sefEffectRecords[i].loadTag);
-            sdvScheduleAlter(&sefEffectRecords[i].alter, &sefEffectRecords[i].owner, sefEffectRecords[i].entryId, i);
+            sdvScheduleAlter(&sefEffectRecords[i].alter, (SdvSefRequest *) &sefEffectRecords[i].owner, sefEffectRecords[i].entryId, i);
             if (!(gameWork.control & SEF_DRAW_FLAG_PENDING) || sefEffectRecordCount == 128) {
                 sdvDrawSpecial(&sefEffectRecords[i].special);
             }
@@ -4107,13 +4073,13 @@ int sefStepEffectRecords(int only)
                         sefDestroyEffectData((EffectData *) &sefEffectRecords[i].entries[k]);
                     }
                     sefEffectRecords[i].coord_a = sefEffectRecords[i].linkValue;
-                    sefLoadEffectSlots((SefEffectLoadEntry *) sefEffectRecords[i].inUse, i, sefEffectRecords[i].loadFlags);
+                    sefInitEffectTbl((SefEffectLoadEntry *) sefEffectRecords[i].inUse, i, sefEffectRecords[i].loadFlags);
                     i--;
                 } else {
                     if (running) {
                         uwamonoReleaseOwnedRecords((SefOwner *) record);
                     }
-                    sefReleaseEffectRecord(i);
+                    sefFreeScheduler(i);
                 }
                 continue;
             }
@@ -4129,7 +4095,7 @@ int sefStepEffectRecords(int only)
 }
 
 /* Returns 1 when the index is outside the table or its record is free, else 0. */
-int sefEffectRecordIsFree(int index) {
+int sefIsDeadSchduler(int index) {
     if ((index < 0) || (index >= sefEffectRecordCount)) {
         return 1;
     }
@@ -4181,17 +4147,8 @@ void sefRemoveHandle(int handle) {
     }
 }
 
-typedef struct SefEntryTable {
-    SefEntry entries[24];
-    AlignedVector4 origin;      /* +0x21A80: the origin vector stored by sefRebuildEntryTable and sefResetObjects */
-    int entryCount;
-    unsigned char unmodeled_21A94[0x0C];
-} SefEntryTable;
 
 SefEntryTable sefEntryTable = { 0 };
-struct SefActor;
-int sefActorMulLocalVector(struct SefActor *actor, int input, void *output, int apply);
-
 /* Registers an actor handle in the first free entry: clears the entry's mode and tail, stores the flag and
  * takes the entry scale from half the actor's local height, clamped to [0.25, 4.0]. */
 void sefRegisterEntry(int handle, int mode)
@@ -4214,7 +4171,7 @@ void sefRegisterEntry(int handle, int mode)
     sefEntryTable.entryCount = index + 1;
     sefEntryTable.entries[index].id = handle;
     sefEntryTable.entries[index].mode = mode;
-    if (sefActorMulLocalVector((struct SefActor *)handle, 0, &output, 0) != 0) {
+    if (sefActorMulLocalVector((XenoActor *)handle, 0, &output, 0) != 0) {
         sefEntryTable.entries[index].scale = output.y * 0.5f;
     }
     if (4.0f < sefEntryTable.entries[index].scale) {
@@ -4224,33 +4181,26 @@ void sefRegisterEntry(int handle, int mode)
     }
 }
 
-/* An entry of the list func_A87E38 returns; its handle sits at 0x1d0. */
-typedef struct SefListEntry {
-    unsigned char unmodeled_000[0x1d0];
-    int handle;
-} SefListEntry;
-
-int func_A87E38(int kind, SefListEntry ***entries);
-extern s16 sefClipTestDisabled;
+extern s16 _sefBattleMode;
 
 /* Hands the handle of every listed entry to sefRegisterEntry when the gate is set. */
 void sefRegisterListEntries(void)
 {
-    SefListEntry **entries;
-    SefListEntry *entry;
+    BattleUnit **entries;
+    BattleUnit *entry;
     int count;
     int index;
     int handle;
 
-    if (sefClipTestDisabled != 0) {
-        count = func_A87E38(2, &entries);
+    if (_sefBattleMode != 0) {
+        count = unitTblGet(UNIT_SIDE_ALL, &entries);
         index = 0;
         if (count > 0) {
             do {
                 entry = entries[index];
                 index++;
                 if (entry != 0) {
-                    handle = entry->handle;
+                    handle = (int)entry->unit;
                     if (handle != 0) {
                         sefRegisterEntry(handle, 1);
                     }
@@ -4258,12 +4208,6 @@ void sefRegisterListEntries(void)
             } while (index < count);
         }
     }
-}
-
-/* The owner pair's high word at SefEffectRecord +0x54, read here until include/main/sef.h names it (integrator). */
-static inline int sefRecordOwnerHigh(const SefEffectRecord *record)
-{
-    return *(const int *)((const unsigned char *)record + 0x54);
 }
 
 /* sqc2 of the VU0 origin (0, 0, 0, 1) into one vector; the store is the asm's memory output. */
@@ -4299,8 +4243,8 @@ void sefRebuildEntryTable(void)
             if (record->object != 0) {
                 sefRegisterEntry((int)record->object, 0);
             }
-            if (sefRecordOwnerHigh(record) != 0) {
-                sefRegisterEntry(sefRecordOwnerHigh(record), 1);
+            if (record->ownerHigh != 0) {
+                sefRegisterEntry((int) record->ownerHigh, 1);
             }
             if (record->values[0] != 0) {
                 sefRegisterEntry(record->values[0], 2);
@@ -4334,6 +4278,9 @@ void sefOrEntryFlags(int key, int flags) {
         sefEntryTable.entries[0].flags |= flags;
         return;
     }
+    /* Goto loop kept: gcc 2.96 leaves a goto-built loop without loop notes (no strength reduction); a do/while or
+       for loop here (from 0 or from 1 after the entries[0] test) is strength-reduced / reloads differently and the
+       object differs (re-tried in pass 3: the loop bound is reloaded from sefEntryTable every iteration). */
 next:
     i++;
 check:
@@ -4361,7 +4308,7 @@ void sefClearEntryFlags(int key, int flags)
         return;
     }
     if (entry->id != key) {
-        goto loop;
+        goto loop; /* enters the loop mid-body: no loop notes, as in the original (see sefOrEntryFlags) */
         do {
             entry = 0;
 loop:
@@ -4375,23 +4322,20 @@ loop:
     entry->flags &= ~flags;
 }
 
-/* Returns the flags of the first entry whose id is key, or 8 when none matches (and for key 0). The wrappers below
-   call it with no argument, so the definition stays unprototyped. */
-int sefGetEntryFlags(key)
-    int key;
-
+/* Returns the flags of the first entry of the actor, or 8 when none matches (and for no actor). */
+int sefGetEntryFlags(struct XenoActor *actor)
 {
     SefEntryTable *table;
     SefEntry *entry;
     int i;
 
-    if (key != 0) {
+    if (actor != 0) {
         table = &sefEntryTable;
         i = 0;
         if (table->entryCount > 0) {
             do {
                 entry = &table->entries[i];
-                if (entry->id == key) {
+                if (entry->id == (int) actor) {
                     return entry->flags;
                 }
                 i++;
@@ -4401,38 +4345,24 @@ int sefGetEntryFlags(key)
     return 8;
 }
 
-int sefEntryHasFlag1(int key) {
-    return sefGetEntryFlags(key) & 1;
+int sefIsHitActor(struct XenoActor *actor) {
+    return sefGetEntryFlags(actor) & 1;
 }
 
-int sefEntryHasFlag2(int key) {
-    return sefGetEntryFlags(key) & 2;
+int sefEntryHasFlag2(struct XenoActor *actor) {
+    return sefGetEntryFlags(actor) & 2;
 }
-
-/* The actor the wrappers below address, with the offsets of XenoActor in xenoActor.c:
-   its local matrix at 0x100 (the 4x4 matrix is the first 0x40 bytes) and the handle
-   channel at 0x640, whose address is passed to the callees. */
-typedef struct SefActor {
-    unsigned char unmodeled_000[0x100];
-    unsigned char localMatrix[0x640 - 0x100];
-    unsigned char handle640[0];
-} SefActor;
-
-int tiMRPackageGetNodeMatrix(void *operand, int input, void *output, int flag);
-int tiMRPackageGetNodePoint(void *operand, int input, void *output, int flag);
-void *MMathMulMatrix(void *destination, const void *matrix, const void *source);
-Vector4 *MMathApplyMatrix(Vector4 *destination, const void *matrix, const Vector4 *source);
 
 /* Fetches the actor's output for input through its handle channel (tiMRPackageGetNodeMatrix); on success, when apply is set,
    multiplies the output by the actor's local matrix. Same shape as XenoActorMulMatrix without its override matrix. */
-int sefActorMulLocalMatrix(SefActor *actor, int input, void *output, int apply)
+int sefActorMulLocalMatrix(XenoActor *actor, int input, void *output, int apply)
 {
     int ok;
 
-    ok = tiMRPackageGetNodeMatrix(actor->handle640, input, output, 1);
+    ok = tiMRPackageGetNodeMatrix(XenoActorMotionPack(actor), input, output, 1);
     if (ok != 0) {
         if (apply != 0) {
-            MMathMulMatrix(output, actor->localMatrix, output);
+            MMathMulMatrix(output, &actor->localMatrix.m, output);
         }
         return 1;
     }
@@ -4441,27 +4371,21 @@ int sefActorMulLocalMatrix(SefActor *actor, int input, void *output, int apply)
 
 /* Same as sefActorMulLocalMatrix with the second callee (tiMRPackageGetNodePoint) and MMathApplyMatrix: the vector form, as
    XenoActorMulVector in xenoActor.c, here without its override matrix. */
-int sefActorMulLocalVector(SefActor *actor, int input, void *output, int apply)
+int sefActorMulLocalVector(XenoActor *actor, int input, void *output, int apply)
 {
     int ok;
 
-    ok = tiMRPackageGetNodePoint(actor->handle640, input, output, 1);
+    ok = tiMRPackageGetNodePoint(XenoActorMotionPack(actor), input, output, 1);
     if (ok != 0) {
         if (apply != 0) {
-            MMathApplyMatrix(output, actor->localMatrix, output);
+            MMathApplyMatrix(output, &actor->localMatrix.m, output);
         }
         return 1;
     }
     return 0;
 }
 
-/* The handle channel of an actor (actor + 0x640); its status block pointer sits at +0xD8 of the channel. */
-typedef struct SefChannel {
-    unsigned char unmodeled_000[0xD8];
-    int *statusBlock;           /* +0xD8 (actor +0x718): status[2] gates the refresh */
-} SefChannel;
-
-extern int D_0069DAD0;
+extern int sefFallbackVectorFlag;
 const Vector4 sefFallbackVectorsEven[16] = { { .x = 0.0f, .y = 2.0f, .z = 2.0f, .w = 1.0f }, { .x = 0.40000000596046448f, .y = 0.80000001192092896f, .z = 2.0f, .w = 1.0f }, { .x = -0.20000000298023224f, .y = 1.1000000238418579f, .z = 2.0f, .w = 1.0f }, { .x = 0.40000000596046448f, .y = 0.80000001192092896f, .z = 2.0f, .w = 1.0f }, { .x = 0.20000000298023224f, .y = 1.1000000238418579f, .z = 2.0f, .w = 1.0f }, { .x = -0.10000000149011612f, .y = 0.0f, .z = 2.0f, .w = 1.0f }, { .x = -0.10000000149011612f, .y = 0.60000002384185791f, .z = 2.0f, .w = 1.0f }, { .x = 0.10000000149011612f, .y = 0.0f, .z = 2.0f, .w = 1.0f }, { .x = 0.10000000149011612f, .y = 0.60000002384185791f, .z = 2.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 2.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 2.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 2.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 2.0f, .w = 1.0f }, { .x = 0.0f, .y = 1.7000000476837158f, .z = 2.0f, .w = 1.0f }, { .x = 0.0f, .y = 1.5499999523162842f, .z = 2.1500000953674316f, .w = 1.0f }, { .x = 0.0f, .y = 1.2999999523162842f, .z = 2.1500000953674316f, .w = 1.0f } };
 
 const Vector4 sefFallbackVectorsOdd[16] = { { .x = 0.0f, .y = 2.0f, .z = -2.0f, .w = 1.0f }, { .x = 0.40000000596046448f, .y = 0.80000001192092896f, .z = -2.0f, .w = 1.0f }, { .x = -0.20000000298023224f, .y = 1.1000000238418579f, .z = -2.0f, .w = 1.0f }, { .x = 0.40000000596046448f, .y = 0.80000001192092896f, .z = -2.0f, .w = 1.0f }, { .x = 0.20000000298023224f, .y = 1.1000000238418579f, .z = -2.0f, .w = 1.0f }, { .x = -0.10000000149011612f, .y = 0.0f, .z = -2.0f, .w = 1.0f }, { .x = -0.10000000149011612f, .y = 0.60000002384185791f, .z = -2.0f, .w = 1.0f }, { .x = 0.10000000149011612f, .y = 0.0f, .z = -2.0f, .w = 1.0f }, { .x = 0.10000000149011612f, .y = 0.60000002384185791f, .z = -2.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -2.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -2.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -2.0f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -2.0f, .w = 1.0f }, { .x = 0.0f, .y = 1.7000000476837158f, .z = -2.0f, .w = 1.0f }, { .x = 0.0f, .y = 1.5499999523162842f, .z = -1.8500000238418579f, .w = 1.0f }, { .x = 0.0f, .y = 1.2999999523162842f, .z = -1.8500000238418579f, .w = 1.0f } };
@@ -4482,18 +4406,18 @@ typedef struct SefEntryLanes {
     signed char slotCounts[16]; /* +0x1600: counted per reset index */
     unsigned char unmodeled_1610[0x20];
     int id;                     /* +0x1630 */
-    int flags;                  /* +0x1634: cleared by sefResetObjects */
+    int flags;                  /* +0x1634: cleared by sefResetEntryFlags */
     float scale;
     signed char slotFlags[0x20]; /* +0x163C: one flag byte per slot, bit 0 = slot set */
     short mode;                 /* +0x165C: value 2 skips the entry; cleared as one halfword by sefRebuildEntryTable */
-    short resetHalf;            /* +0x165E: cleared by sefResetObjects */
+    short resetHalf;            /* +0x165E: cleared by sefResetEntryFlags */
     short resetTail;            /* +0x1660: cleared by sefRebuildEntryTable */
     short slotFlag;             /* +0x1662: set to 1 while the slots are in use */
     unsigned char unmodeled_1664[0x0C];
 } SefEntryLanes;
 
 /* Copies one quadword through t0; the two outputs tell the compiler the whole destination vector is written. */
-static inline void sefCopyEntryVector(Vector4 *destination, Vector4 *source)
+static inline void sefCopyEntryVector(Vector4 *destination, const Vector4 *source)
 {
     __asm__ __volatile__("lq $8, 0(%3)\nsq $8, 0(%2)\n"
                          : "=m"(*destination), "=m"(destination->w)
@@ -4508,30 +4432,30 @@ void sefUpdateEntryTransforms(void)
     int j;
     int i;
     SefEntryLanes *entry;
-    SefChannel *channel;
-    Vector4 *fallbackTable;
+    TiMRPackage *channel;
+    const Vector4 *fallbackTable;
     Vector4 unit; /* never read: only w is set, as the original keeps it in the frame */
 
     unit.w = 1.0f;
     for (i = 0; i < sefEntryTable.entryCount; i++) {
         entry = (SefEntryLanes *) (sefEntryTable.entries + i);
         if (entry->id != 0) {
-            channel = (SefChannel *) ((SefActor *) entry->id)->handle640;
+            channel = XenoActorMotionPack((XenoActor *) entry->id);
             memset(entry->slotFlags, 0, 32);
-            if (channel->statusBlock != 0 && channel->statusBlock[2] != 0) {
+            if (channel->nodeTable != 0 && channel->nodeTable->count != 0) {
                 for (j = 0; j < 32; j++) {
-                    sefActorMulLocalMatrix((SefActor *) entry->id, j, entry->worldMatrices[j], 1);
-                    sefActorMulLocalMatrix((SefActor *) entry->id, j, entry->localMatrices[j], 0);
-                    if (sefActorMulLocalVector((SefActor *) entry->id, j, entry->slotVectors[j], 1)) {
+                    sefActorMulLocalMatrix((XenoActor *) entry->id, j, entry->worldMatrices[j], 1);
+                    sefActorMulLocalMatrix((XenoActor *) entry->id, j, entry->localMatrices[j], 0);
+                    if (sefActorMulLocalVector((XenoActor *) entry->id, j, entry->slotVectors[j], 1)) {
                         entry->slotFlags[j] = 1;
                         if (sefVectorXyzIsZero((Vector4 *) entry->slotVectors[j]) != 0) {
                             entry->slotVectors[j][1] = -10000.0f;
                         }
                     }
-                    sefActorMulLocalVector((SefActor *) entry->id, j, entry->slotVectors[32 + j], 0);
+                    sefActorMulLocalVector((XenoActor *) entry->id, j, entry->slotVectors[32 + j], 0);
                 }
             } else {
-                if (D_0069DAD0 != 0) {
+                if (sefFallbackVectorFlag != 0) {
                     fallbackTable = (i & 1) ? sefFallbackVectorsOdd : sefFallbackVectorsEven;
                     for (j = 0; j < 16; j++) {
                         sefCopyEntryVector((Vector4 *) entry->worldMatrices[j][3], &fallbackTable[j]);
@@ -4597,7 +4521,7 @@ static SefSlotTable sefSlotTable;
 void sefInitWorkTables(void) {
     sevInitPtAllocator();
     srsInitCdRead();
-    sefInitEffectRecords();
+    sefInitScheduler();
     sefClearLineDataRecords();
     memset(&sefSlotTable, 0, sizeof(sefSlotTable));
     memset(sefRequestBuffer, 0, 0x340);
@@ -4606,37 +4530,36 @@ void sefInitWorkTables(void) {
     sdvInitAmbient();
     sefResetResourceTable();
     sefClearHandleTable();
-    sefResetSlotTable();
+    sefResetEffectSlots();
 }
 
 /* Common start: the init chain (sefInitWorkTables among it), then sets the initialized flag sefInitialized = 1 (the gate of
  * the draw passes below) and the time scale sefTimeScale = 1.0f. */
 extern s16 sefInitialized;
-extern int D_0069DB78;
+extern int sefGateOwnerZeroFlag;
 
 void sefStartSystem(void) {
     sefResetBuffers();
-    srsReleaseRecords();
-    srsResetKeyTable();
+    sresFreeReloaderMemory();
+    sresInitMemoryRes();
     svInitImageMapper();
     sdvResetSpecialWork();
     sefInitWorkTables();
-    func_00252E20(1);
+    svSceneFlagsClear(1);
     sefFlagSet(0);
-    loadWaitAdd(0, 0);
+    sefSetLoadQue(0, 0);
     sefTimeScale = 1.0f;
-    D_0069DB78 = 0;
+    sefGateOwnerZeroFlag = 0;
     sefInitialized = 1;
 }
 
-unsigned char sefDefaultMemoryBlock[181376] = { 0 };
-void smInitilize(void *, u32);
+unsigned char sefDefaultMemoryBlock[0x152800] = { 0 };
 
 /* Start with the built-in block sefDefaultMemoryBlock (0x152800 bytes): record limits 0x40 (sefEffectRecordCount), 0xC0 and 0x44C,
  * step sefStepScale = 1.0f, then the common start. */
-void sefStartWithDefaultMemory(void) {
+void sefInitEffect(void) {
     smInitilize(sefDefaultMemoryBlock, 0x152800);
-    srsResetKeyTable();
+    sresInitMemoryRes();
     sefEffectRecordCount = 0x40;
     sefLineDataCount = 0xC0;
     sefPtAllocCount = 0x44C;
@@ -4645,7 +4568,6 @@ void sefStartWithDefaultMemory(void) {
     sefNoiseInit();
 }
 
-void sefMemClear(void *dest, unsigned int size);
 
 int sefStartWithMemory(unsigned char *block) {
     unsigned char *pool;
@@ -4653,9 +4575,9 @@ int sefStartWithMemory(unsigned char *block) {
     sefEffectRecordCount = 0x40;
     sefLineDataCount = 0xC0;
     sefPtAllocCount = 0x44C;
-    sefClipTestDisabled = 0;
+    _sefBattleMode = 0;
     smInitilize(sefDefaultMemoryBlock, 0x152800);
-    srsResetKeyTable();
+    sresInitMemoryRes();
     sefStartSystem();
     sefPtAllocatorState = (SefSlot *) block;
     sefMemClear(block, 0xBD120);
@@ -4668,46 +4590,42 @@ int sefStartWithMemory(unsigned char *block) {
     return 0x14F1A0;
 }
 
-void sefResetWorkTables(void);
-void sefSetOverrideVectors(Vector4 *vectorA, Vector4 *vectorB);
-void srsLoadEspFile(int reload, int cfdef);
 
-/* Second start variant: sets the mode flag sefClipTestDisabled = 1, then the reset of sefResetWorkTables and the subsystem
- * starts. The mirror is sefStartClipTestEnabled, which sets sefClipTestDisabled = 0 and uses sefResetWorkTablesAll. */
-void sefStartClipTestDisabled(void) {
+/* Second start variant: sets the mode flag _sefBattleMode = 1, then the reset of sefDestroyEffect and the subsystem
+ * starts. The mirror is sefInitEffectCf, which sets _sefBattleMode = 0 and uses sefDestroyEffectCf. */
+void sefInitEffectBattle(void) {
     do {
-        sefClipTestDisabled = 1;
+        _sefBattleMode = 1;
         sefTimeScale = 1.0f;
     } while (0);
     sefEffectRecordHead = 0;
     sdvInitAlters();
-    sefResetWorkTables();
-    sefInitEffectRecords();
+    sefDestroyEffect();
+    sefInitScheduler();
     sefClearLineDataRecords();
     tiWindClearFirstSlot();
-    func_00252E20(1);
+    svSceneFlagsClear(1);
     srsLoadEspFile(1, 0);
-    sefSetOverrideVectors(0, 0);
+    sefSetFogOverride(0, 0);
 }
 
-void sefResetWorkTablesAll(void);
 
-void sefStartClipTestEnabled(void) {
+void sefInitEffectCf(void) {
     sefTimeScale = 1.0f;
     sefEffectRecordHead = 0;
-    sefClipTestDisabled = 0;
-    sefResetWorkTablesAll();
+    _sefBattleMode = 0;
+    sefDestroyEffectCf();
     sefInitWorkTables();
-    func_00252E10(1);
+    svSceneFlagsSet(1);
     srsLoadEspFile(0, 1);
     xglCdWaitUntilIdle();
-    sefSetOverrideVectors(0, 0);
+    sefSetFogOverride(0, 0);
 }
 
 /* Slot table sefSlotTable: the effect number of each of eight wait slots, with its loadPending flag.
  * This claims a slot for the key among the first three entries when the key is absent, sets its flag, then calls
- * sefLoadPendingEffects. sefAcquireHighSlot claims among entries 3..7 the same way, for a positive key only. */
-void sefAcquireSlot(int key) {
+ * sefSetupEffect. sefSetupEnemy claims among entries 3..7 the same way, for a positive key only. */
+void sefSetupPlayer(int key) {
     int i;
 
     for (i = 0; i < 3; i++) {
@@ -4719,13 +4637,13 @@ void sefAcquireSlot(int key) {
         if (sefSlotTable.effectNo[i] == 0) {
             sefSlotTable.effectNo[i] = key;
             sefSlotTable.loadPending[i] = 1;
-            sefLoadPendingEffects();
+            sefSetupEffect();
             return;
         }
     }
 }
 
-void sefAcquireHighSlot(int key) {
+void sefSetupEnemy(int key) {
     int i;
 
     if (key > 0) {
@@ -4738,21 +4656,21 @@ void sefAcquireHighSlot(int key) {
             if (sefSlotTable.effectNo[i] == 0) {
                 sefSlotTable.effectNo[i] = key;
                 sefSlotTable.loadPending[i] = 1;
-                sefLoadPendingEffects();
+                sefSetupEffect();
                 return;
             }
         }
     }
 }
 
-/* Releases the slot of the key: for the matching entry calls sefDeleteWaitEffect (delete the wait effect) and
+/* Releases the slot of the key: for the matching entry calls sefDeleteEffectWait (delete the wait effect) and
  * srsReleaseSlotsByIndex, then clears the id and its flag. */
-void sefReleaseWaitSlot(int key) {
+void sefReleaseID(int key) {
     int i;
 
     for (i = 0; i < 8; i++) {
         if (sefSlotTable.effectNo[i] == key) {
-            sefDeleteWaitEffect(key);
+            sefDeleteEffectWait(key);
             srsReleaseSlotsByIndex(key);
             sefSlotTable.effectNo[i] = 0;
             sefSlotTable.loadPending[i] = 0;
@@ -4761,32 +4679,24 @@ void sefReleaseWaitSlot(int key) {
     }
 }
 
-void sefLoadPendingEffects(void) {
+void sefSetupEffect(void) {
     srsLoadPendingEffects(&sefSlotTable);
 }
 
-extern unsigned char D_00471E60[64];
-void sdvDestroyAlters(void);
-void tiWindResetSlots(void);
-
-typedef struct SefResetBlock {
-    unsigned char unmodeled_00[0x94];
-    int resetWord;
-} SefResetBlock;
-
-/* Reset: loadWaitAdd(0, 0), then sefReleaseOwnedRecords(-1) frees every record. The memsets clear sefSlotTable, sefRequestBuffer,
- * sefEntryTable (0x21AA0 bytes) and sefEntryCounts; then the VU0 copy of MMathUnitMatrix into D_00471E60 runs: rows 0..2 move
- * through vf3, vf2, vf1 and row 3 is stored from vf0. The second pass repeats the copy 64 bytes lower. */
-void sefResetWorkTables(void)
+/* Reset: sefSetLoadQue(0, 0), then sefKillEffect(-1) frees every record. The memsets clear sefSlotTable, sefRequestBuffer,
+ * sefEntryTable (0x21AA0 bytes) and sefEntryCounts; then the VU0 copy of MMathUnitMatrix into sefCameraState.previous runs: rows 0..2 move
+ * through vf3, vf2, vf1 and row 3 is stored from vf0. The second pass repeats the copy into sefCameraState.current, and
+ * sefCameraState.valid is cleared. */
+void sefDestroyEffect(void)
 {
-    unsigned char *matrixDst;
-    unsigned char *matrixSrc;
+    Matrix4 *matrixDst;
+    const Matrix4 *matrixSrc;
 
-    loadWaitAdd(0, 0);
-    sefReleaseOwnedRecords(-1);
+    sefSetLoadQue(0, 0);
+    sefKillEffect(-1);
     sdvInitAmbient();
     sdvClearSpecialWork();
-    srsReleaseRecords();
+    sresFreeReloaderMemory();
     memset(&sefSlotTable, 0, sizeof(sefSlotTable));
     memset(sefRequestBuffer, 0, 0x340);
     memset(&sefEntryTable, 0, 0x21AA0);
@@ -4794,8 +4704,8 @@ void sefResetWorkTables(void)
     sdvDestroyAlters();
     sdvResetSpecialWork();
     tiWindResetSlots();
-    matrixDst = D_00471E60;
-    matrixSrc = MMathUnitMatrix;
+    matrixDst = &sefCameraState.previous;
+    matrixSrc = &MMathUnitMatrix;
     __asm__ __volatile__(
         "lqc2 $vf1, 32(%1)\n"
         "lqc2 $vf2, 16(%1)\n"
@@ -4816,22 +4726,20 @@ void sefResetWorkTables(void)
         "sqc2 $vf2, 16(%0)\n"
         "sqc2 $vf3, 0(%0)\n"
         :
-        : "r" (matrixDst - 64), "r" (matrixSrc)
+        : "r" (&sefCameraState.current), "r" (matrixSrc)
         : "memory");
-    ((SefResetBlock *)(matrixDst - 64))->resetWord = 0;
+    sefCameraState.valid = 0;
 }
 
-void sefResetAll(void);
-
-/* The same reset as sefResetWorkTables, with sefResetAll where srsReleaseRecords and tiWindResetSlots would run: the VU0 copy of
- * MMathUnitMatrix into D_00471E60 is the same two passes. */
-void sefResetWorkTablesAll(void)
+/* The same reset as sefDestroyEffect, with sefResetAll where sresFreeReloaderMemory and tiWindResetSlots would run: the VU0 copy of
+ * MMathUnitMatrix into sefCameraState.previous and .current is the same two passes. */
+void sefDestroyEffectCf(void)
 {
-    unsigned char *matrixDst;
-    unsigned char *matrixSrc;
+    Matrix4 *matrixDst;
+    const Matrix4 *matrixSrc;
 
-    loadWaitAdd(0, 0);
-    sefReleaseOwnedRecords(-1);
+    sefSetLoadQue(0, 0);
+    sefKillEffect(-1);
     sdvInitAmbient();
     sefResetAll();
     sdvClearSpecialWork();
@@ -4841,8 +4749,8 @@ void sefResetWorkTablesAll(void)
     memset(sefEntryCounts, 0, 0x488);
     sdvDestroyAlters();
     sdvResetSpecialWork();
-    matrixDst = D_00471E60;
-    matrixSrc = MMathUnitMatrix;
+    matrixDst = &sefCameraState.previous;
+    matrixSrc = &MMathUnitMatrix;
     __asm__ __volatile__(
         "lqc2 $vf1, 32(%1)\n"
         "lqc2 $vf2, 16(%1)\n"
@@ -4863,47 +4771,45 @@ void sefResetWorkTablesAll(void)
         "sqc2 $vf2, 16(%0)\n"
         "sqc2 $vf3, 0(%0)\n"
         :
-        : "r" (matrixDst - 64), "r" (matrixSrc)
+        : "r" (&sefCameraState.current), "r" (matrixSrc)
         : "memory");
-    ((SefResetBlock *)(matrixDst - 64))->resetWord = 0;
+    sefCameraState.valid = 0;
 }
 
-void func_002602F8(int value, unsigned char *name) {
+void sefLogKeyNoOp(int value, const unsigned char *name) {
 }
 
-/* Loads n records: when n > 0 tail-calls srsLoadEffectSlot with the buffer D_0069DBA0. The dossier lists the
+/* Loads the effect key: when it is positive tail-calls srsLoadEffectSlot with no buffer. The callers pass the effect
+ * group (the key's bits 12 and up) as a second argument, which the function never reads. The dossier lists the
  * string "load" for this function; the bytes of this function do not show it. */
-extern unsigned char D_0069DBA0[];
-int srsLoadEffectSlot(int first, int count, int flags);
+extern unsigned char sefLoadLogLabel[];
 
-void sefLoadEffect(int key) {
-    func_002602F8(key, D_0069DBA0);
+void sefLoadEffect(int key, int group) {
+    sefLogKeyNoOp(key, sefLoadLogLabel);
     if (key > 0) {
         srsLoadEffectSlot(0, key, 0);
     }
 }
 
-unsigned char D_0069DBA0[8] = "load";
+unsigned char sefLoadLogLabel[8] = "load";
 SefEffectRecord *sefCurrentRecord = 0;
 int sefActiveOwnerKey = 0;
-int D_0069DBB0 = 0;
+int sefLinkedPointHandle = 0;
 SefTransformState *sefLinkedPoint = 0;
 
-extern s16 D_0069DB84;
-void sdvExecAlters(void);
-void sefRunEmitters(int);
+extern s16 _seSignal;
 
 /* One step of the effect update. sefExecEffect calls it when sefFlagTest(1) returns 0, and sefExecEffectSteps calls
- * it per step for id 0. Clears sefEntryCounts first and D_0069DB80, _hitSignal and D_0069DB84 last. */
+ * it per step for id 0. Clears sefEntryCounts first and _hitFlag, _hitSignal and _seSignal last. */
 void sefExecStep(void) {
     memset(sefEntryCounts, 0, 0x488);
     sefAdvanceGroupKey();
     sdvExecAlters();
     sefRunEmitters(0);
     sefSumEntryCounts();
-    D_0069DB80 = 0;
+    _hitFlag = 0;
     _hitSignal = 0;
-    D_0069DB84 = 0;
+    _seSignal = 0;
 }
 
 /* The render callback slots of sRender: sefDrawEffect2D at +0x30 and sefDrawEffect3DCallback at +0x40, installed by sefSetRenderHooks. */
@@ -4922,7 +4828,7 @@ void sefDrawEffect3DCallback(void);
 /* Both arms of the test install the same 2D hook; the original keeps the counter and gate reads that decide between them. */
 void sefSetRenderHooks(void)
 {
-    if (D_0069DB48 != 0 || sefClipTestDisabled != 0) {
+    if (sefLineFlag4000Count != 0 || _sefBattleMode != 0) {
         sRender.draw2D = sefDrawEffect2D;
     } else {
         sRender.draw2D = sefDrawEffect2D;
@@ -4933,7 +4839,7 @@ void sefSetRenderHooks(void)
 
 void sefExecEffect(void)
 {
-    if (sefClipTestDisabled == 0) {
+    if (_sefBattleMode == 0) {
         if (gameWork.fogDist.x != 0.0f && gameWork.fogDist.y != 0.0f) {
             Vector4 vector;
 
@@ -4941,9 +4847,9 @@ void sefExecEffect(void)
             vector.y = gameWork.fogDist.y;
             vector.z = gameWork.fogDist.z;
             vector.w = gameWork.fogDist.w;
-            sefSetOverrideVectors(&vector, &gameWork.fogColor);
+            sefSetFogOverride(&vector, &gameWork.fogColor);
         } else {
-            sefSetOverrideVectors(0, 0);
+            sefSetFogOverride(0, 0);
         }
     }
     if (sefFlagTest(1) == 0) {
@@ -4953,16 +4859,10 @@ void sefExecEffect(void)
 }
 
 /* The sef effect record that sefExecEffectSteps reads: only the word at +0x40 is modeled here. */
-typedef struct SefStepRecord {
-    unsigned char unmodeled_00[0x40];
-    int stepKind;
-    unsigned char unmodeled_44[0xA70 - 0x44];
-} SefStepRecord;
-
 /* Runs the frame steps of one effect: stores step in sefStepScale and loops with a float time accumulator from 0 up to frames.
    effectRecord 0 runs sefExecStep per step, then sefRunEmitters(0) per frame; other records clear sefEntryCounts
-   and run sefStepEffectRecords per step when stepKind is 0, or sefRunEmitters per frame otherwise. */
-void sefExecEffectSteps(int effectRecord, float frames, float step)
+   and run sefExecScheduler per step when stepKind is 0, or sefRunEmitters per frame otherwise. */
+void sefExecEffectSteps(SefEffectRecord *effectRecord, float frames, float step)
 {
     float elapsed;
 
@@ -4983,17 +4883,17 @@ void sefExecEffectSteps(int effectRecord, float frames, float step)
         }
     } else {
         memset(sefEntryCounts, 0, 0x488);
-        if (((SefStepRecord *)effectRecord)->stepKind == 0) {
+        if (effectRecord->cellSlot == 0) {
             elapsed = 0.0f;
             while (elapsed < frames) {
                 elapsed += step;
-                sefStepEffectRecords(effectRecord);
+                sefExecScheduler(effectRecord);
             }
         } else {
             elapsed = 0.0f;
             while (elapsed < frames) {
                 elapsed += 1.0f;
-                sefRunEmitters(effectRecord);
+                sefRunEmitters(sefCellOf(effectRecord));
             }
         }
     }
@@ -5001,24 +4901,19 @@ void sefExecEffectSteps(int effectRecord, float frames, float step)
 }
 
 /* One-frame-step form of sefExecEffectSteps (step 1.0f): runs the given number of frames for id. */
-void sefExecEffectFrames(int id, float frames) {
-    sefExecEffectSteps(id, frames, 1.0f);
+void sefProgressEffect(SefEffectRecord *record, float frames) {
+    sefExecEffectSteps(record, frames, 1.0f);
 }
 
-void xglPacketInitVuStateArg(int);
 
 void sefFinishDrawPass(int value) {
     xglPacketModeReset();
-    func_001CD134();
-    func_001CD1AC();
-    func_001CD160();
+    nmlPacketClrTextureCache();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
     xglPacketInitVuStateArg(value);
 }
 
-int sefGetActiveCount(void);
-void svDrawScene2D(void);
-void sefGetCameraPos(Matrix4 *dest);
-void MSeObjProc(unsigned int mode);
 Matrix4 sefCameraMatrix[1] = { 0 };
 
 /* Draw pass installed at sRender +0x30. Guarded by the initialized flag sefInitialized and by the pending bit
@@ -5028,10 +4923,10 @@ void sefDrawEffect2D(void) {
     if (sefInitialized != 0) {
         if (!(gameWork.control & SEF_DRAW_FLAG_PENDING)) {
             if (sefGetDraw2DFlag() != 0 || sefGetActiveCount() != 0) {
-                sefGetCameraPos(sefCameraMatrix);
+                sefCalcInvView(sefCameraMatrix);
                 svDrawScene2D();
             }
-            if (sefClipTestDisabled != 0) {
+            if (_sefBattleMode != 0) {
                 MSeObjProc(2);
                 MSeObjProc(3);
             }
@@ -5044,14 +4939,13 @@ void sefDrawEffect2DAndFinish(int value) {
     sefFinishDrawPass(value);
 }
 
-void svDrawEffectRecords3D(void);
 
 void sefDrawEffect(void) {
     if (sefInitialized != 0) {
         if (!(gameWork.control & SEF_DRAW_FLAG_PENDING)) {
-            sefGetCameraPos(sefCameraMatrix);
+            sefCalcInvView(sefCameraMatrix);
             svDrawEffectRecords3D();
-            if (sefClipTestDisabled != 0) {
+            if (_sefBattleMode != 0) {
                 MSeObjProc(0);
                 MSeObjProc(1);
             }
@@ -5063,7 +4957,6 @@ void sefDrawEffect(void) {
     sdvClearSpecialWork();
 }
 
-void svDrawScene3D(void);
 
 /* Draw pass guarded like sefDrawEffect2D (initialized flag sefInitialized, pending bit 0x04000000). When
  * sefGetDraw3DFlag reports yes, enters 3D mode with svDrawScene3D (sets _draw3D = 1, then draws). */
@@ -5088,16 +4981,16 @@ void sefDrawEffect3DCallback(void) {
 }
 
 /* Empty hook: nothing is done here. */
-void func_00260840(unsigned char *request) {
+void sefLogRequestNoOp(unsigned char *request) {
 
 }
 
 const unsigned char sefDeleteWaitEffectLabel[16] = "delete wait eft";
 
 /* Deletes the wait effect for the id (string "delete wait eft"): finds the wait-slot record of srsRecordTable whose
- * effect number is key and releases the effect records bound to it with sefReleaseEffectRecord. Called by
- * sefReleaseWaitSlot (tu165). */
-void sefDeleteWaitEffect(int key)
+ * effect number is key and releases the effect records bound to it with sefFreeScheduler. Called by
+ * sefReleaseID. */
+void sefDeleteEffectWait(int key)
 {
     int keyIndex;
     int i;
@@ -5112,8 +5005,8 @@ void sefDeleteWaitEffect(int key)
 
     for (i = 0; i < sefEffectRecordCount; i++) {
         if ((sefEffectRecords[i].inUse != 0) && (sefEffectRecords[i].entryId == keyIndex)) {
-            func_002602F8(sefEffectRecords[i].ownerKey, sefDeleteWaitEffectLabel);
-            sefReleaseEffectRecord(i);
+            sefLogKeyNoOp(sefEffectRecords[i].ownerKey, sefDeleteWaitEffectLabel);
+            sefFreeScheduler(i);
         }
     }
 }
@@ -5126,10 +5019,14 @@ typedef struct SefRequestBytes {
 } SefRequestBytes;
 
 void sefRegisterGroupCenter(int owner, unsigned short key);
+/* sc_get.c defines it as SefScriptRecord *scGetKeyRecord(int key, int *offset_out, int index). This file keeps the word
+ * form: the record address and the offset address are ints, because sefCreateScheduler (int table address),
+ * sefCreateScheduler2 (int loadTag, kept as an int field of the record) and scGetImmAdrImmIdx2 (int base) take the
+ * record as a word; the typed prototype needs a cast at every use. */
 extern int scGetKeyRecord(int kind, int out, int flag);
 extern int scKeyRecordGroupCount;
 
-void sefStartEffect(void *request, int value)
+void sefStartEffect(void *request, const Vector4 *position)
 {
     SefEffectRecord *record;
     int innerOut;
@@ -5142,17 +5039,17 @@ void sefStartEffect(void *request, int value)
     int ownerCount;
 
     if (((SefRequestBuffer *)request)->kind > 0) {
-        func_00260840(sefRequestBuffer);
+        sefLogRequestNoOp(sefRequestBuffer);
         *(SefRequestBytes *)sefRequestBuffer = *(SefRequestBytes *)request;
         kind = ((SefRequestBuffer *)sefRequestBuffer)->kind;
         result = scGetKeyRecord(kind, (int)&resultOut, 1);
         if (result != 0) {
             if (scKeyRecordMode == SEF_START_MODE_GROUP) {
-                ownerCount = sefCountOwnerValue(kind, sefGroupKey);
+                ownerCount = sefCountOwnerGroupRecords(kind, sefGroupKey);
                 if (ownerCount == 0) {
                     innerResult = scGetKeyRecord(((SefRequestBuffer *)sefRequestBuffer)->kind, (int)&innerOut, 0);
                     if (innerResult) {
-                        createdIndex = sefCreateEffectRecordDefault(innerResult + innerOut * 2, (int)sefRequestBuffer, value, innerResult, -1);
+                        createdIndex = sefCreateScheduler(innerResult + innerOut * 2, (int)sefRequestBuffer, position, innerResult, -1);
                         if (createdIndex >= 0) {
                             if (sefCountMarkedEntries(&sefEffectRecords[createdIndex]) == 0) {
                                 sefEffectRecords[createdIndex].flags = (sefEffectRecords[createdIndex].flags | SEF_RECORD_EXCLUDE_FLAG) & 0xFDFFFFFF;
@@ -5162,15 +5059,15 @@ void sefStartEffect(void *request, int value)
                         }
                     }
                 } else {
-                    sefClearOwnerValueFlags(kind, sefGroupKey, SEF_RECORD_SLOTS_LOADED);
+                    sefClearOwnerGroupFlags(kind, sefGroupKey, SEF_RECORD_SLOTS_LOADED);
                 }
                 if (resultOut) {
-                    sefCreateEffectRecord((unsigned short *) (result + resultOut * 2),
-                                          (SefRecordRequest *) sefRequestBuffer, (Vector4 *) value, result, scKeyRecordGroupCount * ownerCount, -1, 1);
+                    sefCreateScheduler2((unsigned short *) (result + resultOut * 2),
+                                          (SefRecordRequest *) sefRequestBuffer, position, result, scKeyRecordGroupCount * ownerCount, -1, 1);
                 }
                 sefRegisterGroupCenter(kind, sefGroupKey);
             } else {
-                index = sefCreateEffectRecordDefault(result + resultOut * 2, (int)sefRequestBuffer, value, result, -1);
+                index = sefCreateScheduler(result + resultOut * 2, (int)sefRequestBuffer, position, result, -1);
                 if (index >= 0) {
                     record = &sefEffectRecords[index];
                     if (scKeyRecordMode == SEF_START_MODE_FLAG) {
@@ -5183,18 +5080,18 @@ void sefStartEffect(void *request, int value)
 }
 
 /* Starts the effect with value 0. */
-void sefStartEffectDefault(void *object) {
+void sefCreateEffect(void *object) {
     sefStartEffect(object, 0);
 }
 
 /* Starts the effect with the given value. */
-void sefStartEffectWithValue(void *object, int value) {
-    sefStartEffect(object, value);
+void sefStartEffectWithValue(void *object, const Vector4 *position) {
+    sefStartEffect(object, position);
 }
 
 /* Variant of sefStartEffect that copies the request the same way and returns
  * a pointer to the record it set up in sefEffectRecords, or NULL. */
-SefEffectRecord *sefCreateDetachedEffect(void *object)
+SefEffectRecord *sefCreateEffect2(void *object)
 {
     SefEffectRecord *record = 0;
     int index = -1;
@@ -5204,7 +5101,7 @@ SefEffectRecord *sefCreateDetachedEffect(void *object)
 
     if (request->kind > 0) {
         *(SefRequestBytes *)sefRequestBuffer = *(SefRequestBytes *)request;
-        func_00260840(sefRequestBuffer);
+        sefLogRequestNoOp(sefRequestBuffer);
     }
     if (request->kind <= 0) {
         return 0;
@@ -5212,7 +5109,7 @@ SefEffectRecord *sefCreateDetachedEffect(void *object)
     if ((result = scGetKeyRecordFirst(((SefRequestBuffer *)sefRequestBuffer)->kind, (int)&resultOut)) == 0) {
         return 0;
     }
-    if (0 <= (index = sefCreateEffectRecordDefault(result + resultOut * 2, (int)sefRequestBuffer, 0, result, -1))) {
+    if (0 <= (index = sefCreateScheduler(result + resultOut * 2, (int)sefRequestBuffer, 0, result, -1))) {
         record = sefEffectRecords + index;
         record->flags = record->flags | 0x140;
         record->flags = record->flags & 0xEFFFFFFF;
@@ -5223,9 +5120,9 @@ SefEffectRecord *sefCreateDetachedEffect(void *object)
     return record;
 }
 
-/* Forwards its record to sefFreeEffectRecord. */
-void func_00260D20(SefEffectRecord *record) {
-    sefFreeEffectRecord(record);
+/* Forwards its record to sefFreeSchedulerCf. */
+void sefDeleteEffect2(SefEffectRecord *record) {
+    sefFreeSchedulerCf(record);
 }
 
 /* Maps the four alias ids of the effect table to their canonical keys; any other id passes through. */
@@ -5257,8 +5154,8 @@ int sefCanonicalEffectId(int effectId) {
 
 /* Starts the effect key: image keys are loaded as a block and pruned, other keys load one slot;
  * a positive or -2 mode registers the handle. */
-int sefStartEffectKey(int first, int key, int mode) {
-    func_00252E10(1);
+int sefStartEffectKey(void *first, int key, int mode) {
+    svSceneFlagsSet(1);
     if (key <= 0) {
         return 0;
     }
@@ -5279,18 +5176,17 @@ int sefStartEffectKey(int first, int key, int mode) {
     return mode;
 }
 
-int sefStartEffectKeyDefault(int first, int second) {
+int sefStartEffectKeyDefault(void *first, int second) {
     return sefStartEffectKey(first, second, 0);
 }
 
-int srsEffectKeyFromName(signed char *);
 
 /* Starts the effect named by the text code: decodes it to a key, loads the esp file when the code begins
  * with 'e', then starts the key through sefStartEffectKey in mode 1. */
-void sefStartEffectByCode(int first, signed char *text) {
+void sefLoadEffectCfName(void *first, signed char *text) {
     int effectKey;
 
-    effectKey = srsEffectKeyFromName(text);
+    effectKey = srsEffectNameToID(text);
     if ((first != 0) && (effectKey != 0) && (text != 0)) {
         if (*text == 'e') {
             srsLoadEspFile(0, 1);
@@ -5299,7 +5195,7 @@ void sefStartEffectByCode(int first, signed char *text) {
     sefStartEffectKey(first, effectKey, 1);
 }
 
-/* The 56-byte request sefSpawnEffectRecord passes to sefCreateEffectRecordDefault. */
+/* The 56-byte request sefCreateEffectCf2 passes to sefCreateScheduler. */
 typedef struct SefSpawnRequest {
     unsigned char unmodeled_00[0x1C];
     int effectId;               /* 0x1C: the canonical effect id */
@@ -5314,12 +5210,11 @@ typedef struct SefEntryHeader {
 } SefEntryHeader;
 
 extern SefEntryHeader *scKeyRecordEntry;
-SefEffectRecord *sefCreateKindResourceSlot(int key, int base, int index, int second, unsigned char *third,
-                                           unsigned char *fourth,
-                               int fifth);
+/* sc_get.c defines it as SefScriptRecord *scGetKeyRecordFirst(int key, int *offset_out); this file uses the word forms (see scGetKeyRecord). */
+int scGetKeyRecordFirst(int first, int second);
 
 /* Copies one quadword block with lq/sq through $8; the source block is an in-out memory operand of the asm. */
-static inline void sefCopyBlock(unsigned char *destination, unsigned char *source)
+static inline void sefCopyBlock(Vector4 *destination, Vector4 *source)
 {
     __asm__ __volatile__("lq $8, 0(%2)\n"
                          "sq $8, 0(%1)\n"
@@ -5331,7 +5226,8 @@ static inline void sefCopyBlock(unsigned char *destination, unsigned char *sourc
 /* Spawns the effect record for an effect id. Inside an entry (scKeyRecordEntry set) it hands the remapped key to
  * sefCreateKindResourceSlot; otherwise it creates a record, copies the two optional quadword blocks into it and marks
    it. */
-SefEffectRecord *sefSpawnEffectRecord(int effectId, int second, unsigned char *firstBlock, unsigned char *secondBlock, int fifth)
+SefEffectRecord *sefCreateEffectCf2(int effectId, const Vector4 *position, Vector4 *rotation, Vector4 *scale,
+                                    int slotIndex)
 {
     SefEffectRecord *record = 0;
     SefSpawnRequest request;
@@ -5363,22 +5259,22 @@ SefEffectRecord *sefSpawnEffectRecord(int effectId, int second, unsigned char *f
             } else if (key == 0x100C838C) {
                 key = 0x100C8392;
             }
-            return sefCreateKindResourceSlot(key, lookupBase + entry->entryIndex * 2, (key & 0x3FF) - 901, second,
-                                             firstBlock, secondBlock, fifth);
+            return sefRecordOfCell(sefCreateKindResourceSlot(key, (SefImageSource *) (lookupBase + entry->entryIndex * 2),
+                                                             (key & 0x3FF) - 901, position, rotation, scale, slotIndex));
         }
         return 0;
     }
     memset(&request, 0, sizeof(request));
     request.effectId = canonicalId;
     request.scale = 1.0f;
-    recordIndex = sefCreateEffectRecordDefault(lookupBase + slot * 2, (int) &request, second, lookupBase, fifth);
+    recordIndex = sefCreateScheduler(lookupBase + slot * 2, (int) &request, position, lookupBase, slotIndex);
     if (recordIndex >= 0) {
         record = &sefEffectRecords[recordIndex];
-        if (firstBlock != 0) {
-            sefCopyBlock(record->firstBlock, firstBlock);
+        if (rotation != 0) {
+            sefCopyBlock(&record->rotation, rotation);
         }
-        if (secondBlock != 0) {
-            sefCopyBlock(record->secondBlock, secondBlock);
+        if (scale != 0) {
+            sefCopyBlock(&record->scale, scale);
         }
         if (scKeyRecordMode == 61) {
             record->flags |= 0x800000;
@@ -5391,59 +5287,61 @@ SefEffectRecord *sefSpawnEffectRecord(int effectId, int second, unsigned char *f
     return record;
 }
 
-void sefSetRecordOwner(SefEffectRecord *record, int owner) {
+void sefSetRecordOwner(SefEffectRecord *record, void *owner) {
     if (record != 0) {
-        record->owner = owner;
+        record->owner = (int) owner;
     }
 }
 
-void sefSetRecordOwnerMarked(SefEffectRecord *record, int owner) {
+void sefSetRecordOwnerMarked(SefEffectRecord *record, void *owner) {
     if (record != 0) {
-        record->owner = owner;
+        record->owner = (int) owner;
         record->flags |= 0x400;
     }
 }
 
-void sefSetRecordValues(SefEffectRecord *record, int first, int second, int third) {
+void sefSetRecordValues(SefEffectRecord *record, struct XenoActor *first, struct XenoActor *second,
+                        struct XenoActor *third) {
     if (record != 0) {
-        record->values[0] = first;
-        record->values[1] = second;
-        record->values[2] = third;
+        record->values[0] = (int) first;
+        record->values[1] = (int) second;
+        record->values[2] = (int) third;
     }
 }
 
-void sefSetRecordBlock(SefEffectRecord *record, unsigned char *source) {
+void sefSetRecordBlock(SefEffectRecord *record, const Vector4 *source) {
     if (record != 0) {
-        QuadwordCopyT0(record->block, source);
+        QuadwordCopyT0(&record->vertexScale, source);
     }
 }
 
-/* Creates the record for an effect id; the first argument is the id itself. */
-SefEffectRecord *sefSpawnEffectRecordById(int effectId, int second, unsigned char *firstBlock) {
-    return sefSpawnEffectRecord(effectId, second, firstBlock, 0, -1);
+/* Creates the record for an effect id at a position, with a rotation block. */
+SefEffectRecord *sefCreateEffectCf(int effectId, const Vector4 *position, Vector4 *rotation) {
+    return sefCreateEffectCf2(effectId, position, rotation, 0, -1);
 }
 
 /* Decodes the effect code in text, then creates the record for it. */
-SefEffectRecord *sefSpawnEffectRecordByCode(signed char *text, int first, unsigned char *firstBlock, unsigned char *secondBlock) {
+SefEffectRecord *sefSpawnEffectRecordByCode(signed char *text, const Vector4 *position, Vector4 *rotation,
+                                            Vector4 *scale) {
     int effectId;
 
-    effectId = srsEffectKeyFromName(text);
-    return sefSpawnEffectRecord(effectId, first, firstBlock, secondBlock, -1);
+    effectId = srsEffectNameToID(text);
+    return sefCreateEffectCf2(effectId, position, rotation, scale, -1);
 }
 
 /* The request sefSpawnOwnedEffect reads: the owner id and the effect id. */
 typedef struct SefOwnedRequest {
     int owner;                  /* 0x0: copied to the record's owner */
     unsigned char unmodeled_04[0x1C - 0x04];
-    int effectId;               /* 0x1C: passed to sefSpawnEffectRecord */
+    int effectId;               /* 0x1C: passed to sefCreateEffectCf2 */
 } SefOwnedRequest;
 
 /* Spawns the record for the owner's effect id and stores the owner in it. */
-SefEffectRecord *sefSpawnOwnedEffect(SefOwnedRequest *request, int second, unsigned char *firstBlock,
-                                     unsigned char *secondBlock) {
+SefEffectRecord *sefSpawnOwnedEffect(SefOwnedRequest *request, const Vector4 *position, Vector4 *rotation,
+                                     Vector4 *scale) {
     SefEffectRecord *record;
 
-    record = sefSpawnEffectRecord(request->effectId, second, firstBlock, secondBlock, -1);
+    record = sefCreateEffectCf2(request->effectId, position, rotation, scale, -1);
     if (record != 0) {
         record->owner = request->owner;
     }
@@ -5451,11 +5349,10 @@ SefEffectRecord *sefSpawnOwnedEffect(SefOwnedRequest *request, int second, unsig
 }
 
 /* Releases one effect record. */
-void sefReleaseRecordHandle(SefEffectRecord *record) {
-    sefFreeEffectRecord(record);
+void sefDeleteEffectCf(SefEffectRecord *record) {
+    sefFreeSchedulerCf(record);
 }
 
-void srsUnloadEffectSlot(unsigned int index);
 
 /* Releases the in-use records whose entry id is i + 9, for each key-table entry i (entries 9 to 56) whose key is
  * key, then unloads slot i. */
@@ -5468,7 +5365,7 @@ void sefReleaseEntryRecords(void *handle)
         if (srsRecordTable.slots[slotIndex].handle == handle) {
             for (recordIndex = 0; recordIndex < sefEffectRecordCount; recordIndex++) {
                 if (sefEffectRecords[recordIndex].inUse != 0 && sefEffectRecords[recordIndex].entryId == slotIndex + 9) {
-                    sefReleaseEffectRecord(recordIndex);
+                    sefFreeScheduler(recordIndex);
                 }
             }
             srsUnloadEffectSlot(slotIndex);
@@ -5476,9 +5373,9 @@ void sefReleaseEntryRecords(void *handle)
     }
 }
 
-/* Releases the effect records of owner ownerId: with flag zero only the records whose key is in the 300..399 kind
+/* Releases the effect records of the owner (an actor): with flag zero only the records whose key is in the 300..399 kind
  * range (top bits clear) are candidates; a candidate whose key is in the kept-key list survives. */
-void sefReleaseUnitRecords(int ownerId, int releaseAll)
+void sefReleaseUnitRecords(void *owner, int releaseAll)
 {
     int keptKeys[1];
     int i;
@@ -5488,11 +5385,11 @@ void sefReleaseUnitRecords(int ownerId, int releaseAll)
     unsigned int kind;
 
     keptKeys[0] = 0x140008;
-    if (ownerId == 0) {
+    if (owner == 0) {
         return;
     }
     for (i = 0; i < sefEffectRecordCount; i++) {
-        if (sefEffectRecords[i].inUse == 0 || sefEffectRecords[i].owner != ownerId) {
+        if (sefEffectRecords[i].inUse == 0 || sefEffectRecords[i].owner != (int) owner) {
             continue;
         }
         key = sefEffectRecords[i].ownerKey;
@@ -5509,7 +5406,7 @@ void sefReleaseUnitRecords(int ownerId, int releaseAll)
             }
         }
         if (!hit) {
-            sefReleaseEffectRecord(i);
+            sefFreeScheduler(i);
         }
     }
 }
@@ -5525,14 +5422,14 @@ void sefReleaseRecordsOfOwner(int ownerId)
             SefEffectRecord *record = (SefEffectRecord *)(i * sizeof(SefEffectRecord) + (int)sefEffectRecords);
 
             if (record->inUse != 0 && record->owner == ownerId) {
-                sefReleaseRecordHandle(record);
+                sefDeleteEffectCf(record);
             }
         }
     }
 }
 
 /* Releases every in-use record whose query key passes srsIsEffectImageKey. */
-void sefReleaseRecordsByQuery(void)
+void sefReleaseImageRecords(void)
 {
     int i;
 
@@ -5541,7 +5438,7 @@ void sefReleaseRecordsByQuery(void)
         SefEffectRecord *record = (SefEffectRecord *)(i * sizeof(SefEffectRecord) + (int)sefEffectRecords);
 
         if (record->inUse != 0 && srsIsEffectImageKey(record->ownerKey) != 0) {
-            sefReleaseRecordHandle(&sefEffectRecords[i]);
+            sefDeleteEffectCf(&sefEffectRecords[i]);
         }
     }
 }
@@ -5551,8 +5448,6 @@ typedef union {
     int owner;
     SefEffectLoadEntry *table;
 } SefRecordOwner;
-
-void sefResetSlotRecords(SefEffectRecord *record, int suspend);
 
 /* Destroys the 32 effect entries of record and reloads its slots, or resets a cell record; then sets or clears the SEF_RECORD_SKIP_STEP flag. */
 void sefDestroyRecordEffects(SefEffectRecord *record, int setFlag)
@@ -5571,7 +5466,7 @@ void sefDestroyRecordEffects(SefEffectRecord *record, int setFlag)
         return;
     }
     if (record->cellSlot != 0) {
-        sefResetSlotRecords(record, setFlag);
+        sefResetSlotRecords(sefCellOf(record), setFlag);
         return;
     }
     slotIndex = record->slotIndex;
@@ -5589,7 +5484,7 @@ void sefDestroyRecordEffects(SefEffectRecord *record, int setFlag)
         ((SefWordView *) &sefActiveOwnerKey)->value = ownerKey;
         sefCurrentLoadTag = loadTag;
         sefCurrentRecord = record;
-        sefLoadEffectSlots(table, slotIndex, record->loadFlags);
+        sefInitEffectTbl(table, slotIndex, record->loadFlags);
     }
     if (setFlag != 0) {
         record->flags |= SEF_RECORD_SKIP_STEP;
@@ -5616,7 +5511,7 @@ void sefResetEffects(SefEffectRecord *record)
     }
     sefEffectRecordHead = 0;
     for (recordIndex = 0; recordIndex < sefEffectRecordCount; recordIndex++) {
-        sefReleaseEffectRecord(recordIndex);
+        sefFreeScheduler(recordIndex);
     }
     sdvDestroyAlters();
     sdvClearSpecialWork();
@@ -5625,29 +5520,29 @@ void sefResetEffects(SefEffectRecord *record)
     sefMemClear(sefLineDataRecords, sefLineDataCount * sizeof(SefLocalData));
 }
 
-void func_00261778(void)
+void sefHitEffect(void)
 {
-    D_0069DB80 = 1;
+    _hitFlag = 1;
 }
 
-SefLinkedContext *sefGetRequestBuffer(void)
+SefLinkedContext *sefGetBattleData(void)
 {
     return (SefLinkedContext *) sefRequestBuffer;
 }
 
-unsigned char *func_00261798(int slotIndex)
+unsigned char *sevGetPtAllocator(int slotIndex)
 {
     return sefPtAllocatorState[slotIndex].data;
 }
 
-/* Returns the data of slot slotIndex. func_00261798 has the same body and is left unnamed. */
-unsigned char *sefGetSlotData(int slotIndex)
+/* Returns the data of slot slotIndex. sevGetPtAllocator has the same body and is left unnamed. */
+unsigned char *sevGetPtAllocator2(int slotIndex)
 {
     return sefPtAllocatorState[slotIndex].data;
 }
 
 /* Returns line-data record entryIndex, or null for a negative index. */
-SefLocalData *sefGetLineData(int entryIndex)
+SefLocalData *sefGetLineAdr(int entryIndex)
 {
     if (entryIndex < 0) {
         return 0;
@@ -5656,19 +5551,19 @@ SefLocalData *sefGetLineData(int entryIndex)
 }
 
 /* Returns the base of the effect record table. */
-SefEffectRecord *sefGetEffectRecords(void)
+SefEffectRecord *sefGetScheduler(void)
 {
     return sefEffectRecords;
 }
 
 /* Returns the record most recently stored by sefDestroyRecordEffects (the current record). */
-SefEffectRecord *sefGetCurrentRecord(void)
+SefEffectRecord *sefGetNowScheduler(void)
 {
     return sefCurrentRecord;
 }
 
 /* The first index is only checked for a valid value; the slot is selected by the second. */
-unsigned char *sefGetSlotDataChecked(int checkedIndex, int slotIndex)
+unsigned char *sefGetParentLine(int checkedIndex, int slotIndex)
 {
     if (checkedIndex >= 0 && slotIndex >= 0) {
         return sefPtAllocatorState[slotIndex].data;
@@ -5680,14 +5575,14 @@ unsigned char *sefGetSlotDataChecked(int checkedIndex, int slotIndex)
 void sefSetSlotDirectionDefault(Matrix4 *destination, const Vector4 *direction)
 {
     do {
-        sefSetSlotDirection(destination, direction, sefDirectionAxes);
+        sefGetDirMatrix(destination, direction, sefDirectionAxes);
     } while (0);
 }
 
 void sefSetSlotDirectionBetweenDefault(void *state, Vector4 *minuend, Vector4 *subtrahend)
 {
     do {
-        sefSetSlotDirectionBetween(state, minuend, subtrahend, sefDirectionAxes);
+        sefGetVecMatrix(state, minuend, subtrahend, sefDirectionAxes);
     } while (0);
 }
 
@@ -5743,7 +5638,6 @@ void sefMemClear(void *dest, unsigned int size) {
 
 /* LCG state of sefRandf, stored at sefRandSeed. */
 extern unsigned int sefRandSeed;
-void MMathRandomSeed(int initArg);
 /* Set to 1 once sefNoiseInit has filled the noise table. */
 extern int sefNoiseReady;
 
@@ -5858,21 +5752,19 @@ void sefNoiseNextVector(Vector4 *pos)
 }
 
 /* Writes the position transformed by the matrix into dest (the position's translation merged into the matrix). */
-void sefMergeMatrixPos(Matrix4 *dest, Matrix4 *matrix, Vector4 *position)
+void sefMergeMatrixPos(Matrix4 *dest, Matrix4 *matrix, const Vector4 *position)
 {
     QuadwordMergeMatrixPosition(dest, matrix, position);
 }
 
-Matrix4 *MMathRotateMatrixZYX(Matrix4 *out, Matrix4 *matrix, const Vector4 *rotation);
-Matrix4 *MMathScaleMatrix(Matrix4 *out, Matrix4 *matrix, const Vector4 *scale);
 
 /* Builds the effect matrix in out (the scratchpad when out is null): the identity rows of MMathUnitMatrix are copied
  * first, then a nonzero translation becomes row 3, a nonzero rotation is applied, and a scale that is not all ones.
  * Returns how many of the three steps ran. */
-int sefBuildEffectMatrix(const Vector4 *rotation, const Vector4 *translation, const Vector4 *scale, Matrix4 *out)
+int sefCalcRotTransSMatrix(const Vector4 *rotation, const Vector4 *translation, const Vector4 *scale, Matrix4 *out)
 {
     Matrix4 *dest;
-    unsigned char *unitMatrix;
+    const Matrix4 *unitMatrix;
     int stepsRun;
     int hasTranslation;
     int hasRotation;
@@ -5882,7 +5774,7 @@ int sefBuildEffectMatrix(const Vector4 *rotation, const Vector4 *translation, co
         dest = (Matrix4 *)0x70000000;
     }
     stepsRun = 0;
-    unitMatrix = MMathUnitMatrix;
+    unitMatrix = &MMathUnitMatrix;
     __asm__ __volatile__(
         "lqc2 $vf1, 32(%1)\n"
         "lqc2 $vf2, 16(%1)\n"
@@ -5911,7 +5803,7 @@ int sefBuildEffectMatrix(const Vector4 *rotation, const Vector4 *translation, co
     return stepsRun;
 }
 
-void sefGetCameraPos(Matrix4 *dest)
+void sefCalcInvView(Matrix4 *dest)
 {
     XglCamera *camera = xglStudioGetActiveCamera();
 
@@ -5939,7 +5831,7 @@ void sefApplyMatrixVector(Vector4 *destination, Matrix4 *matrix, Vector4 *vector
  * records (ids 9..56), a type 1 effect by bits 12..21 of its id in the eight wait-slot records (ids 1..8). Returns -1
  * when the id is 0 or no record holds it, and 0 for any other effect type. Both loops take their record count
  * from the class being searched (slotClass). */
-int sefFindRecordIndex(int key)
+int sefSearchMapperIndex(int key)
 {
     int charNo;
     int effectType;
@@ -6007,16 +5899,16 @@ typedef struct SefObject {
     unsigned char flags;
 } SefObject;
 
-/* Returns bit 0 of the flags of the object linked to `instance` through the context, or 0 without a link. */
-int sefGetLinkedFlag(unsigned char *instance)
+/* Returns bit 0 of flag byte linkIndex of the linked object table (objectOffset), or 0 without a link. */
+int sefGetLinkedFlag(int linkIndex)
 {
-    SefLinkedContext *context = sefGetRequestBuffer();
+    SefLinkedContext *context = sefGetBattleData();
     int offset = context->objectOffset;
 
     if (offset == 0) {
         return 0;
     }
-    return ((SefObject *) (instance + offset))->flags & 1;
+    return ((SefObject *) (linkIndex + offset))->flags & 1;
 }
 
 /* A kind's table: 64 matrices (64 bytes each), 32 slot vectors at +0x1000, then 64 vectors at +0x1200 and, from +0x163C, one flag byte per index. */
@@ -6045,7 +5937,7 @@ static inline void sefCopySlotVector(Vector4 *dest, Vector4 *src)
  * record or for an unlisted kind). The second argument is never read. */
 int sefGetKindSlotVector(Vector4 *destination, int unused, int slot, int kind)
 {
-    SefLinkedContext *context = sefGetRequestBuffer();
+    SefLinkedContext *context = sefGetBattleData();
 
     if (kind == 1) {
         if (context->kind1Table != 0) {
@@ -6114,7 +6006,7 @@ int sefGetKindSlotVector(Vector4 *destination, int unused, int slot, int kind)
  * that index. The second argument is passed by the caller and never read. */
 int sefGetKindVector(Vector4 *out, int unused, int index, int kind)
 {
-    SefLinkedContext *context = sefGetRequestBuffer();
+    SefLinkedContext *context = sefGetBattleData();
     SefKindTable *kindTable;
 
     if (kind == 1) {
@@ -6173,9 +6065,9 @@ static inline void sefCopyKindMatrix(Matrix4 *dest, Matrix4 *src)
  * the other kinds, and any unlisted kind, copy the unit matrix. */
 void sefGetKindMatrix(Matrix4 *dest, int unused, int matrixIndex, int kind)
 {
-    SefLinkedContext *context = sefGetRequestBuffer();
+    SefLinkedContext *context = sefGetBattleData();
     Matrix4 *matrixTable;
-    unsigned char *unitMatrix;
+    const Matrix4 *unitMatrix;
 
     if (kind == 1) {
         matrixTable = (Matrix4 *) context->objectOffset;
@@ -6230,7 +6122,7 @@ void sefGetKindMatrix(Matrix4 *dest, int unused, int matrixIndex, int kind)
         }
     }
 
-    unitMatrix = MMathUnitMatrix;
+    unitMatrix = &MMathUnitMatrix;
     __asm__ __volatile__(
         "lqc2 $vf1, 32(%1)\n"
         "lqc2 $vf2, 16(%1)\n"
@@ -6251,9 +6143,9 @@ void sefGetKindMatrix(Matrix4 *dest, int unused, int matrixIndex, int kind)
 
 void sefGetKindMatrixSecondHalf(Matrix4 *dest, int unused, int matrixIndex, int kind)
 {
-    SefLinkedContext *context = sefGetRequestBuffer();
+    SefLinkedContext *context = sefGetBattleData();
     Matrix4 *matrixTable;
-    unsigned char *unitMatrix;
+    const Matrix4 *unitMatrix;
 
     if (kind == 1) {
         matrixTable = (Matrix4 *) context->objectOffset;
@@ -6308,7 +6200,7 @@ void sefGetKindMatrixSecondHalf(Matrix4 *dest, int unused, int matrixIndex, int 
         }
     }
 
-    unitMatrix = MMathUnitMatrix;
+    unitMatrix = &MMathUnitMatrix;
     __asm__ __volatile__(
         "lqc2 $vf1, 32(%1)\n"
         "lqc2 $vf2, 16(%1)\n"
@@ -6322,21 +6214,8 @@ void sefGetKindMatrixSecondHalf(Matrix4 *dest, int unused, int matrixIndex, int 
         : "memory");
 }
 
-/* A part's transform: the three matrix columns at +0x000, the translation at +0x140, the scale at +0x160 and the
- * point vu0TransformPoint takes at +0x290. */
-typedef struct SefPartTransform {
-    Vector4 matrix[3];                               /* +0x000 */
-    unsigned char unmodeled_030[0x140 - 0x30];
-    Vector4 translation;                             /* +0x140 */
-    unsigned char unmodeled_150[0x160 - 0x150];
-    Vector4 scale;                                   /* +0x160 */
-    unsigned char unmodeled_170[0x290 - 0x170];
-    Vector4 point;                                   /* +0x290 */
-} SefPartTransform;
 
-void vu0TransformPoint(Vector4 *point);
-
-void sefTransformPartPoint(SefPartTransform *part, Vector4 *out, int mode, Vector4 *offset)
+void sefTransformPartPoint(SefTransformState *part, Vector4 *out, int mode, const Vector4 *offset)
 {
     __asm__ __volatile__(
         "lqc2 vf26, 0(%0)\n"
@@ -6344,7 +6223,7 @@ void sefTransformPartPoint(SefPartTransform *part, Vector4 *out, int mode, Vecto
         "lqc2 vf28, 32(%0)\n"
         "lqc2 vf29, 0(%1)\n"
         :
-        : "r"(part), "r"(&part->translation)
+        : "r"(part), "r"(&part->rotation_aux)
         : "memory");
     if (mode != 0) {
         __asm__ __volatile__(
@@ -6389,14 +6268,13 @@ void sefTransformPartPoint(SefPartTransform *part, Vector4 *out, int mode, Vecto
         : "memory");
 }
 
-extern short sefUseAltMatrix[];
 static Matrix4 sefScratchMatrix;
-Vector4 D_00493B00 = { .x = 0.0f, .y = 0.0f, .z = 0.5f, .w = 1.0f };
+Vector4 sefEntryScaleOffsetVector = { .x = 0.0f, .y = 0.0f, .z = 0.5f, .w = 1.0f };
 
 /* Resolves the point kind to a position in dest and applies the offset in source: through the matrix block the kind
  * selects when there is one (kind 64 scales the offset by the current record's second block first), otherwise by
- * plain addition. Kind 1 transforms the offset by D_00471E20 keeping its y; kinds below 9 copy it. Returns the block. */
-Matrix4 *sefGetPoint(Vector4 *dest, Vector4 *source, int kind)
+ * plain addition. Kind 1 transforms the offset by sefCameraState keeping its y; kinds below 9 copy it. Returns the block. */
+Matrix4 *sefGetPoint(Vector4 *dest, const Vector4 *source, int kind)
 {
     Vector4 flatOffset;
     Vector4 shiftedOffset;
@@ -6410,7 +6288,7 @@ Matrix4 *sefGetPoint(Vector4 *dest, Vector4 *source, int kind)
     matrixBlock = 0;
     useScale = 0;
     vectorMode = sefVectorMode;
-    context = sefGetRequestBuffer();
+    context = sefGetBattleData();
     if (source != 0) {
         sourceNonzero = (((int *) source)[2] | *(long long *) source) != 0;
         hasSource = sourceNonzero;
@@ -6424,9 +6302,9 @@ Matrix4 *sefGetPoint(Vector4 *dest, Vector4 *source, int kind)
         }
         sefCopyQuadword(&flatOffset, source);
         flatOffset.y = 0.0f;
-        sefApplyMatrixVector(dest, &D_00471E20.current, &flatOffset);
+        sefApplyMatrixVector(dest, &sefCameraState.current, &flatOffset);
         dest->y = source->y;
-        Vu0SefAddVectorXYZ(dest, dest, D_00471E20.current[3]);
+        Vu0SefAddVectorXYZ(dest, dest, sefCameraState.current[3]);
         return 0;
     }
     if (kind < 9) {
@@ -6446,7 +6324,7 @@ Matrix4 *sefGetPoint(Vector4 *dest, Vector4 *source, int kind)
         }
     } else if (kind == 128) {
         if (context->kind0Key != 0) {
-            matrixBlock = sefUseAltMatrix[0] != 0 ? &context->kind128AltMatrix : &context->kind128Matrix;
+            matrixBlock = sefPointMotion.sameDirection != 0 ? &context->kind128AltMatrix : &context->kind128Matrix;
         }
     } else if (kind & 0x40) {
         if (vectorMode != 0) {
@@ -6470,16 +6348,16 @@ Matrix4 *sefGetPoint(Vector4 *dest, Vector4 *source, int kind)
     } else if (kind == 162) {
         if (context->kind0Key != 0) {
             sefCopyKindMatrix(&sefScratchMatrix,
-                              sefUseAltMatrix[0] != 0 ? &context->kind128AltMatrix : &context->kind128Matrix);
+                              sefPointMotion.sameDirection != 0 ? &context->kind128AltMatrix : &context->kind128Matrix);
             sefScratchMatrix[3][1] = 0.0f;
             matrixBlock = &sefScratchMatrix;
         }
     } else if (kind & 0x80) {
         if (kind == 161) {
             if (source != 0) {
-                Vu0SefAddVectorXYZ(&shiftedOffset, source, &D_00493B00);
+                Vu0SefAddVectorXYZ(&shiftedOffset, source, &sefEntryScaleOffsetVector);
             } else {
-                QuadwordCopyT0(&shiftedOffset, &D_00493B00);
+                QuadwordCopyT0(&shiftedOffset, &sefEntryScaleOffsetVector);
             }
             sefGetKindSlotVector(dest, context->kind0Key, 31, 0);
             sefMergeMatrixPos(&sefScratchMatrix, &context->kind128AltMatrix, dest);
@@ -6487,7 +6365,7 @@ Matrix4 *sefGetPoint(Vector4 *dest, Vector4 *source, int kind)
             return &sefScratchMatrix;
         }
         sefGetKindSlotVector(dest, context->kind0Key, kind - 129, 0);
-        if (sefUseAltMatrix[0] != 0) {
+        if (sefPointMotion.sameDirection != 0) {
             sefMergeMatrixPos(&sefScratchMatrix, &context->kind128AltMatrix, dest);
         } else {
             sefMergeMatrixPos(&sefScratchMatrix, &context->kind128Matrix, dest);
@@ -6544,18 +6422,18 @@ Matrix4 *sefGetPoint(Vector4 *dest, Vector4 *source, int kind)
         }
     } else if (kind == 17) {
         if (sefLinkedPoint != 0) {
-            sefTransformPartPoint((SefPartTransform *) sefLinkedPoint, dest, D_0069DBB8, source);
+            sefTransformPartPoint(sefLinkedPoint, dest, sefLinkedPartIndex, source);
             return 0;
         }
     } else if (kind >= 0x2000) {
         return 0;
     } else if (kind == 32) {
-        sefCopyQuadword(dest, &sefOriginVector);
+        sefCopyQuadword(dest, &sefEntryTable.origin);
     }
     if (matrixBlock != 0) {
         if (hasSource) {
             if (useScale) {
-                Vu0SefMulVectorXYZ(dest, sefCurrentRecord->secondBlock, source);
+                Vu0SefMulVectorXYZ(dest, &sefCurrentRecord->scale, source);
                 MMathApplyMatrix(dest, matrixBlock, dest);
             } else {
                 MMathApplyMatrix(dest, matrixBlock, source);
@@ -6581,7 +6459,7 @@ Matrix4 *sefGetPoint(Vector4 *dest, Vector4 *source, int kind)
  * matching kind to sefGetKindMatrix. */
 void sefGetPartMatrix(Matrix4 *dest, int kind)
 {
-    SefLinkedContext *context = sefGetRequestBuffer();
+    SefLinkedContext *context = sefGetBattleData();
 
     if (kind == 64) {
         sefCopyKindMatrix(dest, &context->kind64Matrix);
@@ -6635,7 +6513,7 @@ void sefGetPartMatrix(Matrix4 *dest, int kind)
 }
 
 /* Kinds 97 and 98 are passed on as kind 64; a NULL source reads sefDefaultOffset. The w component is set to 1.0f. */
-void sefGetPosition(Vector4 *dest, Vector4 *source, int kind)
+void sefGetPosition(Vector4 *dest, const Vector4 *source, int kind)
 {
     if ((unsigned int)(kind - 97) < 2) {
         kind = 64;
@@ -6647,8 +6525,6 @@ void sefGetPosition(Vector4 *dest, Vector4 *source, int kind)
     dest->w = 1.0f;
 }
 
-f32 xglCos(f32 angle);
-f32 xglSin(f32 angle);
 f32 sefCircleAngleScale = 6.28318548f;
 
 /* Random point on the circle of the given radius in the XZ plane, y zero: the seed steps once, the angle is the
@@ -6712,7 +6588,7 @@ void sefGetCubePosTop(Vector4 *pos, const Vector4 *extent)
 }
 
 /* Random point of the centred cube [-0.5, 0.5)^3 scaled by the extent vector. */
-void sefGetCubePosCenter(Vector4 *destination, Vector4 *scale)
+void sefGetCubePos(Vector4 *destination, Vector4 *scale)
 {
     sefNoiseNextVector(destination);
     Vu0SefMulVectorXYZ(destination, destination, scale);
@@ -6722,11 +6598,11 @@ void sefGetCubePosCenter(Vector4 *destination, Vector4 *scale)
  * value 1 and value 17 use fixed matrices, otherwise the source is copied. */
 void sefApplyPartTransform(Vector4 *destination, Vector4 *source, int partKind)
 {
-    SefLinkedContext *context = sefGetRequestBuffer();
+    SefLinkedContext *context = sefGetBattleData();
 
     if (partKind & 0x80) {
         if (context->kind0Key != 0) {
-            if (sefUseAltMatrix[0] != 0) {
+            if (sefPointMotion.sameDirection != 0) {
                 sefApplyMatrixVector(destination, &context->kind128AltMatrix, source);
                 return;
             }
@@ -6771,7 +6647,7 @@ void sefApplyPartTransform(Vector4 *destination, Vector4 *source, int partKind)
         }
     }
     if (partKind == 1) {
-        sefApplyMatrixVector(destination, &D_00471E20.current, source);
+        sefApplyMatrixVector(destination, &sefCameraState.current, source);
         return;
     }
     if (partKind == 17) {
@@ -6789,14 +6665,12 @@ void sefApplyPartTransform(Vector4 *destination, Vector4 *source, int partKind)
         : "$8", "memory");
 }
 
-void vu0RotateCurrentX(float value);
-void vu0RotateCurrentZ(f32 value);
-f32 D_0069B314 = 0.0174532924f;
-f32 D_0069B318 = 0.0174532924f;
+f32 sefOffsetRotateXDegToRad = 0.0174532924f;
+f32 sefOffsetRotateZDegToRad = 0.0174532924f;
 
 /* A point of the emission shape `kind` with the offsets as its size: sphere (random or fixed radius), the three
  * cubes, a circle turned by the y/z angles, or a random circle with a random height. */
-void sefGetShapePos(Vector4 *pos, Vector4 *offsets, int kind)
+void sefGetOfsRange(Vector4 *pos, Vector4 *offsets, int kind)
 {
     Vector4 circlePoint;
 
@@ -6810,7 +6684,7 @@ void sefGetShapePos(Vector4 *pos, Vector4 *offsets, int kind)
             sefGetSpherePos((DoublewordVector4 *) pos, offsets->x);
         }
     } else if (kind == SEF_SHAPE_CUBE_CENTER) {
-        sefGetCubePosCenter(pos, offsets);
+        sefGetCubePos(pos, offsets);
     } else if (kind == SEF_SHAPE_CUBE_TOP) {
         sefGetCubePosTop(pos, offsets);
     } else if (kind == SEF_SHAPE_CUBE_BOTTOM) {
@@ -6825,10 +6699,10 @@ void sefGetShapePos(Vector4 *pos, Vector4 *offsets, int kind)
                              : "r"(vu0IdentityMatrix)
                              : "memory");
         if (offsets->y != 0.0f) {
-            vu0RotateCurrentX(offsets->y * D_0069B314);
+            vu0RotateCurrentX(offsets->y * sefOffsetRotateXDegToRad);
         }
         if (offsets->z != 0.0f) {
-            vu0RotateCurrentZ(offsets->z * D_0069B318);
+            vu0RotateCurrentZ(offsets->z * sefOffsetRotateZDegToRad);
         }
         __asm__ __volatile__("lqc2 $vf1, 0(%1)\n\t"
                              "vmulax.xyzw ACC, $vf26, $vf1x\n\t"
@@ -6875,12 +6749,12 @@ typedef struct SefLaneObject {
     SefLaneLinks links[2];
 } SefLaneObject;
 
-void sefGetLaneStartPos(Vector4 *pos, SefLaneObject *object)
+void sefGetStartPos(Vector4 *pos, SefLaneObject *object)
 {
     short index;
 
     index = object->links[0].shape[-1].index;
-    sefGetShapePos(pos, &object->anchors[0].vector, index);
+    sefGetOfsRange(pos, &object->anchors[0].vector, index);
     if (sefVectorMode == 0 && index >= SEF_SHAPE_CUBE_CENTER && index < SEF_SHAPE_CIRCLE_RANDOM) {
         sefApplyPartTransform(pos, pos, object->links[0].part[-1].value);
     }
@@ -6894,12 +6768,12 @@ void sefGetLaneStartPos(Vector4 *pos, SefLaneObject *object)
         : "memory");
 }
 
-void sefGetLaneTargetPos(Vector4 *pos, SefLaneObject *object)
+void sefGetTargetPos(Vector4 *pos, SefLaneObject *object)
 {
     short index;
 
     index = object->links[1].shape[-1].index;
-    sefGetShapePos(pos, &object->anchors[1].vector, index);
+    sefGetOfsRange(pos, &object->anchors[1].vector, index);
     if (sefVectorMode == 0 && index >= SEF_SHAPE_CUBE_CENTER && index < SEF_SHAPE_CIRCLE_RANDOM) {
         sefApplyPartTransform(pos, pos, object->links[1].part[-1].value);
     }
@@ -6913,13 +6787,13 @@ void sefGetLaneTargetPos(Vector4 *pos, SefLaneObject *object)
         : "memory");
 }
 
-/* Stores the origin vector at sefOriginVector, then clears the two reset fields of every entry. */
-void sefResetObjects(void)
+/* Stores the origin vector at sefEntryTable.origin, then clears the two reset fields of every entry. */
+void sefResetEntryFlags(void)
 {
     SefEntry *entry;
     int index;
 
-    Vu0SetOrigin(&sefOriginVector);
+    Vu0SetOrigin(&sefEntryTable.origin);
     for (index = 0; index < sefEntryTable.entryCount; index++) {
         entry = &sefEntryTable.entries[index];
         entry->flags = 0;
@@ -6958,7 +6832,7 @@ float sefPlacePart(SefPartPlacement *placement, Vector4 *out, int mode)
             : "r"(&placement->translation), "r"(&sefGlobalTransform.position), "r"(&localTranslation),
               "m"(placement->translation), "m"(sefGlobalTransform.position));
         sefMergeMatrixPos(&combined, &placement->matrix, &localTranslation);
-        MMathMulMatrix(combined, sefGlobalTransform.matrix, combined);
+        MMathMulMatrix(&combined, &sefGlobalTransform.matrix, &combined);
         scale = sefGlobalTransform.scale;
     } else {
         sefMergeMatrixPos(&combined, &placement->matrix, &placement->translation);
@@ -6966,7 +6840,7 @@ float sefPlacePart(SefPartPlacement *placement, Vector4 *out, int mode)
     if (mode >= 0) {
         Vector4 *point = &placement->point;
 
-        MMathApplyMatrix(out, combined, point);
+        MMathApplyMatrix(out, &combined, point);
         return scale;
     }
     sefCopyQuadword(out, combined[3]);
@@ -6999,11 +6873,10 @@ typedef struct SefEntryObject {
     unsigned char rows[16][16];
 } SefEntryObject;
 
-void *func_00252F78(void);
 
 /*
- * Refreshes the 16-byte rows of every live entry's object (entries of mode 2 are skipped) from the block func_00252F78
- * returns. With no slots, a set slot flag is cleared, bit 0x8 of the object flags is dropped while D_0069DB78 is clear
+ * Refreshes the 16-byte rows of every live entry's object (entries of mode 2 are skipped) from the block sefLightSetActiveGet
+ * returns. With no slots, a set slot flag is cleared, bit 0x8 of the object flags is dropped while sefGateOwnerZeroFlag is clear
  * and rows 3..5 and 10..12 are reloaded. With slots, the flag is set, the same six rows are reloaded and rows 3..5
  * and 10..12 of the remaining slots receive the slot offsets and weighted offsets, active slots first.
  */
@@ -7021,17 +6894,17 @@ void sefRefreshEntryRows(void)
     int k;
     int slot;
 
-    if (sefClipTestDisabled != 0) {
+    if (_sefBattleMode != 0) {
         for (i = 0; i < sefEntryTable.entryCount; i++) {
             entry = &sefEntryTable.entries[i];
             if (entry->id != 0 && entry->mode != 2) {
                 rows = ((SefEntryObject *) entry->id)->rows;
-                source = func_00252F78();
+                source = sefLightSetActiveGet();
                 resetCount = entry->resetHalf;
                 if (resetCount == 0) {
                     if (entry->slotFlag != 0) {
                         entry->slotFlag = 0;
-                        if (D_0069DB78 == 0) {
+                        if (sefGateOwnerZeroFlag == 0) {
                             ((SefEntryObject *) entry->id)->flags &= ~SEF_ENTRY_SLOTS_IN_USE;
                         }
                         row = rows;
@@ -7098,7 +6971,7 @@ void sefAccumulateEntryInfluence(Vector4 *position, int *laneOffsets, float radi
     int k;
 
     radiusSquared = radius * radius;
-    context = sefGetRequestBuffer();
+    context = sefGetBattleData();
     for (index = 0; index < sefEntryTable.entryCount; index++) {
         entry = &sefEntryTable.entries[index];
         if (entry->id == 0 || entry->resetHalf >= 16 || entry->mode == 2) {
@@ -7115,7 +6988,7 @@ void sefAccumulateEntryInfluence(Vector4 *position, int *laneOffsets, float radi
             "vsub.xyz vf1, vf1, vf2\n"
             "sqc2 vf1, 0(%2)\n"
             : : "m"(*position), "r"(&slotVector), "r"(&difference), "m"(*position) : "memory");
-        dot = MMathVectorDotProduct((f32 *) &difference, (f32 *) &difference);
+        dot = MMathVectorDotProduct(&difference, &difference);
         if (dot < radiusSquared) {
             rowsBase = entry->id + SEF_ENTRY_ROWS_OFFSET;
             weight = ((radiusSquared - dot) / radiusSquared) * 0.0078125f; /* 1/128 */
@@ -7193,7 +7066,6 @@ typedef struct SefGroupObject {
     Vector4 position;                              /* +0x10 */
 } SefGroupObject;
 
-Vector4 *MMathDivVectorS(Vector4 *destination, const Vector4 *source, float scale);
 
 #define SEF_GROUP_MEMBER_MAX 24
 #define SEF_GROUP_TIMER_FRAMES 600
@@ -7216,7 +7088,7 @@ void sefRegisterGroupCenter(int owner, unsigned short key)
     Vector4 *center;
     SefGroupEntry *entry;
 
-    records = sefGetEffectRecords();
+    records = sefGetScheduler();
     center = &sum;
     seenCount = 0;
     Vu0SetOrigin(center);
@@ -7285,7 +7157,7 @@ void sefRegisterGroupCenter(int owner, unsigned short key)
  * per update around position until age reaches lifetime, then frees the slot. */
 typedef struct SefSpawnSlot {
     Vector4 position;                /* +0x00 */
-    Vector4 direction;               /* +0x10: the fourth argument of sefSpawnEffectRecord */
+    Vector4 direction;               /* +0x10: the scale block of sefCreateEffectCf2 */
     Vector4 scale;                   /* +0x20: scales the noise offset */
     int effectId;                    /* +0x30: 0 marks a free slot */
     float angle;                     /* +0x34: Y rotation of the offsets */
@@ -7298,14 +7170,13 @@ typedef struct SefSpawnSlot {
 static SefSpawnSlot sefEffectSlots[SEF_SPAWN_SLOT_COUNT];
 
 /* Clears the whole effect slot table sefEffectSlots: 32 records of 0x40 bytes. */
-void sefResetSlotTable(void) {
+void sefResetEffectSlots(void) {
     sefMemZero(sefEffectSlots, SEF_SPAWN_SLOT_COUNT * SEF_SPAWN_SLOT_SIZE);
 }
 
-void logNoOp();
-extern const char D_0069DBD0[];
-extern const char D_0069DBD8[];
-const char D_0068C460[32] = "max=%d 2=%d t=%d";
+extern const char sefSclLogLabel[];
+extern const char sefSizeLogLabel[];
+const char sefSpawnCountLogFormat[32] = "max=%d 2=%d t=%d";
 
 /* Spawns one effect into the first free slot of sefEffectSlots, after the canonical-id and count checks. */
 void sefSpawnEffect(int effectId, Vector4 *position, Vector4 *direction, Vector4 *scale, float angle, int count)
@@ -7319,8 +7190,9 @@ void sefSpawnEffect(int effectId, Vector4 *position, Vector4 *direction, Vector4
     int volume;
     int spawnCount;
     int smallScale;
-    /* Block-scope prototype: the calls below are compiled as calls to a not yet defined function. */
-    extern int sefStartEffectKeyDefault(int first, int second);
+    /* Block-scope prototype (a lever: the same declaration is in sef.h, but without this one the code changes): the
+     * calls below are compiled as calls to a not yet defined function. */
+    extern int sefStartEffectKeyDefault(void *buffer, int effectKey);
 
     if (effectId <= 0) {
         return;
@@ -7329,7 +7201,7 @@ void sefSpawnEffect(int effectId, Vector4 *position, Vector4 *direction, Vector4
         if (scGetKeyRecordFirst(effectId, (int)&lookupOut) == 0) {
             sefStartEffectKeyDefault(0, SEF_SPAWN_SPECIAL_ID);
         }
-        sefSpawnEffectRecord(SEF_SPAWN_SPECIAL_ID, (int)position, 0, (unsigned char *)direction, -1);
+        sefCreateEffectCf2(SEF_SPAWN_SPECIAL_ID, position, 0, direction, -1);
         return;
     }
     canonicalId = sefCanonicalEffectId(effectId);
@@ -7341,10 +7213,10 @@ void sefSpawnEffect(int effectId, Vector4 *position, Vector4 *direction, Vector4
         }
     }
     if (direction != 0) {
-        logNoOp(direction, D_0069DBD0);
+        LOG(direction, sefSclLogLabel);
     }
     if (scale != 0) {
-        logNoOp(scale, D_0069DBD8);
+        LOG(scale, sefSizeLogLabel);
     }
 
     for (slotIndex = 0; slotIndex < SEF_SPAWN_SLOT_COUNT; ++slotIndex, ++slot) {
@@ -7436,7 +7308,7 @@ void sefSpawnEffect(int effectId, Vector4 *position, Vector4 *direction, Vector4
             Vu0SefScaleVectorXYZ(&slot->direction, &slot->direction, 1.2f);
         }
 
-        logNoOp(&slot->direction, D_0068C460, slot->count, volume, slot->count * count);
+        LOG(&slot->direction, sefSpawnCountLogFormat, slot->count, volume, slot->count * count);
 
         slot->age = 0;
         slot->lifetime = count;
@@ -7472,7 +7344,6 @@ void sefSpawnEffect(int effectId, Vector4 *position, Vector4 *direction, Vector4
     }
 }
 
-Matrix4 *MMathRotateMatrixY(Matrix4 *out, Matrix4 *matrix, float angle);
 
 /* For each live slot: spawns count records at noise offsets (y lifted by 0.5, scaled, rotated by angle around Y)
  * around position, then ages the slot and frees it once age reaches lifetime. */
@@ -7502,7 +7373,7 @@ void sefUpdateEffectSlots(void)
                     : "memory");
                 MMathApplyMatrix(&offset, &rotation, &offset);
                 Vu0SefAddVectorXYZ(&offset, &offset, &slot->position);
-                sefSpawnEffectRecord(slot->effectId, (int)&offset, 0, (unsigned char *)&slot->direction, -1);
+                sefCreateEffectCf2(slot->effectId, &offset, 0, &slot->direction, -1);
             }
             slot->age++;
             if (slot->age >= slot->lifetime) {
@@ -7518,7 +7389,7 @@ void sefSpawnEffectById(int effectId, Vector4 *position, Vector4 *outVector, Vec
 }
 
 void sefSpawnEffectByName(signed char *name, Vector4 *position, Vector4 *outVector, Vector4 *scale, float radius, int count) {
-    sefSpawnEffectById(srsEffectKeyFromName(name), position, outVector, scale, radius, count);
+    sefSpawnEffectById(srsEffectNameToID(name), position, outVector, scale, radius, count);
 }
 
 /* Load wait table loadWaitTable: sixteen ids, sixteen try counters, sixteen slot values and the ring head. */
@@ -7541,7 +7412,7 @@ typedef struct LoadWaitTableBlock {
 static LoadWaitTableBlock loadWaitTable;
 
 /* Adds id with its slot value to loadWaitTable; an id of 0 clears the whole table. */
-void loadWaitAdd(int id, int slot)
+void sefSetLoadQue(int id, int slot)
 {
     LoadWaitTable *table;
     int i;
@@ -7569,7 +7440,7 @@ void loadWaitAdd(int id, int slot)
 }
 
 /* Retries each id of the ring from head with srsLoadEffectSlot; an entry still busy (-2) keeps the poll waiting until 300 tries. */
-void loadWaitPoll(void)
+void sefExecLoadQue(void)
 {
     LoadWaitTable *table;
     int i;
@@ -7596,7 +7467,7 @@ void loadWaitPoll(void)
 }
 
 /* Returns 1 when any id is set in loadWaitTable, else 0. */
-int loadWaitBusy(void)
+int sefLoadQueBusy(void)
 {
     int i;
 
@@ -7608,10 +7479,10 @@ int loadWaitBusy(void)
     return 0;
 }
 
-/* Returns 1 while the load wait table (loadWaitBusy) holds an id or the srs read counter is positive. */
-int loadWaitPending(void)
+/* Returns 1 while the load wait table (sefLoadQueBusy) holds an id or the srs read counter is positive. */
+int sefCheckLoad(void)
 {
-    if (loadWaitBusy() != 0) {
+    if (sefLoadQueBusy() != 0) {
         return 1;
     }
     return srsLeaveCdRead() > 0;
@@ -7624,7 +7495,7 @@ void xglCdWaitUntilIdle(void)
     }
 }
 
-/* A word set when either override vector was supplied; sefOverrideFlagPtr hands out its address. */
+/* A word set when either override vector was supplied; sefGetFogOverrideBlock hands out its address. */
 static unsigned char sefOverrideFlag[16];
 static AlignedVector4 sefOverrideVectorA;
 static AlignedVector4 sefOverrideVectorB;
@@ -7633,7 +7504,7 @@ static AlignedVector4 sefOverrideVectorB;
  * Copies the two override vectors; a null source resets that vector to the
  * origin (0, 0, 0, 1). The flag records whether any override was given.
  */
-void sefSetOverrideVectors(Vector4 *vectorA, Vector4 *vectorB)
+void sefSetFogOverride(Vector4 *vectorA, Vector4 *vectorB)
 {
     if (vectorA != 0) {
         QuadwordCopyT0(&sefOverrideVectorA, vectorA);
@@ -7648,8 +7519,8 @@ void sefSetOverrideVectors(Vector4 *vectorA, Vector4 *vectorB)
     *(int *) sefOverrideFlag = vectorA != 0 || vectorB != 0;
 }
 
-u8 *sefOverrideFlagPtr(void) {
-    return sefOverrideFlag;
+SefFogOverride *sefGetFogOverrideBlock(void) {
+    return (SefFogOverride *) sefOverrideFlag;
 }
 
 /* sefFlagWord is one flag word; sefExecEffect tests bit 1 of it through sefFlagTest. */
@@ -7671,30 +7542,20 @@ void sefFlagToggle(int mask) {
     sefFlagWord ^= mask;
 }
 
-/* Layout shared with the effect records of tu175: flags at +0x44, enabled at +0x48 (the callee
-   sefObjectClearFlags in sdv_181.c reads FlaggedObject.enabled at +0x188; reconcile in the integrator). */
-typedef struct FlagRequest {
-    u8 unmodeled_00[0x40];
-    int request;
-    u32 flags;
-    int enabled;
-} FlagRequest;
-
-void sefObjectClearFlags(void *state, int bit);
-
-void sefClearEnabledFlag(FlagRequest *state) {
-    if (state != 0) {
-        if (state->enabled != 0) {
-            if (state->request != 0) {
-                sefObjectClearFlags(state, 0x400000);
+/* Clears the skip-step flag of an effect record in use (a cell record through sefObjectClearFlags). */
+void sefClearEnabledFlag(SefEffectRecord *record) {
+    if (record != 0) {
+        if (record->inUse != 0) {
+            if (record->cellSlot != 0) {
+                sefObjectClearFlags(sefCellOf(record), SEF_RECORD_SKIP_STEP);
             } else {
-                state->flags &= ~0x400000;
+                record->flags &= ~SEF_RECORD_SKIP_STEP;
             }
         }
     }
 }
 
-void sefFlagUpdateBit1(int selector) {
+void sefPauseControl(int selector) {
     if (selector < 0) {
         sefFlagToggle(1);
         return;
@@ -7706,8 +7567,6 @@ void sefFlagUpdateBit1(int selector) {
     sefFlagClear(1);
 }
 
-void sefReleaseByKey(int owner);
-
 /*
  * Returns 1 when a record among the first sefEffectRecordCount has its in_use word set
  * and its owner equal to owner, otherwise 0.
@@ -7716,7 +7575,7 @@ int sefOwnerInUse(int owner) {
     int recordIndex;
     SefEffectRecord *records;
 
-    records = sefGetEffectRecords();
+    records = sefGetScheduler();
     for (recordIndex = 0; recordIndex < sefEffectRecordCount; recordIndex += 1) {
         if (records[recordIndex].inUse != 0 && records[recordIndex].ownerKey == owner) {
             return 1;
@@ -7725,24 +7584,24 @@ int sefOwnerInUse(int owner) {
     return 0;
 }
 
-int sefOwnerPairInUse(int owner, int ownerKey) {
+int sefOwnerPairInUse(void *owner, int ownerKey) {
     SefEffectRecord *records;
     int recordIndex;
 
-    records = sefGetEffectRecords();
+    records = sefGetScheduler();
     for (recordIndex = 0; recordIndex < sefEffectRecordCount; recordIndex += 1) {
-        if (records[recordIndex].inUse != 0 && records[recordIndex].ownerKey == ownerKey && records[recordIndex].owner == owner) {
+        if (records[recordIndex].inUse != 0 && records[recordIndex].ownerKey == ownerKey && records[recordIndex].owner == (int) owner) {
             return 1;
         }
     }
     return 0;
 }
 
-int sefOwnerValueInUse(int owner, unsigned short value) {
+int sefOwnerGroupInUse(int owner, unsigned short value) {
     SefEffectRecord *cursor;
     int recordIndex;
 
-    cursor = sefGetEffectRecords();
+    cursor = sefGetScheduler();
     for (recordIndex = 0; recordIndex < sefEffectRecordCount; recordIndex += 1) {
         if (cursor->inUse != 0 && cursor->ownerKey == owner && cursor->value == value) {
             return 1;
@@ -7752,13 +7611,13 @@ int sefOwnerValueInUse(int owner, unsigned short value) {
     return 0;
 }
 
-int sefCountOwnerValue(int owner, unsigned short value) {
+int sefCountOwnerGroupRecords(int owner, unsigned short value) {
     SefEffectRecord *cursor;
     int recordIndex;
     int count;
 
     count = 0;
-    cursor = sefGetEffectRecords();
+    cursor = sefGetScheduler();
     for (recordIndex = 0; recordIndex < sefEffectRecordCount; recordIndex += 1) {
         if (cursor->inUse != 0 && cursor->ownerKey == owner && cursor->value == value) {
             if ((cursor->flags & SEF_RECORD_EXCLUDE_FLAG) == 0) {
@@ -7770,7 +7629,7 @@ int sefCountOwnerValue(int owner, unsigned short value) {
     return count;
 }
 
-void sefClearOwnerValueFlags(int owner, unsigned short value, int mask) {
+void sefClearOwnerGroupFlags(int owner, unsigned short value, int mask) {
     SefEffectRecord *cursor;
     int slot;
     int scanLimit;
@@ -7778,7 +7637,7 @@ void sefClearOwnerValueFlags(int owner, unsigned short value, int mask) {
     int flags;
     int keepBit;
 
-    cursor = sefGetEffectRecords();
+    cursor = sefGetScheduler();
     scanLimit = sefEffectRecordCount;
     slot = 0;
     if (scanLimit > 0) {
@@ -7798,14 +7657,14 @@ void sefClearOwnerValueFlags(int owner, unsigned short value, int mask) {
     }
 }
 
-int sefNoOwnerFlaggedRecords(int owner) {
+int sefIsFinishEffect(int owner) {
     SefEffectRecord *table;
     SefEffectRecord *cursor;
     int slot;
     int count;
     int flags;
 
-    table = sefGetEffectRecords();
+    table = sefGetScheduler();
     count = 0;
     if (owner == 0) {
         return 1;
@@ -7829,13 +7688,13 @@ int sefNoOwnerFlaggedRecords(int owner) {
     return count == 0;
 }
 
-int sefOnlyOwnerInUse(int owner) {
+int sefIsFinishEffect2(int owner) {
     SefEffectRecord *table;
     SefEffectRecord *cursor;
     int slot;
     int count;
 
-    table = sefGetEffectRecords();
+    table = sefGetScheduler();
     count = 0;
     if (owner <= 0) {
         return 1;
@@ -7853,17 +7712,17 @@ int sefOnlyOwnerInUse(int owner) {
 }
 
 /*
- * Calls sefReleaseEffectRecord with the index of each record whose in_use word is set
+ * Calls sefFreeScheduler with the index of each record whose in_use word is set
  * and whose owner matches owner (every record when owner is negative), clears
  * sefEffectRecordHead when owner is negative, then calls sefReleaseByKey with owner.
  */
-void sefReleaseOwnedRecords(int owner) {
+void sefKillEffect(int owner) {
     int slot;
     SefEffectRecord *table;
     SefEffectRecord *cursor;
 
     slot = 0;
-    table = sefGetEffectRecords();
+    table = sefGetScheduler();
     if (owner < 0) {
         sefEffectRecordHead = 0;
     }
@@ -7871,7 +7730,7 @@ void sefReleaseOwnedRecords(int owner) {
         cursor = table;
         do {
             if (cursor->inUse != 0 && (owner < 0 || cursor->ownerKey == owner)) {
-                sefReleaseEffectRecord(slot);
+                sefFreeScheduler(slot);
             }
             slot += 1;
             cursor += 1;
@@ -7899,24 +7758,24 @@ int sefCountMarkedEntries(SefEffectRecord *record) {
 
 /* Applies mode to every record in use whose ownerKey is key and whose owner is owner: releases it, sets and clears
  * flag 0x80, sets and clears the gate, or sets flags 0x880. */
-void sefApplyRecordMode(int owner, int ownerKey, int mode)
+void sefApplyRecordMode(void *owner, int ownerKey, int mode)
 {
     SefEffectRecord *table;
     SefEffectRecord *cursor;
     int slot;
     int count;
     /* Block-scope prototype: the call below is compiled as a call to a not yet defined function. */
-    extern void sefReleaseEffectRecord(int index);
+    extern void sefFreeScheduler(int index);
 
-    table = sefGetEffectRecords();
+    table = sefGetScheduler();
     slot = 0;
     if (sefEffectRecordCount > 0) {
         cursor = table;
         count = sefEffectRecordCount;
         do {
-            if (cursor->inUse != 0 && cursor->ownerKey == ownerKey && cursor->owner == owner) {
+            if (cursor->inUse != 0 && cursor->ownerKey == ownerKey && cursor->owner == (int) owner) {
                 if (mode == SEF_RECORD_MODE_RELEASE) {
-                    sefReleaseEffectRecord(slot);
+                    sefFreeScheduler(slot);
                     count = sefEffectRecordCount;
                 } else if (mode == SEF_RECORD_MODE_SET_FLAG_80) {
                     cursor->flags |= 0x80;
@@ -7939,8 +7798,6 @@ void sefApplyRecordMode(int owner, int ownerKey, int mode)
     }
 }
 
-void sefSetSlotFlags(int key, int flagBits);
-
 void sefSetOwnerFlags(int owner, int flags) {
     SefEffectRecord *records;
     SefEffectRecord *cursor;
@@ -7948,33 +7805,25 @@ void sefSetOwnerFlags(int owner, int flags) {
     int savedCount;
     int i;
 
-    records = sefGetEffectRecords();
+    records = sefGetScheduler();
     count = sefEffectRecordCount;
     i = 0;
-    if (count <= 0) {
-        goto done;
+    if (count > 0) {
+        cursor = records;
+        savedCount = count;
+        do {
+            if (cursor->inUse != 0) {
+                if (owner < 0 || cursor->ownerKey == owner) {
+                    cursor->flags |= flags;
+                    count = savedCount;
+                }
+            }
+            i++;
+            cursor++;
+        } while (i < count);
     }
-    cursor = records;
-    savedCount = count;
-top:
-    if (cursor->inUse == 0) {
-        goto next;
-    }
-    if (owner < 0 || cursor->ownerKey == owner) {
-        cursor->flags |= flags;
-        count = savedCount;
-    }
-next:
-    i++;
-    cursor++;
-    if (i < count) {
-        goto top;
-    }
-done:
     sefSetSlotFlags(owner, flags);
 }
-
-void sefClearSlotFlags(int owner, int mask);
 
 /* Clears the mask bits of every in-use record whose owner matches (any record when owner is negative), then calls
  * sefClearSlotFlags with the same owner and mask. */
@@ -7985,7 +7834,7 @@ void sefClearOwnerFlags(int owner, int mask)
     int count;
     int i;
 
-    table = sefGetEffectRecords();
+    table = sefGetScheduler();
     count = sefEffectRecordCount;
     i = 0;
     if (count > 0) {
@@ -8015,6 +7864,8 @@ typedef struct GateSource {
     GateChunk128 tail;
 } GateSource;
 
+/* The light fields of a unit actor (BattleUnit.unit, a XenoActor) as sefSetGateBlocks writes them: flags is drawFlags
+ * (+0xBC), chunk400 and chunk512 are the two halves of its XenoLight (+0x190). */
 typedef struct GateBlock {
     unsigned char unmodeled_000[188];
     int flags;
@@ -8026,31 +7877,24 @@ typedef struct GateBlock {
 /* Bit of GateBlock.flags: set when sefSetGateBlocks gives the block its free source (owner zero). */
 #define SEF_GATE_BLOCK_CLOSED 0x8
 
-typedef struct GateUnit {
-    unsigned char unmodeled_000[464];
-    GateBlock *gate;
-} GateUnit;
-
-void *func_00252F88(void);
-int unitTblGet(int capacity, GateUnit ***table);
 
 void sefSetGateBlocks(int owner, int reset) {
     GateSource *ownedSource;
     GateSource *freeSource;
-    GateUnit **table;
-    GateUnit *entry;
+    BattleUnit **table;
+    BattleUnit *entry;
     GateBlock *block;
     int count;
     int i;
     int k;
 
-    ownedSource = func_00252F78();
-    freeSource = func_00252F88();
-    count = unitTblGet(2, &table);
+    ownedSource = sefLightSetActiveGet();
+    freeSource = sefLightSetDefaultGet();
+    count = unitTblGet(UNIT_SIDE_ALL, &table);
     for (i = 0; i < count; i += 1) {
         entry = table[i];
         if (entry != 0) {
-            block = entry->gate;
+            block = (GateBlock *)entry->unit;
             if (owner != 0) {
                 block->chunk400 = ownedSource->front;
                 block->chunk512 = ownedSource->tail;
@@ -8087,11 +7931,11 @@ void sefUpdateGroupGate(int owner, int enable, int reset) {
     int flagSetBit;
     int flagClearMask;
 
-    table = sefGetEffectRecords();
+    table = sefGetScheduler();
     if (enable > 0) {
         sefSetGateBlocks(owner, reset);
-        if (D_0069DB78 != 0 && reset != 0) {
-            D_0069DB78 += 1;
+        if (sefGateOwnerZeroFlag != 0 && reset != 0) {
+            sefGateOwnerZeroFlag += 1;
         }
     }
     scanLimit = sefEffectRecordCount;
@@ -8127,7 +7971,7 @@ short sefGateIdList[] = { 55, 56, 57, 0 };
 
 /*
  * Scans the zero-terminated short table sefGateIdList for id. When id is listed,
- * D_0069DB78 takes whether owner is zero and sefUpdateGroupGate runs for owner.
+ * sefGateOwnerZeroFlag takes whether owner is zero and sefUpdateGroupGate runs for owner.
  */
 void sefSetGateForId(int owner, int id) {
     int i;
@@ -8144,7 +7988,7 @@ void sefSetGateForId(int owner, int id) {
         } while (sefGateIdList[i] != 0);
     }
     if (found != 0) {
-        D_0069DB78 = owner == 0;
+        sefGateOwnerZeroFlag = owner == 0;
         sefUpdateGroupGate(owner, id, found);
     }
 }
@@ -8156,7 +8000,7 @@ void sefSetGateDefault(int first, int second)
     short *cursor;
     short entry;
 
-    D_0069DB78 = first == 0;
+    sefGateOwnerZeroFlag = first == 0;
     if (sefDefaultGateIdList[0] != 0) {
         cursor = sefDefaultGateIdList;
         do {
@@ -8167,20 +8011,20 @@ void sefSetGateDefault(int first, int second)
     sefUpdateGroupGate(first, second, 1);
 }
 
-/* Set by sefSetCurrentOwner after sefReleaseOwnedRecords(-1); this file has no other reader. */
+/* Set by sefSetCurrentOwner after sefKillEffect(-1); this file has no other reader. */
 int sefFlagWord = 0;
 int sefCurrentOwner = 0;
 unsigned int sefRandSeed = 2599403U;
 int sefNoiseReady = 0;
-extern unsigned char D_006B4C40[];
-SefEffectRecord *sefEffectRecords = (SefEffectRecord *) D_006B4C40;
-short D_0069DBB8 = 0;
-const char D_0069DBD0[8] = "scl";
-const char D_0069DBD8[8] = "size";
+extern unsigned char _scheduler[];
+SefEffectRecord *sefEffectRecords = (SefEffectRecord *) _scheduler;
+short sefLinkedPartIndex = 0;
+const char sefSclLogLabel[8] = "scl";
+const char sefSizeLogLabel[8] = "size";
 
 /* Changes the current owner: releases every effect record, then stores owner in sefCurrentOwner. */
 void sefSetCurrentOwner(int owner) {
-    sefReleaseOwnedRecords(-1);
+    sefKillEffect(-1);
     sefCurrentOwner = owner;
 }
 
@@ -8192,14 +8036,13 @@ int sefGetCurrentOwner(void) {
 
 /* One slot of the SEF_HANDLE_SLOT_COUNT-slot handle table sefHandleSlots: the value a handle was
  * registered with, and the handle. This file never reads the last four bytes. */
-typedef struct HandleSlot {
-    int value;
+typedef struct SefHandleSlot {
+    void *value;
     int handle;
     u8 unmodeled_08[4];
-} HandleSlot;
+} SefHandleSlot;
 
-HandleSlot sefHandleSlots[48] = { 0 };
-void srsReleaseOtherOwnerEffectSlots(void);
+SefHandleSlot sefHandleSlots[48] = { 0 };
 
 /* Clears the 48-slot handle table, calls srsReleaseOtherOwnerEffectSlots, then refills the
  * slots from the records of srsRecordTable that hold a buffer: the eight wait-slot
@@ -8208,7 +8051,7 @@ void sefResetHandleSlots(void) {
     int count;
     int i;
 
-    memset(sefHandleSlots, 0, SEF_HANDLE_SLOT_COUNT * sizeof(HandleSlot));
+    memset(sefHandleSlots, 0, SEF_HANDLE_SLOT_COUNT * sizeof(SefHandleSlot));
     count = 0;
     srsReleaseOtherOwnerEffectSlots();
     for (i = 0; i < 8; i++) {
@@ -8227,13 +8070,13 @@ void sefResetHandleSlots(void) {
     }
 }
 
-void func_00265400(void) {
+void sefDummy_00265400(void) {
 
 }
 
 /* Registers handle with value in the first free slot, unless the handle is
  * already in the table. */
-void sefRegisterHandle(int handle, int value) {
+void sefRegisterHandle(int handle, void *value) {
     int freeSlot;
     int i;
 
@@ -8254,7 +8097,7 @@ void sefRegisterHandle(int handle, int value) {
 
 /* Clears every slot whose handle srsIsEffectImageKey accepts. */
 void sefPruneHandleSlots(void) {
-    HandleSlot *slot;
+    SefHandleSlot *slot;
     int *handle_ptr;
     int handle;
     int i;
@@ -8273,7 +8116,7 @@ void sefPruneHandleSlots(void) {
 
 /* Calls sefStartEffectKeyDefault with the value and the handle of every registered slot. */
 void sefDispatchHandleSlots(void) {
-    HandleSlot *slot;
+    SefHandleSlot *slot;
     int handle;
     int i;
 
@@ -8287,21 +8130,6 @@ void sefDispatchHandleSlots(void) {
     }
 }
 
-/* One saved record of sefEffectRecordList (0x50 bytes). */
-typedef struct SefEffectListEntry {
-    AlignedVector4 head;               /* +0x00: passed as sefSpawnEffectRecord's second argument */
-    AlignedVector4 firstBlock;         /* +0x10 */
-    AlignedVector4 secondBlock;        /* +0x20 */
-    struct SefGroupObject *owner;      /* +0x30 */
-    struct SefGroupObject *object;     /* +0x34 */
-    int effectId;                      /* +0x38 */
-    int flags;                         /* +0x3c */
-    unsigned short gate;               /* +0x40 */
-    unsigned short cellSlot;           /* +0x42 */
-    short index;                       /* +0x44 */
-    unsigned char unmodeled_046[0x50 - 0x46];
-} SefEffectListEntry;
-
 /* The owner of a record seen as the group object pointer it is: sef.h still declares the field int, and the
  * saved list keeps it next to object with the same type. The integrator retypes SefEffectRecord.owner. */
 typedef struct SefEffectRecordOwnerView {
@@ -8309,11 +8137,10 @@ typedef struct SefEffectRecordOwnerView {
     struct SefGroupObject *owner;      /* +0x50 */
 } SefEffectRecordOwnerView;
 
-static SefEffectListEntry sefEffectRecordList[64];
-extern int D_0069DB6C;
-void sefCollectPersistentSlots(SefEffectListEntry *list, int count);
+static SefSavedEffect sefEffectRecordList[64];
+extern int sefEffectListSavedFlag;
 
-/* Key of the record that sefCollectEffectRecords never saves. */
+/* Key of the record that sefPushEffect never saves. */
 #define SEF_SAVE_EXCLUDED_KEY 0x10000021
 
 /* Number of entries of sefEffectRecordList (the saved effect records). */
@@ -8329,35 +8156,35 @@ static inline void sefCopyListVector(Vector4 *destination, const void *source)
                          : "$8", "memory");
 }
 
-/* Clears the sefEffectRecordList list, sets D_0069DB6C to 1 and calls sefResetHandleSlots.
+/* Clears the sefEffectRecordList list, sets sefEffectListSavedFlag to 1 and calls sefResetHandleSlots.
  * Copies the in-use records that pass its flag and key tests into the list
  * (0x50-byte entries), registers their handles through sefRegisterHandle, and
  * passes the list and its count to sefCollectPersistentSlots. */
-void sefCollectEffectRecords(void)
+void sefPushEffect(void)
 {
     SefEffectRecord *record;
     int count;
     int i;
 
     count = 0;
-    record = sefGetEffectRecords();
-    memset(sefEffectRecordList, 0, SEF_EFFECT_LIST_COUNT * sizeof(SefEffectListEntry));
-    D_0069DB6C = 1;
+    record = sefGetScheduler();
+    memset(sefEffectRecordList, 0, SEF_EFFECT_LIST_COUNT * sizeof(SefSavedEffect));
+    sefEffectListSavedFlag = 1;
     sefResetHandleSlots();
     for (i = 0; i < sefEffectRecordCount; i++, record++) {
         if (record->inUse != 0 && count < sefEffectRecordCount && record->ownerKey != SEF_SAVE_EXCLUDED_KEY
             && (record->flags & 0x04000000)) {
             sefRegisterHandle(record->ownerKey, 0);
-            sefCopyListVector(&sefEffectRecordList[count].head, record);
-            sefCopyListVector(&sefEffectRecordList[count].firstBlock, record->firstBlock);
-            sefCopyListVector(&sefEffectRecordList[count].secondBlock, record->secondBlock);
+            sefCopyListVector(&sefEffectRecordList[count].position, record);
+            sefCopyListVector(&sefEffectRecordList[count].rotation, &record->rotation);
+            sefCopyListVector(&sefEffectRecordList[count].scale, &record->scale);
             sefEffectRecordList[count].flags = record->flags;
             sefEffectRecordList[count].owner = ((SefEffectRecordOwnerView *) record)->owner;
-            sefEffectRecordList[count].effectId = record->ownerKey;
+            sefEffectRecordList[count].key = record->ownerKey;
             sefEffectRecordList[count].object = record->object;
             sefEffectRecordList[count].gate = record->gate;
             sefEffectRecordList[count].cellSlot = record->cellSlot;
-            sefEffectRecordList[count].index = i;
+            sefEffectRecordList[count].slotIndex = i;
             count++;
         }
     }
@@ -8365,21 +8192,20 @@ void sefCollectEffectRecords(void)
 }
 
 /* Releases every record, dispatches the handle slots, then re-creates each
- * entry of the sefEffectRecordList list through sefSpawnEffectRecord and copies its fields back. */
-void sefRestoreEffectRecords(void)
+ * entry of the sefEffectRecordList list through sefCreateEffectCf2 and copies its fields back. */
+void sefPopEffect(void)
 {
     SefEffectRecord *record;
     int i;
 
-    sefReleaseOwnedRecords(-1);
+    sefKillEffect(-1);
     sefDispatchHandleSlots();
-    D_0069DB6C = 0;
+    sefEffectListSavedFlag = 0;
     for (i = 0; i < sefEffectRecordCount; i++) {
-        if (sefEffectRecordList[i].effectId != 0 && &sefEffectRecordList[i].effectId != 0) {
-            record = sefSpawnEffectRecord(sefEffectRecordList[i].effectId, (int)&sefEffectRecordList[i],
-                                          (unsigned char *) &sefEffectRecordList[i].firstBlock,
-                                          (unsigned char *) &sefEffectRecordList[i].secondBlock,
-                                          sefEffectRecordList[i].index);
+        if (sefEffectRecordList[i].key != 0 && &sefEffectRecordList[i].key != 0) {
+            record = sefCreateEffectCf2(sefEffectRecordList[i].key, &sefEffectRecordList[i].position,
+                                          &sefEffectRecordList[i].rotation, &sefEffectRecordList[i].scale,
+                                          sefEffectRecordList[i].slotIndex);
             if (record == 0) {
                 continue;
             }
@@ -8391,12 +8217,12 @@ void sefRestoreEffectRecords(void)
     }
 }
 
-/* Calls sefGetEffectRecords and returns its table, then spins for a count that follows sefEffectRecordCount. */
+/* Calls sefGetScheduler and returns its table, then spins for a count that follows sefEffectRecordCount. */
 void *sefGetEffectRecordsAfterScan(void) {
     void *records;
     int i;
 
-    records = sefGetEffectRecords();
+    records = sefGetScheduler();
     i = sefEffectRecordCount;
     if (i > 0) {
         for (i = i - 1; i != 0; i--) {
@@ -8406,37 +8232,8 @@ void *sefGetEffectRecordsAfterScan(void) {
 }
 
 /* .bss of sef.c (pass 2): static storage, address order (see notes2-b01). */
-static unsigned char D_00746C40[38056];
-static unsigned char D_007500E8[65304];
-static unsigned char D_00760000[19488];
-static unsigned char D_00764C20[74544];
-static unsigned char D_00776F50[37040];
-static unsigned char D_00780000[13360];
-static unsigned char D_00783430[16456];
-static unsigned char D_00787478[66552];
-static unsigned char D_00797870[231312];
-static unsigned char D_007D0000[188416];
-static unsigned char D_007FE000[8192];
-static unsigned char D_00800000[32];
-static unsigned char D_00800020[32];
-static unsigned char D_00800040[16];
-static unsigned char D_00800050[48];
-static unsigned char D_00800080[15568];
+static unsigned char _ptAlloc[0xBD110];
 static SefEntryCounts sefEntryCounts[58];
 
 /* .data of sef.c (pass 2): zero-filled original objects, address order. */
-SefCameraState D_00471E20 = { 0 };
-unsigned char D_004C0000[262144] = { 0 };
-unsigned char D_00500000[32] = { 0 };
-unsigned char D_00500020[32] = { 0 };
-unsigned char D_00500040[32] = { 0 };
-unsigned char D_00500060[32] = { 0 };
-unsigned char D_00500080[32] = { 0 };
-unsigned char D_005000A0[65456] = { 0 };
-unsigned char D_00510050[65840] = { 0 };
-unsigned char D_00520180[130688] = { 0 };
-unsigned char D_00540000[327680] = { 0 };
-unsigned char D_00590000[88] = { 0 };
-unsigned char D_00590058[65448] = { 0 };
-unsigned char D_005A0000[262144] = { 0 };
-unsigned char D_005E0000[25472] = { 0 };
+SefCameraState sefCameraState = { 0 };

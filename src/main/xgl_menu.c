@@ -2,7 +2,9 @@
 #include "shared.h"
 #include "main/pad.h"
 #include "main/xgl_menu.h"
+#include "main/xgl_font.h"
 
+#include "main/xgl_2.h"
 typedef struct XglMenuListData {
     short position_x;
     short position_y;
@@ -63,7 +65,6 @@ typedef struct {
     short sprite_row_marks[18];
 } XglMenuEntry;
 
-float I2F(int value);
 
 /* The initial alpha and row mark of a sprite menu. */
 #define XGL_MENU_SPRITE_ALPHA 100
@@ -72,9 +73,7 @@ float I2F(int value);
 /* Functions and data used by other translation units. */
 
 
-void xglMenuInitial(void);
 
-extern void xglFontDebugPrintf(int x, int y, const char *format, ...);
 
 #define EE_SCRATCHPAD_BASE ((XglMenuDrawContext *)0x70000000)
 #define MENU_LIST_INDENT 8
@@ -100,7 +99,6 @@ extern XglMenuEntry menutbl[MENU_TABLE_COUNT];
 #define XGL_MENU_SELECT_WRITE_BACK 1   /* entry->select_flags: write result at once */
 #define XGL_MENU_RESULT_LIMIT 0x100000 /* below: a result value; above: a node pointer */
 
-extern PadRecord PadData[2];
 
 static void xglMenuDrawType1(XglMenuEntry *entry,
                              XglMenuDrawContext *context);
@@ -370,4 +368,3 @@ void xglMenuInitial(void)
 }
 
 XglMenuEntry menutbl[MENU_TABLE_COUNT] = { 0 };
-unsigned short monthday[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31 };

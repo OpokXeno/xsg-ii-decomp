@@ -1,41 +1,24 @@
 #include "common.h"
 #include "main/TiWindBase.h"
-#include "main/tu026.h"
-#include "main/xgl_2.h"
+#include "main/assert_fail.h"
+#include "main/TiDynamicsColl.h"
 
-/* Three-float vector as used by the node positions below. */
-typedef struct Vector3 {
-    float x;
-    float y;
-    float z;
-} Vector3;
-
-/* Node record, 0x40 bytes: position at 0x10, secondPosition at 0x20 (both moved by a link), otherPosition at 0x30 (read only). */
-typedef struct TiWindNode {
-    unsigned char unmodeled_00[0x10];
-    Vector3 position;
-    unsigned char unmodeled_1C[0x4];
-    Vector3 secondPosition;
-    unsigned char unmodeled_2C[0x4];
-    Vector3 otherPosition;
-    unsigned char unmodeled_3C[0x4];
-} TiWindNode;
-
-void tiWindSolveLink(TiWindNode *node, const TiWindNode *other, const float *restLength)
+/* Moves the body toward the rest length of its link to the world matrix `other` (its translation row). */
+void tiDynamicsSolveLink(TiSolverState *node, Matrix4 other, const float *restLength)
 {
-    Vector3 dir;
+    TiVector3 dir;
     float length;
     float correction;
 
-    dir = (Vector3) { other->otherPosition.x - node->position.x, other->otherPosition.y - node->position.y, other->otherPosition.z - node->position.z };
+    dir = (TiVector3) { other[3][0] - node->position.vector.x, other[3][1] - node->position.vector.y, other[3][2] - node->position.vector.z };
     length = __builtin_sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
     correction = *restLength - length;
-    node->secondPosition.x -= dir.x * correction;
-    node->secondPosition.y -= dir.y * correction;
-    node->secondPosition.z -= dir.z * correction;
-    node->position.z -= dir.z * correction;
-    node->position.x -= dir.x * correction;
-    node->position.y -= dir.y * correction;
+    node->accumulator.vector.x -= dir.x * correction;
+    node->accumulator.vector.y -= dir.y * correction;
+    node->accumulator.vector.z -= dir.z * correction;
+    node->position.vector.z -= dir.z * correction;
+    node->position.vector.x -= dir.x * correction;
+    node->position.vector.y -= dir.y * correction;
 }
 
 #include "shared.h"
@@ -57,7 +40,11 @@ void tiWindSolveLink(TiWindNode *node, const TiWindNode *other, const float *res
 typedef struct DirWind {
     int flags;
     unsigned char unmodeled_04[0xC];
-    float direction[4];
+    /* The vectors stay float[4]: Vector4 members change the code. */
+    union {
+        Vector4 vector;
+        float direction[4];
+    };
     float velocity[4];
     float position[4];
     float phase;
@@ -69,7 +56,7 @@ typedef struct DirWind {
     unsigned char unmodeled_58[0x8];
 } DirWind;
 
-/* D_00989D90 is the DirWind table 0x40 bytes in; the speed setter reaches its fields through it. */
+/* tiWindDirValueTable is the DirWind table 0x40 bytes in; the speed setter reaches its fields through it. */
 typedef struct DirWindValue {
     unsigned char unmodeled_00[4];
     float phaseStep;
@@ -95,86 +82,54 @@ typedef struct PointWind {
     float radius;
 } PointWind;
 
-/* D_00989F00 is the PointWind table 0x30 bytes in; the range setter reaches speedRange[1] and [2] through it. */
+/* tiWindPointValueTable is the PointWind table 0x30 bytes in; the range setter reaches speedRange[1] and [2] through it. */
 typedef struct PointWindValues {
     float speedRange[3];
     unsigned char unmodeled_0C[0x34];
 } PointWindValues;
 
-/* Node records (TiWindNode), indexed from the first node of the wind's cell. */
-
-/* Cell grid: the four starts sum to the first node index; the cell list follows at pairOffset. */
-typedef struct TiWindGrid {
-    unsigned char unmodeled_00[0x10];
-    int nodeStart[4];
-    unsigned char unmodeled_20[0x28];
-    int pairTotal;
-    unsigned char unmodeled_4C[0xC];
-    int pairOffset;
-} TiWindGrid;
-
-/* A cell header (first node index, pair count) is followed by its pairs (second node index). */
-typedef struct TiWindPair {
-    int first;
-    int second;
-    unsigned char unmodeled_08[0x8];
-} TiWindPair;
-
-typedef struct TiWindWorld {
-    unsigned char unmodeled_00[0xD0];
-    TiWindGrid *grid;
-    unsigned char unmodeled_D4[0xC];
-    TiWindNode *otherNodes;
-    unsigned char unmodeled_E4[0x8];
-    TiWindNode *nodes;
-} TiWindWorld;
-
-void tiDynamicsCollSolveSpherePair(TiWindNode *a, TiWindNode *b, TiWindWorld *world);
-void tiDynamicsCollSolveMatrixPair(TiWindNode *a, TiWindNode *b, TiWindWorld *world);
-void tiDynamicsCollSolveCapsulePair(TiWindNode *a, TiWindNode *b, TiWindWorld *world);
-void xglVectorNormal_001A9200(float *destination, const float *source);
 static DirWind tiWindDirTable[DIR_WIND_MAX];
-extern DirWindValue D_00989D90[DIR_WIND_MAX];
+extern DirWindValue tiWindDirValueTable[DIR_WIND_MAX];
 static PointWind tiWindPointTable[POINT_WIND_MAX];
-extern PointWindValues D_00989F00[POINT_WIND_MAX];
-extern const char D_0068F7B0[];
-extern const char D_0068F7C8[];
-extern const char D_0068F7E0[];
+extern PointWindValues tiWindPointValueTable[POINT_WIND_MAX];
+extern const char tiWindDirIndexAssertText[];
+extern const char tiWindBaseSourceFile[];
+extern const char tiWindPointIndexAssertText[];
 
-/* Runs the collision solvers over every pair of each cell of the grid. */
-void tiWindSolveCellPairs(TiWindWorld *world)
+/* Runs the collision solvers over every link of each cell of the link table. */
+void tiDynamicsSolveCellPairs(TiMRPackage *world)
 {
-    TiWindNode *nodes;
+    TiSolverState *nodes;
     int leftStart;
     int rightStart;
-    TiWindPair *cell;
-    TiWindPair *pair;
+    TiLinkRecord *cell;
+    TiLinkRecord *pair;
     int nodeBase;
     u32 pairIndex;
     u32 cellIndex;
 
-    nodes = world->nodes;
-    leftStart = world->grid->nodeStart[0] + world->grid->nodeStart[3];
-    rightStart = world->grid->nodeStart[2] + world->grid->nodeStart[1];
+    nodes = world->dynMat;
+    leftStart = world->hrcData->jointCount + world->hrcData->skipCount;
+    rightStart = world->hrcData->joint3Count + world->hrcData->joint2Count;
     nodeBase = leftStart + rightStart;
-    cell = (TiWindPair *)((char *)world->grid + world->grid->pairOffset);
+    cell = (TiLinkRecord *)((char *)world->hrcData + world->hrcData->linkCellOffset);
     cellIndex = 0;
-    if (world->grid->pairTotal != 0) {
+    if (world->hrcData->linkCellCount != 0) {
         do {
             pair = cell + 1;
             pairIndex = 0;
-            if (cell->second != 0) {
+            if (cell->cell.linkCount != 0) {
                 do {
                     pairIndex++;
-                    tiWindSolveLink(&nodes[cell->first - nodeBase], &world->otherNodes[pair->second], pair);
-                    tiDynamicsCollSolveSpherePair(&nodes[cell->first - nodeBase], &nodes[pair->second - nodeBase], world);
-                    tiDynamicsCollSolveMatrixPair(&nodes[cell->first - nodeBase], &nodes[pair->second - nodeBase], world);
-                    tiDynamicsCollSolveCapsulePair(&nodes[cell->first - nodeBase], &nodes[pair->second - nodeBase], world);
+                    tiDynamicsSolveLink(&nodes[cell->cell.firstNode - nodeBase], world->globalMat[pair->link.node], &pair->link.restLength);
+                    tiDynamicsCollSolveSpherePair(&nodes[cell->cell.firstNode - nodeBase], &nodes[pair->link.node - nodeBase], world);
+                    tiDynamicsCollSolveMatrixPair(&nodes[cell->cell.firstNode - nodeBase], &nodes[pair->link.node - nodeBase], world);
+                    tiDynamicsCollSolveCapsulePair(&nodes[cell->cell.firstNode - nodeBase], &nodes[pair->link.node - nodeBase], world);
                     pair++;
-                } while (pairIndex < cell->second);
+                } while (pairIndex < cell->cell.linkCount);
             }
             cell = pair;
-        } while (++cellIndex < world->grid->pairTotal);
+        } while (++cellIndex < world->hrcData->linkCellCount);
     }
 }
 
@@ -195,7 +150,7 @@ void tiWindClearTables(void)
 void tiWindDirSetEnabled(u32 index, int enabled)
 {
     if (index >= DIR_WIND_MAX) {
-        assertFailed(D_0068F7B0, D_0068F7C8, 29);
+        assertFailed(tiWindDirIndexAssertText, tiWindBaseSourceFile, 29);
     }
     if (enabled != 0) {
         tiWindDirTable[index].flags |= WIND_FLAG_ENABLED;
@@ -208,13 +163,13 @@ void tiWindDirSetEnabled(u32 index, int enabled)
 void tiWindDirSetDirection(u32 index, float x, float y, float z)
 {
     if (index >= DIR_WIND_MAX) {
-        assertFailed(D_0068F7B0, D_0068F7C8, 42);
+        assertFailed(tiWindDirIndexAssertText, tiWindBaseSourceFile, 42);
     }
     tiWindDirTable[index].direction[0] = x;
     tiWindDirTable[index].direction[1] = y;
     tiWindDirTable[index].direction[2] = z;
     tiWindDirTable[index].direction[3] = 1.0f;
-    xglVectorNormal_001A9200(tiWindDirTable[index].direction, tiWindDirTable[index].direction);
+    xglVectorNormal(&tiWindDirTable[index].vector, &tiWindDirTable[index].vector);
     tiWindDirTable[index].velocity[0] = 0.0f;
     tiWindDirTable[index].velocity[1] = 0.0f;
     tiWindDirTable[index].velocity[2] = 0.0f;
@@ -225,7 +180,7 @@ void tiWindDirSetDirection(u32 index, float x, float y, float z)
 void tiWindDirSetPosition(u32 index, const float *position)
 {
     if (index >= DIR_WIND_MAX) {
-        assertFailed(D_0068F7B0, D_0068F7C8, 60);
+        assertFailed(tiWindDirIndexAssertText, tiWindBaseSourceFile, 60);
     }
     tiWindDirTable[index].position[0] = position[0];
     tiWindDirTable[index].position[1] = position[1];
@@ -239,9 +194,9 @@ void tiWindDirSetSpeed(u32 index, float speed)
     DirWindValue *entry;
 
     if (index >= DIR_WIND_MAX) {
-        assertFailed(D_0068F7B0, D_0068F7C8, 73);
+        assertFailed(tiWindDirIndexAssertText, tiWindBaseSourceFile, 73);
     }
-    entry = &D_00989D90[index];
+    entry = &tiWindDirValueTable[index];
     if (entry->speed != speed) {
         entry->speed = speed;
         entry->phaseStep = 1.0f;
@@ -254,7 +209,7 @@ void tiWindDirSetRange(u32 index, float upper, float lower)
     DirWind *entry;
 
     if (index >= DIR_WIND_MAX) {
-        assertFailed(D_0068F7B0, D_0068F7C8, 87);
+        assertFailed(tiWindDirIndexAssertText, tiWindBaseSourceFile, 87);
     }
     entry = &tiWindDirTable[index];
     entry->upper = upper;
@@ -265,7 +220,7 @@ void tiWindDirSetRange(u32 index, float upper, float lower)
 void tiWindDirSetRadius(u32 index, float radius, int global)
 {
     if (index >= DIR_WIND_MAX) {
-        assertFailed(D_0068F7B0, D_0068F7C8, 98);
+        assertFailed(tiWindDirIndexAssertText, tiWindBaseSourceFile, 98);
     }
     tiWindDirTable[index].radius = radius;
     if (global != 0) {
@@ -279,7 +234,7 @@ void tiWindDirSetRadius(u32 index, float radius, int global)
 void tiWindPointSetEnabled(u32 index, int enabled)
 {
     if (index >= POINT_WIND_MAX) {
-        assertFailed(D_0068F7E0, D_0068F7C8, 112);
+        assertFailed(tiWindPointIndexAssertText, tiWindBaseSourceFile, 112);
     }
     if (enabled != 0) {
         tiWindPointTable[index].flags |= WIND_FLAG_ENABLED;
@@ -292,7 +247,7 @@ void tiWindPointSetEnabled(u32 index, int enabled)
 void tiWindPointSetPosition(u32 index, const float *position)
 {
     if (index >= POINT_WIND_MAX) {
-        assertFailed(D_0068F7E0, D_0068F7C8, 125);
+        assertFailed(tiWindPointIndexAssertText, tiWindBaseSourceFile, 125);
     }
     tiWindPointTable[index].position[0] = position[0];
     tiWindPointTable[index].position[1] = position[1];
@@ -304,7 +259,7 @@ void tiWindPointSetPosition(u32 index, const float *position)
 void tiWindPointSetSpeed(u32 index, float speed)
 {
     if (index >= POINT_WIND_MAX) {
-        assertFailed(D_0068F7E0, D_0068F7C8, 138);
+        assertFailed(tiWindPointIndexAssertText, tiWindBaseSourceFile, 138);
     }
     if (tiWindPointTable[index].speedRange[0] != speed) {
         tiWindPointTable[index].speedRange[0] = speed;
@@ -318,9 +273,9 @@ void tiWindPointSetRange(u32 index, float upper, float lower)
     PointWindValues *entry;
 
     if (index >= POINT_WIND_MAX) {
-        assertFailed(D_0068F7E0, D_0068F7C8, 152);
+        assertFailed(tiWindPointIndexAssertText, tiWindBaseSourceFile, 152);
     }
-    entry = &D_00989F00[index];
+    entry = &tiWindPointValueTable[index];
     entry->speedRange[1] = upper;
     entry->speedRange[2] = lower;
 }
@@ -329,7 +284,7 @@ void tiWindPointSetRange(u32 index, float upper, float lower)
 void tiWindPointSetRadius(u32 index, float radius, int global)
 {
     if (index >= POINT_WIND_MAX) {
-        assertFailed(D_0068F7E0, D_0068F7C8, 163);
+        assertFailed(tiWindPointIndexAssertText, tiWindBaseSourceFile, 163);
     }
     tiWindPointTable[index].radius = radius;
     if (global != 0) {
@@ -339,24 +294,11 @@ void tiWindPointSetRadius(u32 index, float radius, int global)
     }
 }
 
-/* The step record and the solver state the wind passes read and write; main/tu263.c owns their full layouts. */
-typedef struct WindStep {
-    unsigned char unmodeled_00[0x18];
-    float time_step;
-} WindStep;
-
-typedef struct WindState {
-    unsigned char unmodeled_00[0x10];
-    Vector4 position;
-    unsigned char unmodeled_20[0x14];
-    float gust;
-} WindState;
-
-extern const char D_0068F7F8[];
+extern const char tiWindWindAssertText[];
 
 /* Pushes the state with a directional wind: a global wind moves it by velocity * time step * gust; otherwise the push
  * falls off with distance over the radius. The gust is redrawn when the phase reaches its upper bound. */
-void tiWindDirApply(DirWind *entry, WindStep *step, WindState *state)
+void tiWindDirApply(DirWind *entry, TiHrcDynamics *step, TiSolverState *state)
 {
     float delta[3];
     float dist;
@@ -364,34 +306,34 @@ void tiWindDirApply(DirWind *entry, WindStep *step, WindState *state)
     int gustRoll;
 
     if (entry == 0) {
-        assertFailed(D_0068F7F8, D_0068F7C8, 177);
+        assertFailed(tiWindWindAssertText, tiWindBaseSourceFile, 177);
     }
     if (entry->phase == entry->upper) {
         gustRoll = xglSRand() % WIND_GUST_STEPS;
         state->gust = (float)gustRoll * 0.01f + 0.5f;
     }
     if (entry->flags & WIND_FLAG_GLOBAL) {
-        state->position.x += entry->velocity[0] * step->time_step * state->gust;
-        state->position.y += entry->velocity[1] * step->time_step * state->gust;
-        state->position.z += entry->velocity[2] * step->time_step * state->gust;
+        state->position.vector.x += entry->velocity[0] * step->timeStep * state->gust;
+        state->position.vector.y += entry->velocity[1] * step->timeStep * state->gust;
+        state->position.vector.z += entry->velocity[2] * step->timeStep * state->gust;
         return;
     }
-    delta[0] = state->position.x - entry->position[0];
-    delta[1] = state->position.y - entry->position[1];
-    delta[2] = state->position.z - entry->position[2];
+    delta[0] = state->position.vector.x - entry->position[0];
+    delta[1] = state->position.vector.y - entry->position[1];
+    delta[2] = state->position.vector.z - entry->position[2];
     dist = __builtin_sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]);
     if (entry->radius == 0.0f || !(dist <= entry->radius)) {
         return;
     }
     falloff = dist / entry->radius;
-    state->position.x += entry->velocity[0] * step->time_step * falloff * state->gust;
-    state->position.y += entry->velocity[1] * step->time_step * falloff * state->gust;
-    state->position.z += entry->velocity[2] * step->time_step * falloff * state->gust;
+    state->position.vector.x += entry->velocity[0] * step->timeStep * falloff * state->gust;
+    state->position.vector.y += entry->velocity[1] * step->timeStep * falloff * state->gust;
+    state->position.vector.z += entry->velocity[2] * step->timeStep * falloff * state->gust;
 }
 
 /* Pushes the state with a point wind: along the unit direction from the wind's position to the state, scaled by the
  * wave strength; a global wind has no falloff with distance. The gust is redrawn when the phase reaches its upper bound. */
-void tiWindPointApply(PointWind *entry, WindStep *step, WindState *state)
+void tiWindPointApply(PointWind *entry, TiHrcDynamics *step, TiSolverState *state)
 {
     float delta[4];
     float dist;
@@ -399,11 +341,11 @@ void tiWindPointApply(PointWind *entry, WindStep *step, WindState *state)
     int gustRoll;
 
     if (entry == 0) {
-        assertFailed(D_0068F7F8, D_0068F7C8, 224);
+        assertFailed(tiWindWindAssertText, tiWindBaseSourceFile, 224);
     }
-    delta[0] = state->position.x - entry->position[0];
-    delta[1] = state->position.y - entry->position[1];
-    delta[2] = state->position.z - entry->position[2];
+    delta[0] = state->position.vector.x - entry->position[0];
+    delta[1] = state->position.vector.y - entry->position[1];
+    delta[2] = state->position.vector.z - entry->position[2];
     delta[3] = 1.0f;
     if (entry->phase == entry->speedRange[1]) {
         gustRoll = xglSRand() % WIND_GUST_STEPS;
@@ -418,23 +360,23 @@ void tiWindPointApply(PointWind *entry, WindStep *step, WindState *state)
     delta[1] *= scale;
     delta[2] *= scale;
     if (entry->flags & WIND_FLAG_GLOBAL) {
-        state->position.x += delta[0] * entry->wave * step->time_step * state->gust;
-        state->position.y += delta[1] * entry->wave * step->time_step * state->gust;
-        state->position.z += delta[2] * entry->wave * step->time_step * state->gust;
+        state->position.vector.x += delta[0] * entry->wave * step->timeStep * state->gust;
+        state->position.vector.y += delta[1] * entry->wave * step->timeStep * state->gust;
+        state->position.vector.z += delta[2] * entry->wave * step->timeStep * state->gust;
         return;
     }
     if (entry->radius == 0.0f || !(dist <= entry->radius)) {
         return;
     }
     scale = dist / entry->radius;
-    state->position.x += delta[0] * entry->wave * step->time_step * scale * state->gust;
-    state->position.y += delta[1] * entry->wave * step->time_step * scale * state->gust;
-    state->position.z += delta[2] * entry->wave * step->time_step * scale * state->gust;
+    state->position.vector.x += delta[0] * entry->wave * step->timeStep * scale * state->gust;
+    state->position.vector.y += delta[1] * entry->wave * step->timeStep * scale * state->gust;
+    state->position.vector.z += delta[2] * entry->wave * step->timeStep * scale * state->gust;
 }
 
 
-/* Applies every enabled wind to the solver state; the parameters are the step record and the state (void * in the header). */
-void tiWindApplyAll(void *first_input, void *second_input)
+/* Applies every enabled wind to the solver state; the parameters are the dynamics node and the solver state. */
+void tiWindApplyAll(TiHrcDynamics *first_input, TiSolverState *second_input)
 {
     u32 index;
 
@@ -456,7 +398,7 @@ void tiWindDirAdvance(DirWind *entry)
     float nextPhase;
 
     if (entry == 0) {
-        assertFailed(D_0068F7F8, D_0068F7C8, 294);
+        assertFailed(tiWindWindAssertText, tiWindBaseSourceFile, 294);
     }
     nextPhase = entry->phase + entry->speed * entry->phaseStep * 0.1f;
     entry->phase = nextPhase;
@@ -478,7 +420,7 @@ void tiWindPointAdvance(PointWind *entry)
     float nextPhase;
 
     if (entry == 0) {
-        assertFailed(D_0068F7F8, D_0068F7C8, 320);
+        assertFailed(tiWindWindAssertText, tiWindBaseSourceFile, 320);
     }
     nextPhase = entry->phase + entry->speedRange[0] * entry->phaseStep * 0.1f;
     entry->phase = nextPhase;
@@ -527,7 +469,7 @@ void tiWindDisableAll(void)
 DirWind *tiWindDirGet(u32 index)
 {
     if (index >= DIR_WIND_MAX) {
-        assertFailed(D_0068F7B0, D_0068F7C8, 375);
+        assertFailed(tiWindDirIndexAssertText, tiWindBaseSourceFile, 375);
     }
     return &tiWindDirTable[index];
 }
@@ -536,12 +478,12 @@ DirWind *tiWindDirGet(u32 index)
 PointWind *tiWindPointGet(u32 index)
 {
     if (index >= POINT_WIND_MAX) {
-        assertFailed(D_0068F7E0, D_0068F7C8, 385);
+        assertFailed(tiWindPointIndexAssertText, tiWindBaseSourceFile, 385);
     }
     return &tiWindPointTable[index];
 }
 
-const char D_0068F7B0[24] = "num < DIR_WIND_MAX";
-const char D_0068F7C8[24] = "../TiWindBase.euc.c";
-const char D_0068F7E0[24] = "num < POINT_WIND_MAX";
-const char D_0068F7F8[8] = "wind";
+const char tiWindDirIndexAssertText[24] = "num < DIR_WIND_MAX";
+const char tiWindBaseSourceFile[24] = "../TiWindBase.euc.c";
+const char tiWindPointIndexAssertText[24] = "num < POINT_WIND_MAX";
+const char tiWindWindAssertText[8] = "wind";

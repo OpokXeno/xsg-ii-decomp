@@ -1,49 +1,36 @@
 #include "common.h"
 #include "main/res_get_path.h"
 #include "main/test_128.h"
-#include "main/tu026.h"
-#include "main/tu051.h"
+#include "main/oLib.h"
+#include "main/assert_fail.h"
+#include "main/game_camera.h"
 #include "main/xenoActor.h"
 
 /* Source file name passed with the allocation and free calls. */
 static const char oLibSourceFile[16] = "../oLib.euc.c";
-extern int oLibHandle;
-int InstanceOfRgHeapById(int count);
-int RgHeapAllocById(int count, int flags, const char *file, int line);
-void resResetSlotTable(void);
-void RgHeapFree(int handle, const char *file, int line);
+/* Fixed EE RAM address of the object library heap. */
+#define OLIB_HEAP_BASE ((void *)0x01000000)
+extern void *oLibHandle;
 
 /* Object library setup: the handle for the oLib file goes into oLibHandle. */
 void oLibInit(void)
 {
-    int setup_handle;
-    int handle;
+    struct RgHeap *setup_heap;
+    void *handle;
 
-    setup_handle = InstanceOfRgHeapById(4);
-    InitRgHeap(setup_handle, 0x01000000, 0x01200000);
+    setup_heap = InstanceOfRgHeapById(4);
+    InitRgHeap(setup_heap, OLIB_HEAP_BASE, 0x01200000);
     handle = RgHeapAllocById(4, 0x800010, oLibSourceFile, 118);
     oLibHandle = handle;
-    resInitPathHeader(handle, 0x800000);
+    GameResourceInit(handle, 0x800000);
 }
 
 /* Object library teardown: frees the handle in oLibHandle. */
 void oLibExit(void)
 {
-    resResetSlotTable();
+    GameResourceReset();
     RgHeapFree(oLibHandle, oLibSourceFile, 134);
 }
-
-/* XenoActor.kind (+0x798) as oLibLoadObject writes it: a pointer-typed store through a view that only has this
- * member, so the loads after it move above it as in the original (cfeLoadResourceObject does the same; through
- * actor->kind, a one-member union read with alias set 0, the stores of the resource words are scheduled before it). */
-typedef struct OLibActorKindView {
-    unsigned char unmodeled_000[0x798];
-    void *kind;
-} OLibActorKindView;
-
-int GameResLoadID(int id, void **buffer, unsigned int *size,
-                  void (*callback)(int index, void *buffer, unsigned int size, int value));
-void XenoActorAllocMatrices(struct XenoActor *actor);
 
 /* Loads the object resource Id (asserted at line 157) and creates the actor from its
  * resource table (model, texture, hierarchy, motion table, lookLink) as uwamonoLoadPlayer does. */
@@ -59,14 +46,14 @@ void oLibLoadObject(struct XenoActor **object, int Id)
     }
     values = SrcData;
     actor = XenoActorAlloc();
-    ((OLibActorKindView *) actor)->kind = (void *) Id;
+    ((XenoActorKindView *) actor)->kind = (void *) Id;
     actor->rsrc[XAct_Rsrc_MDL] = values[0];
     actor->drawMode = 1;
     *object = actor;
     actor->rsrc[XAct_Rsrc_TEX] = values[1];
     actor->rsrc[XAct_Rsrc_XHR] = values[2];
     actor->rsrc[XAct_Rsrc_XAP] = values[4];
-    actor->lookLink = values[3];
+    actor->rsrc[XAct_Rsrc_EntryTableC] = values[3];
     XenoActorAllocMatrices(actor);
     XenoActorSetChannelValue(*object, 0.0f);
     XenoActorSetModeInSlot(*object, 0, 0);
@@ -74,8 +61,7 @@ void oLibLoadObject(struct XenoActor **object, int Id)
     XenoActorSetSelector(*object, 0);
 }
 
-/* The old tu202 and tu203 are the tail of this object: their .sdata flags xglCosDegTableReady and
-   xglSinDegTableReady precede oLibHandle (data map review 2026-11-17). */
+/* The .sdata flags xglCosDegTableReady and xglSinDegTableReady precede oLibHandle. */
 
 /* Converts an x coordinate to 12.4 fixed point, offset into the GS display area. */
 int gsVertexX(int x)
@@ -206,5 +192,5 @@ void xglSinDegTableInit(void)
  * then recordUpdatePaused (used by other TUs, so it stays a global). */
 int xglCosDegTableReady = 0;
 int xglSinDegTableReady = 0;
-int oLibHandle = 0;
+void *oLibHandle = 0;
 int recordUpdatePaused = 0;

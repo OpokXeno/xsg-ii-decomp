@@ -1439,12 +1439,13 @@ def attribute_data(unit, tus):
         ordinal = zone_ordinal[stem]
         claims[section][ordinal] = [start] + [t for t in claims[section].get(ordinal, []) if t > start]
     section_order = {}
+    rank = {tu['ordinal']: position for position, tu in enumerate(tus)}   # address order (SPLIT_CUTS ordinals)
     for section, per_tu in claims.items():
         order = sorted(per_tu, key=lambda ordinal: min(per_tu[ordinal]))
         block = 0
         blocks = [[order[0], order[0]]] if order else []
         for position, ordinal in enumerate(order):
-            if position and ordinal < order[position - 1]:
+            if position and rank[ordinal] < rank[order[position - 1]]:
                 block += 1
                 blocks.append([ordinal, ordinal])
             blocks[-1][1] = ordinal
@@ -1499,9 +1500,11 @@ DATA_RANGE_OWNERS = [
     # Cross-section review (2026-11-17): every data section of one object follows the same link order, so a
     # span whose place contradicts the other sections of its TU belongs to the TU of that place (the readers
     # below are globals read through an extern; a jump table or literal moves its function instead).
-    (0x002BD570, 0x003E6DC0, 0x001EEBC8, 'tya_draw_gauge.c: the globals uwamonoPoints, ladderSlots, uwamonoRecords, '
-     'D_003C6DC0 lie before tu067 in .data, while tu083 and init_uwamono_sys come after tu082 in .rodata, .sdata '
-     'and .lit4'),
+    (0x002BD570, 0x002BD600, 0x001EEBC8, 'tya_draw_gauge.c: tyaGaugePacket (X1 tya_draw_gauge.c keeps this GS packet '
+     'as its static TestEnv); the globals after it belong to ytachi_test, the next file'),
+    (0x002BD600, 0x003E6DC0, 0x001EECD8, 'ytachi_test.c: the globals uwamonoStates, enepcLookAt*, uwamonoPoints, ladderSlots, '
+     'uwamonoRecords, mapSceneScriptBuffer lie before tu067 in .data, while tu083 and init_uwamono_sys come after tu082 '
+     'in .rodata, .sdata and .lit4; its .sdata and .rodata (scene names) interleave the same names, so one file holds them'),
     (0x003E7270, 0x003E7400, 0x001FD348, 'tu083.c: D_003E7270, read by tu083 and tu068; tu083 is the reader inside '
      'the link-order interval tu082..tu088'),
     (0x005E6D28, 0x005E6D40, 0x00266B50, 'sdv_180: its .data starts where srsRecordTable of srs.c ends (0x5E6D28, '
@@ -1513,8 +1516,6 @@ DATA_RANGE_OWNERS = [
     (0x0068C660, 0x0068C6F8, 0x00271458, 'sm_initilize: MMathUnitVector and MMathUnitMatrix, global constants read by '
      'eight TUs, lie between tu185 and tu187 in .rodata; m_math_191 (one reader) follows m_math_188 in .lit4'),
     (0x0068D2B0, 0x0068D348, 0x0027BFD0, 'tu214.c: jump table of effectRequestToCommand (see MOVED_CUTS 0x27C7D0)'),
-    (0x0063EDE0, 0x0063EE80, 0x00199428, 'xgl_pad.c: pad state bytes read by the sdv_033 camera code; between '
-     'xgl_dma and xgl_menu in .data, while sdv_033 comes after xgl_2 everywhere else'),
     (0x006459A0, 0x00645F10, 0x001B8B18, 'tu042.c: the pxy glyph tables'),
     (0x00645F10, 0x00645FB0, 0x001B95F0, 'nml_model_set.c: after tu042 in .data as in .sdata and .text'),
     (0x0069D750, 0x0069D768, 0x0021A520, 'tu101.c: the record "\\031\\003", the 8-byte style record D_0069D758 and '
@@ -1551,8 +1552,11 @@ DATA_RANGE_OWNERS = [
      'objects follow tu108 in link order, so their .data cannot lie before tu108\'s; tu100 reads D_003EB240, D_003EB268'),
     (0x003EBA58, 0x003EC458, 0x00228520, 'tu108.c: also items read only by tu100 (earlier in link order) and tu109'),
     (0x00645580, 0x006459A0, 0x001B2DE4, 'xgl_render.c (D_00645868 read only by tu100, a game object of another link group)'),
-    (0x0063ED50, 0x0063EDE0, 0x00199078, 'xgl_dma.c (D_0063EDA8, D_0063EDD0 read only by tu085/tu089, game objects of '
-     'another link group)'),
+    (0x0063ED50, 0x0063EE80, 0x00199078, 'xgl_dma.c: tbl and the two 0x80-byte port records of PadData (X1 xgl_dma.c '
+     'defines PadData[2] too), read through externs by the pad, camera and menu code'),
+    (0x0063F680, 0x0063F6B0, 0x0019A890, 'xgl_cd.c: monthday[24], the month lengths and cumulative day offsets read by '
+     'xglCd\'s date code (X1 xgl_cd.c defines monthday[24] too); the single-user rule had cut its first 20 bytes into the '
+     'data of xgl_menu'),
 ]
 
 # Objects that span addresses the single-user rule gives to several TUs: (first byte, end, a function of the
@@ -1752,6 +1756,32 @@ JOINED_CUTS = [
      'TickLifetime121 are callbacks whose address only MEfCreateSpray takes'),
     (0x00AB40D8, 'ov01 tu090 joins tu089 (2026-11-18, after the move to func_00AB3CC8): func_00AB40D8 and '
      'MEfAdvanceHistoryStep are callbacks whose address only func_00AB3CC8 takes'),
+    # X1 file audit 2026-11-19 (.work/x2-tu-audit, user order: TU limits by X1's files)
+    (0x0019F300, 'xgl_1: the old tu015/tu016 pair joins tu014 (myDmaDirectFromIPU, X1 xgl_1.c#0, then make_gstrans #2): one X1 file, same -G0 contract, no data between'),
+    (0x001B74D8, 'nml_packet_add: _CurMatrixSet (X1 nml_packet_add.c#0) and _CurApplyMatrix.._CurMatrixMul (#2) are one X1 file; -O0, no data'),
+    (0x00271DA8, "m_math: tu187 (MMathCalcRotFar, X1 m_math.c#3) and tu188 (MMathCalcHermite #4); tu187's .bss holds MOutputDebugBuffer above MMathRandomState, so the debug-string head is in the same object"),
+    (0x00271EF8, 'm_math: tu189 continues m_math.c (MMathRad2DegVectorI #9 -> MMathNormalizeVector2 #10); tu189-tu195 read no small data, so their -G0 contract was undetermined'),
+    (0x00271FE8, 'm_math: tu190 (MMathCalcLengthYZ #14 -> MMathCalcDist #15)'),
+    (0x00272088, 'm_math: tu191 (MMathCalcDirVector #17 -> MMathCalcDir #18)'),
+    (0x00272370, 'm_math: tu192 (MMathIsVectorEqual4 #31 -> MMathVectorDotProduct #32)'),
+    (0x002723F0, 'm_math: tu193 (MMathVectorInterpolation #34 -> MMathRotateMatrixX #36)'),
+    (0x00272928, 'm_math: tu194 (MMathRotateMatrixYXZ #42 -> MMathApplyMatrix #43)'),
+    (0x00272A20, 'm_math: tu195 (MMathScaleMatrix #45 -> MMathScaleMatrixS #46)'),
+    (0x00272D38, 'm_math: tu196 (MMathRotTransPers #51 -> MMathRotTransPersClip #52); the joined .bss/.lit4/.rodata/.sdata pieces are contiguous'),
+    (0x00296688, 'xrg_rand_int: XrgScaleVector (X1 xrg_rand_int.c#15) and XrgInnerVector (#23) are one X1 file, same contract, no data'),
+    (0x00A84430, 'ov01 unit_cmd: tu011 joins tu010 (unitEnCreate, X1 unit_cmd.c#10 -> unitRemove #14); tu010-tu016 data pieces are contiguous'),
+    (0x00A84830, 'ov01 unit_cmd: tu012 joins (unit_cmd.c homologs on both sides)'),
+    (0x00A85A80, 'ov01 unit_cmd: tu013 joins (unitCmdClear #24 -> unitCmdDmg #45)'),
+    (0x00A862D8, 'ov01 unit_cmd: tu014 joins (unitCmdMot #50 -> unitCmdMoveChaRun #58)'),
+    (0x00A865D8, 'ov01 unit_cmd: tu015 joins (unitCmdMovePos #66 -> unitCmdBted #91)'),
+    (0x00A86CB0, 'ov01 unit_cmd: tu016 joins (X1 unit_cmd.c#95..); objPosePublish/objPoseFetch keep their documented '
+     'one-site doubleword views of XenoActor.position and SlideBlock.position'),
+    (0x00AA3928, 'ov01 menu: tu050 joins tu049 (X1 menu.c on both sides, X2 reordered); tu049-tu054 .bss/.data/.rodata contiguous'),
+    (0x00AA3E28, 'ov01 menu: tu051 joins (menu.c on both sides)'),
+    (0x00AA4280, 'ov01 menu: tu052 joins (menu.c on both sides)'),
+    (0x00AA4670, 'ov01 menu: tu053 joins (between menu.c homologs menuKeyGuideDisp #62 and objDmgNumCreate #68)'),
+    (0x00AA4BD8, 'ov01 menu: tu054 joins (objDmgNumCreate, menu.c #68)'),
+    (0x00AAAA50, 'ov01 debug_entry: tu073 joins tu072 (X1 debug_entry.c on both sides), data contiguous'),
 ]
 
 # Cuts moved on compiler evidence: (inferred start of a TU, its corrected start, why).
@@ -1791,8 +1821,289 @@ MOVED_CUTS = [
     (0x0020CE30, 0x0020CE40,
      'func_0020CE30 as C earlier in the file turns bnel into bne in func_0020DDC8; defined after the caller '
      'it matches, so the original did not see that definition first (docs/bulk-match.md, user 2026-11-05)'),
+    # X1 file audit 2026-11-19 (.work/x2-tu-audit, user order: TU limits by X1's files)
+    (0x001948D8, 0x001948B8, 'xglTimer0Reset is X1 xgl_timer0.c#0: it opens the xgl_timer0 file, not control_entry'),
+    (0x00199428, 0x00199430, 'xglDmaInitial is X1 xgl_dma.c#10: it ends xgl_dma; xgl_pad opens at xglPadInitial'),
+    (0x001A4EC8, 0x001A4EC0, 'xglHddDummyCB is X1 xgl_hdd.c#0: it opens xgl_hdd'),
+    (0x002068B0, 0x00205A20, 'set_motion opens at Enemy_After_Battle (X1 set_motion.c#18); tu085 keeps the enemy update '
+     'code (X1 enemy_1.c), both now on the shared UwamonoRecord of ytachi_test.h'),
+    (0x00208560, 0x00208B28, 'uwamonoGetSectorEnds and Check_InsideID (X1 call_java_method.c#10) end uwamono_event_check; vibration opens at Vibration_Stop (X1 vibration.c#0)'),
+    (0x00266F68, 0x00266D78, 'sdv opens at sdvInitAmbient (X1 sdv.c#0); tu180 keeps the sc_get functions (X1 sc_get.c); .sdata clean at the cut'),
+    (0x00A814A8, 0x00A811F8, 'ov01 obj: objStdMove (X1 obj.c#16) opens the obj file, tu006 keeps gr_gp_init (#26)'),
+    (0x00AA2CE0, 0x00AA2D18, 'ov01 GS_REG_SET is X1 gr_gp_init.c#29: it ends gr_gp_init (tu048); menu opens at menuPanelRowsReset'),
 ]
 
+
+# New TU starts inside one inferred TU: (unit, start, ordinal, X1 file name, why). The new TU takes the given ordinal,
+# outside the address order of the others, so no existing TU is renumbered (X1 file audit 2026-11-19 (.work/x2-tu-audit, user order: TU limits by X1's files)).
+SPLIT_CUTS = [
+    ('main', 0x00194890, 300, 'xgl_thread.c',
+     "xglSleep is X1 xgl_thread.c (between control_entry's main and xgl_timer0); no data on either side"),
+    ('main', 0x001AB3C0, 301, 'xgl_light.c',
+     '-O0 static-copy tail xglMatrixCopy/xglVectorSubXYZ (0x1AB344-0x1AB3C0, called only by xgl_2 code) ends xgl_2; xglLightSetDefault.. is X1 xgl_light.c with its own copies at its end; data clean'),
+    ('main', 0x001B2120, 302, 'xgl_packet.c',
+     '-O0 static-copy tail 0x1B2008-0x1B2120 ends xgl_camera; xglPacketTextureTrans..xglPacketSend are X1 xgl_packet.c (6/6); data clean'),
+    ('main', 0x001E9008, 303, 'game_disk_change.c',
+     'GameDiskChange is X1 game_disk_change.c, Intermission X1 game_over.c; .data/.rodata/.bss clean at the cut'),
+    ('main', 0x001EECD8, 304, 'ytachi_test.c',
+     'YtachiTest is X1 ytachi_test.c, tyaDrawGauge X1 tya_draw_gauge.c; data clean at the cut'),
+    ('main', 0x002025B0, 305, 'pause_menu_page_uwamono.c',
+     'DispCollUwamono..DispPillar are X1 pause_menu_page_uwamono.c, HitCheckBoxUwamono X1 init_uwamono_sys.c; .lit4 clean at the cut'),
+    ('ov01', 0x00A9BC08, 91, 'think_dispatch.c',
+     'msgReset opens the message, party data and effect senders of upstream PR #30 (tu042 keeps the bat.dat getters); '
+     'its .rodata 0x3B6A0 and .bss 0xAC51B0 go with it'),
+    ('ov02', 0x00A80790, 300, 'boot_display.c',
+     'BootDisplay is X1 boot_display.c, LogoFirst X1 logo.c; no data'),
+    ('ov02', 0x00A81C38, 301, 'title_game_init.c',
+     'TitleGameInit is X1 title_game_init.c, Title X1 title.c; no data'),
+]
+
+# File names from X1 for TUs that are one X1 file: (unit, first function, name).
+X1_FILE_NAMES = [
+    ('main', 0x001AF494, 'xgl_camera.c'),
+    ('main', 0x00205A20, 'set_motion.c'),
+    # X1 call_java_method.c; X2 has no Java (uwamonoSendEvent posts to the .sb VM), so a neutral name (user 2026-11-19)
+    ('main', 0x00207028, 'uwamono_event_check.c'),
+    ('main', 0x00208B28, 'vibration.c'),
+    ('main', 0x00266B50, 'sc_get.c'),
+    ('main', 0x00266D78, 'sdv.c'),
+    ('main', 0x002717C0, 'm_math.c'),
+    ('main', 0x002965C0, 'xrg_rand_int.c'),
+    ('main', 0x001B74A0, 'nml_packet_add.c'),
+    ('main', 0x0019F260, 'xgl_1.c'),
+    ('ov01', 0x00A811F8, 'obj.c'),
+    ('ov01', 0x00A840F0, 'unit_cmd.c'),
+    ('ov01', 0x00AA1BE0, 'gr_gp_init.c'),
+    ('ov01', 0x00AA2D18, 'menu.c'),
+    ('ov01', 0x00AA9340, 'debug_entry.c'),
+    ('ov02', 0x00A80000, 'logo.c'),
+    ('ov02', 0x00A80798, 'title.c'),
+    ('ov02', 0x00A81C78, 'title_hdd_install.c'),
+    ('main', 0x001D7250, 'game_pause_disp.c'),  # main/tu049
+    ('main', 0x001D9280, 'game_camera.c'),  # main/tu051
+    ('main', 0x001E9740, 'yajima_test.c'),  # main/tu060
+    ('main', 0x001EDA58, 'tya_display_setting.c'),  # main/tu063
+    ('main', 0x001F8138, 'get_ladder.c'),  # main/tu075
+    ('main', 0x00203118, 'enemy_1.c'),  # main/tu085
+    ('main', 0x00206D08, 'enemy_system_init.c'),  # main/tu087
+    ('ov01', 0x00A83D28, 'data_unit_org_get.c'),  # ov01/tu009
+    ('ov01', 0x00A88E70, 'battle_init.c'),  # ov01/tu022
+    ('ov01', 0x00A8A8B8, 'calc.c'),  # ov01/tu023
+    ('ov01', 0x00AA8590, 'entry_first_init.c'),  # ov01/tu064
+    ('ov01', 0x00AAAB80, 'yamamoto_test.c'),  # ov01/tu074
+    ('ov01', 0x00AAAD58, 'm_gs.c'),  # ov01/tu075
+    ('ov01', 0x00AAB888, 'm_ef.c'),  # ov01/tu077
+    ('ov01', 0x00AB0A38, 'm_ef_create_smp_01.c'),  # ov01/tu083
+]
+
+# File names by role for TUs with no single X1 file (2026-11-20, user order: name every tuNNN file, X1 homologs
+# first): the subsystem their functions implement, from their names and callers. (unit, first function, name).
+ROLE_FILE_NAMES = [
+    ('main', 0x00194D08, 'xgl_debug_file.c'),  # main/tu005
+    ('main', 0x0019DB58, 'xgl_mc_request.c'),  # main/tu012
+    ('main', 0x001A01D8, 'movie_player.c'),  # main/tu017
+    ('main', 0x001A3110, 'se_volume.c'),  # main/tu020
+    ('main', 0x001A3248, 'se_bank_load.c'),  # main/tu021
+    ('main', 0x001A3FA8, 'sound_driver.c'),  # main/tu022
+    ('main', 0x001A4768, 'xgl_intc.c'),  # main/tu023
+    ('main', 0x001A4A58, 'xgl_dma_handler.c'),  # main/tu024
+    ('main', 0x001A6888, 'assert_fail.c'),  # main/tu026
+    ('main', 0x001A69A0, 'lan_usb.c'),  # main/tu027
+    ('main', 0x001B75E8, 'cur_matrix_asm.c'),  # main/tu039
+    ('main', 0x001B7944, 'model_calc_clip.c'),  # main/tu040
+    ('main', 0x001B7CD4, 'pxy_profile.c'),  # main/tu041
+    ('main', 0x001B8B18, 'pxy_debug_draw.c'),  # main/tu042
+    ('main', 0x001CCAA0, 'pxy_packet_state.c'),  # main/tu045
+    ('main', 0x001D4568, 'pxy_frame_alpha.c'),  # main/tu047
+    ('main', 0x001D5440, 'game_data.c'),  # main/tu048
+    ('main', 0x001D74E0, 'game_map_object.c'),  # main/tu050
+    ('main', 0x001DEAE8, 'uwamono_light_blend.c'),  # main/tu052
+    ('main', 0x001EF600, 'uwamono_objx.c'),  # main/tu067
+    ('main', 0x001F2DF8, 'runtime_item.c'),  # main/tu068
+    ('main', 0x001F34A8, 'runtime_prog_effect.c'),  # main/tu069
+    ('main', 0x001F48F8, 'runtime_adx.c'),  # main/tu070
+    ('main', 0x001F4A20, 'runtime_se.c'),  # main/tu071
+    ('main', 0x001F4E20, 'runtime_enepc.c'),  # main/tu072
+    ('main', 0x001F5E08, 'runtime_motion_face.c'),  # main/tu073
+    ('main', 0x001F6D90, 'runtime_uwamono_door.c'),  # main/tu074
+    ('main', 0x001F9928, 'ladder_table.c'),  # main/tu076
+    ('main', 0x001F9CC0, 'runtime_camera.c'),  # main/tu077
+    ('main', 0x001FC2D8, 'runtime_math.c'),  # main/tu078
+    ('main', 0x001FC558, 'runtime_pt_init.c'),  # main/tu079
+    ('main', 0x001FC620, 'runtime_pt_member.c'),  # main/tu080
+    ('main', 0x001FC888, 'runtime_pt_pilot.c'),  # main/tu081
+    ('main', 0x001FCBD0, 'runtime_menu.c'),  # main/tu082
+    ('main', 0x001FD348, 'uwamono_record.c'),  # main/tu083
+    ('main', 0x0020B5C0, 'xgl_cd_arena.c'),  # main/tu092
+    ('main', 0x0020BB30, 'gr_screen.c'),  # main/tu093
+    ('main', 0x0020C0E0, 'bg_layer.c'),  # main/tu094
+    ('main', 0x0020CCC0, 'xgl_tick.c'),  # main/tu096
+    ('main', 0x0020CE40, 'font_obj.c'),  # main/tu097
+    ('main', 0x0020ED90, 'cursor_buffer.c'),  # main/tu098
+    ('main', 0x0020F230, 'text_box.c'),  # main/tu099
+    ('main', 0x00210268, 'menu_scene.c'),  # main/tu100
+    ('main', 0x0021A520, 'menu_draw.c'),  # main/tu101
+    ('main', 0x00228520, 'save_party_init.c'),  # main/tu108
+    ('main', 0x00228B88, 'menu_selection.c'),  # main/tu109
+    ('main', 0x0022A560, 'pt_member.c'),  # main/tu110
+    ('main', 0x0022D1D8, 'talk_msg.c'),  # main/tu111
+    ('main', 0x0022D4F0, 'talk_window_ctrl.c'),  # main/tu112
+    ('main', 0x0022D5A0, 'quest_flag.c'),  # main/tu113
+    ('main', 0x0022DD20, 'script_register_natives.c'),  # main/tu114
+    ('main', 0x0022DEF8, 'render_sprite.c'),  # main/tu115
+    ('main', 0x0022E940, 'quest_flag_set.c'),  # main/tu116
+    ('main', 0x00233D50, 'txd_table_entry.c'),  # main/tu121
+    ('main', 0x00233D78, 'battle_result.c'),  # main/tu122
+    ('main', 0x002353B8, 'text_window.c'),  # main/tu123
+    ('main', 0x002356B8, 'choice_menu.c'),  # main/tu124
+    ('main', 0x00236340, 'text_marker.c'),  # main/tu125
+    ('main', 0x00237830, 'save_screen.c'),  # main/tu126
+    ('main', 0x0023C600, 'debug_test.c'),  # main/tu127
+    ('main', 0x0023EC70, 'xgl_vu1_regs.c'),  # main/tu130
+    ('main', 0x0023EDA0, 'xgl_matrix_axes.c'),  # main/tu131
+    ('main', 0x0023EFC8, 'xgl_packet_unpack.c'),  # main/tu132
+    ('main', 0x0023F8E8, 'ti_wat_sim_update.c'),  # main/tu133
+    ('main', 0x00247518, 'cfe_entry.c'),  # main/tu138
+    ('main', 0x0024E9A0, 'cfe_init.c'),  # main/tu141
+    ('main', 0x0024F3B8, 'cfe_text.c'),  # main/tu143
+    ('main', 0x0024F4F0, 'cfe_list.c'),  # main/tu144
+    ('main', 0x0024FA48, 'cfe_track.c'),  # main/tu145
+    ('main', 0x00250FD8, 'cfe_node_pool.c'),  # main/tu146
+    ('main', 0x00251148, 'msg_balance.c'),  # main/tu147
+    ('main', 0x002511C0, 'msg_state.c'),  # main/tu148
+    ('main', 0x00251B80, 'msg_window_bind.c'),  # main/tu149
+    ('main', 0x00251F78, 'vu0_vector.c'),  # main/tu151
+    ('main', 0x002520C0, 'vu0_matrix.c'),  # main/tu152
+    ('main', 0x002522C8, 'vu0_rotate.c'),  # main/tu153
+    ('main', 0x00252680, 'm_math_geom.c'),  # main/tu154
+    ('main', 0x00252D88, 'sv_scene_flags.c'),  # main/tu155
+    ('main', 0x00252F78, 'sef_light_set.c'),  # main/tu156
+    ('main', 0x002594E8, 'draw_list.c'),  # main/tu162
+    ('main', 0x00259628, 'sef_entry_counts.c'),  # main/tu163
+    ('main', 0x002669F0, 'srs_file.c'),  # main/tu179
+    ('main', 0x00272F38, 'm_se_obj.c'),  # main/tu197
+    ('main', 0x002733C0, 'fade_ctrl.c'),  # main/tu198
+    ('main', 0x00273A20, 'fade_commands.c'),  # main/tu199
+    ('main', 0x00273D28, 'script_load.c'),  # main/tu200
+    ('main', 0x00274368, 'gs_make_tex0.c'),  # main/tu204
+    ('main', 0x00274650, 'gs_make_frame.c'),  # main/tu205
+    ('main', 0x00274738, 'xgl_packet_scratch.c'),  # main/tu206
+    ('main', 0x00274830, 'record_render.c'),  # main/tu207
+    ('main', 0x00277720, 'record_draw_strip.c'),  # main/tu208
+    ('main', 0x00277F78, 'record_turn_angle.c'),  # main/tu209
+    ('main', 0x002780E8, 'circle_draw.c'),  # main/tu210
+    ('main', 0x00278CF0, 'quad_draw.c'),  # main/tu211
+    ('main', 0x0027A6F0, 'sprite_batch_draw.c'),  # main/tu212
+    ('main', 0x0027A960, 'gs_queue.c'),  # main/tu213
+    ('main', 0x0027BFD0, 'effect_request.c'),  # main/tu214
+    ('main', 0x0027C930, 'msg_window_run.c'),  # main/tu215
+    ('main', 0x0027CAA0, 'msg_window_text.c'),  # main/tu216
+    ('main', 0x0027CBB0, 'msg_window_slot.c'),  # main/tu217
+    ('main', 0x0027CC58, 'msg_window_open.c'),  # main/tu218
+    ('main', 0x0027CD98, 'msg_window_move.c'),  # main/tu219
+    ('main', 0x0027CF90, 'msg_window_close.c'),  # main/tu220
+    ('main', 0x0027D2F8, 'msg_window_advance.c'),  # main/tu221
+    ('main', 0x0027D438, 'msg_window_scroll.c'),  # main/tu222
+    ('main', 0x0027D918, 'timecode_choice.c'),  # main/tu223
+    ('main', 0x0027DA20, 'timecode_hms.c'),  # main/tu224
+    ('main', 0x0027DCB0, 'timecode_forward.c'),  # main/tu225
+    ('main', 0x0027E148, 'interp_text.c'),  # main/tu226
+    ('main', 0x0027E1B8, 'interp_update.c'),  # main/tu227
+    ('main', 0x0027E600, 'talk_scan.c'),  # main/tu228
+    ('main', 0x0027E7E0, 'talk_script.c'),  # main/tu229
+    ('main', 0x002803D8, 'talk_window_frame.c'),  # main/tu230
+    ('main', 0x00280728, 'talk_draw_fade.c'),  # main/tu231
+    ('main', 0x00281A90, 'talk_text_box.c'),  # main/tu232
+    ('main', 0x00281BE0, 'talk_speaker_name.c'),  # main/tu233
+    ('main', 0x00281CA0, 'debt_box.c'),  # main/tu234
+    ('main', 0x00284300, 'msg_list_slot.c'),  # main/tu235
+    ('main', 0x002843D0, 'msg_window_layout.c'),  # main/tu236
+    ('main', 0x00284590, 'msg_window_center.c'),  # main/tu237
+    ('main', 0x00284620, 'msg_window_update.c'),  # main/tu238
+    ('main', 0x00285048, 'msg_window_size.c'),  # main/tu239
+    ('main', 0x002850B8, 'timecode_window.c'),  # main/tu240
+    ('main', 0x00285910, 'timecode_frames.c'),  # main/tu241
+    ('main', 0x002860D0, 'timecode_counter.c'),  # main/tu242
+    ('main', 0x00286ED0, 'ease_step.c'),  # main/tu243
+    ('main', 0x00286F50, 'msg_slot_center.c'),  # main/tu244
+    ('main', 0x00287120, 'text_tag.c'),  # main/tu245
+    ('main', 0x00287A08, 'xgl_font_width.c'),  # main/tu246
+    ('main', 0x0028B410, 'xeno_actor_set.c'),  # main/tu248
+    ('main', 0x00292D70, 'xgl_vector_ops.c'),  # main/tu254
+    ('main', 0x00292F00, 'xgl_cur_matrix.c'),  # main/tu255
+    ('main', 0x00293178, 'xgl_cur_mul.c'),  # main/tu256
+    ('main', 0x00295260, 'xac_eval.c'),  # main/tu259
+    ('main', 0x00297168, 'ti_dynamics_node.c'),  # main/tu263
+    ('main', 0x0029ACE0, 'ti_dynamics_coll_push.c'),  # main/tu270
+    ('main', 0x0029C288, 'undulate.c'),  # main/tu272
+    ('main', 0x0029E6A0, 'map_scan_node.c'),  # main/tu273
+    ('ov01', 0x00A80000, 'ov01_slot.c'),  # ov01/tu000
+    ('ov01', 0x00A801E0, 'ov01_task.c'),  # ov01/tu001
+    ('ov01', 0x00A80368, 'mons_slot_run.c'),  # ov01/tu002
+    ('ov01', 0x00A804D8, 'unit_side_table.c'),  # ov01/tu003
+    ('ov01', 0x00A80660, 'data_obj_table.c'),  # ov01/tu004
+    ('ov01', 0x00A807E8, 'obj_slot.c'),  # ov01/tu005
+    ('ov01', 0x00A80E40, 'gr_matrix.c'),  # ov01/tu006
+    ('ov01', 0x00A818E8, 'data_file_load.c'),  # ov01/tu008
+    ('ov01', 0x00A87E38, 'unit_tbl.c'),  # ov01/tu017
+    ('ov01', 0x00A88348, 'unit_fade.c'),  # ov01/tu018
+    ('ov01', 0x00A88A50, 'mons_slot.c'),  # ov01/tu019
+    ('ov01', 0x00A88C60, 'mons_slot_show.c'),  # ov01/tu020
+    ('ov01', 0x00A88CB0, 'mons_slot_fade.c'),  # ov01/tu021
+    ('ov01', 0x00A92150, 'cmd_exec.c'),  # ov01/tu033
+    ('ov01', 0x00A97110, 'event_stock.c'),  # ov01/tu034
+    ('ov01', 0x00A97180, 'tgt_select.c'),  # ov01/tu035
+    ('ov01', 0x00A97D68, 'choice_menu.c'),  # ov01/tu036
+    ('ov01', 0x00A99EC0, 'scene.c'),  # ov01/tu037
+    ('ov01', 0x00A9A4B0, 'scene_load.c'),  # ov01/tu038
+    ('ov01', 0x00A9AF68, 'scene_finish.c'),  # ov01/tu039
+    ('ov01', 0x00A9B0F8, 'scene_script.c'),  # ov01/tu040
+    ('ov01', 0x00A9B120, 'effect_pos.c'),  # ov01/tu041
+    ('ov01', 0x00A9B280, 'data_record_get.c'),  # ov01/tu042
+    ('ov01', 0x00A9C610, 'data_box.c'),  # ov01/tu043
+    ('ov01', 0x00A9C928, 'sb_vm.c'),  # ov01/tu044
+    ('ov01', 0x00A9EE28, 'sb_push_const.c'),  # ov01/tu045
+    ('ov01', 0x00A9F0A8, 'sb_natives.c'),  # ov01/tu046
+    ('ov01', 0x00A9FF80, 'sb_natives_unit.c'),  # ov01/tu047
+    ('ov01', 0x00AA5248, 'act_step_icon.c'),  # ov01/tu055
+    ('ov01', 0x00AA5390, 'menu_wep_sp_panel.c'),  # ov01/tu056
+    ('ov01', 0x00AA6148, 'menu_unit_panel.c'),  # ov01/tu058
+    ('ov01', 0x00AA6390, 'menu_unit_panel_open.c'),  # ov01/tu059
+    ('ov01', 0x00AA64A8, 'menu_icon_list.c'),  # ov01/tu060
+    ('ov01', 0x00AA6BF8, 'menu_combo_panel.c'),  # ov01/tu061
+    ('ov01', 0x00AA70E8, 'menu_panel.c'),  # ov01/tu062
+    ('ov01', 0x00AA8200, 'menu_tex_state.c'),  # ov01/tu063
+    ('ov01', 0x00AA8930, 'deco_flags.c'),  # ov01/tu066
+    ('ov01', 0x00AA8B70, 'screen_flash.c'),  # ov01/tu067
+    ('ov01', 0x00AA8C10, 'screen_fill.c'),  # ov01/tu068
+    ('ov01', 0x00AA8EA0, 'handle_table.c'),  # ov01/tu069
+    ('ov01', 0x00AA9058, 'handle_state.c'),  # ov01/tu070
+    ('ov01', 0x00AA90C8, 'snd_play.c'),  # ov01/tu071
+    ('ov01', 0x00AAB010, 'm_ef_path_debug.c'),  # ov01/tu076
+    ('ov01', 0x00AADBE0, 'm_ef_sway.c'),  # ov01/tu078
+    ('ov01', 0x00AAE748, 'm_ef_missile_trail.c'),  # ov01/tu079
+    ('ov01', 0x00AAEEE8, 'm_ef_spiral.c'),  # ov01/tu080
+    ('ov01', 0x00AAF718, 'm_ef_thunder25.c'),  # ov01/tu081
+    ('ov01', 0x00AB0088, 'm_ef_thunder31.c'),  # ov01/tu082
+    ('ov01', 0x00AB14E0, 'm_ef_flag_window.c'),  # ov01/tu084
+    ('ov01', 0x00AB1CE0, 'm_ef_wave.c'),  # ov01/tu085
+    ('ov01', 0x00AB2750, 'm_ef_spray.c'),  # ov01/tu086
+    ('ov01', 0x00AB3210, 'm_ef_actor_path.c'),  # ov01/tu088
+    ('ov01', 0x00AB3CC8, 'm_ef_actor_history.c'),  # ov01/tu089
+]
+
+
+def x1_file_name(unit, start, suggestion):
+    """A TU's name from SPLIT_CUTS / X1_FILE_NAMES / ROLE_FILE_NAMES when its first function is listed, else the suggestion."""
+    wanted = {(u, va): n for u, va, n in X1_FILE_NAMES}
+    wanted.update({(u, va): n for u, va, _, n, _ in SPLIT_CUTS})
+    name = wanted.get((unit.image.unit, start))
+    if name:
+        return dict(name=name, confidence='medium', basis='X1 file of its homologs (X1_FILE_NAMES / SPLIT_CUTS)')
+    name = {(u, va): n for u, va, n in ROLE_FILE_NAMES}.get((unit.image.unit, start))
+    if name:
+        return dict(name=name, confidence='medium', basis='named by its role (ROLE_FILE_NAMES)')
+    return suggestion
 
 def build_units(mean_functions, model_file, homologs, unit, zones, o0_homologs=None):
     """TU list of one image: inferred cuts inside game zones, one coarse record per other zone."""
@@ -1894,7 +2205,25 @@ def build_units(mean_functions, model_file, homologs, unit, zones, o0_homologs=N
                 head['ordinal'] = tu['ordinal']
             continue
         merged.append(tu)
-    return merged, stats
+    # Split only: a SPLIT_CUTS start opens a new TU with its own fixed ordinal, after every merge, so no
+    # other TU changes ordinal (the TU list stays in address order; data attribution uses that order).
+    splits = {va: (ordinal, why) for name, va, ordinal, _, why in SPLIT_CUTS if name == unit.image.unit}
+    result = []
+    for tu in merged:
+        current = tu
+        result.append(current)
+        for i in tu['_indices'][1:]:
+            if unit.vas[i] in splits:
+                ordinal, why = splits[unit.vas[i]]
+                at = current['_indices'].index(i)
+                piece = dict(current, _indices=current['_indices'][at:], ordinal=ordinal, data={}, _cut=None,
+                             _merge=None, _split=why)
+                piece.pop('_merged', None)
+                current['_indices'] = current['_indices'][:at]
+                result.append(piece)
+                current = piece
+                stats['cuts_split'] += 1
+    return result, stats
 
 
 def render_main_tu(unit, tu, names, homologs, model_file):
@@ -1910,7 +2239,10 @@ def render_main_tu(unit, tu, names, homologs, model_file):
     in_game = zone['cls'] == 'game'
     if in_game:
         evidence, confidence = boundary_record(tu.get('_cuts', {}), tu['_cut'], tu.get('_odds'), model_file)
+        if tu.get('_split'):
+            evidence, confidence = [f'split: {tu["_split"]}'], 'medium'
         name, files = suggest_name(unit, indices, names, homologs, tu['ordinal'])
+        name = x1_file_name(unit, first['va'], name)
     else:
         evidence, confidence = [f'coarse zone: {zone["evidence"]}'], 'zone'
         name, files = dict(name=zone['stem'] + '.s', confidence='low', basis='zone label, not an object'), []
@@ -1938,8 +2270,14 @@ def render_overlay_tu(unit, unit_name, tu, names, homologs, model_file):
     start = unit.functions[indices[0]]['va']
     end = tu.get('_next_start', unit.functions[indices[-1]]['end'])
     evidence, confidence = boundary_record(tu.get('_cuts', {}), tu['_cut'], tu.get('_odds'), model_file)
+    if tu.get('_split'):
+        evidence, confidence = [f'split: {tu["_split"]}'], 'medium'
     name, files = suggest_name(unit, indices, names, homologs, tu['ordinal'])
+    name = x1_file_name(unit, start, name)
     stem = re.sub(r'\.(c|s)$', '', name['name'])
+    # Overlay files are named by ordinal, except a TU whose name is listed (X1_FILE_NAMES / SPLIT_CUTS / ROLE_FILE_NAMES).
+    listed_name = stem if name['basis'].startswith(('X1 file of its homologs (X1_FILE_NAMES',
+                                                       'named by its role (ROLE_FILE_NAMES)')) else None
     data = []
     for family, row in tu['data'].items():
         data.append(dict(family='unsplit', start_window=[row['lower_bound_start'], row['anchored_start']],
@@ -1956,7 +2294,8 @@ def render_overlay_tu(unit, unit_name, tu, names, homologs, model_file):
         global_function_count=None, functions=function_table(unit, names, indices), local_data_symbols=[],
         data_contributions=data, source_file_strings=files, suggested_name=stem,
         suggested_path=f'src/{unit_name}/{stem}.c', suggested_name_basis=name['basis'],
-        suggested_name_confidence=name['confidence'], accepted_functions=0, accepted_unit_records=[],
+        suggested_name_confidence=name['confidence'], **({'file_name': listed_name} if listed_name else {}),
+        accepted_functions=0, accepted_unit_records=[],
         accepted_sources=[], accepted_function_list=[], provisional_tus={}, names_also_defined_in_main=[],
         global_data=[], subsystem=None, in_scope=True,
         x1_homologs=sorted({homologs[unit.vas[i]][1] for i in indices if unit.vas[i] in homologs}))
@@ -2030,7 +2369,8 @@ def overlay_rodata_pieces(unit, tus, low, high):
         if len(ordinals) == 1 and all(i in owner for i in who):
             claims[next(iter(ordinals))].append(target)
     cuts = sorted(((min(targets) & ~3, ordinal) for ordinal, targets in claims.items()))
-    order = [ordinal for _, ordinal in cuts]
+    rank = {tu['ordinal']: position for position, tu in enumerate(tus)}   # address order (SPLIT_CUTS ordinals)
+    order = [rank[ordinal] for _, ordinal in cuts]
     monotonic = order == sorted(order)
     if cuts:
         cuts[0] = (low, cuts[0][1])
@@ -2072,6 +2412,7 @@ OVERLAY_BIASED_REFERENCES = [
 def overlay_link_order_pieces(unit, unit_name, tus, low, high):
     """([(ordinal, start, end, anchors)], [(target, ordinal) outside the chain]) of [low, high) of an overlay."""
     owner = {i: tu['ordinal'] for tu in tus for i in tu['_indices']}
+    rank = {tu['ordinal']: position for position, tu in enumerate(tus)}   # address order (SPLIT_CUTS ordinals)
     users = collections.defaultdict(set)
     for table in (unit.users, unit.indexed_users):
         for target, who in table.items():
@@ -2089,13 +2430,13 @@ def overlay_link_order_pieces(unit, unit_name, tus, low, high):
             continue
         ordinals = {owner.get(i) for i in users[target]} - {None}
         weight = 2 if len(ordinals) == 1 and all(i in owner for i in users[target]) else 1
-        candidates += [(target, ordinal, weight) for ordinal in sorted(ordinals)]
-    # Heaviest chain with strictly increasing targets and non-decreasing ordinals (O(n^2), n is small).
+        candidates += [(target, ordinal, weight) for ordinal in sorted(ordinals, key=rank.get)]
+    # Heaviest chain with strictly increasing targets and non-decreasing TU positions (O(n^2), n is small).
     best = [w for _, _, w in candidates]
     back = [-1] * len(candidates)
     for k, (target, ordinal, weight) in enumerate(candidates):
         for j in range(k):
-            if candidates[j][0] < target and candidates[j][1] <= ordinal and best[j] + weight > best[k]:
+            if candidates[j][0] < target and rank[candidates[j][1]] <= rank[ordinal] and best[j] + weight > best[k]:
                 best[k], back[k] = best[j] + weight, j
     chain = []
     k = max(range(len(candidates)), key=lambda i: (best[i], -i)) if candidates else -1

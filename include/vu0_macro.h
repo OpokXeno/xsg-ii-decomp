@@ -338,8 +338,8 @@
         : "r" (destination), "r" (source) \
         : "memory")
 
-/* The current matrix (vf26-vf29, as the vu0* rotation functions of tu152/tu153 keep it) = identity: rows 0-2
- * from the identity table, row 3 from vf0. */
+/* The current matrix (vf26-vf29, as the vu0* rotation functions of vu0_matrix.c/vu0_rotate.c keep it) =
+ * identity: rows 0-2 from the identity table, row 3 from vf0. */
 #define Vu0SetCurrentIdentity(identity) \
     __asm__ __volatile__( \
         "lqc2 vf26, 0(%0)\n" \

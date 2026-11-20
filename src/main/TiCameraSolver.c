@@ -1,8 +1,11 @@
 #include "common.h"
 #include "shared.h"
-#include "main/tu026.h"
+#include "main/assert_fail.h"
+#include "main/TiCameraSolver.h"
+#include "main/xgl_camera.h"
 
-void func_0028D4C8(void)
+#include "main/xgl_2.h"
+void tiCameraSolverDummy(void)
 {
 }
 
@@ -18,31 +21,27 @@ f32 tiCameraFovDegrees(f32 focal_length_mm, f32 frame_size)
     return 2.0f * atanf(half_frame / (focal_length_mm * 0.03937f)) * 57.29578f;
 }
 
-/* Channel written by the scalar and angle readers at camera +0x90. */
+/* The scalar and angle readers zero two words of the camera's travel block (fov_velocity and scale of
+ * XglCamera.travel) with integer stores; as float members they are stored as 0.0f, which changes the code (.text DIFF).
+ * This view of travel.focus..scale keeps those two words int. */
 typedef struct TiCameraChannel {
     unsigned char unmodeled_00[4];
-    float value;
-    int unknown_08;
-    int unknown_0c;
+    float value;                /* travel.fov */
+    int unknown_08;             /* travel.fov_velocity */
+    int unknown_0c;             /* travel.scale */
 } TiCameraChannel;
-
-/* Camera record (pCam). Only the fields the three readers touch are named. */
-typedef struct TiCamera {
-    unsigned char unmodeled_00[0x90];
-    TiCameraChannel channel;
-    Vector4 euler;
-    unsigned char unmodeled_b0[0x20];
-    float position[3];
-} TiCamera;
 
 extern const char tiCameraAssertPData[];
 extern const char tiCameraSourceFile[];
 extern const char tiCameraAssertPCam[];
-void xacEvalJointPose(f32 *values, void **ppJointHeader, f32 curveParam);
-void xacEvalJointValue(f32 curveParam, f32 *values, void **ppJointHeader);
-void xglEulerFromRotation(Vector4 *euler, Vector4 *rotation);
+/* Declared void here although TiXacAnimCurve.h gives them a pointer return: the return value is unused, and a
+ * pointer return changes the register allocation of the callers (check.py: the dead v0 result forces the camera
+ * address into v1). The definitions really return the advanced cursor (a void definition changes TiXacAnimCurve.c), so
+ * the header form cannot be used here. */
+void xacEvalJointPose(f32 *values, u8 **ppJointHeader, f32 curveParam);
+void xacEvalJointValue(f32 curveParam, f32 *values, u8 **ppJointHeader);
 
-void tiCameraReadPose(TiCamera *camera, void **ppData, f32 curveParam)
+void tiCameraReadPose(XglCamera *camera, u8 **ppData, f32 curveParam)
 {
     /* Three position values, then three rotation angles, as xacEvalJointPose writes them. */
     f32 pose[6];
@@ -57,16 +56,16 @@ void tiCameraReadPose(TiCamera *camera, void **ppData, f32 curveParam)
         assertFailed(tiCameraAssertPCam, tiCameraSourceFile, 29);
     }
     xacEvalJointPose(pose, ppData, curveParam);
-    camera->position[0] = pose[0];
-    camera->position[1] = pose[1];
-    camera->position[2] = pose[2];
+    camera->travel.position.x = pose[0];
+    camera->travel.position.y = pose[1];
+    camera->travel.position.z = pose[2];
     rotation.x = pose[3];
     rotation.y = pose[4];
     rotation.z = pose[5];
-    xglEulerFromRotation(&camera->euler, &rotation);
+    xglEulerFromRotation(&camera->travel.rotation, &rotation);
 }
 
-void tiCameraReadScalar(TiCamera *camera, void **ppData, f32 curveParam)
+void tiCameraReadScalar(XglCamera *camera, u8 **ppData, f32 curveParam)
 {
     f32 sample;
     TiCameraChannel *channel;
@@ -78,12 +77,12 @@ void tiCameraReadScalar(TiCamera *camera, void **ppData, f32 curveParam)
         assertFailed(tiCameraAssertPCam, tiCameraSourceFile, 57);
     }
     xacEvalJointValue(curveParam, &sample, ppData);
-    channel = &camera->channel;
+    channel = (TiCameraChannel *)&camera->travel;
     channel->unknown_08 = channel->unknown_0c = 0;
     channel->value = sample;
 }
 
-void tiCameraReadAngle(TiCamera *camera, void **ppData, f32 curveParam)
+void tiCameraReadAngle(XglCamera *camera, u8 **ppData, f32 curveParam)
 {
     f32 sample;
     TiCameraChannel *channel;
@@ -95,20 +94,20 @@ void tiCameraReadAngle(TiCamera *camera, void **ppData, f32 curveParam)
         assertFailed(tiCameraAssertPCam, tiCameraSourceFile, 77);
     }
     xacEvalJointValue(curveParam, &sample, ppData);
-    channel = &camera->channel;
+    channel = (TiCameraChannel *)&camera->travel;
     channel->unknown_0c = 0;
     channel->unknown_08 = 0;
     channel->value = sample * 3.1415927f / 180.0f;
 }
 
-/* Camera record: three header words, then `record[1]` picks the layout (< 1.1 uses the
- * scalar reader, otherwise the angle reader). The data cursor starts at record[3]. */
-void tiCameraReadRecord(TiCamera *camera, f32 *record, f32 value)
+/* Camera animation record: three header words, then `version` picks the layout (< 1.1 uses the
+ * scalar reader, otherwise the angle reader). The data cursor starts after the header. */
+void tiCameraReadRecord(XglCamera *camera, TiCameraRecord *record, f32 value)
 {
-    void *stream;
+    u8 *stream;
 
-    stream = &record[3];
-    if (record[1] < 1.1f)
+    stream = record->data;
+    if (record->version < 1.1f)
     {
         tiCameraReadPose(camera, &stream, value);
         tiCameraReadScalar(camera, &stream, value);

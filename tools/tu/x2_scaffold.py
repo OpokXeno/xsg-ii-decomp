@@ -76,8 +76,19 @@ SOFT_FLOAT_LIBCALLS = {0x002A7560: "litodp", 0x002A70E8: "dpmul", 0x002A7398: "d
 # data without a label at that address. Hand edits of the output were lost at a regeneration
 # (2026-11-13), so they live here. Renamed labels must be renamed here too.
 EXTRA_PROVIDES = (
-    ("func_00A89428", 0x00A89428, "ov01, inside func_00A89340: testMenuCallbacks[0]"),
-    ("func_00A920EC", 0x00A920EC, "ov01, inside actStockRemoveStock: called by the text scale options"),
+    ("testCfEventToolRun", 0x00A89428, "test overlay 98 entry, mid-function in ov01: testMenuCallbacks[0] (CFEventTool)"),
+    ("testWindowGetUserData", 0x00A920EC, "test overlay 98 entry, mid-function in ov01: the heap window's user data"),
+    ("testOverlayMenuOpen", 0x00A82EEC, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
+    ("testWindowDrawLine", 0x00A90DF8, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
+    ("testWindowShow", 0x00A91668, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
+    ("testWindowFindByName", 0x00A917D4, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
+    ("testWindowGetInfo", 0x00A91AF4, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
+    ("testWindowClearRows", 0x00A91E04, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
+    ("testWindowSetColumnTable", 0x00A9229C, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
+    ("testWindowAddRow", 0x00A923D8, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
+    ("testWindowSetRefreshCallback", 0x00A9262C, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
+    ("testWindowCreate", 0x00A92704, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
+    ("testWindowSetText", 0x00AB847C, "test overlay 98 entry called by src/main/test_128.c (not a function of main/ov01/ov02)"),
     ("D_0069DA38", 0x0069DA38, "tu126 .sdata: 8-byte SJIS mark entry; scaffold label split at +1 (D_0069DA39)"),
     ("D_0069DA40", 0x0069DA40, "tu126 .sdata: 8-byte SJIS mark entry; scaffold label split at +1 (D_0069DA41)"),
     ("D_0069DA48", 0x0069DA48, "tu126 .sdata: 8-byte SJIS mark entry; scaffold label split at +1 (D_0069DA49)"),
@@ -127,6 +138,8 @@ def json_text(data):
 def tu_file_name(tu, used):
     """A TU's file stem: its evidence-backed name, otherwise its neutral id."""
     ordinal = f"tu{tu['ordinal']:03d}"
+    if tu.get("file_name"):     # an overlay TU named by its X1 file (tools/tu/map_infer.py X1_FILE_NAMES)
+        return tu["file_name"]
     suggestion = tu.get("suggested_name") or {}
     if not isinstance(suggestion, dict) or suggestion.get("confidence") not in ("high", "medium"):
         return ordinal
@@ -272,14 +285,16 @@ TYPED_DATA_SYMBOLS = {
 
 
 def data_symbol_lines(unit):
-    """Data labels chosen for one unit's link (tools/tu/x1_port.py plan), after its functions."""
-    typed = "".join(f"{name} = 0x{va:08X}; // type:{kind}\n"
-                    for va, (name, kind) in sorted((TYPED_DATA_SYMBOLS.get(unit) or {}).items()))
-    if not REVIEWED_DATA.is_file():
-        return typed
-    wanted = json.loads(REVIEWED_DATA.read_bytes()).get("units", {}).get(unit) or {}
-    return typed + "".join(f"{name} = 0x{int(va, 16):08X};\n"
-                           for va, name in sorted(wanted.items(), key=lambda item: int(item[0], 16)))
+    """Data labels chosen for one unit's link (tools/tu/x1_port.py plan), after its functions.
+    A typed label takes its reviewed name when config/symbols/data-names.json has one (one symbol per address)."""
+    wanted = {}
+    if REVIEWED_DATA.is_file():
+        wanted = {int(va, 16): name for va, name in
+                  (json.loads(REVIEWED_DATA.read_bytes()).get("units", {}).get(unit) or {}).items()}
+    typed_rows = TYPED_DATA_SYMBOLS.get(unit) or {}
+    typed = "".join(f"{wanted.get(va, name)} = 0x{va:08X}; // type:{kind}\n"
+                    for va, (name, kind) in sorted(typed_rows.items()))
+    return typed + "".join(f"{name} = 0x{va:08X};\n" for va, name in sorted(wanted.items()) if va not in typed_rows)
 
 
 def overlay_main_data_lines(unit, taken):

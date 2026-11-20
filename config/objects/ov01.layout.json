@@ -1,319 +1,271 @@
 {
  "provenance": "estimated",
  "text": {
-  "ov01/tu000": [
+  "ov01/ov01_slot": [
    "0x00a80000",
    "0x00a801e0"
   ],
-  "ov01/tu001": [
+  "ov01/ov01_task": [
    "0x00a801e0",
    "0x00a80368"
   ],
-  "ov01/tu002": [
+  "ov01/mons_slot_run": [
    "0x00a80368",
    "0x00a804d8"
   ],
-  "ov01/tu003": [
+  "ov01/unit_side_table": [
    "0x00a804d8",
    "0x00a80660"
   ],
-  "ov01/tu004": [
+  "ov01/data_obj_table": [
    "0x00a80660",
    "0x00a807e8"
   ],
-  "ov01/tu005": [
+  "ov01/obj_slot": [
    "0x00a807e8",
    "0x00a80e40"
   ],
-  "ov01/tu006": [
+  "ov01/gr_matrix": [
    "0x00a80e40",
-   "0x00a814a8"
+   "0x00a811f8"
   ],
-  "ov01/tu007": [
-   "0x00a814a8",
+  "ov01/obj": [
+   "0x00a811f8",
    "0x00a818e8"
   ],
-  "ov01/tu008": [
+  "ov01/data_file_load": [
    "0x00a818e8",
    "0x00a83d28"
   ],
-  "ov01/tu009": [
+  "ov01/data_unit_org_get": [
    "0x00a83d28",
    "0x00a840f0"
   ],
-  "ov01/tu010": [
+  "ov01/unit_cmd": [
    "0x00a840f0",
-   "0x00a84430"
-  ],
-  "ov01/tu011": [
-   "0x00a84430",
-   "0x00a84830"
-  ],
-  "ov01/tu012": [
-   "0x00a84830",
-   "0x00a85a80"
-  ],
-  "ov01/tu013": [
-   "0x00a85a80",
-   "0x00a862d8"
-  ],
-  "ov01/tu014": [
-   "0x00a862d8",
-   "0x00a865d8"
-  ],
-  "ov01/tu015": [
-   "0x00a865d8",
-   "0x00a86cb0"
-  ],
-  "ov01/tu016": [
-   "0x00a86cb0",
    "0x00a87e38"
   ],
-  "ov01/tu017": [
+  "ov01/unit_tbl": [
    "0x00a87e38",
    "0x00a88348"
   ],
-  "ov01/tu018": [
+  "ov01/unit_fade": [
    "0x00a88348",
    "0x00a88a50"
   ],
-  "ov01/tu019": [
+  "ov01/mons_slot": [
    "0x00a88a50",
    "0x00a88c60"
   ],
-  "ov01/tu020": [
+  "ov01/mons_slot_show": [
    "0x00a88c60",
    "0x00a88cb0"
   ],
-  "ov01/tu021": [
+  "ov01/mons_slot_fade": [
    "0x00a88cb0",
    "0x00a88e70"
   ],
-  "ov01/tu022": [
+  "ov01/battle_init": [
    "0x00a88e70",
    "0x00a8a8b8"
   ],
-  "ov01/tu023": [
+  "ov01/calc": [
    "0x00a8a8b8",
    "0x00a92150"
   ],
-  "ov01/tu033": [
+  "ov01/cmd_exec": [
    "0x00a92150",
    "0x00a97110"
   ],
-  "ov01/tu034": [
+  "ov01/event_stock": [
    "0x00a97110",
    "0x00a97180"
   ],
-  "ov01/tu035": [
+  "ov01/tgt_select": [
    "0x00a97180",
    "0x00a97d68"
   ],
-  "ov01/tu036": [
+  "ov01/choice_menu": [
    "0x00a97d68",
    "0x00a99ec0"
   ],
-  "ov01/tu037": [
+  "ov01/scene": [
    "0x00a99ec0",
    "0x00a9a4b0"
   ],
-  "ov01/tu038": [
+  "ov01/scene_load": [
    "0x00a9a4b0",
    "0x00a9af68"
   ],
-  "ov01/tu039": [
+  "ov01/scene_finish": [
    "0x00a9af68",
    "0x00a9b0f8"
   ],
-  "ov01/tu040": [
+  "ov01/scene_script": [
    "0x00a9b0f8",
    "0x00a9b120"
   ],
-  "ov01/tu041": [
+  "ov01/effect_pos": [
    "0x00a9b120",
    "0x00a9b280"
   ],
-  "ov01/tu042": [
+  "ov01/data_record_get": [
    "0x00a9b280",
    "0x00a9bc08"
   ],
-  "ov01/tu091": [
+  "ov01/think_dispatch": [
    "0x00a9bc08",
    "0x00a9c610"
   ],
-  "ov01/tu043": [
+  "ov01/data_box": [
    "0x00a9c610",
    "0x00a9c928"
   ],
-  "ov01/tu044": [
+  "ov01/sb_vm": [
    "0x00a9c928",
    "0x00a9ee28"
   ],
-  "ov01/tu045": [
+  "ov01/sb_push_const": [
    "0x00a9ee28",
    "0x00a9f0a8"
   ],
-  "ov01/tu046": [
+  "ov01/sb_natives": [
    "0x00a9f0a8",
    "0x00a9ff80"
   ],
-  "ov01/tu047": [
+  "ov01/sb_natives_unit": [
    "0x00a9ff80",
    "0x00aa1be0"
   ],
-  "ov01/tu048": [
+  "ov01/gr_gp_init": [
    "0x00aa1be0",
-   "0x00aa2ce0"
+   "0x00aa2d18"
   ],
-  "ov01/tu049": [
-   "0x00aa2ce0",
-   "0x00aa3928"
-  ],
-  "ov01/tu050": [
-   "0x00aa3928",
-   "0x00aa3e28"
-  ],
-  "ov01/tu051": [
-   "0x00aa3e28",
-   "0x00aa4280"
-  ],
-  "ov01/tu052": [
-   "0x00aa4280",
-   "0x00aa4670"
-  ],
-  "ov01/tu053": [
-   "0x00aa4670",
-   "0x00aa4bd8"
-  ],
-  "ov01/tu054": [
-   "0x00aa4bd8",
+  "ov01/menu": [
+   "0x00aa2d18",
    "0x00aa5248"
   ],
-  "ov01/tu055": [
+  "ov01/act_step_icon": [
    "0x00aa5248",
    "0x00aa5390"
   ],
-  "ov01/tu056": [
+  "ov01/menu_wep_sp_panel": [
    "0x00aa5390",
    "0x00aa6148"
   ],
-  "ov01/tu058": [
+  "ov01/menu_unit_panel": [
    "0x00aa6148",
    "0x00aa6390"
   ],
-  "ov01/tu059": [
+  "ov01/menu_unit_panel_open": [
    "0x00aa6390",
    "0x00aa64a8"
   ],
-  "ov01/tu060": [
+  "ov01/menu_icon_list": [
    "0x00aa64a8",
    "0x00aa6bf8"
   ],
-  "ov01/tu061": [
+  "ov01/menu_combo_panel": [
    "0x00aa6bf8",
    "0x00aa70e8"
   ],
-  "ov01/tu062": [
+  "ov01/menu_panel": [
    "0x00aa70e8",
    "0x00aa8200"
   ],
-  "ov01/tu063": [
+  "ov01/menu_tex_state": [
    "0x00aa8200",
    "0x00aa8590"
   ],
-  "ov01/tu064": [
+  "ov01/entry_first_init": [
    "0x00aa8590",
    "0x00aa8930"
   ],
-  "ov01/tu066": [
+  "ov01/deco_flags": [
    "0x00aa8930",
    "0x00aa8b70"
   ],
-  "ov01/tu067": [
+  "ov01/screen_flash": [
    "0x00aa8b70",
    "0x00aa8c10"
   ],
-  "ov01/tu068": [
+  "ov01/screen_fill": [
    "0x00aa8c10",
    "0x00aa8ea0"
   ],
-  "ov01/tu069": [
+  "ov01/handle_table": [
    "0x00aa8ea0",
    "0x00aa9058"
   ],
-  "ov01/tu070": [
+  "ov01/handle_state": [
    "0x00aa9058",
    "0x00aa90c8"
   ],
-  "ov01/tu071": [
+  "ov01/snd_play": [
    "0x00aa90c8",
    "0x00aa9340"
   ],
-  "ov01/tu072": [
+  "ov01/debug_entry": [
    "0x00aa9340",
-   "0x00aaaa50"
-  ],
-  "ov01/tu073": [
-   "0x00aaaa50",
    "0x00aaab80"
   ],
-  "ov01/tu074": [
+  "ov01/yamamoto_test": [
    "0x00aaab80",
    "0x00aaad58"
   ],
-  "ov01/tu075": [
+  "ov01/m_gs": [
    "0x00aaad58",
    "0x00aab010"
   ],
-  "ov01/tu076": [
+  "ov01/m_ef_path_debug": [
    "0x00aab010",
    "0x00aab888"
   ],
-  "ov01/tu077": [
+  "ov01/m_ef": [
    "0x00aab888",
    "0x00aadbe0"
   ],
-  "ov01/tu078": [
+  "ov01/m_ef_sway": [
    "0x00aadbe0",
    "0x00aae748"
   ],
-  "ov01/tu079": [
+  "ov01/m_ef_missile_trail": [
    "0x00aae748",
    "0x00aaeee8"
   ],
-  "ov01/tu080": [
+  "ov01/m_ef_spiral": [
    "0x00aaeee8",
    "0x00aaf718"
   ],
-  "ov01/tu081": [
+  "ov01/m_ef_thunder25": [
    "0x00aaf718",
    "0x00ab0088"
   ],
-  "ov01/tu082": [
+  "ov01/m_ef_thunder31": [
    "0x00ab0088",
    "0x00ab0a38"
   ],
-  "ov01/tu083": [
+  "ov01/m_ef_create_smp_01": [
    "0x00ab0a38",
    "0x00ab14e0"
   ],
-  "ov01/tu084": [
+  "ov01/m_ef_flag_window": [
    "0x00ab14e0",
    "0x00ab1ce0"
   ],
-  "ov01/tu085": [
+  "ov01/m_ef_wave": [
    "0x00ab1ce0",
    "0x00ab2750"
   ],
-  "ov01/tu086": [
+  "ov01/m_ef_spray": [
    "0x00ab2750",
    "0x00ab3210"
   ],
-  "ov01/tu088": [
+  "ov01/m_ef_actor_path": [
    "0x00ab3210",
    "0x00ab3cc8"
   ],
-  "ov01/tu089": [
+  "ov01/m_ef_actor_history": [
    "0x00ab3cc8",
    "0x00ab44fc"
   ]
@@ -321,511 +273,466 @@
  "families": {
   ".data": [
    [
-    "ov01/tu008",
+    "ov01/data_file_load",
     "0x00ab44fc",
     "0x00ab5548"
    ],
    [
-    "ov01/tu012",
+    "ov01/unit_cmd",
     "0x00ab5548",
     "0x00ab55e8"
    ],
    [
-    "ov01/tu020",
+    "ov01/mons_slot_show",
     "0x00ab55e8",
     "0x00ab55f0"
    ],
    [
-    "ov01/tu022",
+    "ov01/battle_init",
     "0x00ab55f0",
     "0x00ab5978"
    ],
    [
-    "ov01/tu023",
+    "ov01/calc",
     "0x00ab5978",
     "0x00ab5a40"
    ],
    [
-    "ov01/tu033",
+    "ov01/cmd_exec",
     "0x00ab5a40",
     "0x00ab5b80"
    ],
    [
-    "ov01/tu035",
+    "ov01/tgt_select",
     "0x00ab5b80",
     "0x00ab5bd0"
    ],
    [
-    "ov01/tu036",
+    "ov01/choice_menu",
     "0x00ab5bd0",
     "0x00ab5cd0"
    ],
    [
-    "ov01/tu038",
+    "ov01/scene_load",
     "0x00ab5cd0",
     "0x00ab5cf0"
    ],
    [
-    "ov01/tu041",
+    "ov01/effect_pos",
     "0x00ab5cf0",
     "0x00ab5f28"
    ],
    [
-    "ov01/tu042",
+    "ov01/data_record_get",
     "0x00ab5f28",
     "0x00ab5f90"
    ],
    [
-    "ov01/tu044",
+    "ov01/sb_vm",
     "0x00ab5f90",
     "0x00ab6078"
    ],
    [
-    "ov01/tu047",
+    "ov01/sb_natives_unit",
     "0x00ab6078",
     "0x00ab62a0"
    ],
    [
-    "ov01/tu048",
+    "ov01/gr_gp_init",
     "0x00ab62a0",
     "0x00ab62b0"
    ],
    [
-    "ov01/tu050",
+    "ov01/menu",
     "0x00ab62b0",
-    "0x00ab62d8"
-   ],
-   [
-    "ov01/tu051",
-    "0x00ab62d8",
-    "0x00ab64c0"
-   ],
-   [
-    "ov01/tu052",
-    "0x00ab64c0",
-    "0x00ab6500"
-   ],
-   [
-    "ov01/tu054",
-    "0x00ab6500",
     "0x00ab6548"
    ],
    [
-    "ov01/tu055",
+    "ov01/act_step_icon",
     "0x00ab6548",
     "0x00ab6588"
    ],
    [
-    "ov01/tu056",
+    "ov01/menu_wep_sp_panel",
     "0x00ab6588",
     "0x00ab6600"
    ],
    [
-    "ov01/tu060",
+    "ov01/menu_icon_list",
     "0x00ab6600",
     "0x00ab6608"
    ],
    [
-    "ov01/tu061",
+    "ov01/menu_combo_panel",
     "0x00ab6608",
     "0x00ab6658"
    ],
    [
-    "ov01/tu062",
+    "ov01/menu_panel",
     "0x00ab6658",
     "0x00ab68b8"
    ],
    [
-    "ov01/tu063",
+    "ov01/menu_tex_state",
     "0x00ab68b8",
     "0x00ab6ab8"
    ],
    [
-    "ov01/tu071",
+    "ov01/snd_play",
     "0x00ab6ab8",
     "0x00ab6ad0"
    ],
    [
-    "ov01/tu072",
+    "ov01/debug_entry",
     "0x00ab6ad0",
     "0x00ab6bc4"
    ],
    [
-    "ov01/tu075",
+    "ov01/m_gs",
     "0x00ab6bc4",
     "0x00ab6c40"
    ],
    [
-    "ov01/tu077",
+    "ov01/m_ef",
     "0x00ab6c40",
     "0x00ab8c40"
    ],
    [
-    "ov01/tu078",
+    "ov01/m_ef_sway",
     "0x00ab8c40",
     "0x00ab8c48"
    ],
    [
-    "ov01/tu079",
+    "ov01/m_ef_missile_trail",
     "0x00ab8c48",
     "0x00ab8c50"
    ],
    [
-    "ov01/tu081",
+    "ov01/m_ef_thunder25",
     "0x00ab8c50",
     "0x00ab8c78"
    ],
    [
-    "ov01/tu082",
+    "ov01/m_ef_thunder31",
     "0x00ab8c78",
     "0x00ab8ca0"
    ]
   ],
   ".rodata": [
    [
-    "ov01/tu008",
+    "ov01/data_file_load",
     "0x00ab8ca0",
     "0x00aba260"
    ],
    [
-    "ov01/tu013",
+    "ov01/unit_cmd",
     "0x00aba260",
-    "0x00aba280"
-   ],
-   [
-    "ov01/tu014",
-    "0x00aba280",
-    "0x00aba2a0"
-   ],
-   [
-    "ov01/tu016",
-    "0x00aba2a0",
     "0x00aba340"
    ],
    [
-    "ov01/tu022",
+    "ov01/battle_init",
     "0x00aba340",
     "0x00aba370"
    ],
    [
-    "ov01/tu023",
+    "ov01/calc",
     "0x00aba370",
     "0x00aba440"
    ],
    [
-    "ov01/tu033",
+    "ov01/cmd_exec",
     "0x00aba440",
     "0x00aba590"
    ],
    [
-    "ov01/tu035",
+    "ov01/tgt_select",
     "0x00aba590",
     "0x00aba5b0"
    ],
    [
-    "ov01/tu036",
+    "ov01/choice_menu",
     "0x00aba5b0",
     "0x00aba6a0"
    ],
    [
-    "ov01/tu091",
+    "ov01/think_dispatch",
     "0x00aba6a0",
     "0x00aba880"
    ],
    [
-    "ov01/tu044",
+    "ov01/sb_vm",
     "0x00aba880",
     "0x00aba8d0"
    ],
    [
-    "ov01/tu047",
+    "ov01/sb_natives_unit",
     "0x00aba8d0",
     "0x00abaca8"
    ],
    [
-    "ov01/tu048",
+    "ov01/gr_gp_init",
     "0x00abaca8",
     "0x00abacc8"
    ],
    [
-    "ov01/tu051",
+    "ov01/menu",
     "0x00abacc8",
     "0x00abacd0"
    ],
    [
-    "ov01/tu056",
+    "ov01/menu_wep_sp_panel",
     "0x00abacd0",
     "0x00abad60"
    ],
    [
-    "ov01/tu072",
+    "ov01/debug_entry",
     "0x00abad60",
     "0x00abb010"
    ],
    [
-    "ov01/tu075",
+    "ov01/m_gs",
     "0x00abb010",
     "0x00abb0a0"
    ],
    [
-    "ov01/tu076",
+    "ov01/m_ef_path_debug",
     "0x00abb0a0",
     "0x00abb108"
    ],
    [
-    "ov01/tu077",
+    "ov01/m_ef",
     "0x00abb108",
     "0x00abb450"
    ],
    [
-    "ov01/tu078",
+    "ov01/m_ef_sway",
     "0x00abb450",
     "0x00abb4b0"
    ],
    [
-    "ov01/tu079",
+    "ov01/m_ef_missile_trail",
     "0x00abb4b0",
     "0x00abb510"
    ],
    [
-    "ov01/tu080",
+    "ov01/m_ef_spiral",
     "0x00abb510",
     "0x00abb530"
    ],
    [
-    "ov01/tu081",
+    "ov01/m_ef_thunder25",
     "0x00abb530",
     "0x00abb570"
    ],
    [
-    "ov01/tu082",
+    "ov01/m_ef_thunder31",
     "0x00abb570",
     "0x00abb5a0"
    ],
    [
-    "ov01/tu083",
+    "ov01/m_ef_create_smp_01",
     "0x00abb5a0",
     "0x00abb690"
    ],
    [
-    "ov01/tu084",
+    "ov01/m_ef_flag_window",
     "0x00abb690",
     "0x00abb6a0"
    ],
    [
-    "ov01/tu085",
+    "ov01/m_ef_wave",
     "0x00abb6a0",
     "0x00abb770"
    ],
    [
-    "ov01/tu086",
+    "ov01/m_ef_spray",
     "0x00abb770",
     "0x00abb7d0"
    ],
    [
-    "ov01/tu088",
+    "ov01/m_ef_actor_path",
     "0x00abb7d0",
     "0x00abb850"
    ],
    [
-    "ov01/tu089",
+    "ov01/m_ef_actor_history",
     "0x00abb850",
     "0x00abb870"
    ]
   ],
   ".bss": [
    [
-    "ov01/tu000",
+    "ov01/ov01_slot",
     "0x00abb870",
     "0x00abb930"
    ],
    [
-    "ov01/tu001",
+    "ov01/ov01_task",
     "0x00abb930",
     "0x00abbcb0"
    ],
    [
-    "ov01/tu002",
+    "ov01/mons_slot_run",
     "0x00abbcb0",
     "0x00abbdf0"
    ],
    [
-    "ov01/tu003",
+    "ov01/unit_side_table",
     "0x00abbdf0",
     "0x00abcf60"
    ],
    [
-    "ov01/tu004",
+    "ov01/data_obj_table",
     "0x00abcf60",
     "0x00abd320"
    ],
    [
-    "ov01/tu005",
+    "ov01/obj_slot",
     "0x00abd320",
     "0x00abff28"
    ],
    [
-    "ov01/tu008",
+    "ov01/data_file_load",
     "0x00abff28",
     "0x00ac1038"
    ],
    [
-    "ov01/tu009",
+    "ov01/data_unit_org_get",
     "0x00ac1038",
     "0x00ac1040"
    ],
    [
-    "ov01/tu010",
+    "ov01/unit_cmd",
     "0x00ac1040",
     "0x00ac1068"
    ],
    [
-    "ov01/tu019",
+    "ov01/mons_slot",
     "0x00ac1068",
     "0x00ac1078"
    ],
    [
-    "ov01/tu022",
+    "ov01/battle_init",
     "0x00ac1078",
     "0x00ac10b0"
    ],
    [
-    "ov01/tu023",
+    "ov01/calc",
     "0x00ac10b0",
     "0x00ac2ad0"
    ],
    [
-    "ov01/tu033",
+    "ov01/cmd_exec",
     "0x00ac2ad0",
     "0x00ac3b98"
    ],
    [
-    "ov01/tu035",
+    "ov01/tgt_select",
     "0x00ac3b98",
     "0x00ac3bfc"
    ],
    [
-    "ov01/tu036",
+    "ov01/choice_menu",
     "0x00ac3bfc",
     "0x00ac4190"
    ],
    [
-    "ov01/tu037",
+    "ov01/scene",
     "0x00ac4190",
     "0x00ac41a0"
    ],
    [
-    "ov01/tu038",
+    "ov01/scene_load",
     "0x00ac41a0",
     "0x00ac51a8"
    ],
    [
-    "ov01/tu041",
+    "ov01/effect_pos",
     "0x00ac51a8",
     "0x00ac51b0"
    ],
    [
-    "ov01/tu091",
+    "ov01/think_dispatch",
     "0x00ac51b0",
     "0x00ac51c0"
    ],
    [
-    "ov01/tu044",
+    "ov01/sb_vm",
     "0x00ac51c0",
     "0x00ae0c20"
    ],
    [
-    "ov01/tu046",
+    "ov01/sb_natives",
     "0x00ae0c20",
     "0x00ae0c2c"
    ],
    [
-    "ov01/tu047",
+    "ov01/sb_natives_unit",
     "0x00ae0c2c",
     "0x00ae0de0"
    ],
    [
-    "ov01/tu048",
+    "ov01/gr_gp_init",
     "0x00ae0de0",
     "0x00ae0e88"
    ],
    [
-    "ov01/tu049",
+    "ov01/menu",
     "0x00ae0e88",
-    "0x00ae0ea0"
-   ],
-   [
-    "ov01/tu050",
-    "0x00ae0ea0",
-    "0x00ae0eb4"
-   ],
-   [
-    "ov01/tu051",
-    "0x00ae0eb4",
-    "0x00ae0eb8"
-   ],
-   [
-    "ov01/tu052",
-    "0x00ae0eb8",
-    "0x00ae0ebc"
-   ],
-   [
-    "ov01/tu053",
-    "0x00ae0ebc",
     "0x00ae0ec0"
    ],
    [
-    "ov01/tu055",
+    "ov01/act_step_icon",
     "0x00ae0ec0",
     "0x00ae0ec4"
    ],
    [
-    "ov01/tu056",
+    "ov01/menu_wep_sp_panel",
     "0x00ae0ec4",
     "0x00ae0ed0"
    ],
    [
-    "ov01/tu058",
+    "ov01/menu_unit_panel",
     "0x00ae0ed0",
     "0x00ae0ed4"
    ],
    [
-    "ov01/tu060",
+    "ov01/menu_icon_list",
     "0x00ae0ed4",
     "0x00ae0ed8"
    ],
    [
-    "ov01/tu061",
+    "ov01/menu_combo_panel",
     "0x00ae0ed8",
     "0x00ae0edc"
    ],
    [
-    "ov01/tu062",
+    "ov01/menu_panel",
     "0x00ae0edc",
     "0x00ae0ee4"
    ],
    [
-    "ov01/tu064",
+    "ov01/entry_first_init",
     "0x00ae0ee4",
     "0x00ae0ee8"
    ],
    [
-    "ov01/tu068",
+    "ov01/screen_fill",
     "0x00ae0ee8",
     "0x00ae0f18"
    ],
    [
-    "ov01/tu069",
+    "ov01/handle_table",
     "0x00ae0f18",
     "0x00ae0f68"
    ],
    [
-    "ov01/tu072",
+    "ov01/debug_entry",
     "0x00ae0f68",
     "0x00aed080"
    ],
    [
-    "ov01/tu075",
+    "ov01/m_gs",
     "0x00aed080",
     "0x00aed088"
    ]

@@ -1,15 +1,26 @@
 #include "common.h"
+#include "main/xenoActor.h"
 #include "shared.h"
-#include "main/tu026.h"
-#include "main/tu092.h"
-#include "main/tu097.h"
-#include "main/tu021.h"
-#include "main/tu101.h"
+#include "main/assert_fail.h"
+#include "main/xgl_cd_arena.h"
+#include "main/font_obj.h"
+#include "main/text_window.h"
+#include "main/se_bank_load.h"
+#include "main/menu_draw.h"
 #include "main/xgl_cd.h"
 #include "main/yg2path.h"
 #include "main/ysegf.h"
-#include "main/tu051.h"
-#include "main/tu048.h"
+#include "main/cfeFileControl.h"
+#include "main/game_camera.h"
+#include "main/game_data.h"
+#include "ov01/data_box.h"
+#include "main/xgl_font.h"
+#include "main/fade_ctrl.h"
+#include "main/xgl_packet.h"
+#include "main/render_sprite.h"
+#include "main/bg_layer.h"
+#include "main/nml_model_set.h"
+#include "main/res_get_path.h"
 
 /* Scene states: the rows of ysegfStateTable (0 = list page, 1 = detail page). */
 enum YsegfScene {
@@ -55,12 +66,12 @@ void ysegfSetTargetFlagOnMode(int mode, int unused_arg1, YsegfTarget *target)
 }
 
 /* One 0x14-byte row of ysegfStateTable (the current scene state is ysegfState): a one-time start hook,
-   a handle queued with xglCallbackQueueAdd on every run, a finish hook called last, and hook_end
+   a draw callback queued with xglCallbackQueueAdd on every run, a finish hook called last, and hook_end
    run when the state is left. */
 typedef struct YsegfSceneState {
     int initialized;            /* +0x00: 0 until the start hook has run */
     void (*start)(void);        /* +0x04 */
-    int handle;                 /* +0x08 */
+    void (*draw)(void);         /* +0x08: queued with xglCallbackQueueAdd on every run */
     void (*finish)(void);       /* +0x0C */
     void (*hook_end)();         /* +0x10: called with the state slot (ysegfState) */
 } YsegfSceneState;
@@ -68,15 +79,15 @@ typedef struct YsegfSceneState {
 /* Runs one frame of a scene state: start hook once, then the queued handle, then the finish hook. */
 void ysegfRunState(YsegfSceneState *record)
 {
-    int handle;
+    void (*draw)(void);
 
     if (record->initialized == 0) {
         record->start();
         record->initialized = 1;
     }
-    handle = record->handle;
-    if (handle != 0) {
-        xglCallbackQueueAdd(handle);
+    draw = record->draw;
+    if (draw != 0) {
+        xglCallbackQueueAdd(draw);
     }
     record->finish();
 }
@@ -108,7 +119,7 @@ void segSetAddrOn(u32 index, int value)
     }
 }
 
-signed char segGetAddrOn(u32 index)
+int segGetAddrOn(u32 index)
 {
     if (index >= YSEGF_ENTRY_COUNT) {
         return 0;
@@ -129,9 +140,8 @@ void segAddrOnClearAll(void)
     }
 }
 
-void *xglCdBufferReserve(int size);
-extern const unsigned char D_0068B200[];
-extern unsigned char D_0069D8A0[];
+extern const unsigned char ysegfSourceName[];
+extern unsigned char ysegfSizeAssertText[];
 
 /* Allocates a buffer sized for the named CD file. The size comes from the
  * directory lookup xglCdGetFileSize; a zero size asserts "size" in ../ysegf.euc.c. */
@@ -140,7 +150,7 @@ void *ysegfAllocFileBuffer(const char *name) {
 
     fileSize = xglCdGetFileSize(name);
     if (fileSize == 0) {
-        assertFailed(D_0069D8A0, D_0068B200, 0x123);
+        assertFailed(ysegfSizeAssertText, ysegfSourceName, 0x123);
     }
     return xglCdBufferReserve(fileSize);
 }
@@ -150,12 +160,14 @@ void ysegfReadFile(void **buffer, const char *name, int allocate, int mode) {
     if (allocate != 0) {
         *buffer = ysegfAllocFileBuffer(name);
     }
-    xglCdReadFile(name, *buffer, mode, 0);
+    xglCdReadFile(name, *buffer, mode, CD_NOTIFY_CURRENT);
 }
 
 #include "main/pad.h"
+#include "main/xgl_flags.h"
+#include "main/xgl_thread.h"
+#include "main/txd_table_entry.h"
 
-int xglFlagsGet(int bit_offset, int bit_count);
 /* One 169-byte treasure record: the three tagged texts that ysegfLoadTreasure reads (offsets from the record start). */
 typedef struct YsegfTreasure {
     unsigned char item[21];          /* +0x00: item name (tagItem) */
@@ -171,41 +183,33 @@ static int ysegfExitFlag;
 static YsegfSceneState ysegfStateTable[2];
 static unsigned char ysegfEntryPos[72];
 static struct FontTrack ysegfListTrack;
-static unsigned char ysegfMenu[16];
-
-typedef struct TextWindow {
-    struct FontTrack track;
-    int width;
-    int fade;
-    unsigned char *text;
-} TextWindow;
+static MsgRange ysegfMenu;
 
 static TextWindow textWindow;
-extern const unsigned char D_0068B210[];
-extern const unsigned char D_0068B220[];
-extern const unsigned char D_0068B230[];
-extern const unsigned char D_0068B240[];
-extern unsigned char D_0069D8A8[];
+extern const unsigned char ysegfItemTagFormat[];
+extern const unsigned char ysegfLocateTagFormat[];
+extern const unsigned char ysegfExplanationTagFormat[];
+extern const unsigned char ysegfTreasureFilePath[];
+extern unsigned char ysegfTextBufferAssertText[];
 void *memset(void *dest, int value, unsigned int count);
-void *yg2PathReadTaggedText(void *source, void *tag, void *dest);
 
 /* Loads the treasure table: clears the 3042-byte buffer, reads the tag file, then reads
  * three tagged texts into each of the eighteen 169-byte records. */
 void ysegfLoadTreasure(void) {
     void *textCursor;
     int index;
-    unsigned char *tagItem = D_0068B210;
-    unsigned char *tagLocate = D_0068B220;
-    unsigned char *tagExplanation = D_0068B230;
+    const unsigned char *tagItem = ysegfItemTagFormat;
+    const unsigned char *tagLocate = ysegfLocateTagFormat;
+    const unsigned char *tagExplanation = ysegfExplanationTagFormat;
 
     textCursor = 0;
     ysegfTreasureTable = xglCdBufferReserve(YSEGF_TREASURE_TABLE_SIZE);
     memset(ysegfTreasureTable, 0, YSEGF_TREASURE_TABLE_SIZE);
     while (xglCdServiceIfPending() != 0) {
     }
-    ysegfReadFile(&textCursor, D_0068B240, 1, 0);
+    ysegfReadFile(&textCursor, ysegfTreasureFilePath, 1, 0);
     if (textCursor == 0) {
-        assertFailed(D_0069D8A8, D_0068B200, 328);
+        assertFailed(ysegfTextBufferAssertText, ysegfSourceName, 328);
     }
     for (index = 0; index < YSEGF_ENTRY_COUNT; index++) {
         textCursor = yg2PathReadTaggedText(textCursor, tagItem, ysegfTreasureTable[index].item);
@@ -221,9 +225,6 @@ void ysegfResetSelection(void)
     ysegfScrollTop = 0;
 }
 
-void menuResetState(void *menu);
-void msgRangeSetText(void *menu, const char *text);
-void cfeFileTempInit(void *buffer, int size);
 void ysegfResetEntryPos(void);
 void ysegfDrawList(void);
 void ysegfUpdatePage(void);
@@ -231,17 +232,16 @@ void ysegfStartFadeIn(void);
 void ysegfDrawDetail(void);
 void ysegfUpdateDetail(void);
 void ysegfListLeaveNoop(void);
-void func_00233D50(void);
-extern const unsigned char D_0068B258[];
-extern const unsigned char D_0068B2C8[];
-extern const unsigned char D_0068B2E8[];
-extern const unsigned char D_0068B308[];
-extern const unsigned char D_0068B328[];
-extern const unsigned char D_0068B348[];
-extern const unsigned char D_0068B358[];
+extern const unsigned char ysegfScrollHelpText[];
+extern const unsigned char ysegfItemImageName[];
+extern const unsigned char ysegfItemAlphaImageName[];
+extern const unsigned char ysegfDoorImageName[];
+extern const unsigned char ysegfDoorAlphaImageName[];
+extern const unsigned char ysegfItemAlphaAssertText[];
+extern const unsigned char ysegfDoorAlphaAssertText[];
 extern unsigned char ysegfItemFadeAlpha;
-extern unsigned char D_0069D8B0[];
-extern unsigned char D_0069D8B8[];
+extern unsigned char ysegfItemImageAssertText[];
+extern unsigned char ysegfDoorImageAssertText[];
 extern void *ysegfDoorImage;
 extern void *ysegfItemImage;
 extern void *ysegfDoorAlpha;
@@ -256,8 +256,8 @@ void ysegfInit(void)
     int *slot;
     YsegfSceneState *scene;
 
-    menuResetState(ysegfMenu);
-    msgRangeSetText(ysegfMenu, D_0068B258);
+    menuResetState(&ysegfMenu);
+    msgRangeSetText(&ysegfMenu, ysegfScrollHelpText);
     lastEntryOffset = 0x44;
     slot = (int *) (ysegfEntryPos + lastEntryOffset);
     for (index = 0; index < YSEGF_ENTRY_COUNT; index++) {
@@ -272,13 +272,13 @@ void ysegfInit(void)
     ysegfLoadTreasure();
     scene = ysegfStateTable;
     scene[YSEGF_SCENE_LIST].start = ysegfResetEntryPos;
-    scene[YSEGF_SCENE_LIST].handle = (int) ysegfDrawList;
+    scene[YSEGF_SCENE_LIST].draw = ysegfDrawList;
     scene[YSEGF_SCENE_LIST].finish = ysegfUpdatePage;
     scene[YSEGF_SCENE_LIST].hook_end = ysegfListLeaveNoop;
     scene[YSEGF_SCENE_DETAIL].start = ysegfStartFadeIn;
-    scene[YSEGF_SCENE_DETAIL].handle = (int) ysegfDrawDetail;
+    scene[YSEGF_SCENE_DETAIL].draw = ysegfDrawDetail;
     scene[YSEGF_SCENE_DETAIL].finish = ysegfUpdateDetail;
-    scene[YSEGF_SCENE_DETAIL].hook_end = func_00233D50;
+    scene[YSEGF_SCENE_DETAIL].hook_end = ysegfDetailLeaveNoop;
     scene[YSEGF_SCENE_DETAIL].initialized = 0;
     ysegfState = scene;
     scene[YSEGF_SCENE_LIST].initialized = 0;
@@ -287,21 +287,21 @@ void ysegfInit(void)
     ysegfItemAlpha = 0;
     ysegfDoorImage = 0;
     ysegfDoorAlpha = 0;
-    ysegfItemImage = ysegfAllocFileBuffer(D_0068B2C8);
-    ysegfReadFile(&ysegfItemAlpha, D_0068B2E8, 1, 0);
-    ysegfReadFile(&ysegfDoorImage, D_0068B308, 1, 0);
-    ysegfReadFile(&ysegfDoorAlpha, D_0068B328, 1, 0);
+    ysegfItemImage = ysegfAllocFileBuffer(ysegfItemImageName);
+    ysegfReadFile(&ysegfItemAlpha, ysegfItemAlphaImageName, 1, 0);
+    ysegfReadFile(&ysegfDoorImage, ysegfDoorImageName, 1, 0);
+    ysegfReadFile(&ysegfDoorAlpha, ysegfDoorAlphaImageName, 1, 0);
     if (ysegfItemImage == 0) {
-        assertFailed(D_0069D8B0, D_0068B200, 403);
+        assertFailed(ysegfItemImageAssertText, ysegfSourceName, 403);
     }
     if (ysegfItemAlpha == 0) {
-        assertFailed(D_0068B348, D_0068B200, 404);
+        assertFailed(ysegfItemAlphaAssertText, ysegfSourceName, 404);
     }
     if (ysegfDoorImage == 0) {
-        assertFailed(D_0069D8B8, D_0068B200, 405);
+        assertFailed(ysegfDoorImageAssertText, ysegfSourceName, 405);
     }
     if (ysegfDoorAlpha == 0) {
-        assertFailed(D_0068B358, D_0068B200, 406);
+        assertFailed(ysegfDoorAlphaAssertText, ysegfSourceName, 406);
     }
     do {
     } while (xglCdServiceIfPending() != 0);
@@ -318,11 +318,11 @@ void ysegfReleaseBuffers(void) {
 
 /* Draws a pair of sprites at (x, y); the second pair is drawn only when flag is set. */
 void ysegfDrawFlagIcon(int x, int y, int flag) {
-    packetSubmitRequest(0x253, x, y, 0);
-    packetSubmitRequest(0x256, x, y, 1);
+    menuDrawCell(0x253, x, y, 0);
+    menuDrawCell(0x256, x, y, 1);
     if (flag != 0) {
-        packetSubmitRequest(0x266, x + 0x17, y + 0x18, 0);
-        packetSubmitRequest(0x267, x + 0x10, y + 0x10, 1);
+        menuDrawCell(0x266, x + 0x17, y + 0x18, 0);
+        menuDrawCell(0x267, x + 0x10, y + 0x10, 1);
     }
 }
 
@@ -332,14 +332,14 @@ void ysegfDrawWindow(int x, int y, int width, int height)
     int right;
     int bottom;
 
-    packetSubmitRequest(0x237, x, y, 0);
+    menuDrawCell(0x237, x, y, 0);
     right = (x + width) - 0x10;
     bottom = (y + height) - 0x10;
-    packetSubmitRequest(0x238, right, y, 0);
-    packetSubmitRequest(0x234, x, bottom, 0);
-    packetSubmitRequest(0x235, right, bottom, 0);
-    packetSubmitRequestEx(0x236, x, y + 0x10, width, height - 0x20, 0x100);
-    packetSubmitRequestEx(0x236, x + 0x10, y, width - 0x20, height, 0x100);
+    menuDrawCell(0x238, right, y, 0);
+    menuDrawCell(0x234, x, bottom, 0);
+    menuDrawCell(0x235, right, bottom, 0);
+    menuDrawCellSized(0x236, x, y + 0x10, width, height - 0x20, 0x100);
+    menuDrawCellSized(0x236, x + 0x10, y, width - 0x20, height, 0x100);
 }
 
 /* Draws a panel frame of eight pieces (sprites 0x239-0x240) around x, y, width, height. */
@@ -348,16 +348,16 @@ void ysegfDrawPanel(int x, int y, int width, int height)
     int right;
     int bottom;
 
-    packetSubmitRequest(0x23E, x, y, 1);
+    menuDrawCell(0x23E, x, y, 1);
     right = (x + width) - 0x10;
-    packetSubmitRequest(0x240, right, y, 1);
+    menuDrawCell(0x240, right, y, 1);
     bottom = (y + height) - 0x11;
-    packetSubmitRequest(0x239, x, bottom, 1);
-    packetSubmitRequest(0x23B, right, bottom, 1);
-    packetSubmitRequestEx(0x23F, x + 0x10, y, width - 0x20, 0x10, 1);
-    packetSubmitRequestEx(0x23A, x + 0x10, bottom, width - 0x20, 0x11, 1);
-    packetSubmitRequestEx(0x23C, x, y + 0x10, 0x10, height - 0x21, 1);
-    packetSubmitRequestEx(0x23D, right, y + 0x10, 0x10, height - 0x21, 1);
+    menuDrawCell(0x239, x, bottom, 1);
+    menuDrawCell(0x23B, right, bottom, 1);
+    menuDrawCellSized(0x23F, x + 0x10, y, width - 0x20, 0x10, 1);
+    menuDrawCellSized(0x23A, x + 0x10, bottom, width - 0x20, 0x11, 1);
+    menuDrawCellSized(0x23C, x, y + 0x10, 0x10, height - 0x21, 1);
+    menuDrawCellSized(0x23D, right, y + 0x10, 0x10, height - 0x21, 1);
 }
 
 /* Same frame as ysegfDrawPanel with the sprite set 0x272-0x279. */
@@ -366,44 +366,33 @@ void ysegfDrawImageFrame(int x, int y, int width, int height)
     int right;
     int bottom;
 
-    packetSubmitRequest(0x277, x, y, 1);
+    menuDrawCell(0x277, x, y, 1);
     right = (x + width) - 0x10;
     bottom = (y + height) - 0x11;
-    packetSubmitRequest(0x279, right, y, 1);
-    packetSubmitRequest(0x272, x, bottom, 1);
-    packetSubmitRequest(0x274, right, bottom, 1);
-    packetSubmitRequestEx(0x278, x + 0x10, y, width - 0x20, 0x10, 1);
-    packetSubmitRequestEx(0x273, x + 0x10, bottom, width - 0x20, 0x10, 1);
-    packetSubmitRequestEx(0x275, x, y + 0x10, 0x10, height - 0x21, 1);
-    packetSubmitRequestEx(0x276, right, y + 0x10, 0x10, height - 0x21, 1);
+    menuDrawCell(0x279, right, y, 1);
+    menuDrawCell(0x272, x, bottom, 1);
+    menuDrawCell(0x274, right, bottom, 1);
+    menuDrawCellSized(0x278, x + 0x10, y, width - 0x20, 0x10, 1);
+    menuDrawCellSized(0x273, x + 0x10, bottom, width - 0x20, 0x10, 1);
+    menuDrawCellSized(0x275, x, y + 0x10, 0x10, height - 0x21, 1);
+    menuDrawCellSized(0x276, right, y + 0x10, 0x10, height - 0x21, 1);
 }
 
 /* Draws the two footer sprites 0x270 and 0x271 at (0, 0x170). */
 void ysegfDrawFooter(void) {
-    packetSubmitRequest(0x271, 0, 0x170, 1);
-    packetSubmitRequest(0x270, 0, 0x170, 1);
+    menuDrawCell(0x271, 0, 0x170, 1);
+    menuDrawCell(0x270, 0, 0x170, 1);
 }
 
-extern int D_003ECAD8[];
-extern int D_003ECAB0[];
-extern const unsigned char D_0068B368[];
-extern const unsigned char D_0068B3B0[];
-extern const unsigned char D_0068B3C0[];
-extern unsigned char D_0069D8C8[];
-extern unsigned char D_0069D8D0[];
-extern unsigned char D_0069D8D8[];
-extern void *D_0069D8C0;
-void panelDrawNineSlice(unsigned char *image, int x, int y, int width, int height);
-int dataBoxChkCategory3(int id);
-void menuDrawFixedFrame(int x, int y);
-void renderSpriteClutAlpha(int x, int y, int a, int b, int c, int d);
-void renderSpriteClut(int x, int y, int a, int b, int c);
-int fontObjBuildBaseVifPacket(void);
-void textDrawDigitsWide(int x, int y, int value, int digits);
-void textDrawSegment(int x, int y, void *text, int style);
-void textDrawShadow(int x, int y, void *text, unsigned long long colour);
-void textDrawTitle(int a, int x, int y, void *data);
-void xglPacketTextureTrans(void *texture);
+extern int ysegfTreasureSelectedPanelImage[];
+extern int ysegfTreasureRowPanelImage[];
+extern const unsigned char ysegfDetailTextHeader[];
+extern const unsigned char ysegfLocationTitleText[];
+extern const unsigned char ysegfTreasureTitleText[];
+extern unsigned char ysegfNoDataShadowText[];
+extern unsigned char ysegfAddressTitleText[];
+extern unsigned char ysegfDecoderTitleText[];
+extern void *ysegfNoDataText;
 
 /* Draws the treasure detail page for the record at index of ysegfTreasureTable. */
 void ysegfDrawTreasureDetail(int x, int y, int index, int selected, int alpha)
@@ -414,25 +403,25 @@ void ysegfDrawTreasureDetail(int x, int y, int index, int selected, int alpha)
     int addressOn;
     int decoderFlag;
     int treasureFound;
-    unsigned char *doorTexture;
+    XglTextureTransSet *doorTexture;
     int *doorEntry;
 
     if (index == selected) {
-        panelDrawNineSlice(D_003ECAD8, x, y, 0x1D0, 0x64);
+        panelDrawNineSlice(ysegfTreasureSelectedPanelImage, x, y, 0x1D0, 0x64);
     } else {
-        panelDrawNineSlice(D_003ECAB0, x, y, 0x1D0, 0x64);
+        panelDrawNineSlice(ysegfTreasureRowPanelImage, x, y, 0x1D0, 0x64);
     }
     frameX = x + 0xC;
     displayNumber = index + 1;
-    packetSubmitRequest(0x26A, frameX, y - 1, 1);
+    menuDrawCell(0x26A, frameX, y - 1, 1);
     labelY = y + 0x15;
     textDrawDigitsWide(x + 0x36, y, displayNumber, 2);
     menuDrawFixedFrame(x + 0x5D, labelY);
-    packetSubmitRequest(0x252, x + 0x69, y + 0x1F, 0);
-    packetSubmitRequest(0x255, x + 0x69, y + 0x1F, 1);
-    packetSubmitRequest(0x252, x + 0x69, y + 0x3E, 0);
-    packetSubmitRequest(0x255, x + 0x69, y + 0x3E, 1);
-    textDrawSegment(0, 0, D_0068B368, 0);
+    menuDrawCell(0x252, x + 0x69, y + 0x1F, 0);
+    menuDrawCell(0x255, x + 0x69, y + 0x1F, 1);
+    menuDrawCell(0x252, x + 0x69, y + 0x3E, 0);
+    menuDrawCell(0x255, x + 0x69, y + 0x3E, 1);
+    textDrawSegment(0, 0, ysegfDetailTextHeader, 0);
     /* addressOn: segAddrOnFlags of this entry; decoderFlag: dataBoxChkCategory3 (second icon);
        treasureFound: entry flag (third icon). */
     addressOn = segAddrOnFlags[index];
@@ -445,26 +434,26 @@ void ysegfDrawTreasureDetail(int x, int y, int index, int selected, int alpha)
     if (addressOn != 0) {
         textDrawSegment(x + 0x71, y + 0x20, ysegfTreasureTable[index].location, 4);
     } else {
-        textDrawSegment(x + 0x71, y + 0x22, D_0069D8C0, 4);
+        textDrawSegment(x + 0x71, y + 0x22, ysegfNoDataText, 4);
     }
 
     if (treasureFound != 0) {
         textDrawSegment(x + 0x71, y + 0x3F, ysegfTreasureTable[index].item, 4);
-        packetSubmitRequest(0x24F, x + 0x120, y + 0x4A, 1);
+        menuDrawCell(0x24F, x + 0x120, y + 0x4A, 1);
     } else if (addressOn != 0) {
-        textDrawSegment(x + 0x71, y + 0x40, D_0069D8C0, 4);
-        packetSubmitRequest(0x24E, x + 0x120, y + 0x4A, 1);
+        textDrawSegment(x + 0x71, y + 0x40, ysegfNoDataText, 4);
+        menuDrawCell(0x24E, x + 0x120, y + 0x4A, 1);
     } else if (decoderFlag != 0) {
-        textDrawSegment(x + 0x71, y + 0x40, D_0069D8C0, 4);
-        packetSubmitRequest(0x24E, x + 0x120, y + 0x4A, 1);
+        textDrawSegment(x + 0x71, y + 0x40, ysegfNoDataText, 4);
+        menuDrawCell(0x24E, x + 0x120, y + 0x4A, 1);
     } else {
-        textDrawSegment(x + 0x71, y + 0x40, D_0069D8C0, 4);
-        packetSubmitRequest(0x24D, x + 0x12E, y + 0x4A, 1);
+        textDrawSegment(x + 0x71, y + 0x40, ysegfNoDataText, 4);
+        menuDrawCell(0x24D, x + 0x12E, y + 0x4A, 1);
     }
 
     if (addressOn != 0) {
         doorEntry = (int *) ysegfDoorImage + index;
-        doorTexture = (unsigned char *) ysegfDoorImage + doorEntry[1];
+        doorTexture = (XglTextureTransSet *) ((unsigned char *) ysegfDoorImage + doorEntry[1]);
         xglPacketTextureTrans(ysegfDoorAlpha);
         renderSpriteClutAlpha(frameX, y + 0x17, 0x4C, 0x41, 0x20, alpha);
         xglPacketTextureTrans(doorTexture);
@@ -473,22 +462,21 @@ void ysegfDrawTreasureDetail(int x, int y, int index, int selected, int alpha)
         ysegfDrawPanel(frameX, y + 0x17, 0x4C, 0x41);
     } else {
         ysegfDrawWindow(frameX, y + 0x17, 0x4C, 0x41);
-        packetSubmitRequest(0x250, frameX, y + 0x17, 1);
+        menuDrawCell(0x250, frameX, y + 0x17, 1);
         ysegfDrawPanel(frameX, y + 0x17, 0x4C, 0x41);
         fontObjSetColor(0x3F80000060000000ULL);
         fontObjSetColor(0x3F80000080808080ULL);
-        textDrawShadow(x + 0x13, y + 0x30, D_0069D8C8, 0x3F80000000000000ULL);
+        textDrawShadow(x + 0x13, y + 0x30, ysegfNoDataShadowText, 0x3F80000000000000ULL);
         fontObjResetColor();
     }
 
-    textDrawTitle(0, x + 0x6C, labelY, D_0068B3B0);
-    textDrawTitle(0, x + 0x6C, y + 0x34, D_0068B3C0);
-    textDrawTitle(0, x + 0x109, y + 0x16, D_0069D8D0);
-    textDrawTitle(0, x + 0x14A, y + 0x16, D_0069D8D8);
-    textDrawTitle(0, x + 0x187, y + 0x16, D_0068B3C0);
+    textDrawTitle(0, x + 0x6C, labelY, ysegfLocationTitleText);
+    textDrawTitle(0, x + 0x6C, y + 0x34, ysegfTreasureTitleText);
+    textDrawTitle(0, x + 0x109, y + 0x16, ysegfAddressTitleText);
+    textDrawTitle(0, x + 0x14A, y + 0x16, ysegfDecoderTitleText);
+    textDrawTitle(0, x + 0x187, y + 0x16, ysegfTreasureTitleText);
 }
 
-void xglFontFlush(void);
 
 /* Draws the treasure list: eighteen detail rows placed from the entry positions,
  * the two count marks, then flushes the font. */
@@ -503,9 +491,9 @@ void ysegfDrawTreasureList(void)
     int slideX;
     struct FontPair *listOrigin;
 
-    packetSubmitRequest(0x24C, 0x40, 0x22, 1);
-    packetSubmitRequestEx(0x24C, 0x1D3, -0x80, 1, 0x240, 0x81);
-    packetSubmitRequestEx(0x24C, 0x1D2, -0x80, 1, 0x240, 0x81);
+    menuDrawCell(0x24C, 0x40, 0x22, 1);
+    menuDrawCellSized(0x24C, 0x1D3, -0x80, 1, 0x240, 0x81);
+    menuDrawCellSized(0x24C, 0x1D2, -0x80, 1, 0x240, 0x81);
     listOrigin = &ysegfListTrack.current_pair;
     entrySlide = (int *) ysegfEntryPos;
     for (row = 0; row < YSEGF_ENTRY_COUNT; row++) {
@@ -526,25 +514,23 @@ void ysegfDrawTreasureList(void)
         }
     }
     if (ysegfScrollTop > 0) {
-        packetSubmitRequest(0x26C, 0x1DD, 0x23, 1);
+        menuDrawCell(0x26C, 0x1DD, 0x23, 1);
     }
     if (ysegfScrollTop < 15) {
-        packetSubmitRequest(0x26B, 0x1DD, 0x160, 1);
+        menuDrawCell(0x26B, 0x1DD, 0x160, 1);
     }
     xglFontFlush();
     fontObjResetAndBuild();
 }
 
 extern struct FontDrawItem ysegfItemNameDraw;
-void menuDrawShortOutlineFrame(void);
-void fontObjDraw(struct FontDrawItem *item);
 
 /* Draws the item-name frame: four font cells across the top row, then clears the colour. */
-void ysegfDrawItemNameFrame(int x, int y, int width, int unused_arg3, void *labelText)
+void ysegfDrawItemNameFrame(int x, int y, int width, int height, const unsigned char *labelText)
 {
     int inner_width;
 
-    menuDrawShortOutlineFrame();
+    menuDrawShortOutlineFrame(x, y, width, height);
     fontObjSetColor(0x3F80000080000080ULL);
     inner_width = width - 16;
     ysegfItemNameDraw.cell_index = 82;
@@ -575,16 +561,15 @@ void ysegfDrawItemNameFrame(int x, int y, int width, int unused_arg3, void *labe
     }
 }
 
-extern int D_003ECB00[];
-extern const unsigned char D_0068B3D0[];
-extern const unsigned char D_0068B3E0[];
-extern const unsigned char D_0068B420[];
-extern unsigned char D_0069D8E0[];
-extern unsigned char D_0069D8E8[];
-extern unsigned char D_0069D8F0[];
+extern int ysegfItemFramePanelImage[];
+extern const unsigned char ysegfExplanationTitleText[];
+extern const unsigned char ysegfItemPageTextHeader[];
+extern const unsigned char ysegfItemImagePathPrefix[];
+extern unsigned char ysegfItemImageZeroPadFormat[];
+extern unsigned char ysegfItemImageNumberFormat[];
+extern unsigned char ysegfImageSuffixText[];
 void sprintf(void *dst, void *format, ...);
 void strcat(void *dst, void *format);
-void textDrawDigitsPair(int x, int y, int value, int width, int digits);
 
 /* Draws the item explanation page: the panel and labels, the selected item's
  * text, then the item image, which fades in when it is loaded or loads its file. */
@@ -592,34 +577,34 @@ void ysegfDrawItemPage(void)
 {
     char fileName[64];
 
-    panelDrawNineSlice(D_003ECB00, 47, 120, 417, 243);
-    packetSubmitRequest(0x27F, 72, 0x77, 1);
-    packetSubmitRequest(0x228, 55, 0x8F, 1);
-    packetSubmitRequest(0x232, 0x1B8, 0x8F, 0);
-    packetSubmitRequest(0x22A, 0x1B8, 0x8F, 1);
-    packetSubmitRequestEx(0x229, 71, 0x8F, 0x171, 16, 1);
-    packetSubmitRequestEx(0x227, 55, 0x9F, 16, 0xAE, 1);
-    packetSubmitRequestEx(0x231, 0x1B8, 0x9F, 16, 0xAE, 0);
-    packetSubmitRequest(0x22E, 55, 0x14D, 0);
-    packetSubmitRequest(0x226, 55, 0x14D, 1);
-    packetSubmitRequest(0x230, 0x1B8, 0x14D, 0);
-    packetSubmitRequestEx(0x22F, 71, 0x14D, 0x171, 16, 0);
-    ysegfDrawItemNameFrame(75, 163, 206, 165, D_0068B3D0);
+    panelDrawNineSlice(ysegfItemFramePanelImage, 47, 120, 417, 243);
+    menuDrawCell(0x27F, 72, 0x77, 1);
+    menuDrawCell(0x228, 55, 0x8F, 1);
+    menuDrawCell(0x232, 0x1B8, 0x8F, 0);
+    menuDrawCell(0x22A, 0x1B8, 0x8F, 1);
+    menuDrawCellSized(0x229, 71, 0x8F, 0x171, 16, 1);
+    menuDrawCellSized(0x227, 55, 0x9F, 16, 0xAE, 1);
+    menuDrawCellSized(0x231, 0x1B8, 0x9F, 16, 0xAE, 0);
+    menuDrawCell(0x22E, 55, 0x14D, 0);
+    menuDrawCell(0x226, 55, 0x14D, 1);
+    menuDrawCell(0x230, 0x1B8, 0x14D, 0);
+    menuDrawCellSized(0x22F, 71, 0x14D, 0x171, 16, 0);
+    ysegfDrawItemNameFrame(75, 163, 206, 165, ysegfExplanationTitleText);
     menuDrawOutlineFrame(294, 153, 147, 165);
     menuDrawOutlineFrame(69, 153, 216, 184);
-    packetSubmitRequestEx(0x27A, 73, 0xD1, 0xD2, 5, 1);
-    packetSubmitRequestEx(0x27A, 73, 0xE5, 0xD2, 5, 1);
-    packetSubmitRequestEx(0x27A, 73, 0xF9, 0xD2, 5, 1);
-    packetSubmitRequestEx(0x27A, 73, 0x10D, 0xD2, 5, 1);
-    packetSubmitRequestEx(0x27A, 73, 0x121, 0xD2, 5, 1);
-    packetSubmitRequestEx(0x27A, 73, 0x135, 0xD2, 5, 1);
-    packetSubmitRequest(0x26F, 14, 0xC3, 1);
-    packetSubmitRequest(0x26F, 0x1DA, 0xC3, 1);
-    packetSubmitRequest(0x26D, 14, 0xC3, 1);
-    packetSubmitRequest(0x26E, 0x1DA, 0xC3, 1);
-    packetSubmitRequest(0x1C, 0x15E, 0x14A, 0x40);
+    menuDrawCellSized(0x27A, 73, 0xD1, 0xD2, 5, 1);
+    menuDrawCellSized(0x27A, 73, 0xE5, 0xD2, 5, 1);
+    menuDrawCellSized(0x27A, 73, 0xF9, 0xD2, 5, 1);
+    menuDrawCellSized(0x27A, 73, 0x10D, 0xD2, 5, 1);
+    menuDrawCellSized(0x27A, 73, 0x121, 0xD2, 5, 1);
+    menuDrawCellSized(0x27A, 73, 0x135, 0xD2, 5, 1);
+    menuDrawCell(0x26F, 14, 0xC3, 1);
+    menuDrawCell(0x26F, 0x1DA, 0xC3, 1);
+    menuDrawCell(0x26D, 14, 0xC3, 1);
+    menuDrawCell(0x26E, 0x1DA, 0xC3, 1);
+    menuDrawCell(0x1C, 0x15E, 0x14A, 0x40);
     textDrawDigitsPair(390, 330, ysegfSelectedIndex + 1, 18, 2);
-    textDrawSegment(0, 0, D_0068B3E0, 0);
+    textDrawSegment(0, 0, ysegfItemPageTextHeader, 0);
     textDrawSegment(80, 190, ysegfTreasureTable[ysegfSelectedIndex].explanation, 4);
 
     if (ysegfItemFadeAlpha != 0 && xglCdServiceIfPending() == 0) {
@@ -637,29 +622,19 @@ void ysegfDrawItemPage(void)
     } else if (xglCdServiceIfPending() == 0) {
         int selected = ysegfSelectedIndex;
         if (selected < 10) {
-            sprintf(fileName, D_0069D8E0, D_0068B420, selected);
+            sprintf(fileName, ysegfItemImageZeroPadFormat, ysegfItemImagePathPrefix, selected);
         } else {
-            sprintf(fileName, D_0069D8E8, D_0068B420, selected);
+            sprintf(fileName, ysegfItemImageNumberFormat, ysegfItemImagePathPrefix, selected);
         }
-        strcat(fileName, D_0069D8F0);
+        strcat(fileName, ysegfImageSuffixText);
         ysegfReadFile(&ysegfItemImage, fileName, 0, 1);
         ysegfItemFadeAlpha = 16;
     }
     fontObjBuildBaseVifPacket();
 }
 
-extern const unsigned char D_0068B438[];
-void soundRestart(void);
-void seVoiceStartDefault(int voice);
-void func_001BA68C(void);
-void XenoActorSetFlagAll(int flag);
-void bgLayerClearAllFlags(void);
-void XenoActorDoit(void);
-void XenoActorDisp(void);
-void xglSleep(void);
-void func_001E0E98(void);
+extern const unsigned char ysegfBgmName[];
 
-extern PadRecord PadData[2];
 
 /* Scene loop of the 201_menu screen: init, poll pad, run frames until the exit flag is set. */
 void ysegfRunMenu(void)
@@ -673,7 +648,7 @@ void ysegfRunMenu(void)
     ysegfExitFlag = 0;
     work = &gameWork;
     soundRestart();
-    seBgmPlay(1, D_0068B438, 0x19000);
+    seBgmPlay(1, ysegfBgmName, 0x19000);
     ysegfInit();
     pad = &PadData[0];
     do {
@@ -693,7 +668,7 @@ void ysegfRunMenu(void)
             break;
         }
         ysegfRunState(ysegfState);
-        func_001BA68C();
+        pxyRequestOverlayPass();
         XenoActorSetFlagAll(2);
         bgLayerClearAllFlags();
         XenoActorDoit();
@@ -703,14 +678,14 @@ void ysegfRunMenu(void)
     ysegfReleaseBuffers();
     if ((gameWork.control & CONTROL_SOFT_RESET) == 0) {
         for (exitFrames = 9; exitFrames >= 0; exitFrames--) {
-            func_001BA68C();
+            pxyRequestOverlayPass();
             XenoActorSetFlagAll(2);
             bgLayerClearAllFlags();
             XenoActorDoit();
             XenoActorDisp();
             xglSleep();
         }
-        func_001E0E98();
+        seStateRestoreDefault();
     }
 }
 
@@ -731,33 +706,32 @@ void ysegfResetEntryPos(void)
 
 /* Draws the header row of eleven sprites (0x241-0x24B). */
 void ysegfDrawListHeader(void) {
-    packetSubmitRequest(0x241, 0x3B, 0xD, 1);
-    packetSubmitRequest(0x242, 0x5E, 0xD, 1);
-    packetSubmitRequest(0x243, 0x81, 0xD, 1);
-    packetSubmitRequest(0x244, 0xA4, 0xD, 1);
-    packetSubmitRequest(0x245, 0xC7, 0xD, 1);
-    packetSubmitRequest(0x246, 0xEA, 0xD, 1);
-    packetSubmitRequest(0x247, 0x10D, 0xD, 1);
-    packetSubmitRequest(0x248, 0x14F, 0xD, 1);
-    packetSubmitRequest(0x249, 0x172, 0xD, 1);
-    packetSubmitRequest(0x24A, 0x195, 0xD, 1);
-    packetSubmitRequest(0x24B, 0x1B8, 0xD, 1);
+    menuDrawCell(0x241, 0x3B, 0xD, 1);
+    menuDrawCell(0x242, 0x5E, 0xD, 1);
+    menuDrawCell(0x243, 0x81, 0xD, 1);
+    menuDrawCell(0x244, 0xA4, 0xD, 1);
+    menuDrawCell(0x245, 0xC7, 0xD, 1);
+    menuDrawCell(0x246, 0xEA, 0xD, 1);
+    menuDrawCell(0x247, 0x10D, 0xD, 1);
+    menuDrawCell(0x248, 0x14F, 0xD, 1);
+    menuDrawCell(0x249, 0x172, 0xD, 1);
+    menuDrawCell(0x24A, 0x195, 0xD, 1);
+    menuDrawCell(0x24B, 0x1B8, 0xD, 1);
 }
 
-void msgRangeDrawRevealed(void *data, int count, int id);
 /* List page enter/draw: header, treasure list, footer, then the list object. */
 void ysegfDrawList(void) {
     fontObjResetAndBuild();
     ysegfDrawListHeader();
     ysegfDrawTreasureList();
     ysegfDrawFooter();
-    msgRangeDrawRevealed(ysegfMenu, 0x18, 0x175);
+    msgRangeDrawRevealed(&ysegfMenu, 0x18, 0x175);
 }
 
 /* Update of the list page (scene 0): eases the entry positions toward their targets, UP/DOWN moves
    the selection, cross leaves the menu, circle opens the detail page when the entry flag is set. */
 extern const float ysegfEntryEaseRate;
-extern const unsigned char D_0068B448[];
+extern const unsigned char ysegfPageSwitchHelpText[];
 
 void ysegfUpdatePage(void)
 {
@@ -785,7 +759,7 @@ void ysegfUpdatePage(void)
         seVoiceStartDefault(YSEGF_SE_CANCEL);
     } else if ((PadData[0].pressed & PAD_CIRCLE) != 0) {
         if (xglFlagsGet(ysegfSelectedIndex + YSEGF_FLAG_BASE, 1) != 0) {
-            msgRangeSetText(ysegfMenu, D_0068B448);
+            msgRangeSetText(&ysegfMenu, ysegfPageSwitchHelpText);
             ysegfSwitchState(&ysegfState, &ysegfStateTable[YSEGF_SCENE_DETAIL]);
             ysegfItemFadeAlpha = 0;
             seVoiceStartDefault(YSEGF_SE_DECIDE);
@@ -826,7 +800,6 @@ void ysegfListLeaveNoop(void)
 {
 }
 
-void fadeStartIn(int value);
 
 void ysegfStartFadeIn(void) {
     fadeStartIn(0xA);
@@ -838,13 +811,15 @@ void ysegfDrawDetail(void) {
     ysegfDrawTreasureDetail(0xC, 0xF, ysegfSelectedIndex, ysegfSelectedIndex, 0x80);
     ysegfDrawItemPage();
     ysegfDrawFooter();
-    msgRangeDrawRevealed(ysegfMenu, 0x18, 0x175);
+    msgRangeDrawRevealed(&ysegfMenu, 0x18, 0x175);
 }
 
 /* Returns the nearest entry below the given index whose flag (0x1C1 + i) is set, wrapping. */
 int ysegfFindPrevEntry(signed char index) {
     signed char candidate = index;
 
+    /* The gotos are kept: the original loop is not rotated (entry branch to the bottom test, found-return block above
+       the body); while/for forms compile rotated (bltz entry test, bgez back edge). */
     candidate--;
     goto test1;
 found1:
@@ -908,7 +883,7 @@ void ysegfUpdateDetail(void) {
     signed char previous;
 
     if ((PadData[0].pressed & PAD_CROSS) != 0) {
-        msgRangeSetText(ysegfMenu, D_0068B258);
+        msgRangeSetText(&ysegfMenu, ysegfScrollHelpText);
         ysegfSwitchState(&ysegfState, ysegfStateTable);
         seVoiceStartDefault(YSEGF_SE_CANCEL);
         return;
@@ -931,47 +906,47 @@ void ysegfUpdateDetail(void) {
     }
 }
 
-const unsigned char D_0068B200[16] = "../ysegf.euc.c";
-const unsigned char D_0068B210[16] = "Item:%s\n";
-const unsigned char D_0068B220[16] = "Locate:%s\n";
-const unsigned char D_0068B230[16] = "Expl:%s\n";
-const unsigned char D_0068B240[24] = "iwase\\Treasure.txt";
-const unsigned char D_0068B258[112] = "Scroll with the directional buttons or the left analog stick.\\nPress &03 for details. Press &04 to go back.";
-const unsigned char D_0068B2C8[32] = "iwase\\img\\item\\item00.xtx";
-const unsigned char D_0068B2E8[32] = "iwase\\img\\item\\item_alpha.xtx";
-const unsigned char D_0068B308[32] = "iwase\\img\\door\\doorimg.dat";
-const unsigned char D_0068B328[32] = "iwase\\img\\door\\door_alpha.xtx";
-const unsigned char D_0068B348[16] = "imgItemAlpha";
-const unsigned char D_0068B358[16] = "imgDoorAlpha";
-const unsigned char D_0068B368[72] = "$init;$bg2;$shadow+1,+3,000000;$colc0c0c0;$zoom12;\000\000\000\000\000\000NO  DATA";
-const unsigned char D_0068B3B0[16] = "Location";
-const unsigned char D_0068B3C0[16] = "Treasure";
-const unsigned char D_0068B3D0[16] = "Explanation";
-const unsigned char D_0068B3E0[64] = "$init;$bg2;$shadow+1,+3,000000;$colc0c0c0;$zoom12;$xx0,20;";
-const unsigned char D_0068B420[24] = "iwase\\img\\item\\item";
-const unsigned char D_0068B438[16] = "201_menu";
-const unsigned char D_0068B448[72] = "Use the L1 and R1 buttons to switch pages.\\nPress &04 to go back.";
+const unsigned char ysegfSourceName[16] = "../ysegf.euc.c";
+const unsigned char ysegfItemTagFormat[16] = "Item:%s\n";
+const unsigned char ysegfLocateTagFormat[16] = "Locate:%s\n";
+const unsigned char ysegfExplanationTagFormat[16] = "Expl:%s\n";
+const unsigned char ysegfTreasureFilePath[24] = "iwase\\Treasure.txt";
+const unsigned char ysegfScrollHelpText[112] = "Scroll with the directional buttons or the left analog stick.\\nPress &03 for details. Press &04 to go back.";
+const unsigned char ysegfItemImageName[32] = "iwase\\img\\item\\item00.xtx";
+const unsigned char ysegfItemAlphaImageName[32] = "iwase\\img\\item\\item_alpha.xtx";
+const unsigned char ysegfDoorImageName[32] = "iwase\\img\\door\\doorimg.dat";
+const unsigned char ysegfDoorAlphaImageName[32] = "iwase\\img\\door\\door_alpha.xtx";
+const unsigned char ysegfItemAlphaAssertText[16] = "imgItemAlpha";
+const unsigned char ysegfDoorAlphaAssertText[16] = "imgDoorAlpha";
+const unsigned char ysegfDetailTextHeader[72] = "$init;$bg2;$shadow+1,+3,000000;$colc0c0c0;$zoom12;\000\000\000\000\000\000NO  DATA";
+const unsigned char ysegfLocationTitleText[16] = "Location";
+const unsigned char ysegfTreasureTitleText[16] = "Treasure";
+const unsigned char ysegfExplanationTitleText[16] = "Explanation";
+const unsigned char ysegfItemPageTextHeader[64] = "$init;$bg2;$shadow+1,+3,000000;$colc0c0c0;$zoom12;$xx0,20;";
+const unsigned char ysegfItemImagePathPrefix[24] = "iwase\\img\\item\\item";
+const unsigned char ysegfBgmName[16] = "201_menu";
+const unsigned char ysegfPageSwitchHelpText[72] = "Use the L1 and R1 buttons to switch pages.\\nPress &04 to go back.";
 
 void * ysegfDoorImage = 0;
 void * ysegfItemImage = 0;
 void * ysegfDoorAlpha = 0;
 void * ysegfItemAlpha = 0;
 unsigned char ysegfItemFadeAlpha = 0;
-unsigned char D_0069D8A0[8] = "size";
-unsigned char D_0069D8A8[8] = "pBuf";
-unsigned char D_0069D8B0[8] = "imgItem";
-unsigned char D_0069D8B8[8] = "imgDoor";
-void *D_0069D8C0 = (void *) ((char *) D_0068B368 + 0x38);
-unsigned char D_0069D8C8[8] = "NO DATA";
-unsigned char D_0069D8D0[8] = "Address";
-unsigned char D_0069D8D8[8] = "Decoder";
-unsigned char D_0069D8E0[8] = "%s0%d";
-unsigned char D_0069D8E8[8] = "%s%d";
-unsigned char D_0069D8F0[8] = ".xtx";
+unsigned char ysegfSizeAssertText[8] = "size";
+unsigned char ysegfTextBufferAssertText[8] = "pBuf";
+unsigned char ysegfItemImageAssertText[8] = "imgItem";
+unsigned char ysegfDoorImageAssertText[8] = "imgDoor";
+void *ysegfNoDataText = (void *) ((char *) ysegfDetailTextHeader + 0x38);
+unsigned char ysegfNoDataShadowText[8] = "NO DATA";
+unsigned char ysegfAddressTitleText[8] = "Address";
+unsigned char ysegfDecoderTitleText[8] = "Decoder";
+unsigned char ysegfItemImageZeroPadFormat[8] = "%s0%d";
+unsigned char ysegfItemImageNumberFormat[8] = "%s%d";
+unsigned char ysegfImageSuffixText[8] = ".xtx";
 
-int D_003ECAB0[10] = { 0x25e, 0x25f, 0x260, 0x261, 0x21a, 0x262, 0x263, 0x264, 0x265, 0x0 };
-int D_003ECAD8[10] = { 0x258, 0x259, 0x25a, 0x219, 0x21a, 0x21b, 0x25b, 0x25c, 0x25d, 0x0 };
-int D_003ECB00[10] = { 0x21f, 0x220, 0x221, 0x219, 0x21a, 0x21b, 0x27c, 0x27d, 0x27e, 0x0 };
+int ysegfTreasureRowPanelImage[10] = { 0x25e, 0x25f, 0x260, 0x261, 0x21a, 0x262, 0x263, 0x264, 0x265, 0x0 };
+int ysegfTreasureSelectedPanelImage[10] = { 0x258, 0x259, 0x25a, 0x219, 0x21a, 0x21b, 0x25b, 0x25c, 0x25d, 0x0 };
+int ysegfItemFramePanelImage[10] = { 0x21f, 0x220, 0x221, 0x219, 0x21a, 0x21b, 0x27c, 0x27d, 0x27e, 0x0 };
 struct FontDrawItem ysegfItemNameDraw = { .cell_index = 0, .x = 0, .y = 0, .offset_x = 0, .offset_y = 0, .size_w = 0, .size_h = 0, .flags = 0 };
 signed char segAddrOnFlags[YSEGF_ENTRY_COUNT] = { 0 };
 

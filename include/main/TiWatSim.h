@@ -2,6 +2,7 @@
 #define INCLUDE_MAIN_TIWATSIM_H
 
 #include "shared.h"
+#include "main/xgl_2.h"
 
 /* One water simulation item (0x110 bytes) of a TiWaterSub table (src/main/TiWatSim.c, TiWater.c). */
 typedef struct TiWatSimItem {
@@ -32,8 +33,8 @@ typedef struct TiWatSimItem {
     u8 unmodeled_80[0x04];
     u8 *block;
     u8 unmodeled_88[0x08];
-    Matrix4 transform;          /* +0x90: translate, rotate Y, scale (tiWaterRegisterSub) */
-    Matrix4 matrix;             /* +0xD0: the inverse of transform */
+    Matrix transform;           /* +0x90: translate, rotate Y, scale (tiWaterRegisterSub) */
+    Matrix matrix;              /* +0xD0: the inverse of transform */
 } TiWatSimItem;
 
 /* A water table (the sub-object of a TiWaterObject): magic "WAT ", the number of items and the items. */
@@ -46,6 +47,7 @@ typedef struct TiWaterSub {
 } TiWaterSub;
 
 void tiWatSimStepRain(TiWatSimItem *item);
+void tiWatSimRandomizeItem(TiWatSimItem *item, int range);
 void tiWatSimUpdate(float step, TiWatSimItem *item);
 void tiWatSimDisturbAll(TiWaterSub *table, Vector4 *pPos);
 void tiWatSimStoreSourcePos(const Vector4 *position);

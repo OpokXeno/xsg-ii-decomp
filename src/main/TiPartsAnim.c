@@ -1,25 +1,18 @@
 #include "common.h"
 #include "shared.h"
-#include "main/tu026.h"
-#include "main/tu254.h"
-#include "main/tu256.h"
+#include "main/assert_fail.h"
+#include "main/xgl_vector_ops.h"
+#include "main/xgl_cur_mul.h"
+#include "main/xgl_cur_matrix.h"
 #include "main/TiXacAnimCurve.h"
+#include "main/TiMRPackage.h"
+#include "main/TiPartsAnim.h"
 
-void xglCurMatrixGet(Matrix4 matrix);
-void xglCurMatrixSet(Matrix4 matrix);
 
-/* The pack read by tiPartsAnimSamplePose: curveParam is the curve parameter of every joint,
- * pPamData the start of the animation data. */
-typedef struct TiPartsPack {
-    unsigned char unmodeled_00[0x18];
-    float curveParam;
-    unsigned char unmodeled_1C[0xB8];
-    u8 *pPamData;
-} TiPartsPack;
 
-/* Samples `count` joints into matrices, reading each joint's curves from pPack->pPamData. The nine curve values
+/* Samples `count` joints into matrices, reading each joint's curves from the parts animation data of pPack. The nine curve values
  * of a joint are: offset (0-2), rotation X, Y, Z (3-5) and pivot (6-8). */
-void tiPartsAnimSamplePose(Matrix4 *matrices, TiPartsPack *pPack, int count)
+void tiPartsAnimSamplePose(Matrix4 *matrices, TiMRPackage *pPack, int count)
 {
     float values[9];
     float negPivot[3];
@@ -27,14 +20,14 @@ void tiPartsAnimSamplePose(Matrix4 *matrices, TiPartsPack *pPack, int count)
     u8 **ppJointHeader;
     int i;
 
-    if (pPack->pPamData == 0) {
+    if (pPack->pamData == 0) {
         assertFailed("pPack->pPamData", "../TiPartsAnim.euc.c", 58);
     }
-    cursor = pPack->pPamData + 12;
+    cursor = pPack->pamData->curves;
     for (i = 0; i < count; i++) {
         ppJointHeader = &cursor;
-        xacReadJointCurves9(values, ppJointHeader, pPack->curveParam);
-        tiVu0LoadFixedMatrix();
+        xacReadJointCurves9(values, ppJointHeader, pPack->state_a.position);
+        tiVu0LoadIdentityMatrix();
         if (values[0] != 0.0f || values[1] != 0.0f || values[2] != 0.0f) {
             xglCurMulTranslate(values);
         }
@@ -76,7 +69,7 @@ void tiPartsAnimSampleJoint(Matrix4 matrix, u8 **ppJointHeader, float curveParam
     float negPivot[3];
 
     xacReadJointCurves9(values, ppJointHeader, curveParam);
-    tiVu0LoadFixedMatrix();
+    tiVu0LoadIdentityMatrix();
     if (values[0] != 0.0f || values[1] != 0.0f || values[2] != 0.0f) {
         xglCurMulTranslate(values);
     }
@@ -109,65 +102,31 @@ void tiPartsAnimSampleJoint(Matrix4 matrix, u8 **ppJointHeader, float curveParam
     xglCurMatrixGet(matrix);
 }
 
-/* One node of the old table format (0x1C bytes): its matrix index and transform. */
-typedef struct TiPartsSlot {
-    int matrixIndex;
-    float offset[3];
-    float rotation[3];
-} TiPartsSlot;
-
-/* One node of the new table format (0x20 bytes): the id it is searched by, then its matrix index and transform. */
-typedef struct TiPartsKey {
-    int id;
-    int matrixIndex;
-    float offset[3];
-    float rotation[3];
-} TiPartsKey;
-
-/* The node table of an MRPack handle: threshold at +4 (below 1.1f the slots are indexed, else searched by id),
- * count at +8, entries from +0x10. */
-typedef struct TiPartsTable {
-    unsigned char unmodeled_00[4];
-    float threshold;
-    int count;
-    unsigned char unmodeled_0C[4];
-    TiPartsSlot slots[0];
-} TiPartsTable;
-
-/* The MRPack handle that tiMRPackageGetNodeMatrix reads (the actor's handle640): its node table at +0xD8, the matrix array
- * at +0xE0, the same offsets as the status block of TiDynamicsColl.c. */
-typedef struct TiMRPackageHandle {
-    unsigned char unmodeled_00[0xD8];
-    TiPartsTable *table;
-    unsigned char unmodeled_DC[4];
-    Matrix4 *matrices;
-} TiMRPackageHandle;
-
 /* Writes the matrix of node `nodeKey` into outMatrix: the old format indexes the table directly, the newer one
  * searches it by id. useBaseMatrix selects the start matrix: the handle's matrix of the node (set) or the fixed one.
  * Returns 0 when the node is absent. */
-int tiMRPackageGetNodeMatrix(TiMRPackageHandle *handle, int nodeKey, Matrix4 outMatrix, int useBaseMatrix)
+int tiMRPackageGetNodeMatrix(TiMRPackage *handle, int nodeKey, Matrix4 outMatrix, int useBaseMatrix)
 {
-    TiPartsTable *table;
-    TiPartsSlot *slots;
-    TiPartsKey *keys;
-    TiPartsKey *key;
+    TiNodeTable *table;
+    TiNodeSlot *slots;
+    TiNodeKey *keys;
+    TiNodeKey *key;
     unsigned int nodeIndex;
 
-    table = handle->table;
+    table = handle->nodeTable;
     if (table == 0) {
         return 0;
     }
     if (table->threshold < 1.1f) {
         slots = table->slots;
-        if ((unsigned int) nodeKey >= (unsigned int) table->count) {
+        if ((unsigned int) nodeKey >= table->count) {
             return 0;
         }
         nodeIndex = (unsigned int) nodeKey;
         if (useBaseMatrix != 0) {
-            xglCurMatrixSet(handle->matrices[slots[nodeIndex].matrixIndex]);
+            xglCurMatrixSet(handle->globalMat[slots[nodeIndex].matrixIndex]);
         } else {
-            tiVu0LoadFixedMatrix();
+            tiVu0LoadIdentityMatrix();
         }
         if (slots[nodeIndex].rotation[2] != 0.0f) {
             xglCurMulRotateZ(slots[nodeIndex].rotation[2]);
@@ -183,9 +142,9 @@ int tiMRPackageGetNodeMatrix(TiMRPackageHandle *handle, int nodeKey, Matrix4 out
         }
         xglCurMatrixGet(outMatrix);
     } else {
-        keys = (TiPartsKey *) table->slots;
+        keys = (TiNodeKey *) table->slots;
         key = 0;
-        for (nodeIndex = 0; nodeIndex < handle->table->count; nodeIndex++) {
+        for (nodeIndex = 0; nodeIndex < handle->nodeTable->count; nodeIndex++) {
             if (keys[nodeIndex].id == nodeKey) {
                 key = &keys[nodeIndex];
                 break;
@@ -195,9 +154,9 @@ int tiMRPackageGetNodeMatrix(TiMRPackageHandle *handle, int nodeKey, Matrix4 out
             return 0;
         }
         if (useBaseMatrix != 0) {
-            xglCurMatrixSet(handle->matrices[key->matrixIndex]);
+            xglCurMatrixSet(handle->globalMat[key->matrixIndex]);
         } else {
-            tiVu0LoadFixedMatrix();
+            tiVu0LoadIdentityMatrix();
         }
         if (key->rotation[2] != 0.0f) {
             xglCurMulRotateZ(key->rotation[2]);

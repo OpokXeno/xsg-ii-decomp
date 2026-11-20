@@ -1,14 +1,22 @@
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_mc_request.h"
 #include "main/xgl_timer0.h"
-
-extern u8 *WorkEnd;
+#include "main/control_entry.h"
 
 /*
  * EE Timer 0.  T0_COUNT is the free-running counter and T0_MODE its control
  * word; bit 7 (0x80) of T0_MODE is CUE, which starts the count.
  */
 #define T0_COUNT ((volatile u32 *)0x10000000)
+#define T0_MODE ((volatile u32 *)0x10000010)
+#define T0_MODE_CUE 0x80
+
+void xglTimer0Reset(int mode) {
+    *T0_COUNT = 0;
+    *T0_MODE = mode + T0_MODE_CUE;
+}
+
 
 #define T0_COUNT_MASK 0xffff
 
@@ -71,17 +79,13 @@ typedef struct XglLanguageCodes {
 } XglLanguageCodes;
 
 extern const XglLanguageCodes xglLanguageCodeTable;
-/* The save image of tu012.c; the byte at +0x3A selects the language (`caption_all` in the settings view
- * of include/main/tu101.h). Unsized: the original addresses it absolutely, not through the gp. */
-extern unsigned char SaveData[];
-#define SAVE_DATA_LANGUAGE_INDEX 0x3A
 
 /* Copies the nine two-letter language codes in xglLanguageCodeTable to the stack and
  * returns the one selected by xglLanguageIndex; a non-null buffer receives its two bytes. */
 unsigned short xglGetLanguageCode(char *buffer)
 {
     XglLanguageCodes codes = xglLanguageCodeTable;
-    unsigned short code = codes.code[SaveData[SAVE_DATA_LANGUAGE_INDEX]];
+    unsigned short code = codes.code[SaveData.caption_all];
 
     if (buffer != 0) {
         buffer[0] = code;

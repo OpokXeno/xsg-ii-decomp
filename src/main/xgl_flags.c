@@ -1,9 +1,8 @@
 #include "common.h"
 #include "shared.h"
+#include "main/xgl_mc_request.h"
 #include "main/xgl_flags.h"
 
-extern unsigned char SaveData[];
-int xglFlagsGet1(int bit_offset);
 
 /*
  * Target-specific bug-preserving storage view.  The original loads this
@@ -16,16 +15,6 @@ union XglPackedFlagWindow {
     unsigned char bytes[8];
 };
 
-int xglFlagsGet(int bit_offset, int bit_count);
-int xglFlagsGet2(int bit_offset);
-int xglFlagsGet4(int bit_offset);
-int xglFlagsGet8(int bit_offset);
-int xglFlagsGet16(int bit_offset);
-int xglFlagsGet32(int bit_offset);
-unsigned long long xglFlagsGet64(int bit_offset);
-
-/* The packed script flags are the byte range of SaveData starting at +0x74. */
-#define XGL_FLAGS_OFFSET 0x74
 
 int xglFlagsSet(int bit_offset, int bit_count, int value)
 {
@@ -49,7 +38,7 @@ int xglFlagsSet(int bit_offset, int bit_count, int value)
 
     for (byte_index = 0; byte_index < byte_count; byte_index++) {
         flag_window.bytes[byte_index] =
-            SaveData[XGL_FLAGS_OFFSET + byte_offset + byte_index];
+            SaveData.scriptFlags[byte_offset + byte_index];
     }
 
     /* Like xglFlagsGet, the word load observes the byte window after only
@@ -63,7 +52,7 @@ int xglFlagsSet(int bit_offset, int bit_count, int value)
     flag_window.signed_value = replacement_word;
 
     for (byte_index = 0; byte_index < byte_count; byte_index++) {
-        SaveData[XGL_FLAGS_OFFSET + byte_offset + byte_index] =
+        SaveData.scriptFlags[byte_offset + byte_index] =
             flag_window.bytes[byte_index];
     }
 
@@ -125,7 +114,7 @@ int xglFlagsGet(int bit_offset, int bit_count)
          byte_index < ((bit_count + (bit_offset & 7) + 7) >> 3);
          byte_index++) {
         flag_window.bytes[byte_index] =
-            SaveData[XGL_FLAGS_OFFSET + (bit_offset >> 3) + byte_index];
+            SaveData.scriptFlags[(bit_offset >> 3) + byte_index];
     }
     /*
      * Preserve the original EE SLLV/ADDIU sequence.  SLLV uses only the low
@@ -187,14 +176,14 @@ unsigned long long xglFlagsGet64(int bit_offset)
 
 /* Clears the 256-byte packed flag window at SaveData +0x74, the window that
    xglFlagsGet and xglFlagsSet address. */
-void xglFlagsClear(void)
+void xglFlagsInitial(void)
 {
     u32 index;
 
     index = 0;
     do
     {
-        SaveData[XGL_FLAGS_OFFSET + index] = 0;
+        SaveData.scriptFlags[index] = 0;
         index += 1;
     }
     while (index < 0x100U);

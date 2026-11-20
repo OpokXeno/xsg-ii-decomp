@@ -1,8 +1,34 @@
 #include "common.h"
 #include "shared.h"
+#include "main/xrg_rand_int.h"
 
-void XrgOuterVector(Vector4 *destination, Vector4 *first, Vector4 *second);
-float XrgInnerVector(Vector4 *first, Vector4 *second);
+#include "quadword.h"
+
+#include "main/xgl_2.h"
+/* Four-component scale: dst = src * scale (same body as XrgScaleVector in X1 ov12). */
+void XrgScaleVector(Vector4 *dst, Vector4 *src, float scale) {
+    dst->x = src->x * scale;
+    dst->y = src->y * scale;
+    dst->z = src->z * scale;
+    dst->w = src->w * scale;
+}
+
+/* Componentwise product of two vectors, all four components. */
+void XrgMultiplyVector(Vector4 *dst, Vector4 *lhs, Vector4 *rhs) {
+    dst->x = lhs->x * rhs->x;
+    dst->y = lhs->y * rhs->y;
+    dst->z = lhs->z * rhs->z;
+    dst->w = lhs->w * rhs->w;
+}
+
+/* In-place accumulate: dst += src, all four components. */
+void XrgAccumulateVector(Vector4 *dst, Vector4 *src) {
+    dst->x += src->x;
+    dst->y += src->y;
+    dst->z += src->z;
+    dst->w += src->w;
+}
+
 
 /* Scales a quaternion to unit length into destination; a zero length is replaced by 1e-8f before the division. */
 void XrgQuaternionNormalize(Vector4 *destination, Vector4 *source)
@@ -20,8 +46,6 @@ void XrgQuaternionNormalize(Vector4 *destination, Vector4 *source)
     destination->z = source->z * length;
     destination->w = source->w * length;
 }
-
-#include "quadword.h"
 
 f32 cosf(f32);
 f32 sinf(f32);
@@ -59,12 +83,12 @@ void XrgEulerToQuaternion(Vector4 *quaternion, Vector4 *euler)
 
 double fptodp(f32);
 double sqrt(double);
-double func_002A1D80(double, double);
+double atan2(double, double);
 f32 dptofp(double);
 
 static inline f32 XrgArcTangent2(f32 y, f32 x)
 {
-    return dptofp(func_002A1D80(fptodp(y), fptodp(x)));
+    return dptofp(atan2(fptodp(y), fptodp(x)));
 }
 
 /* Euler angles (x, y, z in radians) from a quaternion, through its rotation matrix. */
@@ -96,7 +120,7 @@ void XrgQuaternionToEuler(Vector4 *euler, Vector4 *quaternion)
         matrix[1][1] = 1.0f - 2.0f * quaternion->x * quaternion->x - 2.0f * quaternion->z * quaternion->z;
         matrix[1][2] = 2.0f * quaternion->y * quaternion->z - 2.0f * quaternion->w * quaternion->x;
         euler->x = XrgArcTangent2(-matrix[1][2], matrix[1][1]);
-        euler->z = dptofp(func_002A1D80(0.0, 1.0));
+        euler->z = dptofp(atan2(0.0, 1.0));
     }
 }
 
@@ -147,8 +171,6 @@ void XrgOuterVector(Vector4 *destination, Vector4 *first, Vector4 *second)
     destination->z = first->x * second->y - first->y * second->x;
 }
 
-void XrgScaleVector(f32 scale, Vector4 *destination, Vector4 *source);
-
 void XrgQuaternionCombine(Vector4 *result, Vector4 *first, Vector4 *second)
 {
     Vector4 scaled_first;
@@ -158,9 +180,9 @@ void XrgQuaternionCombine(Vector4 *result, Vector4 *first, Vector4 *second)
     f32 dot;
 
     scaled_first = *first;
-    XrgScaleVector(first->w, &scaled_first, &scaled_first);
+    XrgScaleVector(&scaled_first, &scaled_first, first->w);
     scaled_second = *second;
-    XrgScaleVector(second->w, &scaled_second, &scaled_second);
+    XrgScaleVector(&scaled_second, &scaled_second, second->w);
     XrgOuterVector(&cross, second, first);
     sum.x = scaled_first.x + scaled_second.x + cross.x;
     sum.y = scaled_first.y + scaled_second.y + cross.y;
@@ -190,7 +212,6 @@ void XrgQuaternionMultiply(Vector4 *result, Vector4 *first, Vector4 *second)
     result->w = a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z;
 }
 
-void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right);
 
 void XrgQuaternionSlerp(Vector4 *result, Vector4 *from, Vector4 *to, f32 t)
 {

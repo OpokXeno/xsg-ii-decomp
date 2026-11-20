@@ -2,16 +2,26 @@
 #include "gs.h"
 #include "shared.h"
 #include "main/pad.h"
-#include "main/tu017.h"
-#include "main/tu021.h"
-#include "main/tu051.h"
+#include "main/xgl_mc_request.h"
+#include "main/movie_player.h"
+#include "main/se_bank_load.h"
+#include "main/game_camera.h"
 #include "main/xgl_font.h"
 #include "main/xgl_timer0.h"
-#include "main/tu048.h"
+#include "main/game_data.h"
+#include "main/xgl_cd.h"
+#include "main/xgl_render.h"
+#include "main/xgl_packet.h"
+#include "main/xgl_thread.h"
+#include "main/game_movie.h"
+#include "main/fade_ctrl.h"
+#include "main/game_pause_disp.h"
+#include "main/xgl_studio.h"
+#include "main/xgl_cd_arena.h"
+#include "main/res_get_path.h"
 
 char *caption_nextline(char *cursor);
 char *caption_getparam(char *cursor, int *time, char *out);
-void fadeStartOut(int frames);
 
 /* A one-frame fade-out (fadeStartOut(1)), used when the movie is skipped (TRIANGLE). */
 void GameMovieCaptionFadeOut(void) {
@@ -151,12 +161,12 @@ char *caption_getparam(char *cursor, int *time, char *out)
 }
 
 /* Small data of the caption player: the file name suffix, the movie directory and the two string pointers
- * GameMovieCaptionPlay builds the paths from. */
-char D_0069CFF8[8] = ".sfd";
-char *D_0069D000 = D_0069CFF8;
-char D_0069D008[8] = "movie/";
-char *D_0069D010 = D_0069D008;
-const char D_0069D018[8] = "\013\r\003\031\003";
+ * GameMpeg2Play builds the paths from. */
+char movieFileSuffix[8] = ".sfd";
+char *movieFileSuffixPointer = movieFileSuffix;
+char movieDirectoryPath[8] = "movie/";
+char *movieDirectoryPathPointer = movieDirectoryPath;
+const char gameFontStyleControl[8] = "\013\r\003\031\003";
 
 extern const char movieCaptionControl[];
 
@@ -201,17 +211,12 @@ typedef struct XglPacket XglPacket;
 /* The two frame-buffer base pages read by the copy packets below and the movie flag of the caption player. */
 typedef struct MovieRenderState {
     unsigned char unmodeled_00[0x10];
-    /* +0x10, +0x12: DrawImageRenderState (ov02/tu001.c) calls these width/height; both are frame-buffer
+    /* +0x10, +0x12: DrawImageRenderState (ov02/title.c) calls these width/height; both are frame-buffer
      * pages in BITBLTBUF. */
     unsigned short buffer_base[2];
     unsigned char unmodeled_14[0x84 - 0x14];
-    unsigned char movie_active;    /* +0x84: set while GameMovieCaptionPlay runs the player */
+    unsigned char movie_active;    /* +0x84: set while GameMpeg2Play runs the player */
 } MovieRenderState;
-
-typedef struct MovieGsRegister {
-    u64 data;
-    u64 address;
-} MovieGsRegister;
 
 /* GS registers of a local-to-local transfer (BITBLTBUF, TRXPOS, TRXREG, TRXDIR from gs.h), written through the A+D GIF tag. */
 
@@ -224,11 +229,11 @@ typedef struct MovieCopyPacket {
     u64 vif_direct;
     u64 gif_tag;
     u64 gif_registers;
-    MovieGsRegister bitbltbuf;
-    MovieGsRegister trxpos;
-    MovieGsRegister trxreg;
-    MovieGsRegister trxdir;
-    MovieGsRegister texflush;
+    GsAdPair bitbltbuf;
+    GsAdPair trxpos;
+    GsAdPair trxreg;
+    GsAdPair trxdir;
+    GsAdPair texflush;
 } MovieCopyPacket;
 
 /* EE scratchpad RAM. */
@@ -237,16 +242,11 @@ typedef struct MovieCopyPacket {
 #define MOVIE_COPY_QWORDS 7
 
 extern MovieRenderState sRender;
-extern XglPacket *xglPacketGetCurrent(void);
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int count);
-extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int qwc);
-extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 
-/* func_001E7B08 and func_001E7C08 queue the same 512x448 GS local-to-local copy between the two frame-buffer
- * pages at sRender +0x10 / +0x12 (BITBLTBUF: SBP in bits 0-13, DBP in bits 32-45). func_001E7B08 copies
- * page buffer_base[1] to buffer_base[0], func_001E7C08 copies buffer_base[0] to buffer_base[1]. */
-void func_001E7B08(void)
+/* GameMovieFrameCopy1To0 and GameMovieFrameCopy0To1 queue the same 512x448 GS local-to-local copy between the two frame-buffer
+ * pages at sRender +0x10 / +0x12 (BITBLTBUF: SBP in bits 0-13, DBP in bits 32-45). GameMovieFrameCopy1To0 copies
+ * page buffer_base[1] to buffer_base[0], GameMovieFrameCopy0To1 copies buffer_base[0] to buffer_base[1]. */
+void GameMovieFrameCopy1To0(void)
 {
     XglPacket *packet;
     MovieCopyPacket *copy;
@@ -259,22 +259,22 @@ void func_001E7B08(void)
     copy->gif_registers = 0xE;
     copy->bitbltbuf.data = ((u64)(sRender.buffer_base[1] << 5) | 0x80000) | ((u64)sRender.buffer_base[0] << 37) |
                            ((u64)0x8000 << 36);
-    copy->bitbltbuf.address = GS_BITBLTBUF;
+    copy->bitbltbuf.reg = GS_BITBLTBUF;
     copy->trxpos.data = 0;
-    copy->trxpos.address = GS_TRXPOS;
+    copy->trxpos.reg = GS_TRXPOS;
     copy->trxreg.data = ((u64)448 << 32) | 512;
-    copy->trxreg.address = GS_TRXREG;
+    copy->trxreg.reg = GS_TRXREG;
     copy->trxdir.data = 2;
-    copy->trxdir.address = GS_TRXDIR;
+    copy->trxdir.reg = GS_TRXDIR;
     copy->texflush.data = 0;
-    copy->texflush.address = GS_TEXFLUSH;
+    copy->texflush.reg = GS_TEXFLUSH;
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     sceVif1PkAddDirectDataN(packet, MOVIE_COPY_PACKET, MOVIE_COPY_QWORDS);
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-void func_001E7C08(void)
+void GameMovieFrameCopy0To1(void)
 {
     XglPacket *packet;
     MovieCopyPacket *copy;
@@ -287,62 +287,35 @@ void func_001E7C08(void)
     copy->gif_registers = 0xE;
     copy->bitbltbuf.data = ((u64)(sRender.buffer_base[0] << 5) | 0x80000) | ((u64)sRender.buffer_base[1] << 37) |
                            ((u64)0x8000 << 36);
-    copy->bitbltbuf.address = GS_BITBLTBUF;
+    copy->bitbltbuf.reg = GS_BITBLTBUF;
     copy->trxpos.data = 0;
-    copy->trxpos.address = GS_TRXPOS;
+    copy->trxpos.reg = GS_TRXPOS;
     copy->trxreg.data = ((u64)448 << 32) | 512;
-    copy->trxreg.address = GS_TRXREG;
+    copy->trxreg.reg = GS_TRXREG;
     copy->trxdir.data = 2;
-    copy->trxdir.address = GS_TRXDIR;
+    copy->trxdir.reg = GS_TRXDIR;
     copy->texflush.data = 0;
-    copy->texflush.address = GS_TEXFLUSH;
+    copy->texflush.reg = GS_TEXFLUSH;
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     sceVif1PkAddDirectDataN(packet, MOVIE_COPY_PACKET, MOVIE_COPY_QWORDS);
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-/* The two save settings the movie player reads. */
-typedef struct MovieSaveSettings {
-    unsigned char unmodeled_00[0x29];
-    unsigned char dolby_digital;   /* +0x29: Dolby Digital on; the movie render buffer gets the extra block */
-    unsigned char unmodeled_2a[0x3A - 0x2A];
-    unsigned char caption_all; /* +0x3A */
-} MovieSaveSettings;
-
 #define MOVIE_SE_PAUSE 0x2000011
 
-extern MovieSaveSettings SaveData;
-extern PadRecord PadData;
-extern signed char D_0069E094;
-extern int StudioEntrySkip;
-extern char *D_0069D000; /* ".sfd" */
-extern char *D_0069D010; /* "movie/" */
-extern const char D_00688420[]; /* "$ay%d;$xx0,22;" */
-extern const char D_00688430[]; /* the "seek error" message with its replay/skip hints */
+extern char *movieFileSuffixPointer; /* ".sfd" */
+extern char *movieDirectoryPathPointer; /* "movie/" */
+extern const char movieCaptionPositionFormat[]; /* "$ay%d;$xx0,22;" */
+extern const char movieSeekErrorText[]; /* the "seek error" message with its replay/skip hints */
 
-void fadeClear(void);
-void soundRestart(void);
-void *GameResArenaReserve(unsigned int bytesWanted);
-void GameResArenaRelease(void);
-int xglCdServiceIfPending(void);
-unsigned char xglFontLoad(int, int);
-void xglRenderClearDepth(void);
-int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-void xglFontPrintDirect(const char *text);
-char *func_00195E90(int mode, char *cursor, int flag);
 int sprintf(char *destination, const char *format, ...);
-void pauseRefBackdrop(void);
-void pauseDrawTitleAndHints(int skip_hidden);
-void xglSleep(void);
-void xglClockSampleDayTime(void);
-void xglClockAccumulate(void);
 
 /* Plays the movie name (file name.sfd) with its caption script movie/<language>/name.txt: the script is read
  * with xglCdReadFile into the render buffer, laid out by caption_convert and printed with xglFontPrintDirect
  * while the player runs; START pauses, the soft-reset combination (PAD_SOFT_RESET_HELD) sets CONTROL_SOFT_RESET
  * and ends it, a seek error offers replay or skip. Called by the mpeg2 playback. */
-void GameMovieCaptionPlay(const char *name)
+void GameMpeg2Play(const char *name)
 {
     char path[0x40];
     MoviePlayerRecord player;
@@ -365,15 +338,15 @@ void GameMovieCaptionPlay(const char *name)
 
     fadeClear();
     skip_hidden = 0;
-    func_001E7C08();
+    GameMovieFrameCopy0To1();
     soundRestart();
-    buffer = GameResArenaReserve(movieRenderBufferSize(SaveData.dolby_digital));
+    buffer = GameResourceWorkAlloc(movieRenderBufferSize(SaveData.dolby_digital));
     if (gameWork.control & CONTROL_SOFT_RESET) {
         return;
     }
     while (xglCdServiceIfPending() != 0) {
     }
-    xglFontLoad(0, 0);
+    xglFontLoad(0, CD_NOTIFY_CURRENT);
     src = name;
     cursor = path;
     if (*src == 'E') {
@@ -383,7 +356,7 @@ void GameMovieCaptionPlay(const char *name)
         src++;
         cursor++;
     }
-    src = D_0069D000;
+    src = movieFileSuffixPointer;
     while ((*cursor = *src) != 0) {
         src++;
         cursor++;
@@ -392,7 +365,7 @@ void GameMovieCaptionPlay(const char *name)
     do {
         dst = buffer;
         replay = 0;
-        cursor = D_0069D010;
+        cursor = movieDirectoryPathPointer;
         while (*cursor != 0) {
             *dst++ = *cursor++;
         }
@@ -409,7 +382,7 @@ void GameMovieCaptionPlay(const char *name)
                 break;
             }
         }
-        size = xglCdReadFile(buffer, buffer, 0, 0);
+        size = xglCdReadFile(buffer, buffer, 0, CD_NOTIFY_CURRENT);
         if (size < 0) {
             size = 0;
         } else {
@@ -422,7 +395,7 @@ void GameMovieCaptionPlay(const char *name)
         movieRenderBufferAlloc(&player, (int)(buffer + ((size + 63) & ~63)), SaveData.dolby_digital);
         if (moviePlayerStartFile(&player, path) >= 0) {
             sRender.movie_active = 1;
-            D_0069E094 = StudioEntrySkip = 1;
+            xglRenderVSyncInterval = StudioEntrySkip = 1;
             gameWork.inputDelay = 32;
             for (;;) {
                 status = moviePlayerUpdate(&player);
@@ -447,26 +420,26 @@ void GameMovieCaptionPlay(const char *name)
                     if (lines >= 3) {
                         y -= (lines - 2) * 22;
                     }
-                    sprintf(position_control, D_00688420, y);
+                    sprintf(position_control, movieCaptionPositionFormat, y);
                     xglFontPrintDirect(position_control);
                     if (SaveData.caption_all != 0 || text[2] == ' ') {
                         xglFontPrintDirect(text);
                     }
                 }
                 if (status < 0) {
-                    func_001E7B08();
+                    GameMovieFrameCopy1To0();
                     for (pass = 0; pass < 2; pass++) {
-                        xglFontPrint(96, 200, 0xFFFFFF, D_00688430);
-                        pauseRefBackdrop();
+                        xglFontPrint(96, 200, 0xFFFFFF, movieSeekErrorText);
+                        GamePauseDispBG();
                         xglSleep();
                     }
                     xglClockSampleDayTime();
                     for (;;) {
-                        if (PadData.pressed & PAD_TRIANGLE) {
+                        if (PadData[0].pressed & PAD_TRIANGLE) {
                             GameMovieCaptionFadeOut();
                             break;
                         }
-                        if (PadData.pressed & PAD_CIRCLE) {
+                        if (PadData[0].pressed & PAD_CIRCLE) {
                             replay = 1;
                             break;
                         }
@@ -482,41 +455,41 @@ void GameMovieCaptionPlay(const char *name)
                 if (player.frame_stamp >= 0) {
                     if (gameWork.inputDelay != 0) {
                         gameWork.inputDelay--;
-                    } else if (PadData.pressed & PAD_START) {
+                    } else if (PadData[0].pressed & PAD_START) {
                         moviePlayerPause(&player, 1);
                         xglClockSampleDayTime();
                         gameWork.inputDelay = 32;
-                        if ((PadData.held & PAD_SOFT_RESET_HELD) == PAD_SOFT_RESET_HELD) {
+                        if ((PadData[0].held & PAD_SOFT_RESET_HELD) == PAD_SOFT_RESET_HELD) {
                             gameWork.control |= CONTROL_SOFT_RESET;
                             break;
                         }
                         seVoiceStartDefault(MOVIE_SE_PAUSE);
                         xglSleep();
-                        func_001E7B08();
-                        pauseDrawTitleAndHints(skip_hidden);
+                        GameMovieFrameCopy1To0();
+                        GamePauseDispEvent(skip_hidden);
                         xglSleep();
-                        pauseDrawTitleAndHints(skip_hidden);
+                        GamePauseDispEvent(skip_hidden);
                         xglSleep();
                         for (;;) {
                             if (gameWork.inputDelay != 0) {
                                 gameWork.inputDelay--;
-                            } else if (skip_hidden == 0 && (PadData.pressed & PAD_TRIANGLE)) {
+                            } else if (skip_hidden == 0 && (PadData[0].pressed & PAD_TRIANGLE)) {
                                 GameMovieCaptionFadeOut();
                                 break;
-                            } else if (PadData.pressed & PAD_START) {
+                            } else if (PadData[0].pressed & PAD_START) {
                                 break;
                             }
                             xglSleep();
                         }
                         /* After the pause the original tests the combination with START pressed
                          * (heldAndPressed, 0x0800010F), not the held mask tested above. */
-                        if ((PadData.heldAndPressed & PAD_SOFT_RESET) == PAD_SOFT_RESET) {
+                        if ((PadData[0].heldAndPressed & PAD_SOFT_RESET) == PAD_SOFT_RESET) {
                             gameWork.control |= CONTROL_SOFT_RESET;
                             break;
                         }
                         seVoiceStartDefault(MOVIE_SE_PAUSE);
                         gameWork.inputDelay = 32;
-                        if (skip_hidden == 0 && (PadData.pressed & PAD_TRIANGLE)) {
+                        if (skip_hidden == 0 && (PadData[0].pressed & PAD_TRIANGLE)) {
                             gameWork.inputDelay = 64;
                             break;
                         }
@@ -527,7 +500,7 @@ void GameMovieCaptionPlay(const char *name)
                 xglSleep();
             }
             StudioEntrySkip = 0;
-            D_0069E094 = 2;
+            xglRenderVSyncInterval = 2;
             sRender.movie_active = 0;
         }
         moviePlayerDestroy(&player);
@@ -539,18 +512,20 @@ void GameMovieCaptionPlay(const char *name)
           gameWork.mapId == 0x1B8E || gameWork.mapId == 0x1B8F || gameWork.mapId == 0x1B60 ||
           gameWork.mapId == 0x1B70 || gameWork.mapId == 0x1B72 || gameWork.mapId == 0x1B81 ||
           gameWork.mapId == 0x1B89 || gameWork.mapId == 0x1B90 ||
-          /* the GameEnd map (game_over_059 MAP_ID_GAME_END, tu110 MAP_ID_SPLIT_FLAG_MAP) */
+          /* the GameEnd map (game_over_059 MAP_ID_GAME_END, pt_member.c MAP_ID_SPLIT_FLAG_MAP) */
           gameWork.mapId == 0x1B91)) {
         fadeStartOut(1);
     }
-    func_001E7B08();
+    GameMovieFrameCopy1To0();
     xglSleep();
     xglSleep();
-    xglFontLoad(1, 0);
+    xglFontLoad(1, CD_NOTIFY_CURRENT);
     GameResArenaRelease();
     fadeClear();
 }
 
 const char movieCaptionControl[48] = "$bg3;$prop1;$han1;$xx0,24;$xx1,8;$xx2,0;";
-const char D_00688420[16] = "$ay%d;$xx0,22;";
-const char D_00688430[88] = "\013\025\002\001\020\r\003\031\001A seek error has occured.\n\n\n\014\200  \241\373\014\200\200\200button: Replay\n\n\014 \200 \242\244\014\200\200\200button: Skip";
+const char movieCaptionPositionFormat[16] = "$ay%d;$xx0,22;";
+/* JP: A seek error has occured.\n\n\n○button: Replay\n\n△button: Skip
+ * EN: A seek error has occured.\n\n\n(O) button: Replay\n\n(Triangle) button: Skip */
+const char movieSeekErrorText[88] = "\013\025\002\001\020\r\003\031\001A seek error has occured.\n\n\n\014\200  \241\373\014\200\200\200button: Replay\n\n\014 \200 \242\244\014\200\200\200button: Skip";

@@ -1,90 +1,11 @@
 #include "common.h"
 #include "main/pad.h"
+#include "main/xgl_pad.h"
 
-/*
- * Controller record, 0x80 bytes per port (0x68 in XS1). The fields up to
- * +0x68 keep the XS1 layout: xglPadInitial clears 0x80 bytes per port and
- * writes button_map at +0x58 and axis_dead_zone at +0x60; xglPadSetRepeat
- * writes +0x48 to +0x4d. The pressed halfword at +0x2a is also read by
- * xgl_hdd.c, the direction halfwords at +0x32/+0x34 by xgl_menu.c.
- */
-/* xglPadRead clears the analog group with `por $4,$0,$0; sq $4,0x30(pad)`:
- * a C store of a 128-bit zero. QuadwordZero (`sq $0`) drops the por and
- * changes the register allocation of the whole function, so the group is
- * stored through this type, the name the other main files use for it. */
-typedef unsigned int XglQuadword __attribute__((mode(TI)));
-
-typedef struct XglPadRecord {
-    unsigned char packet[0x20];
-    /* xglPadRead's probe state clears each state group with one store of its
-     * width: mode/actuator_count, buttons, the analog group, pressure,
-     * actuator and axis. */
-    union {
-        struct {
-            unsigned char mode;
-            unsigned char actuator_count;
-        };
-        unsigned short mode_state;
-    };
-    short mode_id;
-    unsigned char unmodeled_24[2];
-    unsigned char connection_state;
-    unsigned char setup_state;
-    union {
-        struct {
-            unsigned short buttons;
-            unsigned short pressed;
-            unsigned short repeated;
-            unsigned short released;
-        };
-        /* +0x28: the four button halfwords read as one doubleword
-           (script.c sceneObserver's talk-cancel test in XS1). */
-        unsigned long long button_state;
-    };
-    union {
-        struct {
-            unsigned short directions;
-            unsigned short direction_pressed;
-            unsigned short direction_repeated;
-            unsigned short direction_released;
-            signed char position[4];
-            short horizontal_pressure;
-            short vertical_pressure;
-        };
-        XglQuadword analog_state;       /* +0x30 */
-    };
-    union {
-        signed char pressure[8];
-        unsigned long long pressure_state; /* +0x40 */
-    };
-    signed char repeat_delay;       /* +0x48 */
-    signed char repeat_interval;    /* +0x49 */
-    unsigned short repeat_mask;     /* +0x4a */
-    signed char repeat_wait;        /* +0x4c */
-    signed char repeat_count;       /* +0x4d */
-    unsigned char horizontal_dead_zone; /* +0x4e */
-    unsigned char vertical_dead_zone;   /* +0x4f */
-    union {
-        struct {
-            unsigned char actuator[6];      /* +0x50 */
-            unsigned char actuator_pending; /* +0x56 */
-            unsigned char unmodeled_57;     /* +0x57 */
-        };
-        struct {
-            unsigned int actuator_low;    /* actuator[0..3] */
-            unsigned short actuator_high; /* actuator[4..5] */
-        };
-    };
-    unsigned char button_map[8];    /* +0x58 */
-    unsigned char axis_dead_zone[4]; /* +0x60 */
-    union {
-        signed char axis[4];        /* +0x64 */
-        unsigned int axis_state;
-    };
-    unsigned char unmodeled_68[0x18];
-} XglPadRecord;
-
-/* Controller setup state machine (XglPadRecord.setup_state); a pad that is
+/* The controller record PadRecord (include/main/pad.h) is 0x80 bytes per port (0x68 in XS1): xglPadInitial clears
+ * 0x80 bytes per port and writes buttonMap at +0x58 and axisDeadZone at +0x60; xglPadSetRepeat writes +0x48 to +0x4d.
+ * The pressed halfword at +0x2a is also read by xgl_hdd.c, the direction halfwords at +0x32/+0x34 by xgl_menu.c. */
+/* Controller setup state machine (PadRecord.setupState); a pad that is
  * disconnected restarts at PAD_SETUP_PROBE. */
 #define PAD_SETUP_PROBE 0
 #define PAD_SETUP_QUERY_ACTUATORS_MODE 0x40
@@ -124,12 +45,10 @@ typedef struct XglPadRecord {
 #define PAD_DEFAULT_DEAD_ZONE 64
 #define PAD_AXIS_THRESHOLD 32
 
-extern XglPadRecord PadData[2];
 static unsigned char PadDmaBuffer[2 * PAD_DMA_BUFFER_SIZE];
 /* scePadSetActAlign table: small motor on byte 0, large motor on byte 1. */
 extern unsigned char PadActAlign[6];
 
-void xglPadSetRepeat(int port, unsigned short mask, int delay, int interval);
 int scePadInit(int mode);
 int scePadPortOpen(int port, int slot, unsigned char *dma_buffer);
 int scePadGetState(int port, int slot);
@@ -142,10 +61,6 @@ int scePadInfoPressMode(int port, int slot);
 int scePadEnterPressMode(int port, int slot);
 int scePadRead(int port, int slot, unsigned char *packet);
 int scePadSetActDirect(int port, int slot, unsigned char *actuator);
-
-/* Returns at once with no effect. Only caller: InitializeSystem. */
-void xglDmaInitial(void) {
-}
 
 void xglPadInitial(void) {
     unsigned int byte_index;
@@ -170,29 +85,29 @@ void xglPadInitial(void) {
         ++first_record_bytes;
         ++second_record_bytes;
         ++byte_index;
-    } while (byte_index < sizeof(XglPadRecord));
+    } while (byte_index < sizeof(PadRecord));
 
     xglPadSetRepeat(0, PAD_REPEAT_MASK, PAD_REPEAT_DELAY, PAD_REPEAT_INTERVAL);
     xglPadSetRepeat(1, PAD_REPEAT_MASK, PAD_REPEAT_DELAY, PAD_REPEAT_INTERVAL);
 
     button = 1;
-    map_remaining = sizeof(PadData[0].button_map) - 1;
+    map_remaining = sizeof(PadData[0].buttonMap) - 1;
     do {
-        PadData[0].button_map[sizeof(PadData[0].button_map) - 1 - map_remaining] = button;
-        PadData[1].button_map[sizeof(PadData[1].button_map) - 1 - map_remaining] = button;
+        PadData[0].buttonMap[sizeof(PadData[0].buttonMap) - 1 - map_remaining] = button;
+        PadData[1].buttonMap[sizeof(PadData[1].buttonMap) - 1 - map_remaining] = button;
         button <<= 1;
         --map_remaining;
     } while (map_remaining >= 0);
 
-    PadData[0].horizontal_dead_zone = PAD_DEFAULT_DEAD_ZONE;
-    PadData[0].vertical_dead_zone = PAD_DEFAULT_DEAD_ZONE;
-    PadData[1].horizontal_dead_zone = PAD_DEFAULT_DEAD_ZONE;
-    PadData[1].vertical_dead_zone = PAD_DEFAULT_DEAD_ZONE;
+    PadData[0].horizontalDeadZone = PAD_DEFAULT_DEAD_ZONE;
+    PadData[0].verticalDeadZone = PAD_DEFAULT_DEAD_ZONE;
+    PadData[1].horizontalDeadZone = PAD_DEFAULT_DEAD_ZONE;
+    PadData[1].verticalDeadZone = PAD_DEFAULT_DEAD_ZONE;
     axis_threshold = PAD_AXIS_THRESHOLD;
-    dead_zone_remaining = sizeof(PadData[0].axis_dead_zone) - 1;
+    dead_zone_remaining = sizeof(PadData[0].axisDeadZone) - 1;
     do {
-        PadData[0].axis_dead_zone[sizeof(PadData[0].axis_dead_zone) - 1 - dead_zone_remaining] = axis_threshold;
-        PadData[1].axis_dead_zone[sizeof(PadData[1].axis_dead_zone) - 1 - dead_zone_remaining] = axis_threshold;
+        PadData[0].axisDeadZone[sizeof(PadData[0].axisDeadZone) - 1 - dead_zone_remaining] = axis_threshold;
+        PadData[1].axisDeadZone[sizeof(PadData[1].axisDeadZone) - 1 - dead_zone_remaining] = axis_threshold;
         --dead_zone_remaining;
     } while (dead_zone_remaining >= 0);
 }
@@ -200,7 +115,7 @@ void xglPadInitial(void) {
 void xglPadSetRepeat(int port, unsigned short mask, int delay, int interval)
 {
     unsigned short button_mask = mask;
-    XglPadRecord *pad;
+    PadRecord *pad;
 
     if (port == -1) {
         xglPadSetRepeat(0, button_mask, delay, interval);
@@ -209,11 +124,11 @@ void xglPadSetRepeat(int port, unsigned short mask, int delay, int interval)
     }
 
     pad = &PadData[port];
-    pad->repeat_delay = delay;
-    pad->repeat_interval = interval;
-    pad->repeat_mask = button_mask;
-    pad->repeat_wait = 0;
-    pad->repeat_count = 0;
+    pad->repeatDelay = delay;
+    pad->repeatInterval = interval;
+    pad->repeatMask = button_mask;
+    pad->repeatWait = 0;
+    pad->repeatCount = 0;
 }
 
 void xglPadRead(void)
@@ -228,7 +143,7 @@ void xglPadRead(void)
     signed char horizontal;
 
     for (port = 0; port < PAD_PORT_COUNT; ++port) {
-        XglPadRecord *pad;
+        PadRecord *pad;
         int buttons;
         int directions;
         /* The 0x60 button word and the analog left-stick dead zone share one
@@ -245,31 +160,31 @@ void xglPadRead(void)
 
         pad = &PadData[port];
         buttons = 0;
-        pad->connection_state = scePadGetState(port, 0);
-        if (!pad->connection_state) {
-            pad->setup_state = PAD_SETUP_PROBE;
+        pad->connectionState = scePadGetState(port, 0);
+        if (!pad->connectionState) {
+            pad->setupState = PAD_SETUP_PROBE;
         }
-        switch (pad->setup_state) {
+        switch (pad->setupState) {
         case PAD_SETUP_PROBE: {
             int mode;
 
-            pad->mode_state = 0;
-            pad->button_state = 0;
-            pad->analog_state = 0;
-            pad->pressure_state = 0;
-            pad->actuator_low = 0;
-            pad->actuator_high = 0;
-            pad->axis_state = 0;
-            if (pad->connection_state == PAD_STATE_STABLE || pad->connection_state == PAD_STATE_FINDCTP1) {
+            pad->modeState = 0;
+            pad->heldAndPressed = 0;
+            pad->analogState = 0;
+            pad->pressureState = 0;
+            pad->actuatorLow = 0;
+            pad->actuatorHigh = 0;
+            pad->axisState = 0;
+            if (pad->connectionState == PAD_STATE_STABLE || pad->connectionState == PAD_STATE_FINDCTP1) {
                 mode = scePadInfoMode(port, 0, 1, 0);
                 if (mode) {
-                    pad->mode_id = scePadInfoMode(port, 0, 2, 0);
+                    pad->modeId = scePadInfoMode(port, 0, 2, 0);
                     if (mode == PAD_TERM_ID_DIGITAL) {
-                        pad->setup_state = PAD_SETUP_QUERY_ACTUATORS_MODE;
+                        pad->setupState = PAD_SETUP_QUERY_ACTUATORS_MODE;
                     } else if (mode == PAD_TERM_ID_DUALSHOCK) {
-                        pad->setup_state = PAD_SETUP_ACTUATOR_ALIGN;
+                        pad->setupState = PAD_SETUP_ACTUATOR_ALIGN;
                     } else {
-                        pad->setup_state = PAD_SETUP_READY;
+                        pad->setupState = PAD_SETUP_READY;
                     }
                 }
             }
@@ -277,70 +192,70 @@ void xglPadRead(void)
         }
         case PAD_SETUP_QUERY_ACTUATORS_MODE:
             if (scePadInfoMode(port, 0, PAD_TERM_ID_DIGITAL, -1)) {
-                pad->setup_state = PAD_SETUP_SET_MAIN_MODE;
+                pad->setupState = PAD_SETUP_SET_MAIN_MODE;
             } else {
-                pad->setup_state = PAD_SETUP_READY;
+                pad->setupState = PAD_SETUP_READY;
             }
             break;
         case PAD_SETUP_SET_MAIN_MODE:
             if (scePadSetMainMode(port, 0, 1, 3) == 1) {
-                pad->setup_state = PAD_SETUP_WAIT_MAIN_MODE;
+                pad->setupState = PAD_SETUP_WAIT_MAIN_MODE;
             }
             break;
         case PAD_SETUP_WAIT_MAIN_MODE:
             request_state_or_repeated = scePadGetReqState(port, 0);
             switch (request_state_or_repeated) {
             case 0:
-                pad->setup_state = PAD_SETUP_PROBE;
+                pad->setupState = PAD_SETUP_PROBE;
                 break;
             case 1:
-                pad->setup_state = PAD_SETUP_SET_MAIN_MODE;
+                pad->setupState = PAD_SETUP_SET_MAIN_MODE;
                 break;
             }
             break;
         case PAD_SETUP_ACTUATOR_ALIGN:
-            pad->actuator_count = scePadInfoAct(port, 0, -1, 0);
-            if (pad->actuator_count) {
+            pad->actuatorCount = scePadInfoAct(port, 0, -1, 0);
+            if (pad->actuatorCount) {
                 if (scePadSetActAlign(port, 0, PadActAlign)) {
-                    pad->setup_state = PAD_SETUP_WAIT_ALIGN;
+                    pad->setupState = PAD_SETUP_WAIT_ALIGN;
                 }
             } else {
-                pad->setup_state = PAD_SETUP_READY;
+                pad->setupState = PAD_SETUP_READY;
             }
             break;
         case PAD_SETUP_WAIT_ALIGN:
-            if (pad->connection_state != PAD_STATE_EXECCMD) {
-                pad->setup_state = PAD_SETUP_PRESSURE_INFO;
+            if (pad->connectionState != PAD_STATE_EXECCMD) {
+                pad->setupState = PAD_SETUP_PRESSURE_INFO;
             }
             break;
         case PAD_SETUP_PRESSURE_INFO:
             if (scePadInfoPressMode(port, 0) != 1) {
-                pad->setup_state = PAD_SETUP_READY;
+                pad->setupState = PAD_SETUP_READY;
             } else {
-                pad->setup_state = PAD_SETUP_PRESSURE_ENTER;
+                pad->setupState = PAD_SETUP_PRESSURE_ENTER;
             }
             break;
         case PAD_SETUP_PRESSURE_ENTER:
             if (scePadEnterPressMode(port, 0) == 1) {
-                pad->setup_state = PAD_SETUP_WAIT_PRESSURE;
+                pad->setupState = PAD_SETUP_WAIT_PRESSURE;
             }
             break;
         case PAD_SETUP_WAIT_PRESSURE:
             request_state_or_repeated = scePadGetReqState(port, 0);
             switch (request_state_or_repeated) {
             case 0:
-                pad->setup_state = PAD_SETUP_READY;
+                pad->setupState = PAD_SETUP_READY;
                 break;
             case 1:
-                pad->setup_state = PAD_SETUP_PRESSURE_ENTER;
+                pad->setupState = PAD_SETUP_PRESSURE_ENTER;
                 break;
             }
             break;
         case PAD_SETUP_READY: {
             scePadRead(port, 0, pad->packet);
             pad->mode = pad->packet[1];
-            if (pad->actuator_count) {
-                if (pad->actuator_pending) {
+            if (pad->actuatorCount) {
+                if (pad->actuatorMode) {
                     pad->actuator[0] = 0;
                     pad->actuator[1] = 0;
                     pad->actuator[2] = 0;
@@ -418,13 +333,13 @@ void xglPadRead(void)
                 unsigned char fourth_axis_threshold;
                 int axis;
 
-                button_word_or_dead_zone = pad->axis_dead_zone[0];
+                button_word_or_dead_zone = pad->axisDeadZone[0];
                 axis = pad->packet[4] + PAD_ANALOG_CENTER;
                 pad->position[1] = pad->packet[5] + PAD_ANALOG_CENTER;
                 pad->position[2] = pad->packet[6] + PAD_ANALOG_CENTER;
                 pad->position[3] = pad->packet[7] + PAD_ANALOG_CENTER;
-                pad->horizontal_pressure = pad->packet[8] - pad->packet[9];
-                pad->vertical_pressure = pad->packet[11] - pad->packet[10];
+                pad->horizontalPressure = pad->packet[8] - pad->packet[9];
+                pad->verticalPressure = pad->packet[11] - pad->packet[10];
                 pad->pressure[0] = pad->packet[12];
                 pad->pressure[1] = pad->packet[13];
                 pad->pressure[2] = pad->packet[14];
@@ -439,17 +354,17 @@ void xglPadRead(void)
                     (signed char)axis < button_word_or_dead_zone)
                     pad->axis[0] = 0;
                 first_vertical_position = pad->position[1];
-                second_axis_threshold = pad->axis_dead_zone[1];
+                second_axis_threshold = pad->axisDeadZone[1];
                 pad->axis[1] = first_vertical_position;
                 if (-second_axis_threshold < (signed char)first_vertical_position &&
                     (signed char)first_vertical_position < second_axis_threshold)
                     pad->axis[1] = 0;
-                third_axis_threshold = pad->axis_dead_zone[2];
+                third_axis_threshold = pad->axisDeadZone[2];
                 pad->axis[2] = pad->position[2];
                 if (-third_axis_threshold < pad->position[2] &&
                     pad->position[2] < third_axis_threshold)
                     pad->axis[2] = 0;
-                fourth_axis_threshold = pad->axis_dead_zone[3];
+                fourth_axis_threshold = pad->axisDeadZone[3];
                 pad->axis[3] = pad->position[3];
                 if (-fourth_axis_threshold < pad->position[3] &&
                     pad->position[3] < fourth_axis_threshold)
@@ -522,8 +437,8 @@ void xglPadRead(void)
             if (!up_released) {
                 digital_vertical -= maximum_pressure;
             }
-            pad->horizontal_pressure = digital_horizontal;
-            pad->vertical_pressure = digital_vertical;
+            pad->horizontalPressure = digital_horizontal;
+            pad->verticalPressure = digital_vertical;
             pad->pressure[0] = triangle_released - 1;
             pad->pressure[1] = circle_released - 1;
             pad->pressure[2] = cross_released - 1;
@@ -535,72 +450,69 @@ void xglPadRead(void)
         }
         directions = buttons;
         horizontal = pad->position[2];
-        if (horizontal < -pad->horizontal_dead_zone) {
+        if (horizontal < -pad->horizontalDeadZone) {
             directions = (buttons | PAD_LEFT) & 0xffff;
         }
-        if (horizontal > pad->horizontal_dead_zone) {
+        if (horizontal > pad->horizontalDeadZone) {
             directions = (directions | PAD_RIGHT) & 0xffff;
         }
         vertical = pad->position[3];
-        if (vertical < -pad->vertical_dead_zone) {
+        if (vertical < -pad->verticalDeadZone) {
             directions = (directions | PAD_UP) & 0xffff;
         }
-        if (vertical > pad->vertical_dead_zone) {
+        if (vertical > pad->verticalDeadZone) {
             directions = (directions | PAD_DOWN) & 0xffff;
         }
         button_bits = buttons & 0xff;
         buttons &= 0xff00;
         direction_bits = directions & 0xff;
         directions &= 0xff00;
-        for (button_index = 0; button_index < (int)sizeof(pad->button_map); ++button_index) {
+        for (button_index = 0; button_index < (int)sizeof(pad->buttonMap); ++button_index) {
             button_down = button_bits & 1;
             if (button_down) {
-                buttons = (buttons | pad->button_map[button_index]) & 0xffff;
+                buttons = (buttons | pad->buttonMap[button_index]) & 0xffff;
             }
             button_bits >>= 1;
             direction_down = direction_bits & 1;
             if (direction_down) {
-                directions = (directions | pad->button_map[button_index]) & 0xffff;
+                directions = (directions | pad->buttonMap[button_index]) & 0xffff;
             }
             direction_bits >>= 1;
         }
         {
-            int changed = buttons ^ pad->buttons;
-            int direction_changed = directions ^ pad->directions;
+            int changed = buttons ^ pad->held;
+            int direction_changed = directions ^ pad->directionHeld;
             int pressed = buttons & changed;
             int direction_pressed = directions & direction_changed;
 
             pad->released = changed & ~buttons;
             pad->repeated = pad->pressed = pressed;
-            pad->buttons = buttons;
-            pad->direction_released = direction_changed & ~directions;
-            pad->direction_repeated = pad->direction_pressed = direction_pressed;
-            pad->directions = directions;
+            pad->held = buttons;
+            pad->directionReleased = direction_changed & ~directions;
+            pad->directionRepeated = pad->directionPressed = direction_pressed;
+            pad->directionHeld = directions;
         }
         {
-            int repeat = directions & pad->repeat_mask;
+            int repeat = directions & pad->repeatMask;
             unsigned char repeat_count;
 
-            if (repeat && pad->repeat_wait > pad->repeat_delay) {
-                repeat_count = pad->repeat_count;
-                if (pad->repeat_count > pad->repeat_interval) {
-                    pad->direction_repeated = repeat;
-                    request_state_or_repeated = buttons & pad->repeat_mask;
+            if (repeat && pad->repeatWait > pad->repeatDelay) {
+                repeat_count = pad->repeatCount;
+                if (pad->repeatCount > pad->repeatInterval) {
+                    pad->directionRepeated = repeat;
+                    request_state_or_repeated = buttons & pad->repeatMask;
                     pad->repeated = request_state_or_repeated;
                     repeat_count = 0;
-                    pad->repeat_count = 0;
+                    pad->repeatCount = 0;
                 }
-                pad->repeat_count = repeat_count + 1;
+                pad->repeatCount = repeat_count + 1;
             } else if (repeat) {
-                ++pad->repeat_wait;
+                ++pad->repeatWait;
             } else {
-                pad->repeat_wait = 0;
+                pad->repeatWait = 0;
             }
         }
     }
 }
 
 unsigned char PadActAlign[6] = { 0x00, 0x01, 0xff, 0xff, 0xff, 0xff };
-
-/* .data of this file (0x63EDE0-0x63EE80): pad state bytes read by the sdv_033.c camera code. */
-unsigned char D_0063EDE0[160] = { 0 };

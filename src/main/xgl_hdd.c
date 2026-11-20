@@ -1,32 +1,30 @@
 #include "common.h"
 #include "shared.h"
 #include "main/pad.h"
-#include "main/tu012.h"
-#include "main/tu021.h"
-#include "main/tu093.h"
+#include "main/xgl_mc_request.h"
+#include "main/se_bank_load.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_hdd.h"
-#include "main/control_entry.h"
+#include "main/xgl_thread.h"
 #include "main/xgl_dma.h"
 #include "main/xgl_font.h"
+#include "main/control_entry.h"
 
-struct request {
-    u8 mode;
-    u8 data;
-};
-
-typedef struct {
-    unsigned char status;
-    unsigned char second;
-    unsigned char minute;
-    unsigned char hour;
-    unsigned char day;
-    unsigned char month;
-    unsigned short year;
-} XglClock;
-
+/* Default xglHddInstall progress callback: does nothing and returns 0. */
+int xglHddDummyCB(int stage, int offset, void *param)
+{
+    return 0;
+}
 struct stat;
 int stat(const char *path, struct stat *status);
+/* The HDD error screen flag is read at sRender + 0x84, past the 0x54 bytes of XglRenderState (gr_screen.h), where the hook
+ * data that follows sRender lies. */
+typedef struct HddErrorRenderView {
+    unsigned char unmodeled_00[0x84];
+    unsigned char errorScreenActive; /* +0x84: set while xglHddErrorScreen owns the display */
+} HddErrorRenderView;
+
+extern HddErrorRenderView sRender;
 extern u8 *buffer;
 extern unsigned int strlen(const char *string);
 extern int strcmp(const char *left, const char *right);
@@ -44,45 +42,6 @@ extern int xglHddMcLoadCore(void *save);
 #define HDD_DEVCTL_ZONE_SIZE 0x5001
 #define HDD_DEVCTL_FREE_ZONES 0x5002
 
-/* The header of the card data image: the begin and end of the transferred
- * payload (carddata.new). */
-struct HddTransferInfo {
-    int unmodeled_00;
-    int begin;
-    int end;
-};
-
-struct HddSaveImage;
-
-/* The card save request: xglHddMcCheck/xglHddMcCreate read it through
- * `transfer`, which file.c fills with its card data buffer. */
-struct HddCheckState {
-    int status;
-    union {
-        unsigned char *bytes; /* file.c: the card data buffer it hands in */
-        struct HddTransferInfo *info; /* xgl_hdd: the begin/end transfer header */
-        struct HddSaveImage *image; /* xgl_hdd: the whole saved image, header first */
-    } transfer;
-    int dataSize;
-};
-
-struct HddExistRequest {
-    int card;
-    unsigned char *found;
-};
-
-struct HddLoadRequest {
-    int card;
-    void *data;
-    int size;
-};
-
-struct HddSaveRequest {
-    int card;
-    const void *data;
-    int size;
-};
-
 /*
  * The xglHdd layer keeps its own copy of the "hdd0:" device name at
  * main:0x004DC368; the HddTest debug tool has an identical string of its own
@@ -94,13 +53,10 @@ extern char xgl_hdd_device[];
 extern char hdd_mc_path[];
 extern char mount_device[];
 extern int xglHddMcGetFree(void);
-int xglHddMcExist(struct HddExistRequest *request);
-int xglHddMcSave(const struct HddSaveRequest *save);
 
-/* Size of the icon.sys image that opens every resCmdSave (the icon header). */
+/* Size of the icon.sys image that opens every command_save (the icon header). */
 #define MC_ICON_SYS_SIZE 964
 
-unsigned int xglClockDayTime2UInt(XglClock *clock_time);
 
 struct HddIoStat {
     unsigned int mode;
@@ -135,11 +91,8 @@ struct HddDirectoryEntry {
 
 extern u8 system_cnf[];
 int sceRead(int descriptor, void *buffer, int bytes);
-int xglHddCheck2(void);
 static int xglHddCheckCore(void);
 extern int sceUmount(const char *path);
-int xglHddMcLoad(void *save);
-int xglHddUninstall(void);
 extern int sceRemove(const char *path);
 extern int sceMount(char *mount_point, char *device, int flags,
                     void *payload, unsigned int payload_length);
@@ -152,7 +105,6 @@ extern int sceDclose(int descriptor);
 extern int sceGetstat(const char *path, struct HddFileStat *stat);
 extern int sceClose(int descriptor);
 extern int strncmp(const char *left, const char *right, unsigned int length);
-extern unsigned int xglClockDayTime2UInt(XglClock *clock_time);
 extern int sceWrite(int descriptor, const void *buffer, int size);
 extern int sceChstat(const char *path, const struct HddIoStat *stat, int flags);
 int Judge_MakeNewFolder(void);
@@ -247,7 +199,6 @@ extern u8 HddActive;
 extern char mount_device[8];
 
 /* The pad records of xgl_pad.c (0x80 bytes per port). */
-extern PadRecord PadData[2];
 
 /* The GIF packet xglHddErrorScreen sends before each frame (6 quadwords on
  * DMA channel 2), and the error message it prints. */
@@ -262,13 +213,10 @@ extern const char cd_filename[];
  * the save partition. */
 extern unsigned char hddMcCheckErrorCodes[];
 extern unsigned char mcPartitionSize1G[];
-extern u8 *WorkEnd;
 
 extern int sceIoctl2(int descriptor, int command, const void *input,
                      unsigned int input_size, void *output, unsigned int output_size);
 extern int sceMkdir(const char *path, int mode);
-int xglHddCheck(void);
-void xglHddErrorScreen(void);
 int xglHddMountPartition(int mountFlags);
 void decrypt(void);
 
@@ -824,6 +772,12 @@ int xglHddMcCreate(struct HddCheckState *state)
         }
     }
 
+/* Shared exit of every failure after the mount. The object has one unmount-and-return block and one copy of
+ * the file-writing code that both the existing-folder path and the folder ladder reach. Tried and rejected,
+ * each compiled and diffed: unmount-and-return repeated per exit (result becomes a per-exit constant, the
+ * tail is not shared); do/while(0) with break (loop notes reorder the blocks); inline helpers with early
+ * returns or nested success tests (the file writing is then duplicated and cross-jumped, which merges the two
+ * save-folder close checks into one block and swaps s2/s3). Skipping the file writing needs this jump. */
 unmount_card:
     xglHddMcUmount();
     return result;
@@ -863,7 +817,7 @@ int xglHddUninstall(void)
 /* The progress block at hddInstallContext that xglHddInstallReadCB updates: the
  * installed callback receives a stage, an offset and `param`. */
 struct HddInstallCBParam {
-    int (*callback)(int stage, int offset, void *param);
+    HddInstallCallback *callback;
     int base;
     void *param;
     int status;
@@ -937,7 +891,6 @@ struct HddInstallImage {
 
 extern int sprintf(char *buffer, const char *format, ...);
 extern int sceFormat(const char *mount_point, const char *device, void *payload, int payload_length);
-int xglHddDummyCallback(int stage, int offset, void *param);
 /* The resource file, the partition spec format, the 256 MB sub-partition
  * size, the pfs device, the installed data file and the disc archive name
  * (xenosaga.0N, digit at [10]). */
@@ -954,7 +907,7 @@ extern char dvdname_2[];
  * writes the check file. Progress and failures go to callback (stages and
  * HDD_INSTALL_FAIL_* above). Returns 0 on success, 1 when the copy was
  * cancelled and -1 on failure. */
-int xglHddInstall(int (*callback)(int stage, int offset, void *param), void *param)
+int xglHddInstall(HddInstallCallback *callback, void *param)
 {
     struct HddInstallImage *image = (struct HddInstallImage *)HDD_INSTALL_IMAGE_ADDRESS;
     struct HddInstallCBParam context;
@@ -972,7 +925,7 @@ int xglHddInstall(int (*callback)(int stage, int offset, void *param), void *par
     int length;
 
     if (callback == 0) {
-        callback = xglHddDummyCallback;
+        callback = xglHddDummyCB;
     }
     hddInstallContext = &context;
     context.callback = callback;
@@ -981,7 +934,7 @@ int xglHddInstall(int (*callback)(int stage, int offset, void *param), void *par
     callback(HDD_INSTALL_STAGE_BEGIN, 0, param);
 
     /* Read the install image, then copy SYSTEM.CNF into it. */
-    if (xglCdReadFile(hddResourcePath, image, 0, 1) < 0) {
+    if (xglCdReadFile(hddResourcePath, image, 0, CD_NOTIFY_DUMMY) < 0) {
         callback(HDD_INSTALL_FAIL_RESOURCE, 0, param);
         return -1;
     }
@@ -1105,7 +1058,7 @@ int xglHddInstall(int (*callback)(int stage, int offset, void *param), void *par
         return -1;
     }
     callback(HDD_INSTALL_STAGE_FINISH, 1, param);
-    xglCdCheckFile(cd_filename, image);
+    xglCdGetFileData(cd_filename, image);
     result = sceWrite(descriptor, image, HDD_SECTOR_SIZE);
     if (result != HDD_SECTOR_SIZE) {
         callback(HDD_INSTALL_FAIL_CHECK_WRITE, result, param);
@@ -1229,7 +1182,7 @@ int xglHddMount(void)
     if (sceRead(descriptor, buffer, HDD_SECTOR_SIZE) < 0) {
         mismatch = 1;
     } else {
-        xglCdCheckFile(cd_filename, reference);
+        xglCdGetFileData(cd_filename, reference);
         for (index = 0; index < HDD_CD_RECORD_SIZE; index++) {
             if (buffer[index] != reference[index]) {
                 mismatch = 1;

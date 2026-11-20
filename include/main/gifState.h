@@ -49,12 +49,13 @@ typedef struct GifStatusBlock {
     int effectAlpha;
     int fbp;                    /* +0x14: gifStateSetFbp */
     int blur;                   /* +0x18: gifStateSetBlur */
-    int depth;                  /* +0x1C: the Z of the camera quad (func_00246DD8 sets it) */
+    int depth;                  /* +0x1C: the Z of the camera quad (gifStateSetDepth sets it) */
     f32 ratio;
     f32 ratioStep;              /* +0x24: gifStateSetDecrease; the draw functions lower ratio by it */
-    int subWindow[4];           /* +0x28: nmlModelUseSubWindow; word 0 is the flag gifStateEffectFrame tests,
+    int subWindow[4];           /* +0x28: nmlModelUseSubWindow; word 0 is the flag gifStateDrawBreakShards tests,
                                  * gifStateDrawFadeQuad moves its corners by all four */
-    u8 unmodeled_38[0x50 - 0x38];
+    f32 subWindowValue[4];      /* +0x38: nmlModelSetSubWindowValue */
+    u8 unmodeled_48[0x50 - 0x48];
     Vector4 mulColor;           /* +0x50: the model multiply colour nmlModelSetMulColor sets;
                                  * gifStateDrawCameraQuad scales it by blur into its offset */
 } GifStatusBlock;
@@ -68,8 +69,8 @@ enum GifEffectMode {
     GIF_EFFECT_CAMERA_QUAD,     /* gifStateDrawCameraQuad */
     GIF_EFFECT_JITTER_GRID,     /* gifStateDrawJitterGrid */
     GIF_EFFECT_FADE_QUAD,       /* gifStateDrawFadeQuad */
-    GIF_EFFECT_FRAME,           /* gifStateEffectFrame (gifStateEnableEffect) */
-    GIF_EFFECT_NONE,            /* func_002439C8, an empty function */
+    GIF_EFFECT_FRAME,           /* gifStateDrawBreakShards (gifStateEnableEffect) */
+    GIF_EFFECT_NONE,            /* gifStateDrawNone, an empty function */
     GIF_EFFECT_COUNT
 };
 
@@ -79,12 +80,12 @@ struct XglPacket;
 typedef void (*GifEffectDraw)(struct XglPacket *packet);
 
 /* The mode hook, the word at +0x4C of sRender (0x645820, xgl_render data; gifStateEffectHook is the one at
- * +0x60): gifStateSetMode sets it, gifStateClearModeValue clears it. */
+ * +0x60): gifStateSetMode sets it, gifStateClearModeHook clears it. */
 extern GifEffectDraw gifStateModeHook;
 
-void func_00246AF8(void);
-void func_00246DD8(int value);
-void gifStateClearModeValue(void);
+void gifStateClearDepthAndFlip(void);
+void gifStateSetDepth(int value);
+void gifStateClearModeHook(void);
 void nmlModelSetMulColor(Vector4 *color);
 struct XenoActor;
 void gifStateStartWhiteShake(struct XenoActor *actor);
@@ -103,5 +104,9 @@ void gifStateBuildBreakShards(GifBreakShard *shards, GifBreakPoint *points);
 void gifBreakShardUpdate(GifBreakShard *shard, f32 ratio);
 int gifStateEffectReady(void);
 void gifStateDisableEffect(void);
+void gifStateReset(void);
+void gifStateFlush(void);
+void gifStateUpdateDrawHook(void);
+void gifStateClearScreenAndMessages(void);
 
 #endif /* INCLUDE_MAIN_GIFSTATE_H */

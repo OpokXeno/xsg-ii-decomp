@@ -35,17 +35,27 @@ def is_label(name):
     return not re.fullmatch(r'[a-z]+', name)
 
 
+STRING_LITERAL = re.compile(r'("(?:[^"\\\n]|\\.)*")')
+
+
 def replace_names(text, mapping):
-    """Labels change everywhere. A plain word (`act`, `map`) is also a local, a field and text, so only its function uses change."""
+    """Labels change everywhere but inside string literals: a literal is original data (a native-table string, a profiler
+    section name), and renaming its function never changes its bytes. A plain word (`act`, `map`) is also a local, a
+    field and text, so only its function uses change."""
     if not mapping:
         return text
     labels = {old: new for old, new in mapping.items() if is_label(old)}
     words = {old: new for old, new in mapping.items() if not is_label(old)}
-    text = re.sub(r'\b[A-Za-z_][A-Za-z0-9_]*\b', lambda m: labels.get(m.group(), m.group()), text)
-    for old, new in words.items():
-        text = re.sub(rf'(?<![.>\w"]){re.escape(old)}(?=\s*\()', new, text)                  # definition, prototype, call
-        text = re.sub(rf'(INCLUDE_ASM\([^,\n]*,\s*){re.escape(old)}(?=\s*\))', rf'\g<1>{new}', text)
-    return text
+
+    def code(segment):
+        segment = re.sub(r'\b[A-Za-z_][A-Za-z0-9_]*\b', lambda m: labels.get(m.group(), m.group()), segment)
+        for old, new in words.items():
+            segment = re.sub(rf'(?<![.>\w"]){re.escape(old)}(?=\s*\()', new, segment)        # definition, prototype, call
+            segment = re.sub(rf'(INCLUDE_ASM\([^,\n]*,\s*){re.escape(old)}(?=\s*\))', rf'\g<1>{new}', segment)
+        return segment
+
+    parts = STRING_LITERAL.split(text)       # odd indexes are the literals
+    return ''.join(part if index % 2 else code(part) for index, part in enumerate(parts))
 
 
 def labels_only(mapping):
@@ -81,6 +91,8 @@ def main():
     parser.add_argument('--write', action='store_true')
     parser.add_argument('--report')
     parser.add_argument('--matched-only', action='store_true', help='refuse functions still in asm and data absent from the C sources')
+    parser.add_argument('--replace-medium', action='store_true',
+                        help='let a medium row replace an existing name when its kind is generic or wrong (review passes)')
     args = parser.parse_args()
     base = Path(args.dir)
 
@@ -135,9 +147,11 @@ def main():
                     reason = 'function is not matched'
                 elif args.matched_only and kind == 'data' and DATA_LABEL.match(old) and old not in c_words:
                     reason = 'data not used by matched C'
-                elif kind == 'functions' and not ADDRESS_LABEL.match(old) and row.get('confidence') != 'high':
+                elif (kind == 'functions' and not ADDRESS_LABEL.match(old) and row.get('confidence') != 'high'
+                      and not (args.replace_medium and row.get('kind') in ('generic', 'wrong'))):
                     reason = 'replacing an existing name needs high confidence'
-                elif kind == 'data' and not DATA_LABEL.match(old or '') and row.get('confidence') != 'high':
+                elif (kind == 'data' and not DATA_LABEL.match(old or '') and row.get('confidence') != 'high'
+                      and not (args.replace_medium and row.get('kind') in ('generic', 'wrong'))):
                     reason = 'replacing an existing data name needs high confidence'
                 elif kind == 'data' and not DATA_LABEL.match(old or '') and old not in symbols[unit] and old not in symbols['main']:
                     reason = 'unknown data symbol'
@@ -173,15 +187,23 @@ def main():
     by_new = collections.defaultdict(list)
     for row in chosen:
         by_new[row['new']].append(row)
+    # A name freed in the same plan (a swap or a chain: A -> B while B -> C) is available: one regex pass renames both.
+    # Refusing one rename can take back the name another relied on, so settle the set to a fixed point.
     final = []
     for new, rows in by_new.items():
         if len(rows) > 1:
             refused.append(dict(new=new, reason='same name for different symbols',
                                 olds=[f'{r["unit"]}:{r["old"]}' for r in rows]))
-        elif new in known:
-            refused.append(dict(new=new, old=rows[0]['old'], reason='name already exists'))
         else:
             final.append(rows[0])
+    while True:
+        freed = {row['old'] for row in final}
+        blocked = [row for row in final if row['new'] in known and row['new'] not in freed]
+        if not blocked:
+            break
+        for row in blocked:
+            refused.append(dict(new=row['new'], old=row['old'], reason='name already exists'))
+        final = [row for row in final if row not in blocked]
 
     mapping = {unit: {} for unit in UNITS}
     for row in final:

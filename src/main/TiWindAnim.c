@@ -1,15 +1,15 @@
 #include "common.h"
 #include "shared.h"
-#include "main/tu026.h"
+#include "main/assert_fail.h"
 #include "main/TiWindBase.h"
-#include "main/tu256.h"
+#include "main/TiGlobalColl.h"
+#include "main/xgl_cur_mul.h"
+#include "main/xgl_cur_matrix.h"
 #include "main/TiXacAnimCurve.h"
 
-extern const char D_0068F810[];
-extern const char D_0068F818[];
-extern const DoublewordAlignedVector4 D_0068F800;
-void xglCurSetRotateZ(f32 angle);
-void xglCurApplyVector(Vector4 *destination, const Vector4 *vector);
+extern const char tiWindAnimHeaderAssertText[];
+extern const char tiWindAnimSourceFile[];
+extern const DoublewordAlignedVector4 tiWindAnimDefaultDirVector;
 
 /* The 12 floats that xacReadWindDirCurves and xacReadWindPointCurves fill from a wind header. */
 enum WindAnimField {
@@ -34,11 +34,11 @@ enum WindAnimField {
 
 void tiWindAnimApplyDir(u32 index, u8 *pHeader, f32 time)
 {
-    DoublewordAlignedVector4 dir = D_0068F800;
+    DoublewordAlignedVector4 dir = tiWindAnimDefaultDirVector;
     f32 values[WIND_ANIM_FIELD_COUNT];
 
     if (pHeader == 0) {
-        assertFailed(D_0068F810, D_0068F818, 15);
+        assertFailed(tiWindAnimHeaderAssertText, tiWindAnimSourceFile, 15);
     }
     xacReadWindDirCurves(values, &pHeader, time);
     if (values[WIND_ANIM_ENABLED] == 0.0f) {
@@ -67,7 +67,7 @@ void tiWindAnimApplyPoint(u32 index, u8 *pHeader, f32 time)
     f32 values[WIND_ANIM_FIELD_COUNT];
 
     if (pHeader == 0) {
-        assertFailed(D_0068F810, D_0068F818, 49);
+        assertFailed(tiWindAnimHeaderAssertText, tiWindAnimSourceFile, 49);
     }
     xacReadWindPointCurves(values, &pHeader, time);
     if (values[WIND_ANIM_ENABLED] == 0.0f) {
@@ -85,32 +85,23 @@ void tiWindAnimApplyPoint(u32 index, u8 *pHeader, f32 time)
     }
 }
 
-int tiGlobalCollGetHandle(void);
-
-/* The collision set handle: the wind tables hold offsets from the handle. */
-typedef struct TiWindAnimSet {
-    u8 unmodeled_00[16];
-    int dirOffsets[WIND_ANIM_SLOT_COUNT];
-    int pointOffsets[WIND_ANIM_SLOT_COUNT];
-} TiWindAnimSet;
-
 /* The offsets are bytes from the handle, so the entries are reached through a byte base. */
 void tiWindAnimUpdate(f32 time)
 {
-    TiWindAnimSet *set;
+    TiGlobalCollSet *set;
     int index;
 
-    set = (TiWindAnimSet *)tiGlobalCollGetHandle();
+    set = tiGlobalCollGetHandle();
     if (set != 0) {
         for (index = 0; index < WIND_ANIM_SLOT_COUNT; index++) {
-            tiWindAnimApplyDir(index, (u8 *)set + set->dirOffsets[index], time);
+            tiWindAnimApplyDir(index, (u8 *)set + set->windDirOffsets[index], time);
         }
         for (index = 0; index < WIND_ANIM_SLOT_COUNT; index++) {
-            tiWindAnimApplyPoint(index, (u8 *)set + set->pointOffsets[index], time);
+            tiWindAnimApplyPoint(index, (u8 *)set + set->windPointOffsets[index], time);
         }
     }
 }
 
-const DoublewordAlignedVector4 D_0068F800 = { 0.0f, 0.0f, 1.0f, 1.0f };
-const char D_0068F810[8] = "pHeader";
-const char D_0068F818[24] = "../TiWindAnim.euc.c";
+const DoublewordAlignedVector4 tiWindAnimDefaultDirVector = { 0.0f, 0.0f, 1.0f, 1.0f };
+const char tiWindAnimHeaderAssertText[8] = "pHeader";
+const char tiWindAnimSourceFile[24] = "../TiWindAnim.euc.c";

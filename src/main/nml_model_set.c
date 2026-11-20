@@ -2,8 +2,30 @@
 #include "gs.h"
 #include "shared.h"
 #include "main/nml_model_set.h"
-#include "main/tu045.h"
+#include "main/pxy_frame_alpha.h"
+#include "main/pxy_packet_state.h"
+#include "main/TiWater.h"
+#include "main/pxy_shadow.h"
 #include "main/xgl_2.h"
+#include "main/xgl_camera.h"
+#include "main/xgl_light.h"
+#include "main/xgl_studio.h"
+#include "main/xgl_packet.h"
+#include "main/xgl_render.h"
+#include "main/nml_packet_add.h"
+#include "main/pxy_profile.h"
+#include "main/face_point.h"
+#include "main/cur_matrix_asm.h"
+#include "main/model_calc_clip.h"
+
+void *memcpy(void *destination, const void *source, unsigned int size);
+void *memset(void *destination, int value, unsigned int size);
+
+/* Quadword helpers of the end of this file. */
+void xglVectorCopy_001CC998(void *destination, const void *source);
+void xglMatrixCopy_001CC9C4(Matrix4 destination, Matrix4 source);
+void xglVectorAddXYZ_001CCA30(void *dst, void *first, void *second);
+void xglVectorSubXYZ_001CCA68(void *dst, void *minuend, void *subtrahend);
 
 typedef unsigned int XglQuadword __attribute__((mode(TI)));
 
@@ -14,39 +36,13 @@ typedef union GsTag {
 
 #define NML_MAP_SHADOW_PARTS_MAX 8
 
-/* One row of a pxy plane table: a plane or an angle quadruple. */
-typedef struct PxyRow {
-    float v[4];
-} PxyRow;
-
-/* pxySetClipPlaneWithAngle fills it (at most two entries, five quadwords allocated). */
+/* pxySetClipPlaneWithAngle fills it (at most two entries, five quadwords allocated). It is the PxyClipPlanes of a packet
+ * with float-array rows: indexing a row as v[i] folds the field offset into the address the way the original does, a
+ * vector member does not (pxyClipPlanes, the table under construction, is the only user). */
 typedef struct PxyPlaneTable {
-    PxyRow plane[2]; /* +0x00: plane normal and distance */
-    PxyRow angle[2]; /* +0x20: rotX, rotY, then the next rotX, rotY */
+    Vector4Elements plane[2]; /* +0x00: plane normal and distance */
+    Vector4Elements angle[2]; /* +0x20: rotX, rotY, then the next rotX, rotY */
 } PxyPlaneTable;
-
-/* The same five-quadword plane table as a packet holds it (quadword-aligned rows). */
-typedef struct PxyClipPlanes {
-    AlignedVector4 plane[2]; /* +0x00 */
-    AlignedVector4 angle[2]; /* +0x20 */
-} PxyClipPlanes;
-
-/* A 0x60-byte part of a pxy model. */
-typedef struct PxyPart {
-    u8 unk00[8];
-    signed char layer; /* +0x08 */
-    u8 unk09[7];
-    s16 maskBit; /* +0x10: bit of the pxyHideMask hide mask */
-    u8 unk12[2];
-    s16 index; /* +0x14: index into the per-part flag bytes */
-    u8 unk16[2];
-    u32 flags; /* +0x18 */
-    u8 unk1C[4];
-    Vector4 boundsMin; /* +0x20 */
-    Vector4 boundsMax; /* +0x30 */
-    AlignedVector4 sphere; /* +0x40: centre and radius */
-    u8 unk50[0x60 - 0x50];
-} PxyPart;
 
 /* A 0x20-byte range of parts: [0] opaque, [1] translucent. */
 typedef struct PxyPartRange {
@@ -56,143 +52,8 @@ typedef struct PxyPartRange {
     u8 unk1C[4];
 } PxyPartRange;
 
-/* The "pxy" model file header. */
-typedef struct PxyHeader {
-    char magic[4]; /* "pxy" */
-    float version; /* +0x04 */
-    u32 flags; /* +0x08 */
-    u32 fileSize[1]; /* +0x0c, a one-word array, read as *h->fileSize */
-    char name[0x20]; /* +0x10 */
-    int layerCount; /* +0x30 */
-    u8 unk34[8];
-    int offset3C; /* +0x3c */
-    int partOffset; /* +0x40 */
-    u8 unk44[4];
-    int partCount; /* +0x48 */
-    u8 unk4C[8];
-    int rangeOffset; /* +0x54 */
-    int offset58; /* +0x58 */
-    int matrixCount; /* +0x5c: number of global part matrices */
-    int geometryCount; /* +0x60 */
-    int offset64; /* +0x64 */
-    int offset68; /* +0x68 */
-    int offset6C; /* +0x6c */
-    int offset70; /* +0x70 */
-    int offset74; /* +0x74 */
-    int offset78; /* +0x78 */
-    u8 unk7C[0x80 - 0x7C];
-    float centre[3]; /* +0x80: bounding sphere centre */
-    float radius; /* +0x8c: bounding radius */
-    u8 unk90[0xC0 - 0x90];
-    int waterFlag; /* +0xc0: nonzero runs tiWaterObjectUpdate */
-    u8 unkC4[0xC8 - 0xC4];
-    int trackOffset; /* +0xc8: offset of the PxyTrack of the flags-0x10 entries */
-    int entryOffsets; /* +0xcc: offset of the int table of entry offsets */
-    u8 unkD0[0xE8 - 0xD0];
-    int sortEntryOffset; /* +0xe8 */
-} PxyHeader;
-
 /* Address of a table inside the pxy file image: header + byte offset. */
 #define PXY_HEADER_AT(header, offset) ((char *)(header) + (offset))
-
-/* The light record D_0096A06C points to (pxyState starts with one). */
-typedef struct PxyLight {
-    Vector4 direction; /* +0x00 */
-    u8 unk10[0xD0 - 0x10];
-    Vector4 savedDirection; /* +0xd0 */
-    Vector4 drawDirection; /* +0xe0 */
-    Vector4 override; /* +0xf0; w != 0 selects it */
-} PxyLight;
-
-/* The 0x180-byte light block of a shadow projector, cleared for each model. */
-typedef struct PxyShadowLight {
-    Vector4 direction; /* +0x00 */
-    u8 unk10[0x70 - 0x10];
-    float color[3]; /* +0x70 */
-    u8 unk7C[0x180 - 0x7C];
-} PxyShadowLight;
-
-/* The shadow projector D_0096A080 points to (0x36 quadwords). */
-typedef struct PxyShadow {
-    Matrix light; /* +0x000: light space to world */
-    Matrix textureInverse; /* +0x040 */
-    Matrix view; /* +0x080: world to light space */
-    Matrix project; /* +0x0c0: world to shadow texture */
-    PxyShadowLight lighting; /* +0x100 */
-    int x; /* +0x280: texture rectangle */
-    int y; /* +0x284 */
-    int width; /* +0x288 */
-    int height; /* +0x28c */
-    s16 repeatU; /* +0x290: REGION_REPEAT instead of REGION_CLAMP */
-    s16 repeatV; /* +0x292 */
-    s16 psm; /* +0x294 */
-    s16 frameBase; /* +0x296 */
-    int clutOffset; /* +0x298 */
-    u8 unk29C[4];
-    float scaleU; /* +0x2a0 */
-    float scaleV; /* +0x2a4 */
-    u8 unk2A8[8];
-    u64 tex0; /* +0x2b0 */
-    u64 clamp; /* +0x2b8 */
-    Vector4 uv; /* +0x2c0: offset u, scale u, offset v, scale v */
-    Vector4 unk2D0; /* +0x2d0 */
-    Vector4 direction; /* +0x2e0 */
-    Vector4 center; /* +0x2f0 */
-    Vector4 min; /* +0x300 */
-    Vector4 max; /* +0x310 */
-    Vector4 bounds; /* +0x320: centre and radius */
-    int unk330; /* +0x330 */
-    u8 unk334[4];
-    u64 alphaData; /* +0x338: GS ALPHA_1 data (0x42 or 0x89) */
-} PxyShadow;
-
-/* The 0x2a0-byte parameter block copied from nmlRenderStatus into the packet. */
-typedef struct PxyPacket {
-    u32 renderStatus; /* +0x00 */
-    int camera; /* +0x04: camera that owns the model */
-    int unk08; /* +0x08: draw mode; 1 and 4 cast shadows */
-    u8 unk0C[4];
-    PxyHeader *header; /* +0x10 */
-    PxyPartRange *ranges; /* +0x14 */
-    u8 unk18[8];
-    PxyPart *parts; /* +0x20 */
-    u8 unk24[0x34 - 0x24];
-    u8 *partFlags; /* +0x34 */
-    int unk38; /* +0x38 */
-    u8 unk3C[0x4C - 0x3C];
-    float unk4C; /* +0x4c */
-    u8 unk50[0x58 - 0x50];
-    float unk58; /* +0x58 */
-    struct PxyMatrix *matrices; /* +0x5c: one per part matrix index */
-    u8 unk60[0x68 - 0x60];
-    int unk68; /* +0x68 */
-    PxyLight *light; /* +0x6c */
-    u8 unk70[0x80 - 0x70];
-    PxyShadow *shadow; /* +0x80 */
-    u32 unk84; /* +0x84 */
-    u8 unk88[0x98 - 0x88];
-    struct PxyMatrix *unk98; /* +0x98 */
-    int unk9C; /* +0x9c */
-    u8 unkA0[4];
-    s16 planeCount; /* +0xa4 */
-    u8 unkA6[2];
-    PxyClipPlanes *planes; /* +0xa8: clip planes */
-    u8 unkAC[0xC0 - 0xAC];
-    float unkC0; /* +0xc0: lower clip height */
-    struct PxyHideMask *hideMask; /* +0xc4 */
-    float unkC8; /* +0xc8: upper clip height */
-    u8 unkCC[0xD0 - 0xCC];
-    u8 *partIndexList; /* +0xd0: 16 part indices ended by 0xff */
-    u32 unkD4; /* +0xd4 */
-    u8 unkD8[0xE0 - 0xD8];
-    float world[4][4]; /* +0xe0: model to world */
-    u8 unk120[0x170 - 0x120];
-    int cameraMask[16]; /* +0x170: nonzero where a camera draws the model */
-    Vector4 center; /* +0x1b0 */
-    void (*preDraw)(int, int); /* +0x1c0 */
-    u8 unk1C4[0x1D0 - 0x1C4];
-    void (*postDraw)(int, int); /* +0x1d0 */
-} PxyPacket;
 
 #define PXY_SLOT_COUNT 4 /* ring of recently drawn packets */
 
@@ -219,8 +80,8 @@ typedef union PxyBestRecord {
 } PxyBestRecord;
 
 typedef struct PxyState {
-    PxyLight light;
-    u8 unk100[0x470 - 0x100];
+    XglLightSet light;
+    u8 unk180[0x470 - 0x180];
     u32 cameraVisible[4]; /* +0x470: per camera, nonzero when the model is visible */
     u32 cameraFog[4]; /* +0x480: per camera fog factor << 4 */
     u8 unk490[0x4E0 - 0x490];
@@ -264,7 +125,7 @@ typedef struct PxyDrawEntry {
 
 /* One 16-byte record of the pxy entry table pxyEntryQueue. */
 typedef struct PxyEntry {
-    PxyPacket *packet; /* +0x00 */
+    void *data; /* +0x00: the packet data, copied to the attribute buffer when the key is even */
     unsigned short value; /* +0x04: low half of the second argument */
     unsigned char group; /* +0x06: bit index into pxyEntryGroupMask */
     unsigned char flag; /* +0x07 */
@@ -302,20 +163,6 @@ typedef struct PxyDrawWork {
 #define PXY_PART_VISIBLE 0x80  /* set for every part when the model is entered */
 #define PXY_PART_MERGED 0x40   /* translucent part already attached to the previous entry */
 #define PXY_PART_LOD_MASK 0xF  /* level-of-detail bits tested for header flag 1 */
-
-typedef struct PxyCamera {
-    u8 unk00[0x70];
-    Vector4 viewTrans; /* +0x70 */
-    Vector4 viewScale; /* +0x80 */
-    u8 unk90[0x94 - 0x90];
-    float unk94; /* +0x94 */
-    u8 unk98[0xD0 - 0x98];
-    Vector4 position; /* +0xd0 */
-    u8 unkE0[0x470 - 0xE0];
-    Matrix4 viewMatrix; /* +0x470: the matrix _CurMatrixSet loads */
-    u8 unk4B0[0x4F0 - 0x4B0];
-    Matrix4 clipMatrix; /* +0x4f0: the clip matrix _ModelCalcClipInitMat1 starts from */
-} PxyCamera;
 
 typedef struct PxySortEntry {
     u8 unk00[0xC];
@@ -356,8 +203,8 @@ typedef struct PxySortWork {
     PxyDrawEntry *out; /* +0x24a4 */
     PxySortItem **cursor; /* +0x24a8 */
     PxySortItem *swapped; /* +0x24ac */
-    void *matrixSet; /* +0x24b0 */
-    float (*matrices)[4][4]; /* +0x24b4 */
+    Matrix *matrixSet; /* +0x24b0 */
+    Matrix *matrices; /* +0x24b4 */
     u8 unk24B8[8];
     float matrix[4][4]; /* +0x24c0 */
     Vector4 eye; /* +0x2500 */
@@ -365,8 +212,6 @@ typedef struct PxySortWork {
 } PxySortWork;
 
 typedef struct PxyHideMask { u32 bits[1]; } PxyHideMask;
-
-typedef struct PxyMatrix { float m[4][4]; } PxyMatrix;
 
 /* Slot of a render layout store: one 32-bit word read as float or int. */
 typedef union {
@@ -380,16 +225,16 @@ typedef union {
  * microcode-family bit around nmlPacketAddTransMicrocode.
  */
 enum NmlRenderStatus {
-    NML_RENDER_FOG = 0x1,             /* fog colour/parameters set (pxySetFogColor, pxySetFogDist, global fog) */
-    NML_RENDER_FORCE_VISIBLE = 0x2,   /* shadow models and func_001BA794: camera visibility forced on */
+    NML_RENDER_FOG = 0x1,             /* fog colour/parameters set (nmlModelSetFogCol, nmlModelSetFogDist, global fog) */
+    NML_RENDER_FORCE_VISIBLE = 0x2,   /* shadow models and pxyRequestForcedVisibility: camera visibility forced on */
     NML_RENDER_STENCIL = 0x4,         /* nmlModelSetStencil; also set while a fade factor is below 1 */
     NML_RENDER_ZWRITE = 0x8,          /* nmlModelSetZwrite */
     NML_RENDER_HIDDEN = 0x10,         /* not visible in any camera: the model is skipped */
     NML_RENDER_LIGHT_VERTICAL = 0x20, /* light direction has no x/z component */
     NML_RENDER_HUMAN_MODEL = 0x40,
     NML_RENDER_STENCIL_ALPHA = 0x80,  /* nmlModelSetStencilAlpha */
-    NML_RENDER_ANIM_TIME = 0x100,     /* func_001BA9A0: animation time overridden */
-    NML_RENDER_FOG_WHITE = 0x400,     /* func_001BA278: fog forced to white, full strength */
+    NML_RENDER_ANIM_TIME = 0x100,     /* pxySetAnimTime: animation time overridden */
+    NML_RENDER_FOG_WHITE = 0x400,     /* pxySetFogWhite: fog forced to white, full strength */
     NML_RENDER_PROREAL = 0x800,       /* nmlModelSetTexProreal / RenderProreal */
     NML_RENDER_POINT_LIGHT = 0x1000,  /* nmlModelSetPointLight */
     NML_RENDER_CLIP_PLANE_ANGLE = 0x2000,  /* pxySetClipPlaneWithAngle */
@@ -479,7 +324,7 @@ typedef union NmlPartsReferenceScratch {
 
 /*
  * The "proreal" parameter block: the 0x1e0 bytes nmlModelSetProreal builds in
- * s_inProReal (D_0095A890 +0x10B0) and nmlModelEntry copies into the packet with
+ * s_inProReal (0x95A890 + 0x10B0) and nmlModelEntry copies into the packet with
  * nmlPacketSetAttributeData16N(s_inProReal, 0x1e), storing the packet address
  * it returns in the layout's proreal (ysegfDrawItemNameFrame +0xE8 to +0xF0).
  */
@@ -523,7 +368,7 @@ typedef struct NmlProRealParam {
 struct NmlStealthGeometry;
 
 /*
- * The model layout the engine renders from: the single s_inLayout (sefDefaultMemoryBlock +0x15660, 0x320 bytes) that the nmlModelSet* API fills, plus the
+ * The model layout the engine renders from: the single nmlLayoutStore (0x320 bytes) that the nmlModelSet* API fills, plus the
  * per-entry copies nmlModelEntry stores in s_apModelLayout.  The packet
  * builders and the filter renderers read the same record.
  */
@@ -534,7 +379,8 @@ union LayoutStore {
         /* +0x0; row 3 w (+0x3c) carries the block material alpha the drop
          * shadow path computes. */
         Matrix4 lightDirection;
-        Matrix4 lightColor; /* +0x40; rows 0-2 are the normal light vectors */
+        Matrix4 lightColor; /* +0x40; rows 0-2 are the normal light vectors; row 3 (+0x70) holds the scaffold labels D_00969E20 and
+                         * s_inLayout (+0x78), which no code references */
         Matrix4 place; /* +0x80 */
         Matrix4 inversePlace; /* +0xc0 */
         Vector4 pointPosition[4]; /* +0x100 */
@@ -631,9 +477,8 @@ union LayoutStore {
 
 typedef union LayoutStore LayoutStore;
 
-void nmlModelSetZwrite(int enabled);
 /* canon: config/header-canon.json chose src/math/main/spark-cont01-00231d50/nmlModelCalcDropShadow.c over 0 other accepted spellings */
-extern LayoutStore D_00969DB0;
+extern LayoutStore nmlLayoutStore;
 
 /* nmlFilterStealthMake allocates 31 sixteen-byte records. Its draw consumer
  * witnesses fourteen XYZ records at +0x30 and fourteen UV records at +0x110.
@@ -702,18 +547,16 @@ static PxyState pxyState;
     (((PxyStateRecords *) &pxyState)->records[(i) * 513 + 0x29A])
 
 extern PxyBatchTable pxyBatchTables[2];
-extern unsigned char D_0096E6C0[64];
 extern PxyEntry pxyEntryQueue[400];
-extern unsigned char D_00970000[43392];
 static PxyDrawEntry pxyDrawEntryTable[6656];
-static unsigned char D_00987980[48];
+static unsigned char pxyResetWork[48];
 static unsigned char pxyCircleShadowTexture[4128];
-static unsigned int D_009889D0[8];
+static unsigned int s_aCircleShadowClut[8];
 static int pxyFadeRamp[1024];
 extern int pxyOverlayBatchCount;
 extern int pxyShadowBatchCount;
 extern int pxySeparateBatchCount;
-extern int D_0096A2AC;
+extern int pxyExtraBatchCount;
 extern struct PxyBatch *pxyFirstBatch;
 extern struct PxyBatch *pxyLastBatch;
 
@@ -733,181 +576,176 @@ void pxyResetBatchTables(void)
     pxyShadowBatchCount = 0;
     pxyFirstBatch = 0;
     pxyLastBatch = 0;
-    D_0096A2AC = 0;
+    pxyExtraBatchCount = 0;
 }
 
 void pxyResetBatchTables(void);
 
-void func_001B9728(void) {
+void pxyInitBatchTables(void) {
     pxyResetBatchTables();
 }
 
-extern int D_0096A2B0;
+extern int pxySlotWriteIndex;
 void pxyResetSlots(void);
 
 void pxyResetSlots(void) {
     int i;
 
-    D_0096A2B0 = 0;
+    pxySlotWriteIndex = 0;
     for (i = 0; i < PXY_SLOT_COUNT; i++) {
         pxyState.slots[i].packet = 0;
     }
 }
 
-void func_001B97CC(void) {
+void pxyInitSlots(void) {
     pxyResetSlots();
 }
 
-void xglMatrixUnit(void *);
 void xglVectorClear(Vector4 *destination);
-void *memset(void *, int, unsigned int);
 extern int nmlRenderStatus;
-extern int D_0096A004;
+extern int pxyActiveCameraIndex;
 extern int pxyShadowMode;
 extern PxyHideMask *pxyHideMask;
-extern PxyHeader *D_0096A010;
-extern PxyPartRange *D_0096A014;
-extern void *D_0096A018;
-extern void *D_0096A01C;
-extern PxyPart *D_0096A020;
-extern void *D_0096A024;
-extern void *D_0096A028;
-extern void *pxyJointMatrices;
-extern void *D_0096A030;
-extern u8 *D_0096A034;
-extern int pxyTxyBlock;
-extern void *D_0096A03C;
-extern PxyHeader *D_0096A040;
-extern float D_0096A044;
-extern float D_0096A048;
-extern float D_0096A04C;
-extern void *D_0096A050;
-extern void *D_0096A054;
-extern PxyMatrix *D_0096A05C;
+extern PxyHeader *pxyCurrentHeader;
+extern PxyPartRange *pxyPartRanges;
+extern void *pxyHeaderTable58;
+extern void *pxyHeaderTable6C;
+extern PxyPart *pxyParts;
+extern void *pxyDefaultPartMatrices;
+extern void *pxyDefaultJointMatrices;
+extern Matrix *pxyJointMatrices;
+extern void *pxyHeaderTable64;
+extern u8 *pxyPartVisibilityFlags;
+extern TxyBlock *pxyTxyBlock;
+extern void *pxyHeaderTable3C;
+extern PxyHeader *pxyParentHeader;
+extern float pxyReflTransparency;
+extern float pxyTransparency;
+extern float pxyCircleShadowScale;
+extern void *pxyHeaderTable74;
+extern void *pxyHeaderTable78;
+extern Matrix *pxyPartMatrices;
 extern f32 pxyFocusX;
 extern f32 pxyFocusY;
-extern void *D_0096A068;
-extern PxyLight *D_0096A06C;
-extern PxyShadow *D_0096A080;
-extern int D_0096A084;
+extern void *pxyGeometryFogFactors;
+extern XglLightSet *pxyCurrentLight;
+extern PxyShadow *pxyCurrentShadow;
+extern int pxyRenderLevel;
 extern float pxyModelScaleMax;
-extern int D_0096A090;
-extern PxyMatrix *D_0096A098;
-extern int D_0096A09C;
-extern int D_0096A0A0;
+extern int pxyClipEnabled;
+extern Matrix *pxyShadowMatrix;
+extern int pxyVisibleOverride;
+extern Matrix *pxyMotionGlobalMatrices;
 extern s16 pxyClipPlaneCount;
 extern PxyPlaneTable *pxyClipPlanes;
-extern PxyMatrix *pxyGlobalMatrices;
-extern int D_0096A0B4;
-extern f32 D_0096A0C0;
-extern void *D_0096A0C4;
-extern f32 D_0096A0C8;
-extern int D_0096A0D0;
-extern int D_0096A0D4;
-extern float D_0096A0D8;
+extern Matrix *pxyGlobalMatrices;
+extern u32 *pxyClipPlaneMask;
+extern f32 pxyShadowHeightLower;
+extern void *pxySecondPartMask;
+extern f32 pxyShadowHeightUpper;
+extern u8 *pxyColorIndexSource;
+extern int pxyStateFlags;
+extern float pxyFadeAlpha;
 extern Matrix nmlModelDrawMatrix;
-extern Matrix D_0096A120;
-extern f32 pxyModelScale;
-extern f32 D_0096A164;
-extern f32 D_0096A168;
-extern f32 D_0096A16C;
-extern int D_0096A180;
-extern int D_0096A184;
-extern int D_0096A188;
-extern int D_0096A18C;
+extern Matrix nmlModelDrawInverseMatrix;
+extern AlignedVector4 pxyModelScale;
+extern int pxyColorLimitR;
+extern int pxyColorLimitG;
+extern int pxyColorLimitB;
+extern int pxyColorLimitA;
 extern Vector4 pxyModelPosition;
-extern int D_0096A1C0;
-extern int D_0096A1D0;
-extern float D_0096A2B8;
-extern int D_0096A2D8;
-extern f32 D_0096A318;
+extern int pxyLatchedActorState;
+extern int pxyLatchedSecondState;
+extern float nmlModelSortOffset;
+extern int pxyForcedVisibilityRequested;
+extern f32 pxyShadowScale;
 
 void pxyResetGlobals(void) {
-    xglMatrixUnit(&nmlModelDrawMatrix);
-    xglMatrixUnit(&D_0096A120);
+    xglMatrixUnit(nmlModelDrawMatrix.rows);
+    xglMatrixUnit(nmlModelDrawInverseMatrix.rows);
     nmlRenderStatus = 0;
-    D_0096A0D4 = 0;
+    pxyStateFlags = 0;
     pxyShadowMode = 0;
-    D_0096A004 = 0;
-    D_0096A044 = 1.0f;
-    D_0096A048 = 1.0f;
-    D_0096A04C = 1.0f;
+    pxyActiveCameraIndex = 0;
+    pxyReflTransparency = 1.0f;
+    pxyTransparency = 1.0f;
+    pxyCircleShadowScale = 1.0f;
     pxyModelScaleMax = 1.0f;
-    pxyModelScale = 1.0f;
-    D_0096A164 = 1.0f;
-    D_0096A168 = 1.0f;
-    D_0096A16C = 1.0f;
-    D_0096A180 = 0xFF0;
-    D_0096A184 = 0xFF0;
-    D_0096A188 = 0xFF0;
-    D_0096A18C = 0xFF0;
+    pxyModelScale.x = 1.0f;
+    pxyModelScale.y = 1.0f;
+    pxyModelScale.z = 1.0f;
+    pxyModelScale.w = 1.0f;
+    pxyColorLimitR = 0xFF0;
+    pxyColorLimitG = 0xFF0;
+    pxyColorLimitB = 0xFF0;
+    pxyColorLimitA = 0xFF0;
     pxyFocusX = 0;
     pxyFocusY = 0;
-    D_0096A084 = 0;
-    D_0096A09C = 0;
+    pxyRenderLevel = 0;
+    pxyVisibleOverride = 0;
     pxyClipPlaneCount = 0;
-    D_0096A0C8 = 0.5f;
-    D_0096A0C0 = -1.0f;
+    pxyShadowHeightUpper = 0.5f;
+    pxyShadowHeightLower = -1.0f;
     xglVectorClear(&pxyModelPosition);
-    D_0096A0D8 = 1.0f;
+    pxyFadeAlpha = 1.0f;
     pxyHideMask = 0;
-    D_0096A010 = 0;
-    D_0096A014 = 0;
-    D_0096A018 = 0;
-    D_0096A01C = 0;
-    D_0096A020 = 0;
-    D_0096A024 = 0;
-    D_0096A028 = 0;
+    pxyCurrentHeader = 0;
+    pxyPartRanges = 0;
+    pxyHeaderTable58 = 0;
+    pxyHeaderTable6C = 0;
+    pxyParts = 0;
+    pxyDefaultPartMatrices = 0;
+    pxyDefaultJointMatrices = 0;
     pxyJointMatrices = 0;
-    D_0096A030 = 0;
-    D_0096A034 = 0;
+    pxyHeaderTable64 = 0;
+    pxyPartVisibilityFlags = 0;
     pxyTxyBlock = 0;
-    D_0096A03C = 0;
-    D_0096A040 = 0;
-    D_0096A050 = 0;
-    D_0096A054 = 0;
-    D_0096A05C = 0;
-    D_0096A068 = 0;
-    D_0096A06C = &pxyState.light;
-    D_0096A080 = 0;
-    D_0096A090 = 0;
-    D_0096A098 = 0;
-    D_0096A0A0 = 0;
+    pxyHeaderTable3C = 0;
+    pxyParentHeader = 0;
+    pxyHeaderTable74 = 0;
+    pxyHeaderTable78 = 0;
+    pxyPartMatrices = 0;
+    pxyGeometryFogFactors = 0;
+    pxyCurrentLight = &pxyState.light;
+    pxyCurrentShadow = 0;
+    pxyClipEnabled = 0;
+    pxyShadowMatrix = 0;
+    pxyMotionGlobalMatrices = 0;
     pxyClipPlanes = 0;
     pxyGlobalMatrices = 0;
-    D_0096A0C4 = 0;
-    D_0096A0B4 = 0;
-    D_0096A0D0 = 0;
-    D_0096A1C0 = 0;
-    D_0096A1D0 = 0;
-    D_0096A2B8 = 0;
-    D_0096A2D8 = 0;
-    D_0096A318 = 1.0f;
-    memset(&D_00987980, 0, 0x30);
+    pxySecondPartMask = 0;
+    pxyClipPlaneMask = 0;
+    pxyColorIndexSource = 0;
+    pxyLatchedActorState = 0;
+    pxyLatchedSecondState = 0;
+    nmlModelSortOffset = 0;
+    pxyForcedVisibilityRequested = 0;
+    pxyShadowScale = 1.0f;
+    memset(&pxyResetWork, 0, 0x30);
 }
 
 void pxyResetGlobals(void);
-extern int D_0096A2BC;
+extern int pxyBatchedModelCount;
 extern int pxyTrackedHeaderCount;
-extern int D_0096A2DC;
-extern int D_0096A308;
-extern int D_0096A30C;
-extern int D_0096A324;
+extern int pxyShadowCasterMode;
+extern int pxyOpaqueEntryCursor;
+extern int pxyTranslucentEntryCursor;
+extern int pxyMom2B04LightFlag;
 
 void pxyResetCounters(void)
 {
     pxyResetGlobals();
-    D_0096A2BC = 0;
+    pxyBatchedModelCount = 0;
     pxyTrackedHeaderCount = 0;
-    D_0096A2DC = 1;
-    D_0096A308 = 0;
-    D_0096A30C = 0x1000;
-    D_0096A324 = 0;
+    pxyShadowCasterMode = 1;
+    pxyOpaqueEntryCursor = 0;
+    pxyTranslucentEntryCursor = 0x1000;
+    pxyMom2B04LightFlag = 0;
 }
 
 void pxyResetCounters(void);
 
-void func_001B9B44(void) {
+void pxyInitCounters(void) {
     pxyResetCounters();
 }
 
@@ -917,15 +755,15 @@ extern int pxyEntryGroupMask;
 extern int pxyEntryCount;
 extern int pxyFlags;
 extern void (*pxyDrawCallback)(int);
-extern Vector4 D_00645FA0;
+extern Vector4 pxyGlobalColor;
 
 void pxyClearEntryTable(void) {
     int i;
 
-    D_00645FA0.x = 1.0f;
-    D_00645FA0.y = 1.0f;
-    D_00645FA0.z = 1.0f;
-    D_00645FA0.w = 1.0f;
+    pxyGlobalColor.x = 1.0f;
+    pxyGlobalColor.y = 1.0f;
+    pxyGlobalColor.z = 1.0f;
+    pxyGlobalColor.w = 1.0f;
     pxyEntryCount = 0;
     pxyEntryGroupMask = 0;
     pxyFreezeAnimation = 0;
@@ -937,18 +775,17 @@ void pxyClearEntryTable(void) {
     pxyDrawCallback = 0;
 }
 
-void xglLightSetDefault(void *);
 void pxyClearEntryTable(void);
 extern int pxyCameraEnable[4];
-extern float D_00969E80;
-extern float D_00969E90;
-extern float D_00969EA0;
-extern float D_00969EB0;
-extern float D_00969EC0;
-extern float D_00969ED0;
-extern float D_00969EE0;
-extern f32 D_0096A310;
-extern f32 D_0096A314;
+extern float pxyLightSlotTable;
+extern float pxyLightSlot1Unit;
+extern float pxyLightSlot2Unit;
+extern float pxyLightSlot3Unit;
+extern float pxyLightSlot4Unit;
+extern float pxyLightSlot5Unit;
+extern float pxyLightSlot6Unit;
+extern f32 pxyOpaqueEntryUsagePercent;
+extern f32 pxyTranslucentEntryUsagePercent;
 
 void pxyInitTables(void)
 {
@@ -956,21 +793,21 @@ void pxyInitTables(void)
     pxyCameraEnable[1] = 0;
     pxyCameraEnable[2] = 0;
     pxyCameraEnable[3] = 0;
-    xglLightSetDefault(&pxyState);
-    memset(&D_00969E80, 0, 0x180);
-    D_00969E80 = 1.0f;
-    D_00969E90 = 1.0f;
-    D_00969EA0 = 1.0f;
-    D_00969EB0 = 1.0f;
-    D_00969EC0 = 1.0f;
-    D_00969ED0 = 1.0f;
-    D_00969EE0 = 1.0f;
-    D_0096A310 = 0;
-    D_0096A314 = 0;
+    xglLightSetDefault(&pxyState.light);
+    memset(&pxyLightSlotTable, 0, 0x180);
+    pxyLightSlotTable = 1.0f;
+    pxyLightSlot1Unit = 1.0f;
+    pxyLightSlot2Unit = 1.0f;
+    pxyLightSlot3Unit = 1.0f;
+    pxyLightSlot4Unit = 1.0f;
+    pxyLightSlot5Unit = 1.0f;
+    pxyLightSlot6Unit = 1.0f;
+    pxyOpaqueEntryUsagePercent = 0;
+    pxyTranslucentEntryUsagePercent = 0;
     pxyClearEntryTable();
 }
 
-extern int D_00645F10[];
+extern int pxyFadeRampOrderTable[];
 
 void pxyBuildFadeRamp(float spread) {
     int *ramp;
@@ -981,12 +818,12 @@ void pxyBuildFadeRamp(float spread) {
     ramp = pxyFadeRamp;
     faded = 0.0f;
     step = spread;
-    ramp[D_00645F10[0]] = 0x80000000;
+    ramp[pxyFadeRampOrderTable[0]] = 0x80000000;
     for (i = 1; i < 32; i++) {
         if ((int)faded < 129) {
-            ramp[D_00645F10[i]] = (128 - (int)faded) << 24;
+            ramp[pxyFadeRampOrderTable[i]] = (128 - (int)faded) << 24;
         } else {
-            ramp[D_00645F10[i]] = 0;
+            ramp[pxyFadeRampOrderTable[i]] = 0;
         }
         faded = faded + step;
         step = step + (spread * 0.2f + 0.0f);
@@ -996,10 +833,10 @@ void pxyBuildFadeRamp(float spread) {
 float sqrtf(float);
 /* The first two words of this unit's .sdata (0x69E0C0), defined in address order so that
  * every access is $gp-relative. */
-int D_0069E0C0 = 0;
+int pxyProfileDrawFlag = 0;
 int pxyShadowTexturesReady = 0;
 
-void pxyInitShadowTextures(void)
+void CONSTRUCT_CIRCLR_SHADOW(void)
 {
     int row;
     float maxLevel;
@@ -1044,7 +881,7 @@ void pxyInitShadowTextures(void)
     {
         struct PxyRow { unsigned int w[4]; } *packet;
 
-        packet = (struct PxyRow *)D_009889D0;
+        packet = (struct PxyRow *)s_aCircleShadowClut;
         packet[0].w[0] = 0;
         packet[0].w[1] = 0;
         packet[0].w[2] = 0;
@@ -1073,17 +910,17 @@ void pxyInitShadowTextures(void)
 
 typedef int s32;
 
-void func_001BA214(void) {
-    D_0096A0D4 |= 1;
+void pxySetStateFlag(void) {
+    pxyStateFlags |= 1;
 }
 
-void func_001BA248(int value)
+void pxySetColorIndexSource(u8 *colorIndex)
 {
-  D_0096A0D0 = value;
+  pxyColorIndexSource = colorIndex;
 }
 
-void func_001BA278(void) {
-    D_00969DB0.fields.render_status |= NML_RENDER_FOG_WHITE;
+void pxySetFogWhite(void) {
+    nmlLayoutStore.fields.render_status |= NML_RENDER_FOG_WHITE;
 }
 
 void pxySetDefaultLight(XglLightSet *light)
@@ -1100,30 +937,25 @@ void *pxyGetState(void) {
     return &pxyState;
 }
 
-void func_001BA320(void) {
-    xglLightSetDefault(&pxyState);
+void pxyResetLightToDefault(void) {
+    xglLightSetDefault(&pxyState.light);
 }
 
-void func_001BA358(int value)
+void pxySetShadowCasterMode(int value)
 {
-  D_0096A2DC = value;
+  pxyShadowCasterMode = value;
 }
 
-void xglMatrixStackRotX(float);
-void xglMatrixStackRotY(float);
-void xglMatrixStackSave(void *);
-void xglVectorCopy_001CC998(Vector4 *destination, const Vector4 *source);
-extern const u64 D_0068F018;
 
-const u64 D_0068F010[2] = { 0, 0x3f8000003f800000ULL };
+const u64 xglForwardVector[2] = { 0, 0x3f8000003f800000ULL };
 
 void xglDirectionFromAngles(Vector4 *direction, const Vector4 *rotation) {
     Matrix4 matrix;
     DoublewordVector4 forward;
     AlignedVector4 spare;
 
-    forward.words[0] = D_0068F010[0];
-    forward.words[1] = D_0068F018;
+    forward.words[0] = xglForwardVector[0];
+    forward.words[1] = xglForwardVector[1];
     xglMatrixStackUnit();
     xglMatrixStackRotX(rotation->x);
     xglMatrixStackRotY(rotation->y);
@@ -1139,7 +971,7 @@ int pxyFindEntryIndex(PxyHeader *header, const char *name) {
     int i;
 
     if (name != 0 && header != 0 && header != 0 && header->magic[0] == 'p' && header->magic[1] == 'x' && header->magic[2] == 'y') {
-        base = PXY_HEADER_AT(header, header->offset6C);
+        base = PXY_HEADER_AT(header, header->geometryOffset);
         for (i = 0; i < header->geometryCount; i++) {
             if (strcmp(base, name) == 0) {
                 return i;
@@ -1154,7 +986,7 @@ void *pxyGetEntry(PxyHeader *header, int index) {
     char *base;
 
     if (header != 0 && header != 0 && header->magic[0] == 'p' && header->magic[1] == 'x' && header->magic[2] == 'y') {
-        base = PXY_HEADER_AT(header, header->offset6C);
+        base = PXY_HEADER_AT(header, header->geometryOffset);
         if (header->geometryCount > index) {
             return base + index * 112;
         }
@@ -1162,38 +994,38 @@ void *pxyGetEntry(PxyHeader *header, int index) {
     return 0;
 }
 
-void func_001BA618(f32 first, f32 second) {
+void pxySetFocus(f32 first, f32 second) {
     pxyFocusX = first;
     pxyFocusY = second;
 }
 
-void func_001BA658(void) {
+void pxyRequestTextureCopyPass(void) {
     pxyFlags |= 2;
 }
 
-void func_001BA68C(void) {
+void pxyRequestOverlayPass(void) {
     pxyFlags |= 8;
 }
 
-void func_001BA6C0(void) {
+void pxySetOverlayAlphaMaskMode(void) {
     pxyFlags |= 0x2000;
 }
 
-void func_001BA6F4(void) {
+void pxySkipOverlayDraw(void) {
     pxyFlags |= 0x200;
 }
 
-void func_001BA728(void) {
+void pxyRequestFrameClearOnly(void) {
     pxyFlags |= 0x4000;
 }
 
-void func_001BA75C(void) {
+void pxySetShadowUploadFlag(void) {
     pxyFlags |= 0x20000;
 }
 
-void func_001BA794(void) {
-    D_00969DB0.fields.render_status |= NML_RENDER_FORCE_VISIBLE;
-    D_0096A2D8 = 1;
+void pxyRequestForcedVisibility(void) {
+    nmlLayoutStore.fields.render_status |= NML_RENDER_FORCE_VISIBLE;
+    pxyForcedVisibilityRequested = 1;
 }
 
 /* Requests packet mode 3 (bit 0x10 of pxyFlags); pxyFlush passes that bit to xglPacketSetMode3Flag. */
@@ -1209,64 +1041,64 @@ void pxySetMode4Flag(void) {
     pxyFlags |= 0x80000;
 }
 
-void func_001BA850(void) {
+void pxySetShadowProjectOff(void) {
     pxyFlags |= 0x40000;
 }
 
-void func_001BA888(void) {
+void pxySetSkipTextureUpload(void) {
     pxyFlags |= 0x40;
 }
 
-void func_001BA8BC(void) {
+void pxySetBlackFog(void) {
     pxyFlags |= 0x80;
 }
 
-void func_001BA8F0(void) {
-    D_00969DB0.fields.render_status |= NML_RENDER_PROREAL;
+void nmlModelSetTexProreal(void) {
+    nmlLayoutStore.fields.render_status |= NML_RENDER_PROREAL;
 }
 
-void func_001BA924(void)
+void pxySetSourceDrawPass(void)
 {
     nmlRenderStatus |= NML_RENDER_CULLED;
     pxyFlags |= 0x8000;
 }
 
-void func_001BA970(int value)
+void nmlModelSetClip(int value)
 {
-  D_0096A090 = value;
+  pxyClipEnabled = value;
 }
 
-extern float D_0096A08C;
+extern float pxyAnimTime;
 
-void func_001BA9A0(float value)
+void pxySetAnimTime(float value)
 {
-    D_0096A08C = value;
+    pxyAnimTime = value;
     nmlRenderStatus |= NML_RENDER_ANIM_TIME;
 }
 
-void func_001BA9E4(void)
+void pxySetShadowFirstPass(void)
 {
     nmlRenderStatus |= NML_RENDER_TEXMAP_DROP;
     pxyFlags |= 0x100000;
 }
 
-void func_001BAA34(void) {
-    D_00969DB0.fields.render_status |= NML_RENDER_MAP_ENTRY;
+void nmlModelSetShadowMapEntry(void) {
+    nmlLayoutStore.fields.render_status |= NML_RENDER_MAP_ENTRY;
 }
 
-void func_001BAA6C(void) {
+void pxySetFreezeAnimation(void) {
     pxyFreezeAnimation = 1;
 }
 
-void func_001BAA98(s32 value) {
-    if (D_0096A1C0 == 0) {
-        D_0096A1C0 = value;
+void pxyLatchActorState(s32 value) {
+    if (pxyLatchedActorState == 0) {
+        pxyLatchedActorState = value;
     }
 }
 
-void func_001BAAD8(s32 value) {
-    if (D_0096A1D0 == 0) {
-        D_0096A1D0 = value;
+void pxyLatchSecondState(s32 value) {
+    if (pxyLatchedSecondState == 0) {
+        pxyLatchedSecondState = value;
     }
 }
 
@@ -1285,7 +1117,7 @@ void pxyRegisterDrawCallback(void (*entry)(int)) {
     }
 }
 
-/* Installs the callback that func_001CBCE4 calls through pxyDrawCallback (TiWater passes its draw function). */
+/* Installs the callback that nmlModelFlushSub calls through pxyDrawCallback (TiWater passes its draw function). */
 void pxySetDrawCallback(void (*callback)(int))
 {
   pxyDrawCallback = callback;
@@ -1296,86 +1128,65 @@ void pxySetCameraEnable(int index, int value)
     pxyCameraEnable[index] = value;
 }
 
-void func_001BAC70(int flags)
+void nmlModelSetRenderLevel(int flags)
 {
-    D_0096A084 |= flags;
-    if (D_0096A084 & 0x40) {
+    pxyRenderLevel |= flags;
+    if (pxyRenderLevel & 0x40) {
         pxyFlags |= 0x100;
     }
 }
 
-extern f32 D_0096A058;
-extern f32 D_0096A094;
+extern f32 pxyShadowAlpha;
+extern f32 pxyShadowPlaneHeight;
 
 void pxySetShadowMode(int mode, f32 a, f32 b, f32 c) {
     if (a <= 0.0f) {
         return;
     }
     pxyShadowMode = mode;
-    D_0096A058 = a;
-    D_0096A094 = b;
-    D_0096A318 = c;
+    pxyShadowAlpha = a;
+    pxyShadowPlaneHeight = b;
+    pxyShadowScale = c;
     if (pxyShadowMode == 4 || pxyShadowMode == 1 || pxyShadowMode == 5) {
         nmlRenderStatus |= NML_RENDER_FORCE_VISIBLE;
     }
 }
 
-void func_001BADA8(f32 first, f32 second) {
-    D_0096A0C8 = first;
-    D_0096A0C0 = second;
+void pxySetShadowHeightRange(f32 first, f32 second) {
+    pxyShadowHeightUpper = first;
+    pxyShadowHeightLower = second;
 }
 
-void pxySetJointMatrices(void *a, void *b)
+void pxySetJointMatrices(Matrix *joints, Matrix *global)
 {
-    pxyJointMatrices = a;
-    pxyGlobalMatrices = b;
+    pxyJointMatrices = joints;
+    pxyGlobalMatrices = global;
 }
 
-void func_001BAE28(int value)
+void pxySetMotionGlobalMatrices(Matrix *global)
 {
-  D_0096A0A0 = value;
+  pxyMotionGlobalMatrices = global;
 }
 
-void func_001BAE58(int value)
+void pxySetPartMatrices(Matrix *matrices)
 {
-  D_0096A05C = (PxyMatrix *)value;
+  pxyPartMatrices = matrices;
 }
 
 extern AlignedVector4 pxyFogColor;
 
-void pxySetFogColor(Vector4 *position) {
+void nmlModelSetFogCol(Vector4 *position) {
     pxyFogColor = *position;
     nmlRenderStatus |= NML_RENDER_FOG;
 }
 
-/* A plane or angle row as pxySetClipPlaneMasked reads it: words 0..2 are compared as integers. */
-typedef union PxyRowBits {
-    PxyRow row;
-    u32 words[4];
-} PxyRowBits;
 
-/* Draw state kept in the EE scratchpad while the batches are drawn. */
-/* A "txy" block: magic, the table size and flags; the byte table runs from +0x10 to size. */
-typedef struct TxyBlock {
-    char magic[3]; /* "txy" */
-    u8 unmodeled_03[5];
-    u32 size; /* +0x08 */
-    u32 flags; /* +0x0c: bit 31 set while the table is pending */
-} TxyBlock;
+extern u16 pxyClipPlaneMaskedCount;
+extern float pxyClipPlaneMaskedX;
+extern float pxyClipPlaneMaskedY;
+extern float pxyClipPlaneMaskedZ;
 
-extern u16 D_0096A0A6;
-extern float D_0096A0B0;
-extern float D_0096A0B8;
-extern float D_0096A0BC;
-
-typedef struct {
-    float x;
-    float y;
-    float z;
-    float w;
-} PxyFogPara;
-
-void pxyFogPara(PxyFogPara *out, float fogNear, float fogFar, float fogMin, float fogMax)
+void nmlModelFogPara(AlignedVector4 *out, float fogNear, float fogFar, float fogMin, float fogMax)
 {
     float shadeMin;
     float shadeMax;
@@ -1400,24 +1211,19 @@ void pxyFogPara(PxyFogPara *out, float fogNear, float fogFar, float fogMin, floa
     out->w = (fogFar * fogNear) * (shadeMin - shadeMax) / (fogFar - fogNear);
 }
 
-/* Kept local: xgl_studio.h declares this as returning struct XglCamera *; this file views the camera as its own PxyCamera. */
-PxyCamera *xglStudioSelectGetActiveCamera(int);
 extern AlignedVector4 pxyFogParams;
-void pxyFogPara(PxyFogPara *out, float a, float b, float c, float d);
 
-void pxySetFogDist(float fogNear, float fogFar, float fogMin, float fogMax) {
-    pxyFogPara(&pxyFogParams, fogNear, fogFar, fogMin, fogMax);
+void nmlModelSetFogDist(float fogNear, float fogFar, float fogMin, float fogMax) {
+    nmlModelFogPara(&pxyFogParams, fogNear, fogFar, fogMin, fogMax);
     nmlRenderStatus |= NML_RENDER_FOG;
 }
 
-void _CurMatrixSet(void *matrix);
-void _CurRotTransPersFog(AlignedVector4 *out, int a0, AlignedVector4 *ptr);
 
-int pxyGetFogParaStudio(int position, int studio)
+int nmlModelGetFogParaStudio(const Vector4 *position, int studio)
 {
     int result = 255;
     AlignedVector4 *fogPara = &pxyFogParams;
-    PxyCamera *camera;
+    XglCamera *camera;
     AlignedVector4 projected;
 
     if (nmlRenderStatus & NML_RENDER_FOG) {
@@ -1425,7 +1231,7 @@ int pxyGetFogParaStudio(int position, int studio)
     }
     camera = xglStudioSelectGetActiveCamera(studio);
     if (camera != 0) {
-        _CurMatrixSet(&camera->viewMatrix);
+        _CurMatrixSet(&camera->volume[0].viewMatrix);
         _CurRotTransPersFog(&projected, position, fogPara);
         result = (u32)projected.w;
         if (projected.z < 0.0f) {
@@ -1437,39 +1243,39 @@ int pxyGetFogParaStudio(int position, int studio)
 
 extern AlignedVector4 pxyGlobalFogPara;
 
-void pxySetGlobalFogDist(float fogNear, float fogFar, float fogMin, float fogMax) {
-    pxyFogPara(&pxyGlobalFogPara, fogNear, fogFar, fogMin, fogMax);
+void nmlModelSetGlobalFogDist(float fogNear, float fogFar, float fogMin, float fogMax) {
+    nmlModelFogPara(&pxyGlobalFogPara, fogNear, fogFar, fogMin, fogMax);
     pxyFlags |= 0x20;
 }
 
 extern AlignedVector4 pxyGlobalFogColor;
 
-void pxySetGlobalFogColor(Vector4 *value) {
+void nmlModelSetGlobalFogCol(Vector4 *value) {
     pxyGlobalFogColor = *value;
     pxyFlags |= 0x20;
 }
 
-void func_001BB3CC(float value)
+void nmlModelSetSortOffset(float value)
 {
-  D_0096A2B8 = value;
+  nmlModelSortOffset = value;
 }
 
-void func_001BB3FC(Vector4 *value)
+void pxySetColorScale(Vector4 *value)
 {
-    D_00645FA0 = *value;
+    pxyGlobalColor = *value;
 }
 
-void func_001BB44C(void *value)
+void pxySetHideMask(void *value)
 {
   pxyHideMask = value;
 }
 
-void func_001BB47C(void *value)
+void pxySetSecondPartMask(void *value)
 {
-  D_0096A0C4 = value;
+  pxySecondPartMask = value;
 }
 
-void pxySetTxyBlock(TxyBlock *block)
+void nmlModelSetTexture(TxyBlock *block)
 {
     u8 *bytes;
     u32 i;
@@ -1491,7 +1297,7 @@ void pxySetTxyBlock(TxyBlock *block)
             }
             block->flags &= 0x7FFFFFFF;
         }
-        pxyTxyBlock = (int)block;
+        pxyTxyBlock = block;
     }
 }
 
@@ -1500,19 +1306,18 @@ void pxySetModelPosition(Vector4 *position)
     pxyModelPosition = *position;
 }
 
-void func_001BB678(void *value)
+void nmlModelSetParent(PxyHeader *value)
 {
-  D_0096A040 = value;
+  pxyParentHeader = value;
 }
 
-void xglMatrixCopy_001CC9C4(Matrix4 *destination, const Matrix4 *source);
 
-void nmlModelSetDrawMatrix(void *matrix) {
-    xglMatrixCopy_001CC9C4(&nmlModelDrawMatrix, matrix);
+void nmlModelSetDrawMatrix(Matrix4 matrix) {
+    xglMatrixCopy_001CC9C4(nmlModelDrawMatrix.rows, matrix);
 }
 
-void pxySetModelScale(Vector4 *src) {
-    *(AlignedVector4 *)&pxyModelScale = *src;
+void nmlModelSetScale(const Vector4 *src) {
+    pxyModelScale = *src;
     pxyModelScaleMax = src->x;
     if (pxyModelScaleMax < src->y) {
         pxyModelScaleMax = src->y;
@@ -1525,7 +1330,7 @@ void pxySetModelScale(Vector4 *src) {
 void nmlModelSetZwrite(int enabled)
 {
     if (enabled) {
-        D_00969DB0.fields.render_status |= NML_RENDER_ZWRITE;
+        nmlLayoutStore.fields.render_status |= NML_RENDER_ZWRITE;
     }
 }
 
@@ -1536,8 +1341,8 @@ void nmlModelSetTransparency(float value) {
     if (value > 1.0f) {
         value = 1.0f;
     }
-    D_0096A048 = value;
-    D_0096A04C = value;
+    pxyTransparency = value;
+    pxyCircleShadowScale = value;
 }
 
 void nmlModelSetReflTransparency(float value) {
@@ -1547,31 +1352,29 @@ void nmlModelSetReflTransparency(float value) {
     if (value > 1.0f) {
         value = 1.0f;
     }
-    D_0096A044 = value;
+    pxyReflTransparency = value;
 }
 
 void nmlModelSetStencil(int enabled) {
     if (enabled) {
-        D_00969DB0.fields.render_status |= NML_RENDER_STENCIL;
+        nmlLayoutStore.fields.render_status |= NML_RENDER_STENCIL;
     }
 }
 
-void func_001BB96C(PxyLight *light)
+void pxySetLightPtr(XglLightSet *light)
 {
-  D_0096A06C = light;
+  pxyCurrentLight = light;
 }
 
-void *xglPacketReserve(int);
-void *memcpy(void *destination, const void *source, unsigned int size);
 
-void func_001BB99C(PxyLight *light)
+void pxySetLightCopy(XglLightSet *light)
 {
-    D_0096A06C = xglPacketReserve(0x19);
-    memcpy(D_0096A06C, light, 0x180);
+    pxyCurrentLight = nmlPacketSetAttributeAlloc16N(0x19);
+    memcpy(pxyCurrentLight, light, 0x180);
 }
 
-void func_001BB9F4(void) {
-    D_00969DB0.fields.render_status |= NML_RENDER_HUMAN_MODEL;
+void nmlModelSetHumanModel(void) {
+    nmlLayoutStore.fields.render_status |= NML_RENDER_HUMAN_MODEL;
 }
 
 extern long long nmlStencilAlphaData;
@@ -1585,94 +1388,87 @@ void nmlModelSetStencilAlpha(long long gsAlphaData)
     nmlRenderStatus |= NML_RENDER_STENCIL_ALPHA;
 }
 
-void func_001BBA78(void) {
-    D_00969DB0.fields.render_status |= NML_RENDER_DROP_PASS;
+void nmlModelSetDropPass(void) {
+    nmlLayoutStore.fields.render_status |= NML_RENDER_DROP_PASS;
 }
 
-void func_001BBAB0(void) {
-    D_00969DB0.fields.render_status |= NML_RENDER_TEXMAP_CIRCLE;
+void nmlModelSetTexMapCircle(void) {
+    nmlLayoutStore.fields.render_status |= NML_RENDER_TEXMAP_CIRCLE;
 }
 
 void nmlModelSetModel(NmlModel *model)
 {
-  D_00969DB0.fields.model = model;
+  nmlLayoutStore.fields.model = model;
 }
 
-void func_001BBB18(void) {
+void pxyAbortModel(void) {
     pxyResetGlobals();
 }
 
-extern u64 pxyBoundSphere;
+/* Bounding sphere of the model being drawn: centre and radius (w), computed by pxyCalcModelBounds. */
+extern DoublewordVector4 pxyBoundSphere;
 
-void *func_001BBB48(void) {
-    return &pxyBoundSphere;
+void *pxyGetBoundSphere(void) {
+    return &pxyBoundSphere.vector;
 }
 
-extern int D_0096A31C;
+extern int pxyModelHiddenFlag;
 
-int func_001BBB70(void) {
-    return D_0096A31C;
+int pxyIsModelHidden(void) {
+    return pxyModelHiddenFlag;
 }
 
-void pxyResetState(void);
-extern s32 D_0096A304;
+extern s32 pxyFlushDoneFlag;
 
-/* Frame start for the pxy module: reset the state, clear D_0096A304 (pxyFlush sets it at its end). */
+/* Frame start for the pxy module: reset the state, clear pxyFlushDoneFlag (pxyFlush sets it at its end). */
 void pxyBeginFrame(void) {
-    pxyResetState();
-    D_0096A304 = 0;
+    nmlModelFlushClear();
+    pxyFlushDoneFlag = 0;
     pxyClearFlushDone();
 }
 
-void func_001BBBD8(void) {
+void pxySetTexMapDropAll(void) {
     pxyFlags |= 0x400;
 }
 
-void func_001BBC0C(void) {
+void pxyEnableFrameMaskPass(void) {
     pxyFlags |= 0x800;
 }
 
-void func_001BBC40(void) {
+void pxyForceCameraVisibleSet(void) {
     pxyFlags |= 0x1000;
 }
 
-int func_001BBC74(void) {
+int pxyGlowPendingGet(void) {
     return pxyFlags & 4;
 }
 
-int func_001BBCA0(void) {
+int pxyWaterReflectionPendingGet(void) {
     return pxyFlags & 1;
 }
 
-typedef struct PxyAngle {
-    float rotX;
-    float rotY;
-} PxyAngle;
-
-void pxySetClipPlaneWithAngle(PxyRow *plane, PxyRow *angle, PxyAngle *rotation)
+void pxySetClipPlaneWithAngle(Vector4Elements *plane, Vector4Elements *angle, PxyAngle *rotation)
 {
     if (pxyClipPlanes == 0) {
-        pxyClipPlanes = xglPacketReserve(5);
+        pxyClipPlanes = nmlPacketSetAttributeAlloc16N(5);
     }
     if (pxyClipPlaneCount < 2) {
         pxyClipPlanes->plane[pxyClipPlaneCount] = *plane;
         pxyClipPlanes->angle[pxyClipPlaneCount] = *angle;
-        pxyClipPlanes->angle[pxyClipPlaneCount].v[2] = rotation->rotX;
-        pxyClipPlanes->angle[pxyClipPlaneCount].v[3] = rotation->rotY;
+        pxyClipPlanes->angle[pxyClipPlaneCount].component[2] = rotation->rotX;
+        pxyClipPlanes->angle[pxyClipPlaneCount].component[3] = rotation->rotY;
         pxyClipPlaneCount++;
         nmlRenderStatus |= NML_RENDER_CLIP_PLANE_ANGLE;
     }
 }
 
-int pxyGetFogParaStudio(int a0, int a1);
-extern u64 D_0096A378;
 
 void pxyAddClipPlanePair(PxyRowBits *plane, PxyRowBits *angle)
 {
     if (plane->words[0] != 0 || plane->words[1] != 0 || plane->words[2] != 0 ||
         angle->words[0] != 0 || angle->words[1] != 0 || angle->words[2] != 0) {
         if (pxyClipPlanes == 0) {
-            pxyClipPlanes = xglPacketReserve(5);
+            pxyClipPlanes = nmlPacketSetAttributeAlloc16N(5);
         }
         if (pxyClipPlaneCount < 2) {
             pxyClipPlanes->plane[pxyClipPlaneCount] = plane->row;
@@ -1691,117 +1487,102 @@ void pxySetClipPlaneMasked(PxyRowBits *plane, PxyRowBits *angle, int count, floa
 {
     if (plane->words[0] != 0 || plane->words[1] != 0 || plane->words[2] != 0 || angle->words[0] != 0 || angle->words[1] != 0 || angle->words[2] != 0) {
         if (pxyClipPlanes == 0) {
-            pxyClipPlanes = xglPacketReserve(5);
+            pxyClipPlanes = nmlPacketSetAttributeAlloc16N(5);
         }
         pxyClipPlanes->plane[0] = plane->row;
         pxyClipPlanes->angle[0] = angle->row;
         nmlRenderStatus |= NML_RENDER_CLIP_PLANE_MASKED;
         pxyClipPlaneCount = 1;
-        D_0096A0A6 = (u16)count;
-        D_0096A0B0 = x;
-        D_0096A084 |= 8;
-        D_0096A0B4 = mask;
-        D_0096A0B8 = y;
-        D_0096A0BC = z;
+        pxyClipPlaneMaskedCount = (u16)count;
+        pxyClipPlaneMaskedX = x;
+        pxyRenderLevel |= 8;
+        pxyClipPlaneMask = mask;
+        pxyClipPlaneMaskedY = y;
+        pxyClipPlaneMaskedZ = z;
     }
 }
 
-float pxyKeyInterpolate(PxyRow *, PxyRow *, float, float);
 
-float pxyInterpolateKeys(int count, PxyRow *keyframes, float time, float weight)
+float pxyInterpolateKeys(int count, Vector4Elements *keyframes, float time, float weight)
 {
     int i;
 
-    if (time <= keyframes[0].v[0]) {
-        return keyframes[0].v[1];
+    if (time <= keyframes[0].component[0]) {
+        return keyframes[0].component[1];
     }
-    if (time >= keyframes[count - 1].v[0]) {
-        return keyframes[count - 1].v[1];
+    if (time >= keyframes[count - 1].component[0]) {
+        return keyframes[count - 1].component[1];
     }
     if (count == 1) {
-        return keyframes[0].v[1];
+        return keyframes[0].component[1];
     }
     i = 0;
     while (i < count) {
-        if (time < keyframes[i].v[0]) {
+        if (time < keyframes[i].component[0]) {
             break;
         }
         i++;
     }
     i--;
     if (i < 0) {
-        return keyframes[0].v[1];
+        return keyframes[0].component[1];
     }
     if (weight >= 0.2f) {
-        float value = keyframes[i].v[1];
+        float value = keyframes[i].component[1];
 
         if (*(u32 *)&value & 1) {
-            return keyframes[i].v[1];
+            return keyframes[i].component[1];
         }
     }
     return pxyKeyInterpolate(&keyframes[i], &keyframes[i + 1], time, 1.0f);
 }
 
 /* Append one A+D pair (value, register) to a direct-queue packet. */
-extern float D_0096A058;
+extern float pxyShadowAlpha;
 extern float pxyFadeMetric;
-extern float D_0096A110;
-extern float D_0096A114;
-extern float D_0096A118;
+extern float pxyShadowOffsetX;
+extern float pxyShadowOffsetY;
+extern float pxyShadowOffsetZ;
 extern u16 sRenderTextureBase;
 extern s16 cameraScreenWidth;
 extern s16 cameraScreenHeight;
 float atan2f(float, float);
-void xglVectorNormal_001A9200(void *, void *);
-float xglPointLength(void *, void *);
-void _ModelCalcClipInitMat1(void *, void *);
-int _ModelCalcClipMat1(void *);
-int nmlModelCalcClipCulling(PxyCamera *, void *);
-void xglVectorScaleXYZ(void *, void *, float);
-void xglVectorAddXYZ_001CCA30(register AlignedVector4 *dst, register AlignedVector4 *first, register AlignedVector4 *second);
-void xglVectorSubXYZ_001CCA68(register AlignedVector4 *dst, register AlignedVector4 *minuend, register AlignedVector4 *subtrahend);
-void xglMatrixStackInverse(void);
-void xglMatrixStackMul(void *);
-void xglMatrixStackRotZ(float);
-void xglMatrixStackTrans(void *);
-void xglMatrixStackScale(void *);
-void xglMatrixScale(void *, PxyShadow *, void *);
 
 /* Aims the shadow projector at the model from the light and builds its matrices and texture registers. */
 void pxySetupShadowProjector(PxyHeader *header)
 {
     int texWidth = 0x400;
     int texHeight = 0x200;
-    PxyShadow *shadow = D_0096A080;
+    PxyShadow *shadow = pxyCurrentShadow;
     float rotX;
     float rotY;
     float horizontal;
     Matrix inverse;
-    AlignedVector4 scale = { D_0096A318 * 128.0f, D_0096A318 * -128.0f, 8000.0f, 1.0f };
+    AlignedVector4 scale = { pxyShadowScale * 128.0f, pxyShadowScale * -128.0f, 8000.0f, 1.0f };
     AlignedVector4 size = { 256.0f, 256.0f, 1.0f, 1.0f };
     AlignedVector4 offset = { 2045.0f, 2045.0f, 0.0f, 1.0f };
     AlignedVector4 direction;
     float zoom = 1.0f;
-    float extent = header->radius;
+    float extent = header->sphere.w;
 
     if (pxyFlags & 0x10) {
-        if (D_0096A110 != 0.0f || D_0096A114 != 0.0f || D_0096A118 != 0.0f) {
+        if (pxyShadowOffsetX != 0.0f || pxyShadowOffsetY != 0.0f || pxyShadowOffsetZ != 0.0f) {
         }
         if (pxyFadeMetric < 139000.0f) {
             pxyShadowMode = 0;
             return;
         } else if (pxyFadeMetric < 173000.0f) {
-            D_0096A058 *= 1.0f - (173000.0f - pxyFadeMetric) / 34000.0f;
+            pxyShadowAlpha *= 1.0f - (173000.0f - pxyFadeMetric) / 34000.0f;
         }
     }
-    if (D_0096A080 == 0) {
-        D_0096A080 = xglPacketReserve(PXY_SHADOW_QUADWORDS);
+    if (pxyCurrentShadow == 0) {
+        pxyCurrentShadow = nmlPacketSetAttributeAlloc16N(PXY_SHADOW_QUADWORDS);
     }
-    shadow = D_0096A080;
+    shadow = pxyCurrentShadow;
     xglVectorCopy_001CC998(&shadow->center, &pxyModelPosition);
-    extent = header->radius * 2.0f;
-    if (header->radius >= 5.0f) {
-        extent = header->radius * 3.0f;
+    extent = header->sphere.w * 2.0f;
+    if (header->sphere.w >= 5.0f) {
+        extent = header->sphere.w * 3.0f;
     }
     if (extent < 0.968f) {
         extent = 0.968f;
@@ -1809,32 +1590,32 @@ void pxySetupShadowProjector(PxyHeader *header)
     zoom = 0.968f / extent;
     scale.x *= zoom;
     scale.y *= zoom;
-    if (D_0096A06C->override.w == 0.0f) {
-        direction.x = D_0096A06C->direction.x;
+    if (pxyCurrentLight->shadows[0].w == 0.0f) {
+        direction.x = pxyCurrentLight->directions[0][0];
         direction.y = 2.0f;
-        direction.z = D_0096A06C->direction.z;
+        direction.z = pxyCurrentLight->directions[0][2];
         direction.w = 1.0f;
         if (pxyFlags & 0x10) {
-            direction.y = D_0096A06C->direction.y;
+            direction.y = pxyCurrentLight->directions[0][1];
         }
     } else {
-        direction.x = D_0096A06C->override.x;
-        direction.y = D_0096A06C->override.y;
-        direction.z = D_0096A06C->override.z;
+        direction.x = pxyCurrentLight->shadows[0].x;
+        direction.y = pxyCurrentLight->shadows[0].y;
+        direction.z = pxyCurrentLight->shadows[0].z;
         direction.w = 1.0f;
     }
-    xglVectorNormal_001A9200(&direction, &direction);
+    xglVectorNormal(&direction, &direction);
     xglVectorCopy_001CC998(&shadow->min, &shadow->center);
     xglVectorCopy_001CC998(&shadow->max, &shadow->center);
     if (pxyFlags & 0x10) {
         float tilt;
 
-        shadow->min.x -= header->radius;
-        shadow->min.y -= header->radius;
-        shadow->min.z -= header->radius;
-        shadow->max.x += header->radius;
-        shadow->max.y += header->radius;
-        shadow->max.z += header->radius;
+        shadow->min.x -= header->sphere.w;
+        shadow->min.y -= header->sphere.w;
+        shadow->min.z -= header->sphere.w;
+        shadow->max.x += header->sphere.w;
+        shadow->max.y += header->sphere.w;
+        shadow->max.z += header->sphere.w;
         tilt = 1.0f;
         if (direction.y != 0.0f) {
             tilt = __builtin_fabsf((direction.x * direction.x + direction.z * direction.z) / direction.y);
@@ -1843,25 +1624,25 @@ void pxySetupShadowProjector(PxyHeader *header)
             tilt = 1.0f;
         }
         if (direction.x > 0.0f) {
-            shadow->min.x -= direction.x * tilt * header->radius * 1.3f;
-            shadow->max.x += direction.x * tilt * header->radius * 0.3f;
+            shadow->min.x -= direction.x * tilt * header->sphere.w * 1.3f;
+            shadow->max.x += direction.x * tilt * header->sphere.w * 0.3f;
         } else {
-            shadow->max.x -= direction.x * tilt * header->radius * 1.3f;
-            shadow->min.x += direction.x * tilt * header->radius * 0.3f;
+            shadow->max.x -= direction.x * tilt * header->sphere.w * 1.3f;
+            shadow->min.x += direction.x * tilt * header->sphere.w * 0.3f;
         }
         if (direction.z > 0.0f) {
-            shadow->min.z -= direction.z * tilt * header->radius * 1.3f;
-            shadow->max.z += direction.z * tilt * header->radius * 0.3f;
+            shadow->min.z -= direction.z * tilt * header->sphere.w * 1.3f;
+            shadow->max.z += direction.z * tilt * header->sphere.w * 0.3f;
         } else {
-            shadow->max.z -= direction.z * tilt * header->radius * 1.3f;
-            shadow->min.z += direction.z * tilt * header->radius * 0.3f;
+            shadow->max.z -= direction.z * tilt * header->sphere.w * 1.3f;
+            shadow->min.z += direction.z * tilt * header->sphere.w * 0.3f;
         }
         if (!(direction.y > 0.0f)) {
-            shadow->max.y += header->radius;
-            shadow->min.y -= header->radius * 0.5f;
+            shadow->max.y += header->sphere.w;
+            shadow->min.y -= header->sphere.w * 0.5f;
         } else {
-            shadow->min.y -= header->radius * 1.5f;
-            shadow->max.y -= header->radius * 0.5f;
+            shadow->min.y -= header->sphere.w * 1.5f;
+            shadow->max.y -= header->sphere.w * 0.5f;
         }
     } else {
         float spread;
@@ -1869,20 +1650,20 @@ void pxySetupShadowProjector(PxyHeader *header)
         float tilt;
         float lift;
 
-        shadow->min.x -= header->radius;
-        shadow->min.y -= header->radius;
-        shadow->min.z -= header->radius;
-        shadow->max.x += header->radius;
-        shadow->max.y += header->radius;
-        shadow->max.z += header->radius;
+        shadow->min.x -= header->sphere.w;
+        shadow->min.y -= header->sphere.w;
+        shadow->min.z -= header->sphere.w;
+        shadow->max.x += header->sphere.w;
+        shadow->max.y += header->sphere.w;
+        shadow->max.z += header->sphere.w;
         spread = 1.5f;
         side = 0.3f;
         tilt = 1.0f;
         lift = 0.0f;
-        if (header->radius >= 5.0f) {
-            lift = header->radius * 1.9f;
-        } else if (header->radius >= 2.0f) {
-            lift = header->radius;
+        if (header->sphere.w >= 5.0f) {
+            lift = header->sphere.w * 1.9f;
+        } else if (header->sphere.w >= 2.0f) {
+            lift = header->sphere.w;
         }
         if (direction.y != 0.0f) {
             tilt = __builtin_fabsf((direction.x * direction.x + direction.z * direction.z) / direction.y);
@@ -1892,26 +1673,26 @@ void pxySetupShadowProjector(PxyHeader *header)
         }
         if (direction.x != 0.0f || direction.z != 0.0f) {
             if (direction.x > 0.0f) {
-                shadow->min.x -= __builtin_fabsf(direction.x * tilt * header->radius * spread + lift);
-                shadow->max.x += __builtin_fabsf(direction.x * tilt * header->radius * side);
+                shadow->min.x -= __builtin_fabsf(direction.x * tilt * header->sphere.w * spread + lift);
+                shadow->max.x += __builtin_fabsf(direction.x * tilt * header->sphere.w * side);
             } else {
-                shadow->max.x += __builtin_fabsf(direction.x * tilt * header->radius * spread + lift);
-                shadow->min.x -= __builtin_fabsf(direction.x * tilt * header->radius * side);
+                shadow->max.x += __builtin_fabsf(direction.x * tilt * header->sphere.w * spread + lift);
+                shadow->min.x -= __builtin_fabsf(direction.x * tilt * header->sphere.w * side);
             }
             if (direction.z > 0.0f) {
-                shadow->min.z -= __builtin_fabsf(direction.z * tilt * header->radius * spread + lift);
-                shadow->max.z += __builtin_fabsf(direction.z * tilt * header->radius * side);
+                shadow->min.z -= __builtin_fabsf(direction.z * tilt * header->sphere.w * spread + lift);
+                shadow->max.z += __builtin_fabsf(direction.z * tilt * header->sphere.w * side);
             } else {
-                shadow->max.z += __builtin_fabsf(direction.z * tilt * header->radius * spread + lift);
-                shadow->min.z -= __builtin_fabsf(direction.z * tilt * header->radius * side);
+                shadow->max.z += __builtin_fabsf(direction.z * tilt * header->sphere.w * spread + lift);
+                shadow->min.z -= __builtin_fabsf(direction.z * tilt * header->sphere.w * side);
             }
         }
         if (direction.y > 0.0f) {
-            shadow->min.y -= header->radius * 1.5f;
-            shadow->max.y -= header->radius * 0.5f;
+            shadow->min.y -= header->sphere.w * 1.5f;
+            shadow->max.y -= header->sphere.w * 0.5f;
         } else {
-            shadow->max.y += header->radius;
-            shadow->min.y -= header->radius * 0.5f;
+            shadow->max.y += header->sphere.w;
+            shadow->min.y -= header->sphere.w * 0.5f;
         }
     }
     shadow->bounds.x = (shadow->max.x + shadow->min.x) * 0.5f;
@@ -1919,13 +1700,13 @@ void pxySetupShadowProjector(PxyHeader *header)
     shadow->bounds.z = (shadow->max.z + shadow->min.z) * 0.5f;
     shadow->bounds.w = xglPointLength(&shadow->max, &shadow->min) * 0.5f;
     {
-        PxyCamera *camera = xglStudioSelectGetActiveCamera(0);
+        XglCamera *camera = xglStudioSelectGetActiveCamera(0);
 
         if (camera != 0) {
             Matrix clip;
 
-            xglMatrixUnit(&clip);
-            _ModelCalcClipInitMat1(camera->clipMatrix, &clip);
+            xglMatrixUnit(clip.rows);
+            _ModelCalcClipInitMat1(camera->volume[0].planeSet[0], clip.rows);
             if (_ModelCalcClipMat1(&shadow->bounds) == 0) {
                 nmlRenderStatus &= ~NML_RENDER_FORCE_VISIBLE;
             } else if ((pxyFlags & 0x10) && nmlModelCalcClipCulling(camera, &shadow->bounds)) {
@@ -1949,8 +1730,8 @@ void pxySetupShadowProjector(PxyHeader *header)
         xglMatrixStackRotY(rotY);
         xglMatrixStackRotX(rotX);
         xglMatrixStackInverse();
-        xglMatrixStackSave(&shadow->view);
-        xglVectorNormal_001A9200(&direction, &direction);
+        xglMatrixStackSave(shadow->view.rows);
+        xglVectorNormal(&direction, &direction);
         xglVectorScale(&direction, &direction, 3.0f);
         xglVectorAddXYZ_001CCA30(&direction, &direction, &shadow->center);
         xglMatrixStackUnit();
@@ -1958,16 +1739,16 @@ void pxySetupShadowProjector(PxyHeader *header)
         xglMatrixStackRotY(rotY);
         xglMatrixStackRotX(rotX);
         xglMatrixStackRotZ(1.5707964f);
-        xglMatrixStackSave(&shadow->light);
+        xglMatrixStackSave(shadow->light.rows);
         xglMatrixStackInverse();
-        xglMatrixStackSave(&inverse);
+        xglMatrixStackSave(inverse.rows);
         xglMatrixStackUnit();
         offset.x -= (cameraScreenWidth - size.x) * 0.5f;
         offset.y -= (cameraScreenHeight - size.y) * 0.5f;
         xglMatrixStackTrans(&offset);
         xglMatrixStackScale(&scale);
-        xglMatrixStackMul(&inverse);
-        xglMatrixStackSave(&shadow->project);
+        xglMatrixStackMul(inverse.rows);
+        xglMatrixStackSave(shadow->project.rows);
         memset(&shadow->lighting, 0, sizeof(shadow->lighting));
         if (pxyShadowMode == 4) {
             shadow->alphaData = 0x42;
@@ -1999,11 +1780,11 @@ void pxySetupShadowProjector(PxyHeader *header)
             scale.x = (float)shadow->width * 0.015625f * shadow->scaleU;
             scale.y = (float)shadow->height * 0.015625f * shadow->scaleV;
             scale.z = scale.w = 1.0f;
-            xglMatrixScale(&texture, shadow, &scale);
+            xglMatrixScale(&texture, &shadow->light, &scale);
             xglVectorMulMat(&shadow->unk2D0, texture.rows, &depth);
             xglVectorSubXYZ_001CCA68(&shadow->direction, &shadow->unk2D0, texture.rows[3]);
             xglMatrixInverse(&shadow->textureInverse, &texture);
-            xglVectorNormal_001A9200(&shadow->direction, &shadow->direction);
+            xglVectorNormal(&shadow->direction, &shadow->direction);
             switch (shadow->psm) {
             case GS_PSMT4:
                 shadow->tex0 = GS_SET_TEX0(shadow->frameBase << 5, 16, GS_PSMT4, 10, 9, 1, 0,
@@ -2054,17 +1835,17 @@ typedef struct PxyPartView {
     signed char mode;   /* +0x18: 0 or 1 selects pxyFocusX or pxyFocusY when focus driven */
     signed char focusDriven; /* +0x19: nonzero takes pxyFocusX/Y instead of keyframes */
     u8 unk1A[6];
-    PxyRow keys;        /* +0x20: first keyframe row */
+    Vector4Elements keys;        /* +0x20: first keyframe row */
 } PxyPartView;
 
-extern f32 D_0096A1E0[][4];
+extern f32 pxyTrackFocusTable[][4];
 
 void pxyTrackStoreFocus(PxyHeader *header, PxyPartView *record, int trackIndex) {
     float *trackSlot;
     if (record->focusDriven != 1) {
         return;
     }
-    trackSlot = &D_0096A1E0[(trackIndex + 1) / 4][(trackIndex + 1) % 4];
+    trackSlot = &pxyTrackFocusTable[(trackIndex + 1) / 4][(trackIndex + 1) % 4];
     if (record->mode == 0) {
         *trackSlot = pxyFocusX;
     } else {
@@ -2088,11 +1869,8 @@ typedef struct PxyTrackEntry {
     signed char frozen;  /* +0x8c */
 } PxyTrackEntry;
 
-extern int D_0097A580[];
 
 float fmodf(float, float);
-float pxyInterpolateKeys(int, PxyRow *, float, float);
-void tiWaterObjectUpdate(PxyHeader *, int);
 
 void pxyEvaluateTracks(PxyHeader *header)
 {
@@ -2119,7 +1897,7 @@ void pxyEvaluateTracks(PxyHeader *header)
             offsets = (int *)PXY_HEADER_AT(header, header->offset78);
             for (k = 0; k < track->count; k++) {
                 trackPart = (PxyPartView *)PXY_HEADER_AT(header, offsets[k]);
-                value = D_0096A08C;
+                value = pxyAnimTime;
                 if (trackPart->focusDriven != 0) {
                     pxyTrackStoreFocus(header, trackPart, k);
                     continue;
@@ -2211,7 +1989,6 @@ void pxyEvaluateTracks(PxyHeader *header)
     }
 }
 
-extern float D_0096A1BC;
 extern PxyBatch *pxyFirstBatch;
 extern PxyBatch *pxyLastBatch;
 
@@ -2240,7 +2017,7 @@ void pxyQueueBatch(PxySlot *slot, PxyPacket *packet)
         slot->translucentBatch = pxyBatchTables[1].count++;
         return;
     }
-    if (packet->unk08) {
+    if (packet->drawMode) {
         pxyState.shadowBatches[pxyShadowBatchCount++] = batch;
     }
     if (pxyFirstBatch == 0) {
@@ -2254,7 +2031,7 @@ void pxyQueueBatch(PxySlot *slot, PxyPacket *packet)
             if (cursor < 0 || cursor >= 256) {
                 break;
             }
-            if ((table->batches[cursor].depth < batch->depth && !(table->batches[cursor].packet->unk84 & 0x10)) || (packet->unk84 & 0x10)) {
+            if ((table->batches[cursor].depth < batch->depth && !(table->batches[cursor].packet->drawFlags & 0x10)) || (packet->drawFlags & 0x10)) {
                 if (table->batches[cursor].unk10 < 0) {
                     table->batches[cursor].unk10 = table->count;
                     batch->next = cursor;
@@ -2311,25 +2088,27 @@ void pxyQueueBatchBasic(PxySlot *slot, PxyPacket *packet) {
     slot->translucentBatch = pxyBatchTables[1].count++;
 }
 
-void _CurSetViewScaleTrans(void *, void *);
-void _CurRotTransPersClipScreen(void *, int);
-float func_002A1D08(float);
-float pxyCalcFadeMetric(int cameraIndex, int point, float scale);
+float tanf(float);
+float pxyCalcFadeMetric(int cameraIndex, const Vector4 *point, float scale);
 
-float pxyCalcFadeMetric(int cameraIndex, int point, float scale) {
-    int screen[4];
+float pxyCalcFadeMetric(int cameraIndex, const Vector4 *point, float scale) {
+    union {
+        Vector4 vector;
+        int words[4];
+        ScreenVector4 projected;
+    } screen; /* the projection helper stores fixed-point coordinates in vector storage */
     float result;
-    PxyCamera *camera;
+    XglCamera *camera;
 
     result = 0.0f;
     camera = xglStudioSelectGetActiveCamera(cameraIndex);
     if (camera == 0) {
         return result;
     }
-    _CurMatrixSet(camera->viewMatrix);
-    _CurSetViewScaleTrans(&camera->viewScale, &camera->viewTrans);
-    _CurRotTransPersClipScreen(screen, point);
-    result = (float)screen[2] * scale / func_002A1D08(camera->unk94 * 0.5f);
+    _CurMatrixSet(&camera->volume[0].viewMatrix);
+    _CurSetViewScaleTrans(&camera->screen.screenScale, &camera->screen.screenOffset);
+    _CurRotTransPersClipScreen(&screen.projected, point);
+    result = (float)screen.words[2] * scale / tanf(camera->travel.fov * 0.5f);
     if (result < 0.0f) {
         result = 10000000.0f;
     }
@@ -2341,20 +2120,20 @@ void pxyCalcModelBounds(PxyHeader *header)
     DoublewordVector4 sphere;
     Vector4 spare;
 
-    xglVectorScaleXYZ(&sphere, &pxyModelPosition, 1.0f / pxyModelScaleMax);
+    xglVectorScaleXYZ(&sphere.vector, &pxyModelPosition, 1.0f / pxyModelScaleMax);
     if (pxyJointMatrices == 0) {
-        xglVectorCopy_001CC998(&sphere, header->centre);
+        xglVectorCopy_001CC998(&sphere.vector, &header->sphere);
     }
     sphere.vector.w = 1.0f;
     xglVectorMulMat(&pxyModelPosition, nmlModelDrawMatrix.rows, &sphere.vector);
     xglVectorCopy_001CC998(&sphere, &pxyModelPosition);
-    sphere.vector.w = header->radius * pxyModelScaleMax;
-    D_0096A1BC = sphere.vector.w;
-    pxyBoundSphere = sphere.words[0];
-    D_0096A378 = sphere.words[1];
-    D_0096A0C0 += D_0096A114;
-    D_0096A0C8 += D_0096A114;
-    pxyFadeMetric = pxyCalcFadeMetric(0, &pxyModelPosition, D_0096A1BC);
+    sphere.vector.w = header->sphere.w * pxyModelScaleMax;
+    pxyModelPosition.w = sphere.vector.w;
+    pxyBoundSphere.words[0] = sphere.words[0];
+    pxyBoundSphere.words[1] = sphere.words[1];
+    pxyShadowHeightLower += pxyShadowOffsetY;
+    pxyShadowHeightUpper += pxyShadowOffsetY;
+    pxyFadeMetric = pxyCalcFadeMetric(0, &pxyModelPosition, pxyModelPosition.w);
 }
 
 void pxyCalcCameraVisibility(void)
@@ -2364,32 +2143,32 @@ void pxyCalcCameraVisibility(void)
     Matrix4 clipMatrix;
     PxyHeader *header;
     int forceMask;
-    PxyCamera *camera;
+    XglCamera *camera;
     int visible;
 
     anyVisible = 0;
-    header = D_0096A010;
+    header = pxyCurrentHeader;
     forceMask = (nmlRenderStatus & NML_RENDER_TEXMAP_CIRCLE) | (pxyFlags & 0x1000);
-    xglMatrixUnit(&clipMatrix);
+    xglMatrixUnit(clipMatrix);
     for (i = 0; i < 4; i++) {
         camera = xglStudioSelectGetActiveCamera(i);
         if (pxyCameraEnable[i] != 0 && camera != 0) {
-            if (nmlRenderStatus & NML_RENDER_PROREAL || D_0096A084 & 0x8 || header->flags & 0x88 || forceMask != 0) {
+            if (nmlRenderStatus & NML_RENDER_PROREAL || pxyRenderLevel & 0x8 || header->flags & 0x88 || forceMask != 0) {
                 pxyState.cameraVisible[i] = 1;
             } else {
-                _ModelCalcClipInitMat1(camera->clipMatrix, &clipMatrix);
-                visible = _ModelCalcClipMat1(&pxyBoundSphere);
+                _ModelCalcClipInitMat1(camera->volume[0].planeSet[0], clipMatrix);
+                visible = _ModelCalcClipMat1(&pxyBoundSphere.vector);
                 if (visible && (header->flags & 2)) {
-                    visible = nmlModelCalcClipCulling(camera, &pxyBoundSphere) == 0;
+                    visible = nmlModelCalcClipCulling(camera, &pxyBoundSphere.vector) == 0;
                 }
                 if ((pxyState.cameraVisible[i] = visible)) {
                     anyVisible = 1;
-                } else if ((D_0096A084 & 0x80) && pxyGlobalMatrices != 0 && !(pxyFlags & 0x10)) {
+                } else if ((pxyRenderLevel & 0x80) && pxyGlobalMatrices != 0 && !(pxyFlags & 0x10)) {
                     int j;
 
-                    _ModelCalcClipInitMat1(camera->clipMatrix, &clipMatrix);
-                    for (j = 0; j < header->matrixCount; j++) {
-                        if (_ModelCalcClipMat1(pxyGlobalMatrices[j].m[3])) {
+                    _ModelCalcClipInitMat1(camera->volume[0].planeSet[0], clipMatrix);
+                    for (j = 0; j < header->nJointMatrix; j++) {
+                        if (_ModelCalcClipMat1(&pxyGlobalMatrices[j].vectors[3])) {
                             pxyState.cameraVisible[i] = 1;
                             anyVisible = 1;
                             break;
@@ -2403,15 +2182,15 @@ void pxyCalcCameraVisibility(void)
         }
     }
     if (anyVisible == 0) {
-        if (!(nmlRenderStatus & NML_RENDER_PROREAL) && !(D_0096A084 & 0x8) && !(header->flags & 0x88) && forceMask == 0) {
+        if (!(nmlRenderStatus & NML_RENDER_PROREAL) && !(pxyRenderLevel & 0x8) && !(header->flags & 0x88) && forceMask == 0) {
             nmlRenderStatus |= NML_RENDER_HIDDEN;
         }
     }
-    if (D_0096A2D8 != 0 && D_0096A09C == 0) {
+    if (pxyForcedVisibilityRequested != 0 && pxyVisibleOverride == 0) {
         nmlRenderStatus |= NML_RENDER_HIDDEN;
     }
     if (nmlRenderStatus & NML_RENDER_HIDDEN) {
-        D_0096A31C = 1;
+        pxyModelHiddenFlag = 1;
     }
 }
 
@@ -2433,13 +2212,13 @@ void pxyCalcFogFactors(PxyHeader *header)
             if (nmlRenderStatus & NML_RENDER_FOG_WHITE) {
                 pxyState.cameraFog[i] = 0xA00;
             } else {
-                pxyState.cameraFog[i] = pxyGetFogParaStudio((int)&pxyBoundSphere, i) << 4;
+                pxyState.cameraFog[i] = nmlModelGetFogParaStudio(&pxyBoundSphere.vector, i) << 4;
             }
-            if (D_0096A068 != 0) {
+            if (pxyGeometryFogFactors != 0) {
                 for (j = 0; j < header->geometryCount; j++) {
                     Vector4 local;
-                    xglVectorAddXYZ_001CCA30(&local, D_0096A05C[j].m[3], &pxyBoundSphere);
-                    ((PxySlotWords *)D_0096A068)[j].word[i] = pxyGetFogParaStudio((int)&local, i) << 4;
+                    xglVectorAddXYZ_001CCA30(&local, pxyPartMatrices[j].rows[3], &pxyBoundSphere.vector);
+                    ((PxySlotWords *)pxyGeometryFogFactors)[j].word[i] = nmlModelGetFogParaStudio(&local, i) << 4;
                 }
             }
         }
@@ -2447,14 +2226,12 @@ void pxyCalcFogFactors(PxyHeader *header)
     }
 }
 
-int xglCullingExist(void);
-void xglMatrixMul(void *, void *, void *);
 
 void pxyCalcPartVisibility(PxyHeader *header)
 {
     int i;
     int j;
-    PxyCamera *camera;
+    XglCamera *camera;
     PxyPart *part;
     u8 forcedBits;
     u8 flags21;
@@ -2464,12 +2241,12 @@ void pxyCalcPartVisibility(PxyHeader *header)
     for (i = 0; i < 4; i++) {
         camera = xglStudioSelectGetActiveCamera(i);
         if (pxyCameraEnable[i] != 0 && camera != 0) {
-            part = D_0096A020;
+            part = pxyParts;
             forcedBits = 0;
-            if ((header->matrixCount != 0 && pxyJointMatrices != 0) || (D_0096A084 & 0x8)) {
+            if ((header->nJointMatrix != 0 && pxyJointMatrices != 0) || (pxyRenderLevel & 0x8)) {
                 forcedBits = 15;
             }
-            _ModelCalcClipInitMat1(camera->clipMatrix, &nmlModelDrawMatrix);
+            _ModelCalcClipInitMat1(camera->volume[0].planeSet[0], nmlModelDrawMatrix.rows);
             if (nmlRenderStatus & NML_RENDER_PROREAL || header->flags & 0x88) {
                 flags21 = 1 << i;
                 for (j = 0; j < header->partCount; j++) {
@@ -2478,7 +2255,7 @@ void pxyCalcPartVisibility(PxyHeader *header)
 
                     flags96 = (part->flags & 0x60) ? flags21 : 0;
                     visible = 1;
-                    xglMatrixMul(partMatrix, &nmlModelDrawMatrix, D_0096A05C[part->maskBit].m[0]);
+                    xglMatrixMul(partMatrix, nmlModelDrawMatrix.rows, pxyPartMatrices[part->matrixIndex].rows);
                     if (xglCullingExist()) {
                         sphereWorld = part->sphere;
                         sphereWorld.w = 1.0f;
@@ -2486,15 +2263,15 @@ void pxyCalcPartVisibility(PxyHeader *header)
                         sphereWorld.w = part->sphere.w;
                         visible = nmlModelCalcClipCulling(camera, &sphereWorld) == 0;
                     }
-                    _ModelCalcClipInitMat1(camera->clipMatrix, partMatrix);
-                    D_0096A034[j] |= ((_ModelCalcClipMat1(&part->sphere) & visible) << i) | forcedBits | flags96;
+                    _ModelCalcClipInitMat1(camera->volume[0].planeSet[0], partMatrix);
+                    pxyPartVisibilityFlags[j] |= ((_ModelCalcClipMat1(&part->sphere) & visible) << i) | forcedBits | flags96;
                     part++;
                 }
             } else {
                 u8 *partFlagPtr;
 
                 flags96 = 1 << i;
-                partFlagPtr = D_0096A034;
+                partFlagPtr = pxyPartVisibilityFlags;
                 for (j = 0; j < header->partCount; j++, partFlagPtr++) {
                     Vector4 sphereScaled;
                     int inside;
@@ -2503,10 +2280,10 @@ void pxyCalcPartVisibility(PxyHeader *header)
                     inside = 1;
                     xglVectorCopy_001CC998(&sphereScaled, &part->sphere);
                     sphereScaled.w *= pxyModelScaleMax;
-                    if ((D_0096A010->flags & 1) && xglCullingExist()) {
+                    if ((pxyCurrentHeader->flags & 1) && xglCullingExist()) {
                         inside = nmlModelCalcClipCulling(camera, &sphereScaled) == 0;
                     }
-                    _ModelCalcClipInitMat1(camera->clipMatrix, &nmlModelDrawMatrix);
+                    _ModelCalcClipInitMat1(camera->volume[0].planeSet[0], nmlModelDrawMatrix.rows);
                     *partFlagPtr |= ((_ModelCalcClipMat1(&sphereScaled) & inside) << i) | forcedBits | flags21;
                     part++;
                 }
@@ -2519,7 +2296,7 @@ typedef struct {
     int e[8][2];
 } PxyShuffleTable;
 
-const PxyShuffleTable D_0068F050 = { .e = { { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 }, { 0, 2 }, { 1, 3 }, { 2, 0 }, { 3, 1 } } };
+const PxyShuffleTable pxyDescrambleSwapTable = { .e = { { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 }, { 0, 2 }, { 1, 3 }, { 2, 0 }, { 3, 1 } } };
 
 void pxyDescrambleHeader(PxyHeader *hdr)
 {
@@ -2538,7 +2315,7 @@ void pxyDescrambleHeader(PxyHeader *hdr)
         bytes = (u8 *)hdr;
         seed = 0x16253495;
         j = 13;
-        swapPairs = D_0068F050;
+        swapPairs = pxyDescrambleSwapTable;
         for (i = *h->fileSize - 1; i >= 16; i--) {
             j = seed;
             j = ((2121 * i - 909) * (i - 1) + j) - 1;
@@ -2564,25 +2341,22 @@ void pxyDescrambleHeader(PxyHeader *hdr)
     }
 }
 
-extern float D_0096A094;
+extern float pxyShadowPlaneHeight;
 void pxyDescrambleHeader(PxyHeader *hdr);
 void pxyEvaluateTracks(PxyHeader *);
-void xglMatrixStackLoad(void *);
-void xglMatrixStackMulVector(void *, void *);
 void pxyCalcFogFactors(PxyHeader *header);
 void pxyCalcModelBounds(PxyHeader *header);
 void pxyCalcCameraVisibility(void);
 void pxyCalcPartVisibility(PxyHeader *header);
-PxyPacket *xglPacketAppendVectors(void *, int);
 void pxyQueueBatch(PxySlot *slot, PxyPacket *packet);
 
 /* Validates a "pxy" model header and queues its parts as opaque and translucent draw batches (shadow, light and fade setup included). */
 int pxySubmitModel(PxyHeader *header)
 {
-    PxyCamera *camera;
+    XglCamera *camera;
     PxySlot *newSlot;
     PxySlot *slot;
-    PxyRow vector;
+    Vector4Elements vector;
     void *ptr;
     int i;
     int j;
@@ -2603,15 +2377,15 @@ int pxySubmitModel(PxyHeader *header)
     PxySortWork work;
     PxySortWork *w;
 
-    camera = xglStudioSelectGetActiveCamera(D_0096A004);
+    camera = xglStudioSelectGetActiveCamera(pxyActiveCameraIndex);
     newSlot = 0;
     slot = 0;
-    D_0096A31C = 0;
+    pxyModelHiddenFlag = 0;
     if (camera == 0) {
         pxyResetGlobals();
         return 1;
     }
-    if (D_0096A2BC >= PXY_BATCH_MAX || pxyBatchTables[0].count >= PXY_BATCH_MAX) {
+    if (pxyBatchedModelCount >= PXY_BATCH_MAX || pxyBatchTables[0].count >= PXY_BATCH_MAX) {
         pxyResetGlobals();
         return 1;
     }
@@ -2635,18 +2409,18 @@ int pxySubmitModel(PxyHeader *header)
     if (header->flags & 0x800) {
         pxyFlags |= 0x8000;
     }
-    if ((pxyFlags & 0x20) && !(D_0096A084 & 0x100)) {
+    if ((pxyFlags & 0x20) && !(pxyRenderLevel & 0x100)) {
         pxyFogParams = pxyGlobalFogPara;
         pxyFogColor = pxyGlobalFogColor;
         nmlRenderStatus |= NML_RENDER_FOG;
     }
     if (header->flags & 2) {
         if (pxyShadowMode == 1 || pxyShadowMode == 5 || pxyShadowMode == 4) {
-            D_0096A084 |= 0x80;
+            pxyRenderLevel |= 0x80;
         }
     }
-    if (D_0096A084 & 0x10) {
-        D_0096A09C = -1;
+    if (pxyRenderLevel & 0x10) {
+        pxyVisibleOverride = -1;
     }
     if (pxyFlags & 0x80) {
         pxyFogColor.x = 0;
@@ -2662,95 +2436,95 @@ int pxySubmitModel(PxyHeader *header)
         pxyFogColor.y = 255.0f;
         pxyFogColor.z = 255.0f;
     }
-    if (D_0096A06C->override.w == 0.0f) {
-        vector.v[0] = D_0096A06C->direction.x;
-        vector.v[2] = D_0096A06C->direction.z;
+    if (pxyCurrentLight->shadows[0].w == 0.0f) {
+        vector.component[0] = pxyCurrentLight->directions[0][0];
+        vector.component[2] = pxyCurrentLight->directions[0][2];
     } else {
-        vector.v[0] = D_0096A06C->override.x;
-        vector.v[2] = D_0096A06C->override.z;
+        vector.component[0] = pxyCurrentLight->shadows[0].x;
+        vector.component[2] = pxyCurrentLight->shadows[0].z;
     }
-    if (vector.v[0] == 0.0f && vector.v[2] == 0.0f) {
+    if (vector.component[0] == 0.0f && vector.component[2] == 0.0f) {
         nmlRenderStatus |= NML_RENDER_LIGHT_VERTICAL;
     }
     if (pxyFlags & 0x80000) {
         if (strcmp(header->name, "MOM2_B04") == 0) {
-            D_0096A324 = 1;
-        } else if (D_0096A324 != 0) {
+            pxyMom2B04LightFlag = 1;
+        } else if (pxyMom2B04LightFlag != 0) {
             ptr = &pxyState.light;
-            ((PxyLight *)ptr)->drawDirection.x = ((PxyLight *)ptr)->savedDirection.x;
-            ((PxyLight *)ptr)->drawDirection.y = ((PxyLight *)ptr)->savedDirection.y;
-            ((PxyLight *)ptr)->drawDirection.z = ((PxyLight *)ptr)->savedDirection.z;
-            ptr = D_0096A06C;
-            ((PxyLight *)ptr)->drawDirection.x = ((PxyLight *)ptr)->savedDirection.x;
-            ((PxyLight *)ptr)->drawDirection.y = ((PxyLight *)ptr)->savedDirection.y;
-            ((PxyLight *)ptr)->drawDirection.z = ((PxyLight *)ptr)->savedDirection.z;
+            ((XglLightSet *)ptr)->ambientColorLower.x = ((XglLightSet *)ptr)->ambientColor.x;
+            ((XglLightSet *)ptr)->ambientColorLower.y = ((XglLightSet *)ptr)->ambientColor.y;
+            ((XglLightSet *)ptr)->ambientColorLower.z = ((XglLightSet *)ptr)->ambientColor.z;
+            ptr = pxyCurrentLight;
+            ((XglLightSet *)ptr)->ambientColorLower.x = ((XglLightSet *)ptr)->ambientColor.x;
+            ((XglLightSet *)ptr)->ambientColorLower.y = ((XglLightSet *)ptr)->ambientColor.y;
+            ((XglLightSet *)ptr)->ambientColorLower.z = ((XglLightSet *)ptr)->ambientColor.z;
         }
     }
-    D_0096A2BC++;
+    pxyBatchedModelCount++;
     ptr = 0;
-    D_0096A010 = header;
-    D_0096A020 = (PxyPart *)PXY_HEADER_AT(header, header->partOffset);
-    D_0096A014 = (PxyPartRange *)PXY_HEADER_AT(header, header->rangeOffset);
-    D_0096A018 = PXY_HEADER_AT(header, header->offset58);
-    D_0096A01C = PXY_HEADER_AT(header, header->offset6C);
-    D_0096A03C = PXY_HEADER_AT(header, header->offset3C);
-    D_0096A024 = PXY_HEADER_AT(header, header->offset68);
-    D_0096A028 = PXY_HEADER_AT(header, header->offset70);
-    D_0096A030 = PXY_HEADER_AT(header, header->offset64);
-    D_0096A050 = PXY_HEADER_AT(header, header->offset74);
-    D_0096A054 = PXY_HEADER_AT(header, header->offset78);
+    pxyCurrentHeader = header;
+    pxyParts = (PxyPart *)PXY_HEADER_AT(header, header->partOffset);
+    pxyPartRanges = (PxyPartRange *)PXY_HEADER_AT(header, header->rangeOffset);
+    pxyHeaderTable58 = PXY_HEADER_AT(header, header->offset58);
+    pxyHeaderTable6C = PXY_HEADER_AT(header, header->geometryOffset);
+    pxyHeaderTable3C = PXY_HEADER_AT(header, header->offset3C);
+    pxyDefaultPartMatrices = PXY_HEADER_AT(header, header->entryMatrixOffset);
+    pxyDefaultJointMatrices = PXY_HEADER_AT(header, header->offset70);
+    pxyHeaderTable64 = PXY_HEADER_AT(header, header->jointMatrixOffset);
+    pxyHeaderTable74 = PXY_HEADER_AT(header, header->offset74);
+    pxyHeaderTable78 = PXY_HEADER_AT(header, header->offset78);
     if ((nmlRenderStatus & NML_RENDER_PROREAL) || (header->flags & 0x88)) {
         if (nmlRenderStatus & NML_RENDER_FOG) {
-            D_0096A068 = xglPacketReserve(header->geometryCount);
+            pxyGeometryFogFactors = nmlPacketSetAttributeAlloc16N(header->geometryCount);
         }
     }
-    D_0096A034 = xglPacketReserve(header->partCount / 16 + 1);
+    pxyPartVisibilityFlags = nmlPacketSetAttributeAlloc16N(header->partCount / 16 + 1);
     xglVectorScaleXYZ(&pxyModelPosition, &pxyModelPosition, pxyModelScaleMax);
-    memset(D_0096A034, PXY_PART_VISIBLE, header->partCount);
-    if (D_0096A05C == 0) {
-        D_0096A05C = D_0096A024;
+    memset(pxyPartVisibilityFlags, PXY_PART_VISIBLE, header->partCount);
+    if (pxyPartMatrices == 0) {
+        pxyPartMatrices = pxyDefaultPartMatrices;
     }
-    xglMatrixInverse(&D_0096A120, &nmlModelDrawMatrix);
+    xglMatrixInverse(&nmlModelDrawInverseMatrix, &nmlModelDrawMatrix);
     if ((nmlRenderStatus & (NML_RENDER_CLIP_PLANE_ANGLE | NML_RENDER_CLIP_PLANE_PAIR | NML_RENDER_CLIP_PLANE_MASKED)) && pxyClipPlanes != 0) {
-        vector = (PxyRow){ { 0.0f, 0.0f, 1.0f, 0.0f } };
+        vector = (Vector4Elements){ { 0.0f, 0.0f, 1.0f, 0.0f } };
         for (i = 0; i < pxyClipPlaneCount; i++) {
-            pxyClipPlanes->plane[i].v[3] = 1.0f;
-            xglMatrixStackLoad(&D_0096A120);
-            xglMatrixStackMulVector(&pxyClipPlanes->plane[i], &pxyClipPlanes->plane[i]);
-            xglMatrixStackRotY(pxyClipPlanes->angle[i].v[1]);
-            xglMatrixStackRotX(pxyClipPlanes->angle[i].v[0]);
-            xglMatrixStackMulVector(&vector, &vector);
-            vector.v[3] = -(vector.v[0] * pxyClipPlanes->plane[i].v[0] + vector.v[1] * pxyClipPlanes->plane[i].v[1]
-                            + vector.v[2] * pxyClipPlanes->plane[i].v[2]);
+            pxyClipPlanes->plane[i].component[3] = 1.0f;
+            xglMatrixStackLoad(nmlModelDrawInverseMatrix.rows);
+            xglMatrixStackMulVector(&pxyClipPlanes->plane[i].vector, &pxyClipPlanes->plane[i].vector);
+            xglMatrixStackRotY(pxyClipPlanes->angle[i].component[1]);
+            xglMatrixStackRotX(pxyClipPlanes->angle[i].component[0]);
+            xglMatrixStackMulVector(&vector.vector, &vector.vector);
+            vector.component[3] = -(vector.component[0] * pxyClipPlanes->plane[i].component[0] + vector.component[1] * pxyClipPlanes->plane[i].component[1]
+                            + vector.component[2] * pxyClipPlanes->plane[i].component[2]);
             pxyClipPlanes->plane[i] = vector;
-            pxyClipPlanes->angle[i].v[0] = pxyClipPlanes->angle[i].v[2];
-            pxyClipPlanes->angle[i].v[1] = pxyClipPlanes->angle[i].v[3];
-            pxyClipPlanes->angle[i].v[2] = pxyClipPlanes->angle[i].v[0] + pxyClipPlanes->angle[i].v[1];
+            pxyClipPlanes->angle[i].component[0] = pxyClipPlanes->angle[i].component[2];
+            pxyClipPlanes->angle[i].component[1] = pxyClipPlanes->angle[i].component[3];
+            pxyClipPlanes->angle[i].component[2] = pxyClipPlanes->angle[i].component[0] + pxyClipPlanes->angle[i].component[1];
         }
     }
-    if (D_0096A040 != 0) {
-        i = D_0096A2B0;
+    if (pxyParentHeader != 0) {
+        i = pxySlotWriteIndex;
         for (j = PXY_SLOT_COUNT; j > 0; j--) {
             if (--i < 0) {
                 i = PXY_SLOT_COUNT - 1;
             }
-            if (pxyState.slots[i].packet != 0 && pxyState.slots[i].packet->header == D_0096A040) {
+            if (pxyState.slots[i].packet != 0 && pxyState.slots[i].packet->header == pxyParentHeader) {
                 slot = &pxyState.slots[i];
                 ptr = slot->packet;
-                D_0096A06C = ((PxyPacket *)ptr)->light;
-                D_0096A080 = ((PxyPacket *)ptr)->shadow;
-                D_0096A098 = ((PxyPacket *)ptr)->unk98;
+                pxyCurrentLight = ((PxyPacket *)ptr)->light;
+                pxyCurrentShadow = ((PxyPacket *)ptr)->shadow;
+                pxyShadowMatrix = ((PxyPacket *)ptr)->shadowMatrix;
                 if (pxyTxyBlock == 0) {
-                    pxyTxyBlock = ((PxyPacket *)ptr)->unk38;
+                    pxyTxyBlock = ((PxyPacket *)ptr)->textureTable;
                 }
                 break;
             }
         }
         pxyCalcFogFactors(header);
     } else {
-        newSlot = &pxyState.slots[D_0096A2B0++];
-        if (D_0096A2B0 >= PXY_SLOT_COUNT) {
-            D_0096A2B0 = 0;
+        newSlot = &pxyState.slots[pxySlotWriteIndex++];
+        if (pxySlotWriteIndex >= PXY_SLOT_COUNT) {
+            pxySlotWriteIndex = 0;
         }
         pxyCalcModelBounds(header);
         pxyCalcCameraVisibility();
@@ -2764,20 +2538,20 @@ int pxySubmitModel(PxyHeader *header)
             fadeZeroDistance = 839000.0f;
         }
         if (pxyFadeMetric < fadeZeroDistance) {
-            D_0096A044 = 0;
-            D_0096A0D8 = 0;
+            pxyReflTransparency = 0;
+            pxyFadeAlpha = 0;
         } else if (pxyFadeMetric < fadeFullDistance) {
-            D_0096A044 *= 1.0f - (fadeFullDistance - pxyFadeMetric) / (fadeFullDistance - fadeZeroDistance);
-            D_0096A0D8 *= 1.0f - (fadeFullDistance - pxyFadeMetric) / (fadeFullDistance - fadeZeroDistance);
+            pxyReflTransparency *= 1.0f - (fadeFullDistance - pxyFadeMetric) / (fadeFullDistance - fadeZeroDistance);
+            pxyFadeAlpha *= 1.0f - (fadeFullDistance - pxyFadeMetric) / (fadeFullDistance - fadeZeroDistance);
         }
-        if (D_0096A084 & 0x800) {
-            D_0096A044 = 0;
+        if (pxyRenderLevel & 0x800) {
+            pxyReflTransparency = 0;
         }
-        if (D_0096A044 == 0.0f) {
-            D_0096A084 |= 0x800;
+        if (pxyReflTransparency == 0.0f) {
+            pxyRenderLevel |= 0x800;
         }
     }
-    if (D_0096A084 & 0x1000) {
+    if (pxyRenderLevel & 0x1000) {
         fadeZeroDistance = 223000.0f;
         fadeFullDistance = 209000.0f;
         fadeFactor = 1.0f;
@@ -2792,27 +2566,27 @@ int pxySubmitModel(PxyHeader *header)
         }
         if (fadeFactor < 1.0f) {
             nmlRenderStatus |= NML_RENDER_STENCIL;
-            D_0096A044 *= fadeFactor;
-            D_0096A048 *= fadeFactor;
-            D_0096A04C *= fadeFactor;
-            D_0096A0D8 *= fadeFactor;
+            pxyReflTransparency *= fadeFactor;
+            pxyTransparency *= fadeFactor;
+            pxyCircleShadowScale *= fadeFactor;
+            pxyFadeAlpha *= fadeFactor;
         }
     }
     if (!(nmlRenderStatus & NML_RENDER_HIDDEN) || (nmlRenderStatus & NML_RENDER_FORCE_VISIBLE)) {
         pxyCalcPartVisibility(header);
         if (header->geometryCount < 0x100 && pxyHideMask != 0) {
-            i = (int)D_0096A020;
+            i = (int)pxyParts;
             for (j = 0; j < header->partCount; i += sizeof(PxyPart), j++) {
-                if (pxyHideMask->bits[(s16)(((PxyPart *)i)->maskBit >> 5)] & (1 << (s16)(((PxyPart *)i)->maskBit & 0x1F))) {
-                    D_0096A034[j] = D_0096A034[j] & 0x7F;
+                if (pxyHideMask->bits[(s16)(((PxyPart *)i)->matrixIndex >> 5)] & (1 << (s16)(((PxyPart *)i)->matrixIndex & 0x1F))) {
+                    pxyPartVisibilityFlags[j] = pxyPartVisibilityFlags[j] & 0x7F;
                 }
             }
         }
     }
-    if (header->matrixCount != 0 && pxyJointMatrices == 0) {
-        pxyJointMatrices = D_0096A028;
+    if (header->nJointMatrix != 0 && pxyJointMatrices == 0) {
+        pxyJointMatrices = pxyDefaultJointMatrices;
     }
-    if (D_0096A040 == 0) {
+    if (pxyParentHeader == 0) {
         switch (pxyShadowMode) {
         case 1:
         case 4:
@@ -2822,59 +2596,59 @@ int pxySubmitModel(PxyHeader *header)
             }
             break;
         case 3:
-            D_0096A098 = xglPacketReserve(4);
-            xglMatrixUnit(D_0096A098);
-            if (D_0096A06C->override.w == 0.0f) {
-                direction.x = D_0096A06C->direction.x;
+            pxyShadowMatrix = nmlPacketSetAttributeAlloc16N(4);
+            xglMatrixUnit(pxyShadowMatrix->rows);
+            if (pxyCurrentLight->shadows[0].w == 0.0f) {
+                direction.x = pxyCurrentLight->directions[0][0];
                 direction.y = 2.0f;
-                direction.z = D_0096A06C->direction.z;
+                direction.z = pxyCurrentLight->directions[0][2];
                 if (pxyFlags & 0x10) {
-                    direction.y = D_0096A06C->direction.y;
+                    direction.y = pxyCurrentLight->directions[0][1];
                 }
             } else {
-                direction.x = D_0096A06C->override.x;
-                direction.y = D_0096A06C->override.y;
-                direction.z = D_0096A06C->override.z;
+                direction.x = pxyCurrentLight->shadows[0].x;
+                direction.y = pxyCurrentLight->shadows[0].y;
+                direction.z = pxyCurrentLight->shadows[0].z;
             }
-            xglVectorNormal_001A9200(&direction, &direction);
+            xglVectorNormal(&direction, &direction);
             if (direction.y != 0.0f) {
-                D_0096A098->m[1][0] = -direction.x / direction.y;
-                D_0096A098->m[1][2] = -direction.z / direction.y;
+                pxyShadowMatrix->rows[1][0] = -direction.x / direction.y;
+                pxyShadowMatrix->rows[1][2] = -direction.z / direction.y;
             } else {
-                D_0096A098->m[1][0] = 0;
-                D_0096A098->m[1][2] = 0;
+                pxyShadowMatrix->rows[1][0] = 0;
+                pxyShadowMatrix->rows[1][2] = 0;
             }
-            D_0096A098->m[1][1] = 0;
-            D_0096A098->m[3][1] = D_0096A114 + 0.005f;
-            D_0096A098->m[3][0] = -D_0096A114 * D_0096A098->m[1][0];
-            D_0096A098->m[3][2] = -D_0096A114 * D_0096A098->m[1][2];
-            D_0096A098->m[3][1] = D_0096A094 + 0.005f;
-            D_0096A098->m[3][0] = -D_0096A094 * D_0096A098->m[1][0];
-            D_0096A098->m[3][2] = -D_0096A094 * D_0096A098->m[1][2];
+            pxyShadowMatrix->rows[1][1] = 0;
+            pxyShadowMatrix->rows[3][1] = pxyShadowOffsetY + 0.005f;
+            pxyShadowMatrix->rows[3][0] = -pxyShadowOffsetY * pxyShadowMatrix->rows[1][0];
+            pxyShadowMatrix->rows[3][2] = -pxyShadowOffsetY * pxyShadowMatrix->rows[1][2];
+            pxyShadowMatrix->rows[3][1] = pxyShadowPlaneHeight + 0.005f;
+            pxyShadowMatrix->rows[3][0] = -pxyShadowPlaneHeight * pxyShadowMatrix->rows[1][0];
+            pxyShadowMatrix->rows[3][2] = -pxyShadowPlaneHeight * pxyShadowMatrix->rows[1][2];
             break;
         case 2:
             break;
         }
     }
-    j = (int)xglPacketAppendVectors(&nmlRenderStatus, 0x2A);
+    j = (int)nmlPacketSetAttributeData16N(&nmlRenderStatus, 0x2A);
     i = (int)((PxyPacket *)j)->ranges;
     ptr = &((PxyPacket *)j)->ranges[1];
-    entry = &pxyDrawEntryTable[D_0096A308];
-    translucentEntry = &pxyDrawEntryTable[D_0096A30C];
+    entry = &pxyDrawEntryTable[pxyOpaqueEntryCursor];
+    translucentEntry = &pxyDrawEntryTable[pxyTranslucentEntryCursor];
     table = &pxyBatchTables[0];
     batch = &table->batches[table->count];
     translucentTable = &pxyBatchTables[1];
     translucentBatch = &translucentTable->batches[translucentTable->count];
     if (slot == 0) {
-        batch->start = D_0096A308;
+        batch->start = pxyOpaqueEntryCursor;
         batch->count = 0;
-        batch->depth = xglPointLength(&((PxyPacket *)j)->center, &camera->position) + D_0096A2B8;
+        batch->depth = xglPointLength(&((PxyPacket *)j)->center, &camera->travel.position) + nmlModelSortOffset;
         batch->flags = ((PxyPacket *)j)->renderStatus;
         batch->unk10 = -1;
         batch->next = -1;
         batch->packet = (PxyPacket *)j;
         batch->translucent = translucentBatch;
-        translucentBatch->start = D_0096A30C;
+        translucentBatch->start = pxyTranslucentEntryCursor;
         translucentBatch->count = 0;
         translucentBatch->depth = 0;
         translucentBatch->flags = ((PxyPacket *)j)->renderStatus;
@@ -2909,7 +2683,7 @@ int pxySubmitModel(PxyHeader *header)
         batch->flags |= 0x20000;
         translucentBatch->flags |= 0x20000;
     }
-    if (D_0096A084 & 0x40) {
+    if (pxyRenderLevel & 0x40) {
         batch->flags |= 0x100000;
         translucentBatch->flags |= 0x100000;
     }
@@ -2917,7 +2691,7 @@ int pxySubmitModel(PxyHeader *header)
         batch->flags |= 0x800000;
         translucentBatch->flags |= 0x800000;
     }
-    if (((PxyPacket *)j)->unk68 != 0) {
+    if (((PxyPacket *)j)->levelTable != 0) {
         batch->flags |= 0x80000000;
         translucentBatch->flags |= 0x80000000;
     }
@@ -2976,7 +2750,7 @@ int pxySubmitModel(PxyHeader *header)
             }
         }
     }
-    if (!(((PxyPacket *)j)->unkD4 & 1)) {
+    if (!(((PxyPacket *)j)->unmodeled_D4 & 1)) {
         if (!(nmlRenderStatus & NML_RENDER_HIDDEN) || (nmlRenderStatus & NML_RENDER_FORCE_VISIBLE)) {
             for (d = header->layerCount - 1; d >= 0; d--) {
                 b = (int)&((PxyPacket *)j)->parts[((PxyPartRange *)ptr)->first];
@@ -3027,7 +2801,7 @@ int pxySubmitModel(PxyHeader *header)
                             }
                         }
                     }
-                    if (((PxyPacket *)j)->unk84 & 2) {
+                    if (((PxyPacket *)j)->drawFlags & 2) {
                         break;
                     }
                 } else {
@@ -3062,8 +2836,8 @@ int pxySubmitModel(PxyHeader *header)
                         w->item->count = 0;
                         w->matrixSet = pxyGlobalMatrices;
                         w->matrices = pxyJointMatrices;
-                        xglMatrixCopy_001CC9C4(w->matrix, &nmlModelDrawMatrix);
-                        xglVectorCopy_001CC998(&w->eye, &camera->position);
+                        xglMatrixCopy_001CC9C4(w->matrix, nmlModelDrawMatrix.rows);
+                        xglVectorCopy_001CC998(&w->eye, &camera->travel.position);
                         for (c = 0; c < a; c++, b += sizeof(PxyPart)) {
                             if (((PxyPart *)b)->layer == d) {
                                 if (!(((PxyPacket *)j)->partFlags[((PxyPart *)b)->index] & PXY_PART_VISIBLE)) {
@@ -3084,7 +2858,7 @@ int pxySubmitModel(PxyHeader *header)
                         }
                         {
                             for (w->i = 0; w->i < w->entryCount; w->i++) {
-                                w->sortEntry = &w->sortEntries[w->entries[w->i].part->maskBit];
+                                w->sortEntry = &w->sortEntries[w->entries[w->i].part->matrixIndex];
                                 if (w->sortEntry->key >= 0) {
                                     if (w->item->count == 0 || w->item->key != w->sortEntry->key) {
                                         if (w->item->count != 0) {
@@ -3128,13 +2902,13 @@ int pxySubmitModel(PxyHeader *header)
                                 w->item->position.w = 1.0f;
                                 if (w->item->matrix >= 0 && w->matrixSet != 0 && w->matrices != 0) {
                                     xglMatrixStackLoad(w->matrix);
-                                    xglMatrixStackMul(w->matrices[w->item->matrix]);
-                                    xglMatrixStackMulVector(w->item, w->item);
-                                    w->item->depth = xglPointLength(w->item, &w->eye);
+                                    xglMatrixStackMul(w->matrices[w->item->matrix].rows);
+                                    xglMatrixStackMulVector(&w->item->position, &w->item->position);
+                                    w->item->depth = xglPointLength(&w->item->position, &w->eye);
                                 } else {
                                     xglMatrixStackLoad(w->matrix);
-                                    xglMatrixStackMulVector(w->item, w->item);
-                                    w->item->depth = xglPointLength(w->item, &w->eye);
+                                    xglMatrixStackMulVector(&w->item->position, &w->item->position);
+                                    w->item->depth = xglPointLength(&w->item->position, &w->eye);
                                 }
                             }
                             {
@@ -3164,8 +2938,8 @@ int pxySubmitModel(PxyHeader *header)
         }
     }
     pxyQueueBatch(newSlot, (PxyPacket *)j);
-    D_0096A308 += batch->count;
-    D_0096A30C += translucentBatch->count;
+    pxyOpaqueEntryCursor += batch->count;
+    pxyTranslucentEntryCursor += translucentBatch->count;
     pxyResetGlobals();
     return 0;
 }
@@ -3175,7 +2949,7 @@ void pxyQueueBatchBasic(PxySlot *slot, PxyPacket *packet);
 /* Reduced variant of pxySubmitModel: no header validation, shadow or fade setup; queues the parts as draw batches. */
 int pxySubmitModelBasic(PxyHeader *header)
 {
-    PxyCamera *camera;
+    XglCamera *camera;
     PxySlot *newSlot;
     int j;
     int i;
@@ -3191,10 +2965,10 @@ int pxySubmitModelBasic(PxyHeader *header)
     int c;
     int d;
 
-    camera = xglStudioSelectGetActiveCamera(D_0096A004);
+    camera = xglStudioSelectGetActiveCamera(pxyActiveCameraIndex);
     newSlot = 0;
-    D_0096A31C = 0;
-    if (D_0096A2BC >= PXY_BATCH_MAX || pxyBatchTables[0].count >= PXY_BATCH_MAX) {
+    pxyModelHiddenFlag = 0;
+    if (pxyBatchedModelCount >= PXY_BATCH_MAX || pxyBatchTables[0].count >= PXY_BATCH_MAX) {
         pxyResetGlobals();
         return 1;
     }
@@ -3202,8 +2976,8 @@ int pxySubmitModelBasic(PxyHeader *header)
     if ((header->flags & 0x100) && (pxyFlags & 8)) {
         pxyFlags |= 4;
     }
-    if (D_0096A084 & 0x10) {
-        D_0096A09C = -1;
+    if (pxyRenderLevel & 0x10) {
+        pxyVisibleOverride = -1;
     }
     if (pxyFlags & 0x80) {
         pxyFogColor.x = 0;
@@ -3213,58 +2987,58 @@ int pxySubmitModelBasic(PxyHeader *header)
     if (pxyFlags & 0x400) {
         nmlRenderStatus |= NML_RENDER_TEXMAP_DROP;
     }
-    D_0096A2BC++;
-    D_0096A010 = header;
-    D_0096A020 = (PxyPart *)PXY_HEADER_AT(header, header->partOffset);
-    D_0096A014 = (PxyPartRange *)PXY_HEADER_AT(header, header->rangeOffset);
-    D_0096A018 = PXY_HEADER_AT(header, header->offset58);
-    D_0096A01C = PXY_HEADER_AT(header, header->offset6C);
-    D_0096A03C = PXY_HEADER_AT(header, header->offset3C);
-    D_0096A024 = PXY_HEADER_AT(header, header->offset68);
-    D_0096A028 = PXY_HEADER_AT(header, header->offset70);
-    D_0096A030 = PXY_HEADER_AT(header, header->offset64);
-    D_0096A050 = PXY_HEADER_AT(header, header->offset74);
-    D_0096A054 = PXY_HEADER_AT(header, header->offset78);
-    D_0096A034 = xglPacketReserve(header->partCount / 16 + 1);
+    pxyBatchedModelCount++;
+    pxyCurrentHeader = header;
+    pxyParts = (PxyPart *)PXY_HEADER_AT(header, header->partOffset);
+    pxyPartRanges = (PxyPartRange *)PXY_HEADER_AT(header, header->rangeOffset);
+    pxyHeaderTable58 = PXY_HEADER_AT(header, header->offset58);
+    pxyHeaderTable6C = PXY_HEADER_AT(header, header->geometryOffset);
+    pxyHeaderTable3C = PXY_HEADER_AT(header, header->offset3C);
+    pxyDefaultPartMatrices = PXY_HEADER_AT(header, header->entryMatrixOffset);
+    pxyDefaultJointMatrices = PXY_HEADER_AT(header, header->offset70);
+    pxyHeaderTable64 = PXY_HEADER_AT(header, header->jointMatrixOffset);
+    pxyHeaderTable74 = PXY_HEADER_AT(header, header->offset74);
+    pxyHeaderTable78 = PXY_HEADER_AT(header, header->offset78);
+    pxyPartVisibilityFlags = nmlPacketSetAttributeAlloc16N(header->partCount / 16 + 1);
     xglVectorScaleXYZ(&pxyModelPosition, &pxyModelPosition, pxyModelScaleMax);
-    memset(D_0096A034, PXY_PART_VISIBLE, header->partCount);
-    D_0096A05C = D_0096A024;
-    xglMatrixInverse(&D_0096A120, &nmlModelDrawMatrix);
-    newSlot = &pxyState.slots[D_0096A2B0++];
-    if (D_0096A2B0 >= PXY_SLOT_COUNT) {
-        D_0096A2B0 = 0;
+    memset(pxyPartVisibilityFlags, PXY_PART_VISIBLE, header->partCount);
+    pxyPartMatrices = pxyDefaultPartMatrices;
+    xglMatrixInverse(&nmlModelDrawInverseMatrix, &nmlModelDrawMatrix);
+    newSlot = &pxyState.slots[pxySlotWriteIndex++];
+    if (pxySlotWriteIndex >= PXY_SLOT_COUNT) {
+        pxySlotWriteIndex = 0;
     }
     pxyCalcModelBounds(header);
     pxyCalcCameraVisibility();
     if (!(nmlRenderStatus & NML_RENDER_HIDDEN) || (nmlRenderStatus & NML_RENDER_FORCE_VISIBLE)) {
         pxyCalcPartVisibility(header);
         if (header->geometryCount < 0x100 && pxyHideMask != 0) {
-            i = (int)D_0096A020;
+            i = (int)pxyParts;
             for (j = 0; j < header->partCount; i += sizeof(PxyPart), j++) {
-                if (pxyHideMask->bits[(s16)(((PxyPart *)i)->maskBit >> 5)] & (1 << (s16)(((PxyPart *)i)->maskBit & 0x1F))) {
-                    D_0096A034[j] = D_0096A034[j] & 0x7F;
+                if (pxyHideMask->bits[(s16)(((PxyPart *)i)->matrixIndex >> 5)] & (1 << (s16)(((PxyPart *)i)->matrixIndex & 0x1F))) {
+                    pxyPartVisibilityFlags[j] = pxyPartVisibilityFlags[j] & 0x7F;
                 }
             }
         }
     }
-    i = (int)xglPacketAppendVectors(&nmlRenderStatus, 0x2A);
+    i = (int)nmlPacketSetAttributeData16N(&nmlRenderStatus, 0x2A);
     j = (int)((PxyPacket *)i)->ranges;
     ptr = &((PxyPacket *)i)->ranges[1];
-    entry = &pxyDrawEntryTable[D_0096A308];
-    translucentEntry = &pxyDrawEntryTable[D_0096A30C];
+    entry = &pxyDrawEntryTable[pxyOpaqueEntryCursor];
+    translucentEntry = &pxyDrawEntryTable[pxyTranslucentEntryCursor];
     table = &pxyBatchTables[0];
     batch = &table->batches[table->count];
     translucentTable = &pxyBatchTables[1];
     translucentBatch = &translucentTable->batches[translucentTable->count];
-    batch->start = D_0096A308;
+    batch->start = pxyOpaqueEntryCursor;
     batch->count = 0;
-    batch->depth = xglPointLength(&((PxyPacket *)i)->center, &camera->position) + D_0096A2B8;
+    batch->depth = xglPointLength(&((PxyPacket *)i)->center, &camera->travel.position) + nmlModelSortOffset;
     batch->flags = ((PxyPacket *)i)->renderStatus;
     batch->unk10 = -1;
     batch->next = -1;
     batch->packet = (PxyPacket *)i;
     batch->translucent = translucentBatch;
-    translucentBatch->start = D_0096A30C;
+    translucentBatch->start = pxyTranslucentEntryCursor;
     translucentBatch->count = 0;
     translucentBatch->depth = 0;
     translucentBatch->flags = ((PxyPacket *)i)->renderStatus;
@@ -3275,7 +3049,7 @@ int pxySubmitModelBasic(PxyHeader *header)
         batch->flags |= 0x2000000;
         translucentBatch->flags |= 0x2000000;
     }
-    if (D_0096A084 & 0x40) {
+    if (pxyRenderLevel & 0x40) {
         batch->flags |= 0x100000;
         translucentBatch->flags |= 0x100000;
     }
@@ -3328,7 +3102,7 @@ int pxySubmitModelBasic(PxyHeader *header)
             }
         }
     }
-    if (!(((PxyPacket *)i)->unkD4 & 1)) {
+    if (!(((PxyPacket *)i)->unmodeled_D4 & 1)) {
         if (!(nmlRenderStatus & NML_RENDER_HIDDEN) || (nmlRenderStatus & NML_RENDER_FORCE_VISIBLE)) {
             for (d = header->layerCount - 1; d >= 0; d--) {
                 b = (int)&((PxyPacket *)i)->parts[((PxyPartRange *)ptr)->first];
@@ -3350,13 +3124,11 @@ int pxySubmitModelBasic(PxyHeader *header)
         }
     }
     pxyQueueBatchBasic(newSlot, (PxyPacket *)i);
-    D_0096A308 += batch->count;
-    D_0096A30C += translucentBatch->count;
+    pxyOpaqueEntryCursor += batch->count;
+    pxyTranslucentEntryCursor += translucentBatch->count;
     pxyResetGlobals();
     return 0;
 }
-
-void xglPacketAddRefOffset(void *packet, int value, int state);
 
 void pxyPlayEntryGroup(int group) {
     int i;
@@ -3366,13 +3138,11 @@ void pxyPlayEntryGroup(int group) {
         for (i = 0; i < pxyEntryCount; i++) {
             entry = &pxyEntryQueue[i];
             if (entry->group == group) {
-                xglPacketAddRefOffset(entry->packet, entry->value, entry->state);
+                xglPacketAddRefOffset(entry->data, entry->value, entry->state);
             }
         }
     }
 }
-
-void xglDirectQueueAppendFlushWide(void *packet, int value);
 
 void pxyPlayEntryGroupFiltered(int group, int filter) {
     int i;
@@ -3386,9 +3156,9 @@ void pxyPlayEntryGroupFiltered(int group, int filter) {
             if (entry->group == group) {
                 if (entry->flag == filter) {
                     if ((signed char)entry->row == 1) {
-                        xglDirectQueueAppendFlushWide(entry->packet, entry->value);
+                        xglDirectQueueAppendFlushWide(entry->data, entry->value);
                     } else {
-                        xglPacketAddRefOffset(entry->packet, entry->value, entry->state);
+                        xglPacketAddRefOffset(entry->data, entry->value, entry->state);
                     }
                 }
             }
@@ -3396,24 +3166,24 @@ void pxyPlayEntryGroupFiltered(int group, int filter) {
     }
 }
 
-void pxyAddEntry(int key, int data, int qwc)
+void nmlModelDirectSend(int key, void *data, int qwc)
 {
-    pxyAddEntryFull(key, data, qwc, 0, 0);
+    nmlModelDirectSendFull(key, data, qwc, 0, 0);
 }
 
-void pxyAddEntryWithState(int key, void *data, int qwc, int offset) {
-    pxyAddEntryFull(key, data, qwc, 0, offset);
+void nmlModelDirectSendWithState(int key, void *data, int qwc, int offset) {
+    nmlModelDirectSendFull(key, data, qwc, 0, offset);
 }
 
-void pxyAddEntryFlagged(int key, void *data, int qwc, int flag)
+void nmlModelDirectSendFlagged(int key, void *data, int qwc, int flag)
 {
-    pxyAddEntryFull(key, data, qwc, flag, 0);
+    nmlModelDirectSendFull(key, data, qwc, flag, 0);
 }
 
-void pxyAddEntryFull(int key, void *data, int qwc, int flag, int state) {
+void nmlModelDirectSendFull(int key, void *data, int qwc, int flag, int state) {
     PxyEntry *entry;
 
-    if (D_0096A304 != 0) {
+    if (pxyFlushDoneFlag != 0) {
         return;
     }
     if (pxyEntryCount < 3048) {
@@ -3421,9 +3191,9 @@ void pxyAddEntryFull(int key, void *data, int qwc, int flag, int state) {
             entry->value = qwc;
             entry->flag = flag;
             if ((key & 1) == 0) {
-                entry->packet = xglPacketAppendVectors(data, qwc);
+                entry->data = nmlPacketSetAttributeData16N(data, qwc);
             } else {
-                entry->packet = data;
+                entry->data = data;
             }
             entry->group = (key % 12) >> 1;
             entry->row = key / 12;
@@ -3456,21 +3226,8 @@ extern int pxyCurrentCamera;
 extern int pxyDrawPass;
 extern u16 sRenderDepthBase;
 extern s16 sRenderPsm;
-void func_001CD108(int);
-void xglDirectQueueFlush(void);
-void xglDirectQueueFlushWide(void);
 int pxyPartNotInIndexList(PxyPacket *packet, PxyDrawWork *work);
-void pxyUploadPacketState(int, PxyPacket *);
-void xglPacketSelectMode(PxyPacket *);
-void pxyUploadBoneMatrices(void);
-void pxyUploadViewMatrices(void);
-void pxyDrawPartData(void);
-XglPacket *xglPacketGetCurrent(void);
-void sceVif1PkCnt(XglPacket *packet, int count);
-void func_0012B6E0(XglPacket *packet, int, int, int, int);
-void func_0012B770(XglPacket *packet);
-void func_0012BCE8(XglPacket *packet, void *, int);
-void func_0012B9F8(XglPacket *packet, XglQuadword);
+void sceVif1PkAddUpkData128(XglPacket *packet, XglQuadword);
 
 /* Draws the batches of shadow caster `caster` into its shadow texture at frameBase. */
 void pxyDrawShadowCaster(int caster, u32 frameBase)
@@ -3486,12 +3243,12 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
     savedPass = pxyDrawPass;
     pxyDrawWork->frameBase = frameBase;
     pxyDrawWork->unk28 = 0;
-    func_001CD1AC();
-    func_001CD160();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
     {
         u64 *start;
 
-        xglDirectQueueBegin();
+        nmlPacketGsInit();
         p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
         start = p;
         GS_PUT(p, GS_ZBUF_1, GS_SET_ZBUF(sRenderDepthBase, 1, 1));
@@ -3502,7 +3259,7 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
         GS_PUT(p, GS_ALPHA_1, shadow->alphaData);
         xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
     }
-    xglDirectQueueFlushWide();
+    nmlPacketAddGsFlushWide();
     for (i = 0; i < pxyOverlayBatchCount; i++) {
         int pass;
         AlignedVector4 v;
@@ -3514,37 +3271,37 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
         Matrix local;
 
         pxyDrawWork->batch = pxyState.overlayBatches[i];
-        if ((pxyFlags & 0x10) && !(pxyFlags & 0x40000) && (packet->unk08 == 1 || packet->unk08 == 4)
-            && packet->unkC0 < packet->unkC8) {
+        if ((pxyFlags & 0x10) && !(pxyFlags & 0x40000) && (packet->drawMode == 1 || packet->drawMode == 4)
+            && packet->lowerClipHeight < packet->upperClipHeight) {
             v = (AlignedVector4){ 0.0f, -1.0f, 0.0f, 0.0f };
-            v.w = -(v.x * packet->center.x + v.y * packet->unkC0 + v.z * packet->center.z);
+            v.w = -(v.x * packet->center.x + v.y * packet->lowerClipHeight + v.z * packet->center.z);
             if (pxyDrawWork->batch->packet->planes == 0) {
-                pxyDrawWork->batch->packet->planes = xglPacketReserve(5);
+                pxyDrawWork->batch->packet->planes = nmlPacketSetAttributeAlloc16N(5);
             }
             pxyDrawWork->batch->packet->planes->plane[0] = v;
             pxyDrawWork->batch->packet->planes->plane[1] = v;
             v = (AlignedVector4){ 0.0f, 1.0f, 0.0f, 0.0f };
-            v.w = -(v.x * packet->center.x + v.y * packet->unkC8 + v.z * packet->center.z);
+            v.w = -(v.x * packet->center.x + v.y * packet->upperClipHeight + v.z * packet->center.z);
             if (pxyDrawWork->batch->packet->planes == 0) {
-                pxyDrawWork->batch->packet->planes = xglPacketReserve(5);
+                pxyDrawWork->batch->packet->planes = nmlPacketSetAttributeAlloc16N(5);
             }
             pxyDrawWork->batch->packet->planes->plane[1] = v;
             pxyDrawWork->batch->packet->planeCount = 2;
             pxyDrawWork->batch->packet->renderStatus |= 0x4000;
         }
-        xglDirectQueueBegin();
+        nmlPacketGsInit();
         p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
         q = p;
         GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm,
-                                           pxyDrawWork->batch->packet->unk9C | 0xFF000000));
+                                           pxyDrawWork->batch->packet->frameMask | 0xFF000000));
         GS_PUT(p, GS_FRAME_2, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm,
-                                           pxyDrawWork->batch->packet->unk9C | 0xFF000000));
+                                           pxyDrawWork->batch->packet->frameMask | 0xFF000000));
         xglDirectQueueCount += ((u32)p - (u32)q) >> 4;
-        xglDirectQueueFlush();
+        nmlPacketAddGsFlush();
         for (pass = 0; pass < 2; pass++) {
             pxyDrawWork->lastPacket = pxyDrawWork->batch->packet;
             pxyDrawPass = pass;
-            func_001CD108(pxyDrawPass);
+            pxySetDrawPass(pxyDrawPass);
             if (pass != 0) {
                 pxyDrawWork->batch = pxyDrawWork->batch->translucent;
             }
@@ -3554,19 +3311,19 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
             }
             pxyDrawWork->batch->packet->renderStatus |= 0x20000000;
             pxyUploadPacketState(pxyDrawWork->batch->packet->renderStatus & 4, pxyDrawWork->batch->packet);
-            xglPacketSelectMode(pxyDrawWork->batch->packet);
+            nmlPacketAddTransMicrocode(pxyDrawWork->batch->packet);
             q = xglPacketGetCurrent();
-            xglMatrixStackLoad(&shadow->textureInverse);
-            xglMatrixStackMul(pxyDrawWork->batch->packet->world);
-            xglMatrixStackSave(&m);
+            xglMatrixStackLoad(shadow->textureInverse.rows);
+            xglMatrixStackMul(pxyDrawWork->batch->packet->localMatrix);
+            xglMatrixStackSave(m.rows);
             sceVif1PkCnt(q, 0);
-            func_0012B6E0(q, 0x39E, 0x6C, 1, 1);
-            func_0012BCE8(q, &m, 4);
-            func_0012B770(q);
-            func_0012B6E0(q, 0x3C3, 0x6C, 1, 1);
-            func_0012B9F8(q, *(XglQuadword *)&shadow->uv);
-            func_0012B770(q);
-            xglMatrixUnit(&m);
+            sceVif1PkOpenUpkCode(q, 0x39E, 0x6C, 1, 1);
+            sceVif1PkAddUpkData128N(q, &m, 4);
+            sceVif1PkCloseUpkCode(q);
+            sceVif1PkOpenUpkCode(q, 0x3C3, 0x6C, 1, 1);
+            sceVif1PkAddUpkData128(q, *(XglQuadword *)&shadow->uv);
+            sceVif1PkCloseUpkCode(q);
+            xglMatrixUnit(m.rows);
             shadow->center.w = 1.0f;
             shadow->lighting.direction.w = 0;
             xglVectorCopy_001CC998(m.rows[3], &shadow->lighting.direction);
@@ -3577,15 +3334,15 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
             m.rows[1][2] = shadow->center.y;
             m.rows[2][2] = shadow->center.z;
             m.rows[0][0] = 128.0f / (packet->center.w * 2.0f);
-            if (packet->unk08 == 4) {
+            if (packet->drawMode == 4) {
                 m.words[0][1] = 1;
             }
             if (pxyFlags & 0x20000) {
                 m.words[1][0] = 1;
             }
-            func_0012B6E0(q, 0x392, 0x6C, 1, 1);
-            func_0012BCE8(q, &m, 4);
-            func_0012B770(q);
+            sceVif1PkOpenUpkCode(q, 0x392, 0x6C, 1, 1);
+            sceVif1PkAddUpkData128N(q, &m, 4);
+            sceVif1PkCloseUpkCode(q);
             pxyDrawWork->entry = &pxyDrawEntryTable[pxyDrawWork->batch->start];
             for (pxyDrawWork->i = 0; pxyDrawWork->i < pxyDrawWork->batch->count;
                  pxyDrawWork->i++, pxyDrawWork->entry++) {
@@ -3601,7 +3358,7 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
                     continue;
                 }
                 if (pxyFlags & 0x10) {
-                    if (D_0096A2DC == 2) {
+                    if (pxyShadowCasterMode == 2) {
                         if (pass != 0 && !(pxyDrawWork->part->flags & 0x20000)) {
                             continue;
                         }
@@ -3609,15 +3366,15 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
                             && (pxyDrawWork->part->flags & 0x10)) {
                             continue;
                         }
-                    } else if (D_0096A2DC == 1 && (pxyDrawWork->part->flags & 0x10)) {
+                    } else if (pxyShadowCasterMode == 1 && (pxyDrawWork->part->flags & 0x10)) {
                         continue;
                     }
-                } else if (D_0096A2DC == 1 && (pxyDrawWork->part->flags & 0x10)) {
+                } else if (pxyShadowCasterMode == 1 && (pxyDrawWork->part->flags & 0x10)) {
                     continue;
                 }
                 if (pxyFlags & 0x10) {
-                    xglVectorAddXYZ_001CCA30(&box[0], &pxyDrawWork->part->boundsMax, pxyDrawWork->batch->packet->world[3]);
-                    xglVectorAddXYZ_001CCA30(&box[1], &pxyDrawWork->part->boundsMin, pxyDrawWork->batch->packet->world[3]);
+                    xglVectorAddXYZ_001CCA30(&box[0], &pxyDrawWork->part->boundsMax, pxyDrawWork->batch->packet->localMatrix[3]);
+                    xglVectorAddXYZ_001CCA30(&box[1], &pxyDrawWork->part->boundsMin, pxyDrawWork->batch->packet->localMatrix[3]);
                     if (shadow->min.x > box[0].x || shadow->min.y > box[0].y || shadow->min.z > box[0].z
                         || shadow->max.x < box[1].x || shadow->max.y < box[1].y || shadow->max.z < box[1].z) {
                         continue;
@@ -3625,7 +3382,7 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
                 } else {
                     v = pxyDrawWork->part->sphere;
                     v.w = 1.0f;
-                    xglVectorMulMat(&box[0], pxyDrawWork->batch->packet->world, &v);
+                    xglVectorMulMat(&box[0], pxyDrawWork->batch->packet->localMatrix, &v);
                     if (shadow->min.x > box[0].x + pxyDrawWork->part->sphere.w
                         || shadow->min.y > box[0].y + pxyDrawWork->part->sphere.w
                         || shadow->min.z > box[0].z + pxyDrawWork->part->sphere.w
@@ -3646,14 +3403,14 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
             }
             if (pxyDrawWork->i < pxyDrawWork->batch->count) {
                 for (; pxyDrawWork->i < pxyDrawWork->batch->count; pxyDrawWork->i++, pxyDrawWork->entry++) {
-                    q = &pxyDrawWork->entry->packet->matrices[pxyDrawWork->entry->part->maskBit];
+                    q = &pxyDrawWork->entry->packet->boneMatrices[pxyDrawWork->entry->part->matrixIndex];
                     pxyDrawWork->packet = pxyDrawWork->entry->packet;
                     pxyDrawWork->part = pxyDrawWork->entry->part;
                     if (pxyDrawWork->part->flags & 0x1000) {
                         continue;
                     }
                     if (pxyFlags & 0x10) {
-                        if (D_0096A2DC == 2) {
+                        if (pxyShadowCasterMode == 2) {
                             if (pass != 0 && !(pxyDrawWork->part->flags & 0x20000)) {
                                 continue;
                             }
@@ -3661,16 +3418,16 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
                                 && (pxyDrawWork->part->flags & 0x10)) {
                                 continue;
                             }
-                        } else if (D_0096A2DC == 1 && (pxyDrawWork->part->flags & 0x10)) {
+                        } else if (pxyShadowCasterMode == 1 && (pxyDrawWork->part->flags & 0x10)) {
                             continue;
                         }
-                    } else if (D_0096A2DC == 1 && (pxyDrawWork->part->flags & 0x10)) {
+                    } else if (pxyShadowCasterMode == 1 && (pxyDrawWork->part->flags & 0x10)) {
                         continue;
                     }
                     if (pxyFlags & 0x10) {
                         v = pxyDrawWork->part->sphere;
                         v.w = 1.0f;
-                        xglMatrixStackLoad(pxyDrawWork->entry->packet->world);
+                        xglMatrixStackLoad(pxyDrawWork->entry->packet->localMatrix);
                         xglMatrixStackMul(q);
                         xglMatrixStackMulVector(&v, &v);
                         v.w = pxyDrawWork->part->sphere.w;
@@ -3696,16 +3453,16 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
                         }
                     }
                     p = (u64 *)xglPacketGetCurrent();
-                    xglMatrixMul(&local, &shadow->textureInverse, pxyDrawWork->packet->world);
-                    xglMatrixMul(&local, &local, &pxyDrawWork->packet->matrices[pxyDrawWork->part->maskBit]);
+                    xglMatrixMul(local.rows, shadow->textureInverse.rows, pxyDrawWork->packet->localMatrix);
+                    xglMatrixMul(local.rows, local.rows, pxyDrawWork->packet->boneMatrices[pxyDrawWork->part->matrixIndex].rows);
                     sceVif1PkCnt((XglPacket *)p, 0);
-                    func_0012B6E0((XglPacket *)p, 0x39E, 0x6C, 1, 1);
-                    func_0012BCE8((XglPacket *)p, &local, 4);
-                    func_0012B770((XglPacket *)p);
-                    func_0012B6E0((XglPacket *)p, 0x3C3, 0x6C, 1, 1);
-                    func_0012B9F8((XglPacket *)p, *(XglQuadword *)&shadow->uv);
-                    func_0012B770((XglPacket *)p);
-                    xglMatrixMul(&local, pxyDrawWork->packet->world, &pxyDrawWork->packet->matrices[pxyDrawWork->part->maskBit]);
+                    sceVif1PkOpenUpkCode((XglPacket *)p, 0x39E, 0x6C, 1, 1);
+                    sceVif1PkAddUpkData128N((XglPacket *)p, &local, 4);
+                    sceVif1PkCloseUpkCode((XglPacket *)p);
+                    sceVif1PkOpenUpkCode((XglPacket *)p, 0x3C3, 0x6C, 1, 1);
+                    sceVif1PkAddUpkData128((XglPacket *)p, *(XglQuadword *)&shadow->uv);
+                    sceVif1PkCloseUpkCode((XglPacket *)p);
+                    xglMatrixMul(local.rows, pxyDrawWork->packet->localMatrix, pxyDrawWork->packet->boneMatrices[pxyDrawWork->part->matrixIndex].rows);
                     xglMatrixInverse(&local, &local);
                     shadow->center.w = 1.0f;
                     xglVectorMulMat(&sphere, local.rows, &shadow->center);
@@ -3718,15 +3475,15 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
                     local.rows[1][2] = sphere.y;
                     local.rows[2][2] = sphere.z;
                     local.rows[0][0] = 128.0f / (packet->center.w * 2.0f);
-                    if (packet->unk08 == 4) {
+                    if (packet->drawMode == 4) {
                         local.words[0][1] = 1;
                     }
                     if (pxyFlags & 0x20000) {
                         local.words[1][0] = 1;
                     }
-                    func_0012B6E0((XglPacket *)p, 0x392, 0x6C, 1, 1);
-                    func_0012BCE8((XglPacket *)p, &local, 4);
-                    func_0012B770((XglPacket *)p);
+                    sceVif1PkOpenUpkCode((XglPacket *)p, 0x392, 0x6C, 1, 1);
+                    sceVif1PkAddUpkData128N((XglPacket *)p, &local, 4);
+                    sceVif1PkCloseUpkCode((XglPacket *)p);
                     pxyDrawWork->packet->renderStatus |= 0x20000000;
                     pxyUploadBoneMatrices();
                     if ((pxyDrawWork->batch->flags & 0x40000000) || pxyDrawWork->lastPacket != pxyDrawWork->packet) {
@@ -3738,31 +3495,29 @@ void pxyDrawShadowCaster(int caster, u32 frameBase)
                 }
             }
             pxyDrawWork->batch->packet->renderStatus &= ~0x20000000;
-            if (D_0096A2DC == 1) {
+            if (pxyShadowCasterMode == 1) {
                 break;
             }
         }
-        if ((pxyFlags & 0x10) && (packet->unk08 == 1 || packet->unk08 == 4)) {
+        if ((pxyFlags & 0x10) && (packet->drawMode == 1 || packet->drawMode == 4)) {
             pxyDrawWork->batch->packet->renderStatus &= ~0x4000;
         }
     }
-    func_001CD134();
-    func_001CD1AC();
-    func_001CD160();
+    nmlPacketClrTextureCache();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
     pxyDrawPass = savedPass;
-    func_001CD108(pxyDrawPass);
+    pxySetDrawPass(pxyDrawPass);
 }
 
 void pxyBuildFadeRamp(float f);
-void nmlPacketSendCircleTexture(void *, void *);
-void pxyDrawCircleShadow(PxyPacket *);
 
 void pxyDrawCircleShadows(int frameBase)
 {
     int i;
     u64 *p;
 
-    xglDirectQueueBegin();
+    nmlPacketGsInit();
     {
         u64 *start;
 
@@ -3772,7 +3527,7 @@ void pxyDrawCircleShadows(int frameBase)
         GS_PUT(p, GS_FRAME_2, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
         xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
     }
-    xglDirectQueueFlush();
+    nmlPacketAddGsFlush();
     for (i = 0; i < pxyShadowBatchCount; i++) {
         PxyBatch *batch = pxyState.shadowBatches[i];
 
@@ -3780,22 +3535,17 @@ void pxyDrawCircleShadows(int frameBase)
             batch = batch->translucent;
         }
         if (!((pxyCameraEnable[pxyCurrentCamera] == 1 || pxyCurrentCamera == batch->packet->camera)
-              && batch->packet->cameraMask[pxyCurrentCamera] != 0 && batch->packet->unk08 == 2)) {
+              && batch->packet->cameraMask[pxyCurrentCamera] != 0 && batch->packet->drawMode == 2)) {
             continue;
         }
         {
-            pxyBuildFadeRamp(batch->packet->unk58 * batch->packet->unk4C);
-            nmlPacketSendCircleTexture(pxyCircleShadowTexture, D_009889D0);
-            pxyDrawCircleShadow(batch->packet);
+            pxyBuildFadeRamp(batch->packet->glowIntensity * batch->packet->glowScale);
+            nmlPacketSendCircleTexture(pxyCircleShadowTexture, s_aCircleShadowClut);
+            nmlPacketMakeCircleTexture(batch->packet);
         }
     }
 }
 
-f32 func_001D34C4(void);
-f32 xglPacketBufferUsedPercent(void);
-void xglStudioSetScissor(void);
-void func_001D0AE0(u16);
-void pxyDrawGlow(int, PxyPacket *);
 
 /* Draws the shadow caster batches of the current camera, then their glow, at frameBase. */
 void pxyDrawShadowPass(u32 frameBase)
@@ -3808,8 +3558,8 @@ void pxyDrawShadowPass(u32 frameBase)
     savedPass = pxyDrawPass;
     pxyDrawWork->frameBase = frameBase;
     pxyDrawWork->unk28 = 0;
-    func_001CD1AC();
-    func_001CD160();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
     for (i = 0; i < pxyShadowBatchCount; i++) {
         translucent = 0;
         frameBuffer = sRenderTextureBase;
@@ -3822,44 +3572,44 @@ void pxyDrawShadowPass(u32 frameBase)
         if (!((pxyCameraEnable[pxyCurrentCamera] == 1 || pxyCurrentCamera == pxyDrawWork->batch->packet->camera)
               && (pxyDrawWork->batch->packet->renderStatus & 2)
               && pxyDrawWork->batch->packet->cameraMask[pxyCurrentCamera] != 0
-              && (pxyDrawWork->batch->packet->unk08 == 1 || pxyDrawWork->batch->packet->unk08 == 5
-                  || pxyDrawWork->batch->packet->unk08 == 4))) {
+              && (pxyDrawWork->batch->packet->drawMode == 1 || pxyDrawWork->batch->packet->drawMode == 5
+                  || pxyDrawWork->batch->packet->drawMode == 4))) {
             continue;
         }
-        if (func_001D34C4() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
+        if (xglPacketQueuedPercent() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
             return;
         }
         pxyDrawPass = translucent;
-        func_001CD108(pxyDrawPass);
+        pxySetDrawPass(pxyDrawPass);
         {
             u64 *p;
             u64 *q;
 
-            xglDirectQueueBegin();
+            nmlPacketGsInit();
             p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
             q = p;
             GS_PUT(p, GS_ZBUF_1, GS_SET_ZBUF(sRenderDepthBase, 1, 1));
             GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(frameBuffer, cameraScreenWidth / 64, sRenderPsm, 0));
             GS_PUT(p, GS_FRAME_2, GS_SET_FRAME(frameBuffer, cameraScreenWidth / 64, sRenderPsm, 0xFFFFFFFF));
             xglDirectQueueCount += ((u32)p - (u32)q) >> 4;
-            xglDirectQueueFlush();
+            nmlPacketAddGsFlush();
         }
         {
             u64 *p;
             u64 *q;
 
-            xglDirectQueueBegin();
+            nmlPacketGsInit();
             p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
             q = p;
             GS_PUT(p, GS_SCISSOR_1, GS_SET_SCISSOR(0, cameraScreenWidth - 1, 0, 0xFF));
             xglDirectQueueCount += ((u32)p - (u32)q) >> 4;
-            xglDirectQueueFlush();
+            nmlPacketAddGsFlush();
         }
-        func_001D0AE0(frameBuffer);
+        pxyFillFrameAlphaMsbStrip(frameBuffer);
         pxyDrawWork->batch->packet->renderStatus |= 0x10000000;
-        func_001CD1AC();
+        nmlPacketClrModelCache();
         pxyUploadPacketState(pxyDrawWork->batch->packet->renderStatus & 4, pxyDrawWork->batch->packet);
-        xglPacketSelectMode(pxyDrawWork->batch->packet);
+        nmlPacketAddTransMicrocode(pxyDrawWork->batch->packet);
         pxyDrawWork->entry = &pxyDrawEntryTable[pxyDrawWork->batch->start];
         for (pxyDrawWork->i = 0; pxyDrawWork->i < pxyDrawWork->batch->count; pxyDrawWork->i++, pxyDrawWork->entry++) {
             pxyDrawWork->packet = pxyDrawWork->entry->packet;
@@ -3878,15 +3628,13 @@ void pxyDrawShadowPass(u32 frameBase)
         xglStudioSetScissor();
         pxyDrawShadowCaster(i, pxyDrawWork->frameBase);
     }
-    func_001CD134();
-    func_001CD1AC();
-    func_001CD160();
+    nmlPacketClrTextureCache();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
     pxyDrawPass = savedPass;
-    func_001CD108(pxyDrawPass);
+    pxySetDrawPass(pxyDrawPass);
 }
 
-void pxyFillFrameAlpha80(int, u32);
-void pxyModulateFrameByAlpha(u32, float);
 
 void pxyDrawMode3Pass(u32 frameBase)
 {
@@ -3902,16 +3650,16 @@ void pxyDrawMode3Pass(u32 frameBase)
     {
         u64 *start;
 
-        xglDirectQueueBegin();
+        nmlPacketGsInit();
         cursor = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
         start = cursor;
         GS_PUT(cursor, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
         GS_PUT(cursor, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
         xglDirectQueueCount += ((u32)cursor - (u32)start) >> 4;
-        xglDirectQueueFlush();
+        nmlPacketAddGsFlush();
     }
-    func_001CD1AC();
-    func_001CD160();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
     for (batchIndex = 0; batchIndex < pxyShadowBatchCount; batchIndex++) {
         int translucent;
 
@@ -3924,45 +3672,45 @@ void pxyDrawMode3Pass(u32 frameBase)
         }
         if (!((pxyCameraEnable[pxyCurrentCamera] == 1 || pxyCurrentCamera == pxyDrawWork->batch->packet->camera)
               && pxyDrawWork->batch->packet->cameraMask[pxyCurrentCamera] != 0
-              && pxyDrawWork->batch->packet->unk08 == 3
-              && pxyDrawWork->batch->packet->unk98 != 0)) {
+              && pxyDrawWork->batch->packet->drawMode == 3
+              && pxyDrawWork->batch->packet->shadowMatrix != 0)) {
             continue;
         }
         if (!started) {
             u64 *start;
 
-            pxyFillFrameAlpha80(pxyDrawWork->batch->packet->unk9C, pxyDrawWork->frameBase);
-            xglDirectQueueBegin();
+            pxyFillFrameAlpha80(pxyDrawWork->batch->packet->frameMask, pxyDrawWork->frameBase);
+            nmlPacketGsInit();
             cursor = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
             start = cursor;
             GS_PUT(cursor, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0x00FFFFFF));
             GS_PUT(cursor, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFFFFFFFF));
             xglDirectQueueCount += ((u32)cursor - (u32)start) >> 4;
-            xglDirectQueueFlush();
+            nmlPacketAddGsFlush();
             started = 1;
         }
         {
             u64 *writePtr;
 
-            xglDirectQueueBegin();
+            nmlPacketGsInit();
             writePtr = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
             cursor = writePtr;
             GS_PUT(writePtr, GS_ZBUF_1, GS_SET_ZBUF(sRenderDepthBase, 1, 1));
             xglDirectQueueCount += ((u32)writePtr - (u32)cursor) >> 4;
-            xglDirectQueueFlush();
+            nmlPacketAddGsFlush();
         }
         pxyDrawWork->batch->packet->renderStatus |= 0x01000000;
-        func_001CD108(0);
-        func_001CD1AC();
+        pxySetDrawPass(0);
+        nmlPacketClrModelCache();
         pxyUploadPacketState(pxyDrawWork->batch->packet->renderStatus & 0x01000000, pxyDrawWork->batch->packet);
-        xglPacketSelectMode(pxyDrawWork->batch->packet);
+        nmlPacketAddTransMicrocode(pxyDrawWork->batch->packet);
         pxyDrawPass = translucent;
-        func_001CD108(pxyDrawPass);
+        pxySetDrawPass(pxyDrawPass);
         pxyDrawWork->entry = &pxyDrawEntryTable[pxyDrawWork->batch->start];
         for (pxyDrawWork->i = 0; pxyDrawWork->i < pxyDrawWork->batch->count; pxyDrawWork->i++, pxyDrawWork->entry++) {
             pxyDrawWork->packet = pxyDrawWork->entry->packet;
             pxyDrawWork->part = pxyDrawWork->entry->part;
-            if (pxyDrawWork->packet->unk98 == 0) {
+            if (pxyDrawWork->packet->shadowMatrix == 0) {
                 continue;
             }
             pxyDrawWork->packet->renderStatus |= 0x01000000;
@@ -3980,24 +3728,23 @@ void pxyDrawMode3Pass(u32 frameBase)
         u64 *writePtr;
         u64 *start;
 
-        xglDirectQueueBegin();
+        nmlPacketGsInit();
         writePtr = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
         start = writePtr;
         GS_PUT(writePtr, GS_FBA_1, 0);
         GS_PUT(writePtr, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
         GS_PUT(writePtr, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
         xglDirectQueueCount += ((u32)writePtr - (u32)start) >> 4;
-        xglDirectQueueFlush();
+        nmlPacketAddGsFlush();
         pxyModulateFrameByAlpha(pxyDrawWork->frameBase, 1.0f);
     }
-    func_001CD1AC();
-    func_001CD160();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
     pxyDrawPass = savedPass;
-    func_001CD108(pxyDrawPass);
+    pxySetDrawPass(pxyDrawPass);
 }
 
 extern u16 sRenderDisplayBase;
-void func_001D4180(void);
 
 /* Writes the GS prelude and frame state of batch into the direct queue, then the entries of the batch. */
 void pxyDrawScreenSampledParts(PxyBatch *batch, u32 frameBase)
@@ -4012,7 +3759,7 @@ void pxyDrawScreenSampledParts(PxyBatch *batch, u32 frameBase)
     if (!(pxyDrawWork->batch->packet->header->flags & 0x400)) {
         return;
     }
-    xglDirectQueueBegin();
+    nmlPacketGsInit();
     p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
     q = p;
     GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(sRenderTextureBase, cameraScreenWidth / 64, sRenderPsm, 0));
@@ -4031,23 +3778,23 @@ void pxyDrawScreenSampledParts(PxyBatch *batch, u32 frameBase)
     GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(sRenderDisplayBase, cameraScreenWidth / 64, sRenderPsm, 0));
     GS_PUT(p, GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
     xglDirectQueueCount += ((u32)p - (u32)q) >> 4;
-    xglDirectQueueFlushWide();
-    func_001CD160();
-    func_001CD1AC();
+    nmlPacketAddGsFlushWide();
+    nmlPacketClrMatrixCache();
+    nmlPacketClrModelCache();
 
-    xglDirectQueueBegin();
+    nmlPacketGsInit();
     q = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
     p = q;
     GS_PUT(q, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm,
-                                       (u32)pxyDrawWork->batch->packet->unk9C));
+                                       (u32)pxyDrawWork->batch->packet->frameMask));
     GS_PUT(q, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm,
-                                       pxyDrawWork->batch->packet->unk9C | 0xFF000000));
+                                       pxyDrawWork->batch->packet->frameMask | 0xFF000000));
     xglDirectQueueCount += ((u32)q - (u32)p) >> 4;
-    xglDirectQueueFlush();
+    nmlPacketAddGsFlush();
     pxyUploadPacketState(0x1000, pxyDrawWork->batch->packet);
-    xglPacketSelectMode(pxyDrawWork->batch->packet);
+    nmlPacketAddTransMicrocode(pxyDrawWork->batch->packet);
     pxyDrawWork->entry = &pxyDrawEntryTable[pxyDrawWork->batch->start];
-    func_001D4180();
+    pxyUploadScreenSampleParams();
     for (pxyDrawWork->i = 0; pxyDrawWork->i < pxyDrawWork->batch->count;
          pxyDrawWork->i++, pxyDrawWork->entry++) {
         pxyDrawWork->packet = pxyDrawWork->entry->packet;
@@ -4062,19 +3809,17 @@ void pxyDrawScreenSampledParts(PxyBatch *batch, u32 frameBase)
         pxyDrawPartData();
     }
 
-    xglDirectQueueBegin();
+    nmlPacketGsInit();
     q = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
     p = q;
     GS_PUT(q, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
     GS_PUT(q, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
     xglDirectQueueCount += ((u32)q - (u32)p) >> 4;
-    xglDirectQueueFlush();
-    func_001CD1AC();
-    func_001CD134();
+    nmlPacketAddGsFlush();
+    nmlPacketClrModelCache();
+    nmlPacketClrTextureCache();
 }
 
-void pxyUploadModelTextures(void);
-void pxyUploadRenderFlags(int);
 
 void pxyDrawZwriteParts(PxyBatch *batch, u32 frameBase)
 {
@@ -4089,16 +3834,16 @@ void pxyDrawZwriteParts(PxyBatch *batch, u32 frameBase)
     pxyDrawWork->unk28 = 0;
     if (pxyDrawWork->batchFlags & 0x08000008) {
         if (pxyDrawPass == 1) {
-            func_001CD1AC();
-            xglDirectQueueBegin();
+            nmlPacketClrModelCache();
+            nmlPacketGsInit();
             p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
             q = p;
             GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, -1));
             GS_PUT(p, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, -1));
             xglDirectQueueCount += ((u32)p - (u32)q) >> 4;
-            xglDirectQueueFlush();
+            nmlPacketAddGsFlush();
             pxyUploadPacketState(8, pxyDrawWork->batch->packet);
-            xglPacketSelectMode(pxyDrawWork->batch->packet);
+            nmlPacketAddTransMicrocode(pxyDrawWork->batch->packet);
             pxyDrawWork->entry = &pxyDrawEntryTable[pxyDrawWork->batch->start];
             pxyDrawWork->i = 0;
             for (; pxyDrawWork->i < pxyDrawWork->batch->count; pxyDrawWork->i++, pxyDrawWork->entry++) {
@@ -4111,7 +3856,7 @@ void pxyDrawZwriteParts(PxyBatch *batch, u32 frameBase)
                     continue;
                 }
                 if (!(pxyFlags & 0x40)) {
-                    pxyUploadModelTextures();
+                    nmlPacketAddTexture();
                 }
                 pxyUploadBoneMatrices();
                 if ((pxyDrawWork->batchFlags & 0x40000000) || pxyDrawWork->lastPacket != pxyDrawWork->packet) {
@@ -4124,19 +3869,19 @@ void pxyDrawZwriteParts(PxyBatch *batch, u32 frameBase)
                 pxyDrawWork->lastPacket = pxyDrawWork->packet;
             }
 
-            xglDirectQueueBegin();
+            nmlPacketGsInit();
             q = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
             p = q;
             GS_PUT(q, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
             GS_PUT(q, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
             xglDirectQueueCount += ((u32)q - (u32)p) >> 4;
-            xglDirectQueueFlush();
-            func_001CD1AC();
+            nmlPacketAddGsFlush();
+            nmlPacketClrModelCache();
         }
     }
 }
 
-void func_001C7500(PxyBatch *batch, u32 frameBase)
+void pxyDrawFrameMaskParts(PxyBatch *batch, u32 frameBase)
 {
     u64 *cursor;
     u64 *start;
@@ -4149,18 +3894,18 @@ void func_001C7500(PxyBatch *batch, u32 frameBase)
     if (!(pxyFlags & 0x800)) {
         return;
     }
-    func_001CD1AC();
-    func_001CD160();
-    xglDirectQueueBegin();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
+    nmlPacketGsInit();
     cursor = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
     start = cursor;
     GS_PUT(cursor, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFFFFFFFF));
     GS_PUT(cursor, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFFFFFFFF));
     xglDirectQueueCount += ((u32)cursor - (u32)start) >> 4;
-    xglDirectQueueFlush();
-    func_001CCEB4(64);
+    nmlPacketAddGsFlush();
+    pxySetAlphaRef(64);
     pxyUploadPacketState(pxyDrawWork->batch->packet->renderStatus & 4, pxyDrawWork->batch->packet);
-    xglPacketSelectMode(pxyDrawWork->batch->packet);
+    nmlPacketAddTransMicrocode(pxyDrawWork->batch->packet);
     pxyDrawWork->entry = &pxyDrawEntryTable[pxyDrawWork->batch->start];
     for (pxyDrawWork->i = 0; pxyDrawWork->i < pxyDrawWork->batch->count; pxyDrawWork->i++, pxyDrawWork->entry++) {
         pxyDrawWork->packet = pxyDrawWork->entry->packet;
@@ -4175,7 +3920,7 @@ void func_001C7500(PxyBatch *batch, u32 frameBase)
             continue;
         }
         if (!(pxyFlags & 0x40)) {
-            pxyUploadModelTextures();
+            nmlPacketAddTexture();
         }
         pxyUploadBoneMatrices();
         if ((pxyDrawWork->batch->flags & 0x40000000) || pxyDrawWork->lastPacket != pxyDrawWork->packet) {
@@ -4188,20 +3933,18 @@ void func_001C7500(PxyBatch *batch, u32 frameBase)
         pxyDrawPartData();
         pxyDrawWork->lastPacket = pxyDrawWork->packet;
     }
-    xglDirectQueueBegin();
+    nmlPacketGsInit();
     start = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
     cursor = start;
     GS_PUT(start, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
     GS_PUT(start, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
     xglDirectQueueCount += ((u32)start - (u32)cursor) >> 4;
-    xglDirectQueueFlush();
-    func_001CCEB4(117);
-    func_001CD160();
+    nmlPacketAddGsFlush();
+    pxySetAlphaRef(117);
+    nmlPacketClrMatrixCache();
 }
 
-extern int D_0096A2D0;
-void pxyUploadPartState(void);
-void pxyClearDepthByFrameAlpha(int, u32);
+extern int pxyAlphaCorrectionFlag;
 
 /* Draws the entries of `batch` in draw mode `mode` into the frame at frameBase; `frameMask`
  * is or-ed into the FRAME write mask of the batch. A part is drawn only in the modes its flags
@@ -4220,19 +3963,19 @@ void pxyDrawBatch(int mode, PxyBatch *batch, u32 frameBase, int frameMask)
     pxyDrawWork->frameBase = frameBase;
     pxyDrawWork->frameMask = frameMask;
     pxyDrawWork->unk28 = 0;
-    func_001CD1AC();
-    func_001CD160();
-    xglDirectQueueBegin();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
+    nmlPacketGsInit();
     p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
     q = p;
     GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm,
-                                       pxyDrawWork->frameMask | pxyDrawWork->batch->packet->unk9C));
+                                       pxyDrawWork->frameMask | pxyDrawWork->batch->packet->frameMask));
     GS_PUT(p, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm,
-                                       pxyDrawWork->frameMask | pxyDrawWork->batch->packet->unk9C | 0xFF000000));
+                                       pxyDrawWork->frameMask | pxyDrawWork->batch->packet->frameMask | 0xFF000000));
     xglDirectQueueCount += ((u32)p - (u32)q) >> 4;
-    xglDirectQueueFlush();
+    nmlPacketAddGsFlush();
     pxyUploadPacketState(pxyDrawWork->batch->packet->renderStatus & 4, pxyDrawWork->batch->packet);
-    xglPacketSelectMode(pxyDrawWork->batch->packet);
+    nmlPacketAddTransMicrocode(pxyDrawWork->batch->packet);
     if (pxyDrawWork->batch->flags & 0x6920000) {
         pxyDrawWork->entry = &pxyDrawEntryTable[pxyDrawWork->batch->start];
         pxyDrawWork->count = pxyDrawWork->batch->count;
@@ -4258,14 +4001,14 @@ void pxyDrawBatch(int mode, PxyBatch *batch, u32 frameBase, int frameMask)
             }
             if (pxyDrawWork->packet->hideMask != 0) {
                 if (pxyDrawWork->mode != 4
-                    && !(pxyDrawWork->packet->hideMask->bits[(s16)(pxyDrawWork->part->maskBit >> 5)]
-                         & (1 << (s16)(pxyDrawWork->part->maskBit & 0x1F)))
+                    && !(pxyDrawWork->packet->hideMask->bits[(s16)(pxyDrawWork->part->matrixIndex >> 5)]
+                         & (1 << (s16)(pxyDrawWork->part->matrixIndex & 0x1F)))
                     && ((pxyDrawWork->packetFlags & 0x20000) || (pxyDrawWork->partFlags & 0x10000))) {
                     continue;
                 }
                 if (pxyDrawWork->mode == 4
-                    && ((pxyDrawWork->packet->hideMask->bits[(s16)(pxyDrawWork->part->maskBit >> 5)]
-                         & (1 << (s16)(pxyDrawWork->part->maskBit & 0x1F)))
+                    && ((pxyDrawWork->packet->hideMask->bits[(s16)(pxyDrawWork->part->matrixIndex >> 5)]
+                         & (1 << (s16)(pxyDrawWork->part->matrixIndex & 0x1F)))
                         || !((pxyDrawWork->packetFlags & 0x20000) || (pxyDrawWork->partFlags & 0x10000)))) {
                     continue;
                 }
@@ -4274,47 +4017,47 @@ void pxyDrawBatch(int mode, PxyBatch *batch, u32 frameBase, int frameMask)
                 continue;
             }
             if (pxyDrawPass != 0 && (pxyDrawWork->partFlags & 0x80)) {
-                pxyClearFrameAlphaMsb(pxyDrawWork->batch->packet->unk9C, pxyDrawWork->frameBase);
+                pxyClearFrameAlphaMsb(pxyDrawWork->batch->packet->frameMask, pxyDrawWork->frameBase);
             }
             if (pxyDrawWork->partFlags & 0x4000) {
                 if (!(pxyDrawWork->partFlags & 0x1000)) {
-                    xglDirectQueueBegin();
+                    nmlPacketGsInit();
                     q = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                     p = q;
                     GS_PUT(q, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFFFFFFFF));
                     GS_PUT(q, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFFFFFFFF));
                     xglDirectQueueCount += ((u32)q - (u32)p) >> 4;
-                    xglDirectQueueFlush();
+                    nmlPacketAddGsFlush();
                     pxyDrawWork->unk28 = 1;
                 } else {
-                    xglDirectQueueBegin();
+                    nmlPacketGsInit();
                     q = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                     p = q;
                     GS_PUT(q, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
                     GS_PUT(q, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFFFFFFFF));
                     xglDirectQueueCount += ((u32)q - (u32)p) >> 4;
-                    xglDirectQueueFlush();
+                    nmlPacketAddGsFlush();
                 }
             } else if ((pxyDrawWork->partFlags & 0x200) && (pxyDrawWork->partFlags & 0x1000)) {
                 continue;
             }
             if (pxyDrawWork->partFlags & 0x40) {
-                xglDirectQueueBegin();
+                nmlPacketGsInit();
                 q = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                 p = q;
                 GS_PUT(q, GS_FBA_1, 1);
                 xglDirectQueueCount += ((u32)q - (u32)p) >> 4;
-                xglDirectQueueFlush();
+                nmlPacketAddGsFlush();
             } else {
-                xglDirectQueueBegin();
+                nmlPacketGsInit();
                 q = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                 p = q;
-                GS_PUT(q, GS_FBA_1, D_0096A2D0);
+                GS_PUT(q, GS_FBA_1, pxyAlphaCorrectionFlag);
                 xglDirectQueueCount += ((u32)q - (u32)p) >> 4;
-                xglDirectQueueFlush();
+                nmlPacketAddGsFlush();
             }
             if (!(pxyFlags & 0x40)) {
-                pxyUploadModelTextures();
+                nmlPacketAddTexture();
             }
             pxyUploadBoneMatrices();
             if ((pxyDrawWork->batchFlags & 0x40000000) || pxyDrawWork->lastPacket != pxyDrawWork->packet) {
@@ -4326,18 +4069,18 @@ void pxyDrawBatch(int mode, PxyBatch *batch, u32 frameBase, int frameMask)
             pxyUploadPartState();
             pxyDrawPartData();
             if (pxyDrawWork->partFlags & 0x4000) {
-                xglDirectQueueBegin();
+                nmlPacketGsInit();
                 q = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                 p = q;
                 GS_PUT(q, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm,
-                                                   (u32)pxyDrawWork->batch->packet->unk9C));
+                                                   (u32)pxyDrawWork->batch->packet->frameMask));
                 GS_PUT(q, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm,
-                                                   pxyDrawWork->batch->packet->unk9C | 0xFF000000));
+                                                   pxyDrawWork->batch->packet->frameMask | 0xFF000000));
                 xglDirectQueueCount += ((u32)q - (u32)p) >> 4;
-                xglDirectQueueFlush();
+                nmlPacketAddGsFlush();
             }
             if (pxyDrawPass != 0 && (pxyDrawWork->partFlags & 0x100)) {
-                pxyClearDepthByFrameAlpha(pxyDrawWork->batch->packet->unk9C, pxyDrawWork->frameBase);
+                pxyClearDepthByFrameAlpha(pxyDrawWork->batch->packet->frameMask, pxyDrawWork->frameBase);
             }
             pxyDrawWork->lastPacket = pxyDrawWork->packet;
         }
@@ -4353,7 +4096,7 @@ void pxyDrawBatch(int mode, PxyBatch *batch, u32 frameBase, int frameMask)
                     continue;
                 }
                 if (!(pxyFlags & 0x40)) {
-                    pxyUploadModelTextures();
+                    nmlPacketAddTexture();
                 }
                 pxyUploadBoneMatrices();
                 if ((pxyDrawWork->batchFlags & 0x40000000) || pxyDrawWork->lastPacket != pxyDrawWork->packet) {
@@ -4374,7 +4117,7 @@ void pxyDrawBatch(int mode, PxyBatch *batch, u32 frameBase, int frameMask)
                     continue;
                 }
                 if (!(pxyFlags & 0x40)) {
-                    pxyUploadModelTextures();
+                    nmlPacketAddTexture();
                 }
                 pxyUploadBoneMatrices();
                 pxyUploadPartState();
@@ -4382,14 +4125,14 @@ void pxyDrawBatch(int mode, PxyBatch *batch, u32 frameBase, int frameMask)
             }
         }
     }
-    xglDirectQueueBegin();
+    nmlPacketGsInit();
     q = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
     p = q;
     GS_PUT(q, GS_FRAME_1, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
     GS_PUT(q, GS_FRAME_2, GS_SET_FRAME(pxyDrawWork->frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
     xglDirectQueueCount += ((u32)q - (u32)p) >> 4;
-    xglDirectQueueFlush();
-    func_001CD160();
+    nmlPacketAddGsFlush();
+    nmlPacketClrMatrixCache();
 }
 
 /* Half the screen, in pixels, as the GS offsets use it. */
@@ -4398,10 +4141,10 @@ void pxyDrawBatch(int mode, PxyBatch *batch, u32 frameBase, int frameMask)
 
 void pxyPlayEntryGroupFiltered(int kind, int sub);
 void pxyDrawBatch(int, PxyBatch *, u32, int);
-void pxyClearFrameAlphaMsb(int, u32);
+
 void pxyDrawZwriteParts(PxyBatch *batch, u32 frameBase);
 /* Writes the GS prelude and frame state of batch into the direct queue, then the entries of the batch. */ void pxyDrawScreenSampledParts(PxyBatch *batch, u32 frameBase);
-void func_001C7500(PxyBatch *batch, u32 frameBase);
+void pxyDrawFrameMaskParts(PxyBatch *batch, u32 frameBase);
 /* Draws the shadow caster batches of the current camera, then their glow, at frameBase. */ void pxyDrawShadowPass(u32 frameBase);
 void pxyDrawCircleShadows(int frameBase);
 void pxyDrawMode3Pass(u32 frameBase);
@@ -4415,10 +4158,10 @@ void pxyDrawBatches(int mode, u32 frameBase)
 
     table = 0;
     batch = 0;
-    func_001CD1AC();
-    func_001CD160();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
     pxyDrawPass = 0;
-    func_001CD108(pxyDrawPass);
+    pxySetDrawPass(pxyDrawPass);
     for (i = 0; i < pxyOverlayBatchCount; i++) {
         batch = pxyState.overlayBatches[i];
         if (!((pxyCameraEnable[pxyCurrentCamera] == 1 || pxyCurrentCamera == batch->packet->camera)
@@ -4427,7 +4170,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
             || (mode == 1 && !(batch->flags & 0x4000000)) || (mode == 2 && !(batch->flags & 0x2000000))) {
             continue;
         }
-        if (func_001D34C4() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
+        if (xglPacketQueuedPercent() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
             return;
         }
         if (mode == 0 && batch->packet->preDraw != 0) {
@@ -4454,7 +4197,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
             batch = &table->batches[batch->next];
             continue;
         }
-        if (func_001D34C4() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
+        if (xglPacketQueuedPercent() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
             return;
         }
         if (mode == 0 && batch->packet->preDraw != 0) {
@@ -4464,13 +4207,13 @@ void pxyDrawBatches(int mode, u32 frameBase)
             u64 *p;
             u64 *start;
 
-            pxyClearFrameAlphaMsb(batch->packet->unk9C, frameBase);
-            xglDirectQueueBegin();
+            pxyClearFrameAlphaMsb(batch->packet->frameMask, frameBase);
+            nmlPacketGsInit();
             p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
             start = p;
             GS_PUT(p, GS_FBA_1, 1);
             xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-            xglDirectQueueFlush();
+            nmlPacketAddGsFlush();
         }
         pxyDrawBatch(mode, batch, frameBase, 0);
         if (batch->packet->renderStatus & 0x80000) {
@@ -4485,12 +4228,12 @@ void pxyDrawBatches(int mode, u32 frameBase)
                 u64 *p;
                 u64 *start;
 
-                xglDirectQueueBegin();
+                nmlPacketGsInit();
                 p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                 start = p;
                 GS_PUT(p, GS_FBA_1, 0);
                 xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-                xglDirectQueueFlush();
+                nmlPacketAddGsFlush();
             }
             for (y = 0; y < cameraScreenHeight; y += SCREEN_HALF_H) {
                 int pass;
@@ -4499,7 +4242,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
                     u64 *p;
                     u64 *start;
 
-                    xglDirectQueueBegin();
+                    nmlPacketGsInit();
                     p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                     start = p;
                     GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(sRenderTextureBase, cameraScreenWidth / 64, sRenderPsm, 0));
@@ -4520,7 +4263,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
                     GS_PUT(p, GS_TEX1_1, GS_SET_TEX1(0, 0, 1, 1, 0, 0, 0));
                     GS_PUT(p, GS_FBA_1, 1);
                     xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-                    xglDirectQueueFlushWide();
+                    nmlPacketAddGsFlushWide();
                 }
                 for (pass = 0; pass < 1; pass++) {
                     int alphas[2] = { 40, 48 };
@@ -4534,7 +4277,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
                         u64 *p;
                         u64 *start;
 
-                        xglDirectQueueBegin();
+                        nmlPacketGsInit();
                         p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                         start = p;
                         GS_PUT(p, GS_ALPHA_1, GS_SET_ALPHA(0, 1, 2, 1, alpha));
@@ -4544,13 +4287,13 @@ void pxyDrawBatches(int mode, u32 frameBase)
                         GS_PUT(p, GS_UV, GS_SET_UV(((cameraScreenWidth - shift) << 4) + 9, ((SCREEN_HALF_H + y) << 4) + 9));
                         GS_PUT(p, GS_XYZF2, GS_SET_XYZ(((cameraScreenWidth - SCREEN_HALF_W + 0x800) << 4), 0x8000, 0));
                         xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-                        xglDirectQueueFlushWide();
+                        nmlPacketAddGsFlushWide();
                     }
                     {
                         u64 *p;
                         u64 *start;
 
-                        xglDirectQueueBegin();
+                        nmlPacketGsInit();
                         p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                         start = p;
                         GS_PUT(p, GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 1, 0, 1, 0, 0));
@@ -4559,13 +4302,13 @@ void pxyDrawBatches(int mode, u32 frameBase)
                         GS_PUT(p, GS_UV, GS_SET_UV((cameraScreenWidth << 4) + 9, ((SCREEN_HALF_H + y) << 4) + 9));
                         GS_PUT(p, GS_XYZF2, GS_SET_XYZ(((cameraScreenWidth - SCREEN_HALF_W - shift + 0x800) << 4), 0x8000, 0));
                         xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-                        xglDirectQueueFlushWide();
+                        nmlPacketAddGsFlushWide();
                     }
                     {
                         u64 *p;
                         u64 *start;
 
-                        xglDirectQueueBegin();
+                        nmlPacketGsInit();
                         p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                         start = p;
                         GS_PUT(p, GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 1, 0, 1, 0, 0));
@@ -4574,13 +4317,13 @@ void pxyDrawBatches(int mode, u32 frameBase)
                         GS_PUT(p, GS_UV, GS_SET_UV((cameraScreenWidth << 4) + 8, ((SCREEN_HALF_H + y) << 4) + 9));
                         GS_PUT(p, GS_XYZF2, GS_SET_XYZ(((cameraScreenWidth - SCREEN_HALF_W + 0x800) << 4), ((0x800 - shift) << 4), 0));
                         xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-                        xglDirectQueueFlushWide();
+                        nmlPacketAddGsFlushWide();
                     }
                     {
                         u64 *p;
                         u64 *start;
 
-                        xglDirectQueueBegin();
+                        nmlPacketGsInit();
                         p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                         start = p;
                         GS_PUT(p, GS_PRIM, GS_SET_PRIM(6, 0, 1, 0, 1, 0, 1, 0, 0));
@@ -4589,14 +4332,14 @@ void pxyDrawBatches(int mode, u32 frameBase)
                         GS_PUT(p, GS_UV, GS_SET_UV((cameraScreenWidth << 4) + 8, ((SCREEN_HALF_H + y - shift) << 4) + 9));
                         GS_PUT(p, GS_XYZF2, GS_SET_XYZ(((cameraScreenWidth - SCREEN_HALF_W + 0x800) << 4), 0x8000, 0));
                         xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-                        xglDirectQueueFlushWide();
+                        nmlPacketAddGsFlushWide();
                     }
                 }
                 {
                     u64 *p;
                     u64 *start;
 
-                    xglDirectQueueBegin();
+                    nmlPacketGsInit();
                     p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                     start = p;
                     GS_PUT(p, GS_FBA_1, 0);
@@ -4609,13 +4352,13 @@ void pxyDrawBatches(int mode, u32 frameBase)
                     GS_PUT(p, GS_UV, GS_SET_UV((cameraScreenWidth << 4), ((SCREEN_HALF_H + y) << 4)));
                     GS_PUT(p, GS_XYZF2, GS_SET_XYZ(((cameraScreenWidth - SCREEN_HALF_W + 0x7FF) << 4), (0x7FF << 4), 0));
                     xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-                    xglDirectQueueFlushWide();
+                    nmlPacketAddGsFlushWide();
                 }
                 {
                     u64 *p;
                     u64 *start;
 
-                    xglDirectQueueBegin();
+                    nmlPacketGsInit();
                     p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
                     start = p;
                     GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
@@ -4631,10 +4374,10 @@ void pxyDrawBatches(int mode, u32 frameBase)
                     GS_PUT(p, GS_XYZF2, GS_SET_XYZ(((cameraScreenWidth - SCREEN_HALF_W + 0x7FF) << 4), ((y + 0x7FF) << 4), 0));
                     GS_PUT(p, GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
                     xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-                    xglDirectQueueFlushWide();
+                    nmlPacketAddGsFlushWide();
                 }
             }
-            func_001CD134();
+            nmlPacketClrTextureCache();
         }
         if (mode == 0 && batch->packet->postDraw != 0) {
             batch->packet->postDraw(pxyCurrentCamera, pxyDrawPass);
@@ -4648,25 +4391,25 @@ void pxyDrawBatches(int mode, u32 frameBase)
         u64 *p;
         u64 *start;
 
-        xglDirectQueueBegin();
+        nmlPacketGsInit();
         p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
         start = p;
         GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
         GS_PUT(p, GS_FRAME_2, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
         xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-        xglDirectQueueFlush();
+        nmlPacketAddGsFlush();
     }
     if (mode == 0) {
         pxyPlayEntryGroupFiltered(0, pxyCurrentCamera);
     }
     pxyDrawPass = 1;
-    func_001CD108(pxyDrawPass);
+    pxySetDrawPass(pxyDrawPass);
     table = &pxyBatchTables[0];
     batch = pxyFirstBatch;
     while (pxyFirstBatch != 0) {
         if (!((pxyCameraEnable[pxyCurrentCamera] == 1 || pxyCurrentCamera == batch->packet->camera)
               && batch->packet->cameraMask[pxyCurrentCamera] != 0 && (batch->packet->renderStatus & 0x40000)
-              && !(batch->packet->renderStatus & 0x10) && !(batch->packet->unkD4 & 1))
+              && !(batch->packet->renderStatus & 0x10) && !(batch->packet->unmodeled_D4 & 1))
             || (mode == 4 && !(batch->packet->renderStatus & 0x20000) && !(batch->flags & 0x20000))
             || (mode == 1 && !(batch->flags & 0x4000000)) || (mode == 2 && !(batch->flags & 0x2000000))) {
             if (batch->next < 0) {
@@ -4675,7 +4418,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
             batch = &table->batches[batch->next];
             continue;
         }
-        if (func_001D34C4() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
+        if (xglPacketQueuedPercent() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
             return;
         }
         if (mode == 0 || mode == 2 || mode == 4) {
@@ -4687,10 +4430,10 @@ void pxyDrawBatches(int mode, u32 frameBase)
         pxyDrawBatch(mode, batch->translucent, frameBase, 0);
         if (mode == 0 || mode == 2 || mode == 4) {
             pxyDrawPass = 0;
-            func_001CD108(pxyDrawPass);
-            func_001C7500(batch, frameBase);
+            pxySetDrawPass(pxyDrawPass);
+            pxyDrawFrameMaskParts(batch, frameBase);
             pxyDrawPass = 1;
-            func_001CD108(pxyDrawPass);
+            pxySetDrawPass(pxyDrawPass);
         }
         if (batch->next < 0) {
             break;
@@ -4698,7 +4441,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
         batch = &table->batches[batch->next];
     }
     if ((pxyFlags & 0x100000) && mode == 0) {
-        if (func_001D34C4() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
+        if (xglPacketQueuedPercent() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
             return;
         }
         pxyDrawShadowPass(frameBase);
@@ -4714,7 +4457,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
                 || (mode == 1 && !(batch->flags & 0x4000000)) || (mode == 2 && !(batch->flags & 0x2000000))) {
                 continue;
             }
-            if (func_001D34C4() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
+            if (xglPacketQueuedPercent() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
                 return;
             }
             if (mode == 0 || mode == 2 || mode == 4) {
@@ -4724,7 +4467,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
         }
     }
     if (!(pxyFlags & 0x100000) && mode == 0) {
-        if (func_001D34C4() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
+        if (xglPacketQueuedPercent() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
             return;
         }
         pxyDrawShadowPass(frameBase);
@@ -4736,7 +4479,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
     while (pxyFirstBatch != 0) {
         if (!((pxyCameraEnable[pxyCurrentCamera] == 1 || pxyCurrentCamera == batch->packet->camera)
               && batch->packet->cameraMask[pxyCurrentCamera] != 0 && !(batch->packet->renderStatus & 0x40000)
-              && !(batch->packet->renderStatus & 0x10) && !(batch->packet->unkD4 & 1))
+              && !(batch->packet->renderStatus & 0x10) && !(batch->packet->unmodeled_D4 & 1))
             || (mode == 4 && !(batch->packet->renderStatus & 0x20000) && !(batch->flags & 0x20000))
             || (mode == 1 && !(batch->flags & 0x4000000)) || (mode == 2 && !(batch->flags & 0x2000000))) {
             if (batch->next < 0) {
@@ -4745,7 +4488,7 @@ void pxyDrawBatches(int mode, u32 frameBase)
             batch = &table->batches[batch->next];
             continue;
         }
-        if (func_001D34C4() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
+        if (xglPacketQueuedPercent() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
             return;
         }
         if (mode == 0 || mode == 2 || mode == 4) {
@@ -4757,10 +4500,10 @@ void pxyDrawBatches(int mode, u32 frameBase)
         pxyDrawBatch(mode, batch->translucent, frameBase, 0);
         if (mode == 0 || mode == 2 || mode == 4) {
             pxyDrawPass = 0;
-            func_001CD108(pxyDrawPass);
-            func_001C7500(batch, frameBase);
+            pxySetDrawPass(pxyDrawPass);
+            pxyDrawFrameMaskParts(batch, frameBase);
             pxyDrawPass = 1;
-            func_001CD108(pxyDrawPass);
+            pxySetDrawPass(pxyDrawPass);
         }
         if (batch->next < 0) {
             break;
@@ -4771,16 +4514,16 @@ void pxyDrawBatches(int mode, u32 frameBase)
         u64 *p;
         u64 *start;
 
-        xglDirectQueueBegin();
+        nmlPacketGsInit();
         p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
         start = p;
         GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
         GS_PUT(p, GS_FRAME_2, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
         xglDirectQueueCount += ((u32)p - (u32)start) >> 4;
-        xglDirectQueueFlush();
+        nmlPacketAddGsFlush();
     }
     if (mode == 0) {
-        if (func_001D34C4() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
+        if (xglPacketQueuedPercent() > 85.0f || xglPacketBufferUsedPercent() > 85.0f) {
             return;
         }
         pxyPlayEntryGroupFiltered(1, pxyCurrentCamera);
@@ -4794,17 +4537,17 @@ void pxyDrawSeparateBatches(int mode, u32 frameBase)
     u64 *p;
     u64 *q;
 
-    func_001CD1AC();
-    func_001CD160();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
     pxyDrawPass = 0;
-    func_001CD108(pxyDrawPass);
+    pxySetDrawPass(pxyDrawPass);
     for (i = 0; i < pxySeparateBatchCount; i++) {
         batch = pxyState.unk820[i];
         if (!((pxyCameraEnable[pxyCurrentCamera] == 1 || pxyCurrentCamera == batch->packet->camera)
               && batch->packet->cameraMask[pxyCurrentCamera] != 0)) {
             continue;
         }
-        if (func_001D34C4() > 85.0f) {
+        if (xglPacketQueuedPercent() > 85.0f) {
             return;
         }
         if (xglPacketBufferUsedPercent() > 85.0f) {
@@ -4813,22 +4556,22 @@ void pxyDrawSeparateBatches(int mode, u32 frameBase)
         pxyDrawBatch(mode, batch, frameBase, 0);
     }
 
-    xglDirectQueueBegin();
+    nmlPacketGsInit();
     p = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
     q = p;
     GS_PUT(p, GS_FRAME_1, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
     GS_PUT(p, GS_FRAME_2, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
     xglDirectQueueCount += ((u32)p - (u32)q) >> 4;
-    xglDirectQueueFlush();
+    nmlPacketAddGsFlush();
     pxyDrawPass = 1;
-    func_001CD108(pxyDrawPass);
+    pxySetDrawPass(pxyDrawPass);
     for (i = 0; i < pxySeparateBatchCount; i++) {
         batch = pxyState.unk820[i];
         if (!((pxyCameraEnable[pxyCurrentCamera] == 1 || pxyCurrentCamera == batch->packet->camera)
               && batch->packet->cameraMask[pxyCurrentCamera] != 0)) {
             continue;
         }
-        if (func_001D34C4() > 85.0f) {
+        if (xglPacketQueuedPercent() > 85.0f) {
             return;
         }
         if (xglPacketBufferUsedPercent() > 85.0f) {
@@ -4839,37 +4582,32 @@ void pxyDrawSeparateBatches(int mode, u32 frameBase)
         pxyDrawBatch(mode, batch->translucent, frameBase, 0);
     }
 
-    xglDirectQueueBegin();
+    nmlPacketGsInit();
     q = (u64 *)&xglDirectQueueBuffer[xglDirectQueueCount];
     p = q;
     GS_PUT(q, GS_FRAME_1, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm, 0));
     GS_PUT(q, GS_FRAME_2, GS_SET_FRAME(frameBase, cameraScreenWidth / 64, sRenderPsm, 0xFF000000));
     xglDirectQueueCount += ((u32)q - (u32)p) >> 4;
-    xglDirectQueueFlush();
+    nmlPacketAddGsFlush();
 }
 
-extern PxyCamera *D_0096A2E8;
+extern XglCamera *pxyActiveCamera;
 extern u16 sRenderFrameBase;
-void xglStudioSelect(int);
-void xglPacketInitVuState(void);
-void xglSetFullScreenScissor(void);
-void pxyClearFrame(int, int);
-void pxyDrawTextureRect(int, void *, int, void *);
 
-void func_001CBCE4(void)
+void nmlModelFlushSub(void)
 {
     DoublewordAlignedVector4 rect;
     DoublewordAlignedVector4 vec;
     int i;
 
-    D_0096A2E8 = xglStudioSelectGetActiveCamera(pxyCurrentCamera);
-    D_0096A2D0 = 0;
+    pxyActiveCamera = xglStudioSelectGetActiveCamera(pxyCurrentCamera);
+    pxyAlphaCorrectionFlag = 0;
     xglStudioSelect(pxyCurrentCamera);
-    func_001CD134();
-    func_001CD1AC();
+    nmlPacketClrTextureCache();
+    nmlPacketClrModelCache();
     xglPacketModeReset();
-    func_001CD160();
-    if (D_0096A2E8 == 0) {
+    nmlPacketClrMatrixCache();
+    if (pxyActiveCamera == 0) {
         return;
     }
     if (pxyCameraEnable[pxyCurrentCamera] == 0) {
@@ -4885,10 +4623,10 @@ void func_001CBCE4(void)
         rect = vec;
         xglStudioSetScissor();
         xglPacketInitVuState();
-        pxyClearFrame(sRenderFrameBase, 3);
+        nmlPacketAddScreenClear(sRenderFrameBase, 3);
         if (!(pxyFlags & 0x4000)) {
             pxyDrawBatches(1, sRenderFrameBase);
-            pxyDrawTextureRect(sRenderFrameBase, D_0096A2E8->unk00 + 0x60, sRenderDisplayBase, &rect);
+            pxyDrawTextureRect(sRenderFrameBase, &pxyActiveCamera->screen.window, sRenderDisplayBase, &rect);
             pxyDrawTextureRect(sRenderDisplayBase, &rect, sRenderFrameBase, &rect);
         }
         xglSetFullScreenScissor();
@@ -4897,7 +4635,7 @@ void func_001CBCE4(void)
         xglStudioSetScissor();
         xglPacketInitVuState();
         if (pxyCurrentCamera != 0 || (pxyFlags & 1)) {
-            pxyClearFrame(sRenderDisplayBase, 3);
+            nmlPacketAddScreenClear(sRenderDisplayBase, 3);
         }
         if (!(pxyFlags & 0x4000)) {
             pxyDrawBatches(4, sRenderDisplayBase);
@@ -4910,7 +4648,7 @@ void func_001CBCE4(void)
     xglStudioSetScissor();
     xglPacketInitVuState();
     if (!(pxyFlags & 0x8000)) {
-        pxyClearFrame(sRenderDisplayBase, 11);
+        nmlPacketAddScreenClear(sRenderDisplayBase, 11);
     }
     pxyDrawBatches(0, sRenderDisplayBase);
     for (i = 0; i < 16; i++) {
@@ -4925,28 +4663,28 @@ void func_001CBCE4(void)
     }
     xglSetFullScreenScissor();
     if (pxyFlags & 0x100) {
-        pxyClearFrame(sRenderDisplayBase, 8);
+        nmlPacketAddScreenClear(sRenderDisplayBase, 8);
         xglStudioSetScissor();
         xglPacketInitVuState();
         pxyDrawSeparateBatches(3, sRenderDisplayBase);
         xglSetFullScreenScissor();
     }
     if (pxyFlags & 0x4000) {
-        pxyClearFrame(sRenderDisplayBase, 2);
+        nmlPacketAddScreenClear(sRenderDisplayBase, 2);
     }
     if (pxyFlags & 4) {
         if (pxyFlags & 0x2000) {
             xglStudioSetScissor();
             xglPacketInitVuState();
             pxyClearFrameAlphaMsb(0, sRenderDisplayBase);
-            D_0096A2D0 = 1;
+            pxyAlphaCorrectionFlag = 1;
             pxyDrawBatches(2, sRenderDisplayBase);
             xglSetFullScreenScissor();
-            D_0096A2D0 = 0;
+            pxyAlphaCorrectionFlag = 0;
         } else {
             xglStudioSetScissor();
             xglPacketInitVuState();
-            pxyClearFrame(sRenderFrameBase, 7);
+            nmlPacketAddScreenClear(sRenderFrameBase, 7);
             if (!(pxyFlags & 0x200)) {
                 pxyDrawBatches(2, sRenderFrameBase);
             }
@@ -4956,115 +4694,106 @@ void func_001CBCE4(void)
     }
 }
 
-void pxyClearEntries(void);
-void pxyBegin(void *);
-void pxyEnd(void *);
-void pxyDrawEntries(void);
 void pxyPlayEntryGroup(int key);
-void func_001CBCE4(void);
-void func_001CCF84(void *);
-void pxyUpdateReflectionRotation(int);
-void xglPacketSelectDefaultMode(void);
-void pxyResetGsState(void);
-void func_001D4498(int);
-const unsigned char D_0068F0B8[24] = "pxyFlush";
-extern int D_0096A2F8;
-extern f32 D_0096A2FC;
-extern f32 D_0096A300;
+void nmlModelFlushSub(void);
+const char pxyFlushProfileName[24] = "pxyFlush";
+extern int pxyFlushSubmitCount;
+extern f32 pxyPacketFillPercent;
+extern f32 pxyPacketBufferPercent;
 
 void pxyFlush(void) {
-    pxyBegin(&D_0068F0B8);
+    pxyProfileBegin(pxyFlushProfileName);
     pxyResetSubmitCount();
     xglPacketSelectDefaultMode();
-    func_001CCF84(&D_00645FA0);
-    func_001D4498(pxyFlags & 0x80);
+    pxySetGlobalColor(&pxyGlobalColor);
+    pxySetBlackFogFlag(pxyFlags & 0x80);
     pxyUpdateReflectionRotation(pxyFlags & 0x40);
     xglPacketSetMode3Flag(pxyFlags & 0x10);
     xglPacketSetMode4Flag(pxyFlags & 0x80000);
     pxySetRotateFreeze(pxyFreezeAnimation);
     pxyResetGsState();
     pxyPlayEntryGroup(3);
-    if ((D_0096A2BC != 0) || (pxyEntryCount != 0) || (pxyDrawCallbackCount != 0)) {
+    if ((pxyBatchedModelCount != 0) || (pxyEntryCount != 0) || (pxyDrawCallbackCount != 0)) {
         for (pxyCurrentCamera = 0; pxyCurrentCamera < 4; pxyCurrentCamera += 1) {
-            func_001CBCE4();
+            nmlModelFlushSub();
         }
     }
     pxyPlayEntryGroup(2);
     xglLightPackCacheInvalidate();
-    pxyEnd(&D_0068F0B8);
-    if (D_0069E0C0 != 0) {
-        pxyDrawEntries();
+    pxyProfileEnd(pxyFlushProfileName);
+    if (pxyProfileDrawFlag != 0) {
+        pxyProfileDrawEntries();
     }
-    pxyClearEntries();
-    D_0096A2F8 = pxyGetSubmitCount();
-    D_0096A2FC = func_001D34C4();
-    D_0096A300 = xglPacketBufferUsedPercent();
-    D_0096A304 = 1;
-    D_0096A310 = ((f32) D_0096A308 / 4096.0f) * 100.0f;
-    D_0096A314 = ((f32) (D_0096A30C - 0x1000) / 2560.0f) * 100.0f;
+    pxyProfileClearEntries();
+    pxyFlushSubmitCount = pxyGetSubmitCount();
+    pxyPacketFillPercent = xglPacketQueuedPercent();
+    pxyPacketBufferPercent = xglPacketBufferUsedPercent();
+    pxyFlushDoneFlag = 1;
+    pxyOpaqueEntryUsagePercent = ((f32) pxyOpaqueEntryCursor / 4096.0f) * 100.0f;
+    pxyTranslucentEntryUsagePercent = ((f32) (pxyTranslucentEntryCursor - 0x1000) / 2560.0f) * 100.0f;
     pxySetFlushDone();
 }
 
-void func_001B9728(void);
-void func_001B97CC(void);
+void pxyInitBatchTables(void);
+void pxyInitSlots(void);
 
 /* Reset the pxy state: records, counters and globals, entry table and slots. */
-void pxyResetState(void)
+void nmlModelFlushClear(void)
 {
-    func_001B97CC();
+    pxyInitSlots();
     pxyResetCounters();
     pxyClearEntryTable();
-    func_001B9728();
+    pxyInitBatchTables();
 }
 
-void func_001CC4EC(void) {
-    xglPacketAddFlushEIrq();
+void xglRenderFrameBeginFlushEIrq(void) {
+    nmlPacketAddWaitMicrocodeIrq();
 }
 
-void func_001CC51C(void) {
-    xglPacketAddFlushEIrq();
+void xglRenderFrameEndFlushEIrq(void) {
+    nmlPacketAddWaitMicrocodeIrq();
 }
 
-int func_001CC54C(void) {
-    return D_0096A2F8;
+int pxyFlushSubmitCountGet(void) {
+    return pxyFlushSubmitCount;
 }
 
-f32 func_001CC574(void) {
-    return D_0096A2FC;
+f32 pxyFlushPacketFillPercentGet(void) {
+    return pxyPacketFillPercent;
 }
 
-f32 func_001CC59C(void) {
-    return D_0096A300;
+f32 pxyFlushPacketBufferPercentGet(void) {
+    return pxyPacketBufferPercent;
 }
 
-f32 func_001CC5C4(void) {
-    return D_0096A310;
+f32 pxyOpaqueEntryUsagePercentGet(void) {
+    return pxyOpaqueEntryUsagePercent;
 }
 
-f32 func_001CC5EC(void) {
-    return D_0096A314;
+f32 pxyTranslucentEntryUsagePercentGet(void) {
+    return pxyTranslucentEntryUsagePercent;
 }
 
-extern int D_0096A2F4;
+extern int pxyFrameCopyRequested;
 
-void func_001CC614(void) {
-    D_0096A2F4 = 1;
+void pxyFrameCopyRequest(void) {
+    pxyFrameCopyRequested = 1;
 }
 
-extern u16 D_00645842;
+extern u16 sRenderFlipBase;
 
 void pxyAddFrameCopyPacket(XglPacket *packet)
 {
     u64 pairs[7][2];
     int count;
 
-    if (D_0096A2F4 != 0) {
+    if (pxyFrameCopyRequested != 0) {
         count = 0;
         pairs[count][0] = 0x1000000000008000ULL;
         pairs[count++][1] = 14;
         pairs[count][0] = 0;
         pairs[count++][1] = 63;
-        pairs[count][0] = ((D_00645842 << 5) | 0x80000) | ((u64)sRenderPsm << 24) | ((u64)(sRenderDisplayBase << 5) << 32) | ((u64)sRenderPsm << 56) | 0x0008000000000000ULL;
+        pairs[count][0] = ((sRenderFlipBase << 5) | 0x80000) | ((u64)sRenderPsm << 24) | ((u64)(sRenderDisplayBase << 5) << 32) | ((u64)sRenderPsm << 56) | 0x0008000000000000ULL;
         pairs[count++][1] = 80;
         pairs[count][0] = 0;
         pairs[count++][1] = 81;
@@ -5078,7 +4807,7 @@ void pxyAddFrameCopyPacket(XglPacket *packet)
         sceVif1PkAddDirectDataN(packet, pairs, count);
         sceVif1PkCloseDirectHLCode(packet);
     }
-    D_0096A2F4 = 0;
+    pxyFrameCopyRequested = 0;
 }
 
 void pxyPlayEntryGroup5(int unused)
@@ -5086,37 +4815,36 @@ void pxyPlayEntryGroup5(int unused)
     pxyPlayEntryGroup(5);
 }
 
-void func_001B9B44(void);
+void pxyInitCounters(void);
 void pxyInitTables(void);
-void pxyInitShadowTextures(void);
-extern void (*D_00645874[])(void);
-extern void (*D_00645878[])(void);
+void CONSTRUCT_CIRCLR_SHADOW(void);
 void pxyAddFrameCopyPacket(XglPacket *packet);
 void pxyPlayEntryGroup5(int unused);
 
-/* Init the pxy module: the reset helpers, then the two callbacks it installs in D_00645878 and D_00645874. */
-void pxyInit(void)
+/* Init the pxy module: the reset helpers, then the two callbacks it installs in pxyFrameCopyHooks and pxyEntryGroupHooks. */
+void nmlModelConstruct(void)
 {
-    D_0069E0C0 = 0;
+    pxyProfileDrawFlag = 0;
     pxyResetSlots();
-    func_001B9B44();
+    pxyInitCounters();
     pxyInitTables();
     pxyResetBatchTables();
-    pxyInitShadowTextures();
-    D_0096A2F4 = 0;
-    D_00645878[0] = &pxyAddFrameCopyPacket;
-    D_00645874[0] = &pxyPlayEntryGroup5;
+    CONSTRUCT_CIRCLR_SHADOW();
+    pxyFrameCopyRequested = 0;
+    pxyFrameCopyHooks[0] = &pxyAddFrameCopyPacket;
+    pxyEntryGroupHooks[0] = &pxyPlayEntryGroup5;
 }
 
 #include "quadword.h"
 
-/* Copies one 16-byte vector through the $2 quadword register. */
-void xglVectorCopy_001CC998(register Vector4 *destination, register const Vector4 *source) {
+/* Copies one 16-byte vector through the $2 quadword register. Any quadword (a Vector4, a matrix row, a sort entry) is
+ * passed by address, so the parameters are untyped. */
+void xglVectorCopy_001CC998(register void *destination, register const void *source) {
     QuadwordCopy(destination, source);
 }
 
 /* Copies a 4x4 float matrix (four quadwords) through the $2 quadword register. */
-void xglMatrixCopy_001CC9C4(register Matrix4 *destination, register const Matrix4 *source) {
+void xglMatrixCopy_001CC9C4(register Matrix4 destination, register Matrix4 source) {
     QuadwordCopyMatrix(destination, source);
 }
 
@@ -5127,19 +4855,19 @@ void xglVectorClear(register Vector4 *destination) {
 
 #include "vu0_macro.h"
 
-void xglVectorAddXYZ_001CCA30(register AlignedVector4 *dst, register AlignedVector4 *first, register AlignedVector4 *second)
+void xglVectorAddXYZ_001CCA30(register void *dst, register void *first, register void *second)
 {
     Vu0AddVectorXYZ(dst, first, second);
 }
 
-void xglVectorSubXYZ_001CCA68(register AlignedVector4 *dst, register AlignedVector4 *minuend, register AlignedVector4 *subtrahend)
+void xglVectorSubXYZ_001CCA68(register void *dst, register void *minuend, register void *subtrahend)
 {
     Vu0SubVectorXYZ(dst, minuend, subtrahend);
 }
 
 /* .data of this file (0x645F10-0x645FB0). */
-int D_00645F10[32] = { 0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31 };
+int pxyFadeRampOrderTable[32] = { 0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 8, 9, 10, 11, 12, 13, 14, 15, 24, 25, 26, 27, 28, 29, 30, 31 };
 
 int pxyCameraEnable[4] = { 0 };
 
-Vector4 D_00645FA0 = { 0 };
+Vector4 pxyGlobalColor = { 0 };

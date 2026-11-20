@@ -2,19 +2,31 @@
 #include "shared.h"
 #include "main/sv_get_image_item.h"
 #include "main/srs.h"
+#include "main/sdv.h"
+#include "main/m_math.h"
+#include "main/sef.h"
+#include "main/res_get_path.h"
 #include "main/sm_initilize.h"
 #include "vu0_macro.h"
 #include "gs.h"
+#include "main/xgl_packet.h"
+#include "main/nml_model_set.h"
+#include "main/pxy_packet_state.h"
+#include "main/xgl_studio.h"
+#include "main/vu0_matrix.h"
+#include "main/vu0_rotate.h"
+#include "main/vu0_vector.h"
+#include "main/xgl_2.h"
 
 /* Small data before the draw state pointer: five 8-byte tag strings, the sort count, the draw mode and the fog value. */
-/* Scaffold .bss object of this TU: 384 bytes at D_006AF7C0 (the scaffold split it at D_006AF890, a 16-byte aligned vector at +0xD0). */
-static u8 D_006AF7C0[384];
-void *D_0069DAE4 = D_006AF7C0;
-char D_0069DAE8[8] = "sDir";
-char D_0069DAF0[8] = "sCol";
-char D_0069DAF8[8] = "sSha";
-char D_0069DB00[8] = "sPntP";
-char D_0069DB08[8] = "sPntC";
+/* Scaffold .bss object of this TU: 384 bytes at svEffectLightSet (the scaffold split it at 0x6AF890, a 16-byte aligned vector at +0xD0). */
+static u8 svEffectLightSet[384];
+void *svActiveLightSet = svEffectLightSet;
+char lightLogDirectionLabel[8] = "sDir";
+char lightLogColorLabel[8] = "sCol";
+char lightLogShadowLabel[8] = "sSha";
+char lightLogPointPositionLabel[8] = "sPntP";
+char lightLogPointColorLabel[8] = "sPntC";
 int svSortCount = 0;
 int _draw3D = 0;
 int svFogValue = -1;
@@ -22,33 +34,23 @@ int svFogValue = -1;
 /* Scaffold .sbss items of this TU only (no other TU reads them), in address order from svDrawTestWord. */
 static u64 svDrawTestWord;
 static int svZTestEnable;
-static void *svVertexScale;
-static void *svRecordScale;
-static int D_0069E2EC;
+static const Vector4 *svVertexScale;
+static const Vector4 *svRecordScale;
+static int svRequestedMapperIndex;
 static int svActiveMapperIndex;
-static void *D_0069E2F4;
-static void *D_0069E2F8;
-static int D_0069E2FC;
-static int D_0069E300;
+static void *svRecordSourcePointer;
+static void *svRecordTargetPointer;
+static int svItemModeFlags;
+static Vector4 *svRecordSourceRowsPointer;
 static int svDrawMode;
-static int D_0069E308;
+static int svPolygonAxesMode;
 static Matrix4 *svRecordMatrix;
-static int D_0069E310;
+static int svPivotAddress;
 static Matrix4 *svViewMatrix;
-static int D_0069E318;
+static int svItemDrawFlags;
 
 
 typedef struct XglPacket XglPacket;
-
-typedef struct DrawList {
-    u8 *entries;
-    int flush_code;     /* +0x4: 40 (0x28) at setup; the same code svDrawListFlush appends as its closing record. */
-    int end_index;
-    int begin_index;
-} DrawList;
-
-/* One 128-bit quadword (sq/lq width). */
-typedef unsigned int Quadword __attribute__((mode(TI)));
 
 typedef struct DrawListEntry {
     unsigned int flush_word;        /* +0x00: VIF FLUSH, 0x11000000 */
@@ -67,11 +69,6 @@ typedef struct DrawListEntry {
 } DrawListEntry;
 
 extern void *memset(void *destination, int value, unsigned int count);
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-extern void sceVif1PkRef(XglPacket *packet, const void *environment,
-                         int count, int mode, int offset, int flags);
-extern XglPacket *xglPacketGetCurrent(void);
-void sceVif1PkAddCode(XglPacket *packet, u32 word);
 /*
  * Appends one draw record at the end cursor: a VIF FLUSH, STCYCL 4,4, an
  * UNPACK to VU address `vuAddress` and the operands. The record starts at the
@@ -118,18 +115,15 @@ typedef struct SvViewUpload {
  * the draw list header and the draw-list storage that follows it. */
 static SortItem svSortItems[SV_SORT_ITEM_LIMIT];
 static SortBucket svSortBuckets[SV_SORT_BUCKET_COUNT];
-static Matrix4 D_006B4980[4];
-static Vector4 D_006B4A80;
-static u8 D_006B4A90[256];
+static Matrix4 svEffectCameraMatrices[4];
+static Vector4 svEffectScaleVector;
+static u8 svDrawStatePacketBuffer[256];
 static SvViewUpload svViewUpload;
 static DrawList svDrawList;
-static u8 D_006B4C40[46016];
-static u8 D_006C0000[65536];
-static u8 D_006D0000[384];
-static u8 D_006D0180[59072];
-extern u32 D_003ED4A0[];
-extern int D_002B3740[];
-extern unsigned char D_002B3750[];
+static u8 _scheduler[0x29C00];
+extern u32 svDrawModeTagTable[];
+extern int svStaticRefQuadwordCount[];
+extern unsigned char svStaticRefData[];
 
 /*
  * Clears the depth-sort state: the item count, the 0x200 bucket heads
@@ -202,30 +196,25 @@ void svSortAdd(int id, int flags, float depth)
     svSortCount++;
 }
 
-/* One A+D entry: register data, then register address. */
-typedef struct DrawStateRegister {
-    u64 data;
-    u64 address;
-} DrawStateRegister;
 /* Eight doublewords of GS state, one row of the draw state tables. */
 typedef struct DrawStateWords {
     u64 words[8];
 } DrawStateWords;
-/* Read-only scaffold items of this TU from svAlphaTestTable up to D_0068C1D0: GS alpha and state tables, the identity-like matrix and the vector. */
+/* Read-only scaffold items of this TU from svAlphaTestTable up to svEffectProjectionMatrix: GS alpha and state tables, the identity-like matrix and the vector. */
 const u64 svAlphaTestTable[4] = { 0x44ULL, 0x48ULL, 0x8000000042ULL, 0x6AULL };
-const u64 D_0068C010[4] = { 0x54ULL, 0x58ULL, 0x8000000052ULL, 0x6AULL };
-const Matrix4 D_0068C030 = {
+const u64 svPairAlphaTable[4] = { 0x54ULL, 0x58ULL, 0x8000000052ULL, 0x6AULL };
+const Matrix4 svUnitQuadCornerMatrix = {
     { 0.0f, 0.0f, 1.0f, 0.0f },
     { 1.0f, 0.0f, 1.0f, 0.0f },
     { 0.0f, 1.0f, 1.0f, 0.0f },
     { 1.0f, 1.0f, 1.0f, 0.0f },
 };
-const DrawStateWords D_0068C070 = { { 0x3F800000BF800000ULL, 0x3F80000000000000ULL, 0x3F8000003F800000ULL, 0x3F80000000000000ULL, 0xBF800000BF800000ULL, 0x3F80000000000000ULL, 0xBF8000003F800000ULL, 0x3F80000000000000ULL } };
-const DrawStateWords D_0068C0B0 = { { 0xBF800000ULL, 0x3F8000003F800000ULL, 0x3F800000ULL, 0x3F8000003F800000ULL, 0xBF800000ULL, 0x3F800000BF800000ULL, 0x3F800000ULL, 0x3F800000BF800000ULL } };
-const DrawStateWords D_0068C0F0 = { { 0x3F80000000000000ULL, 0x3F800000BF800000ULL, 0x3F80000000000000ULL, 0x3F8000003F800000ULL, 0xBF80000000000000ULL, 0x3F800000BF800000ULL, 0xBF80000000000000ULL, 0x3F8000003F800000ULL } };
-const DrawStateWords D_0068C130 = { { 0x42C80000C2C80000ULL, 0x3F80000000000000ULL, 0x42C8000042C80000ULL, 0x3F80000000000000ULL, 0xC2C80000C2C80000ULL, 0x3F80000000000000ULL, 0xC2C8000042C80000ULL, 0x3F80000000000000ULL } };
-const Vector4 D_0068C170 = { 0.0f, 0.0f, 0.0f, 1.0f };
-const u64 D_0068C180[2] = { 0xC02A400000008000ULL, 0x525252521EEEULL };
+const DrawStateWords svDefaultDrawStateTable = { { 0x3F800000BF800000ULL, 0x3F80000000000000ULL, 0x3F8000003F800000ULL, 0x3F80000000000000ULL, 0xBF800000BF800000ULL, 0x3F80000000000000ULL, 0xBF8000003F800000ULL, 0x3F80000000000000ULL } };
+const DrawStateWords svMode7DrawStateTable = { { 0xBF800000ULL, 0x3F8000003F800000ULL, 0x3F800000ULL, 0x3F8000003F800000ULL, 0xBF800000ULL, 0x3F800000BF800000ULL, 0x3F800000ULL, 0x3F800000BF800000ULL } };
+const DrawStateWords svMode9DrawStateTable = { { 0x3F80000000000000ULL, 0x3F800000BF800000ULL, 0x3F80000000000000ULL, 0x3F8000003F800000ULL, 0xBF80000000000000ULL, 0x3F800000BF800000ULL, 0xBF80000000000000ULL, 0x3F8000003F800000ULL } };
+const DrawStateWords svSpriteDrawStateTable = { { 0x42C80000C2C80000ULL, 0x3F80000000000000ULL, 0x42C8000042C80000ULL, 0x3F80000000000000ULL, 0xC2C80000C2C80000ULL, 0x3F80000000000000ULL, 0xC2C8000042C80000ULL, 0x3F80000000000000ULL } };
+const Vector4 svDefaultVertexScale = { 0.0f, 0.0f, 0.0f, 1.0f };
+const u64 svDrawRefUvWords[2] = { 0xC02A400000008000ULL, 0x525252521EEEULL };
 
 
 /* The GS state block at the pointer in svDrawStatePacket: two matrices, one row of the draw state tables, a GIF tag with its
@@ -245,7 +234,7 @@ typedef struct DrawStatePacket {
     DrawStateRegister alpha;
 } DrawStatePacket;
 
-/* The two buffer addresses func_00259638 hands back: the first one is used when the flag is set, the second one otherwise. */
+/* The two buffer addresses sefEntryCountsEntryGet hands back: the first one is used when the flag is set, the second one otherwise. */
 typedef struct DrawBufferPair {
     u32 first;
     u32 second;
@@ -253,8 +242,6 @@ typedef struct DrawBufferPair {
 
 extern DrawStatePacket *svDrawStatePacket;
 extern const u64 svAlphaTestTable[];
-extern u8 *xglPacketReserve(u8 *base);
-extern DrawBufferPair *func_00259638(int tag);
 
 /* Starts the draw list (svDrawList) in one of two buffers, chosen by the flag, with both cursors at zero. */
 u8 *svDrawListBegin(int useFirst)
@@ -263,7 +250,7 @@ u8 *svDrawListBegin(int useFirst)
     u8 *bufferBase;
     void *packetStart;
 
-    buffers = func_00259638(57);
+    buffers = sefEntryCountsEntryGet(57);
     if (useFirst != 0) {
         bufferBase = (u8 *) (buffers->first + SV_DRAW_LIST_FIRST_OFFSET);
     } else {
@@ -273,11 +260,12 @@ u8 *svDrawListBegin(int useFirst)
         bufferBase = (u8 *) (buffers->second + SV_DRAW_LIST_SECOND_OFFSET);
     }
     svDrawList.entries = 0;
-    packetStart = xglPacketReserve(bufferBase);
+    /* the definition names this argument the quadword count; the caller passes the buffer address */
+    packetStart = nmlPacketSetAttributeAlloc16N((int) bufferBase);
     if (packetStart == 0) {
         return 0;
     }
-    svDrawList.entries = (u8 *) (0x20000000 + (u32) packetStart);
+    svDrawList.entries = (Quadword *) (0x20000000 + (u32) packetStart);
     svDrawList.flush_code = SV_DRAW_LIST_FLUSH_CODE;
     svDrawList.end_index = 0;
     svDrawList.begin_index = 0;
@@ -294,7 +282,7 @@ void svDrawListAppend(int vuAddress, int operand_a, int operand_b)
     DrawListEntry *record;
 
     svDrawList.begin_index = svDrawList.end_index;
-    record = (DrawListEntry *) (svDrawList.entries + svDrawList.begin_index * 0x10);
+    record = (DrawListEntry *) (svDrawList.entries + svDrawList.begin_index);
     record->payload = 0;
     record->flush_word = 0x11000000;
     record->nop_word = 0;
@@ -308,12 +296,9 @@ void svDrawListAppend(int vuAddress, int operand_a, int operand_b)
 
 #include "quadword.h"
 
-void func_0012B9F8(XglPacket *packet, Quadword word);
+void sceVif1PkAddUpkData128(XglPacket *packet, Quadword word);
 extern u8 D_80[];
 extern u8 D_110[];
-void func_0012B6E0(XglPacket *packet, int first, int second, int third, int fourth);
-void func_0012BCE8(XglPacket *packet, const void *data, int count);
-void func_0012B770(XglPacket *packet);
 extern u32 svDrawRecordDivisors[];
 
 /* Emits the VIF packet for `count` records at `entry`: sceVif1PkRef calls and UNPACK headers, split at 0x100 records. */
@@ -329,7 +314,7 @@ void svDrawListEmit(XglPacket *packet, DrawListEntry *records, int pending_count
     drawMode = svDrawMode;
     sourceAddress = (u32) records & 0xfffffff;
     divisor = svDrawRecordDivisors[drawMode * 2];
-    header = (DrawListEntry *) (svDrawList.entries + svDrawList.begin_index * 0x10);
+    header = (DrawListEntry *) (svDrawList.entries + svDrawList.begin_index);
     countMinusOne = pending_count - 1;
     if (drawMode == 13) {
         header->count_word = (pending_count - 8) / divisor;
@@ -356,9 +341,9 @@ void svDrawListEmit(XglPacket *packet, DrawListEntry *records, int pending_count
     carriedQuad = *(Quadword *) ((u8 *) header + 4112);
     sceVif1PkRef(packet, (const void *) sourceAddress, 257, 0, 0, 0);
     sceVif1PkCnt(packet, 0);
-    func_0012B6E0(packet, 296, 108, 4, 4);
-    func_0012B9F8(packet, carriedQuad);
-    func_0012B770(packet);
+    sceVif1PkOpenUpkCode(packet, 296, 108, 4, 4);
+    sceVif1PkAddUpkData128(packet, carriedQuad);
+    sceVif1PkCloseUpkCode(packet);
     if (countMinusOne == 257) {
         return;
     }
@@ -381,14 +366,14 @@ void svDrawListFlush(int pending_count)
     if (pending_count >= 3 && _draw3D != SV_RENDER_3D_MODEL && svDrawMode > 0) {
         packet = xglPacketGetCurrent();
         svDrawListEmit(packet,
-                      (DrawListEntry *) (svDrawList.entries + svDrawList.begin_index * 0x10),
+                      (DrawListEntry *) (svDrawList.entries + svDrawList.begin_index),
                       pending_count);
         sceVif1PkCnt(packet, 0);
         sceVif1PkAddCode(packet, 0x11000000);
-        tag = D_003ED4A0[svDrawMode * 2];
+        tag = svDrawModeTagTable[svDrawMode * 2];
         sceVif1PkAddCode(packet, (tag >> 3) | 0x14000000);
         sceVif1PkAddCode(packet, 0x11000000);
-        entry = (DrawListEntry *) (svDrawList.entries + svDrawList.begin_index * 0x10);
+        entry = (DrawListEntry *) (svDrawList.entries + svDrawList.begin_index);
         svDrawListAppend(0x28, entry->operand_a, entry->operand_b);
     }
 }
@@ -410,19 +395,17 @@ void svDrawSendStaticRef(void)
     packet = xglPacketGetCurrent();
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddCode(packet, 0x11000000);
-    sceVif1PkRef(packet, D_002B3750, D_002B3740[0], 0, 0, 0);
+    sceVif1PkRef(packet, svStaticRefData, svStaticRefQuadwordCount[0], 0, 0, 0);
 }
 
-#include "main/sdv_033.h"
+#include "main/xgl_camera.h"
 
 extern Vector4 svDefaultScreenParams[];
-extern const Matrix4 D_0068C030;
+extern const Matrix4 svUnitQuadCornerMatrix;
 extern SvViewUpload svViewUpload;
 extern char D_50[];
 /* The static VU1 view setup packet, nine quadwords. */
 extern unsigned int svViewSetupPacket[];
-extern Matrix4 MMathUnitMatrix;
-XglCamera *xglStudioGetActiveCamera(void);
 
 /* One quadword through t0; an inline helper, so the copies the two arms below end with stay one asm statement. */
 static inline void svViewCopyQuadword(Vector4 *destination, Vector4 *source)
@@ -432,7 +415,7 @@ static inline void svViewCopyQuadword(Vector4 *destination, Vector4 *source)
 
 /*
  * Sends the view setup to VU1: the static reference svViewSetupPacket, then the view block (unit rotation, the
- * screen scale and offset of the active camera or, in 3D mode 1, the defaults, and D_0068C030) as ten
+ * screen scale and offset of the active camera or, in 3D mode 1, the defaults, and svUnitQuadCornerMatrix) as ten
  * quadwords, then FLUSH and MSCAL of the microprogram at D_50.
  */
 void svDrawSendViewSetup(void)
@@ -454,7 +437,7 @@ void svDrawSendViewSetup(void)
         "sqc2 vf2, 16(%0)\n"
         "sqc2 vf3, 0(%0)\n"
         : : "r"(svViewUpload.unit), "r"(MMathUnitMatrix) : "memory");
-    QuadwordCopyMatrixT0(svViewUpload.view, D_0068C030);
+    QuadwordCopyMatrixT0(svViewUpload.view, svUnitQuadCornerMatrix);
     if (_draw3D == 1) {
         svViewCopyQuadword(&svViewUpload.scale, &svDefaultScreenParams[3]);
         svViewCopyQuadword(&svViewUpload.offset, &svDefaultScreenParams[2]);
@@ -467,9 +450,9 @@ void svDrawSendViewSetup(void)
     svViewUpload.offset.z = svViewUpload.offset.z * 0.0625f;
     svViewUpload.offset.w = 0;
     sceVif1PkCnt(packet, 0);
-    func_0012B6E0(packet, 10, 108, 4, 4);
-    func_0012BCE8(packet, &svViewUpload, 10);
-    func_0012B770(packet);
+    sceVif1PkOpenUpkCode(packet, 10, 108, 4, 4);
+    sceVif1PkAddUpkData128N(packet, &svViewUpload, 10);
+    sceVif1PkCloseUpkCode(packet);
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddCode(packet, 0x11000000);
     sceVif1PkAddCode(packet, ((u32) D_50 >> 3) | 0x14000000);
@@ -506,9 +489,9 @@ void svDrawSubmitMode(void)
     }
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddCode(packet, 0x11000000);
-    func_0012B6E0(packet, 20, 108, 4, 4);
-    func_0012BCE8(packet, svDrawStatePacket, 16);
-    func_0012B770(packet);
+    sceVif1PkOpenUpkCode(packet, 20, 108, 4, 4);
+    sceVif1PkAddUpkData128N(packet, svDrawStatePacket, 16);
+    sceVif1PkCloseUpkCode(packet);
     sceVif1PkAddCode(packet, 0x11000000);
     if (svDrawMode < 5 || svDrawMode == 11 || svDrawMode == 12) {
         sceVif1PkAddCode(packet, ((u32) D_80 >> 3) | 0x14000000);
@@ -550,11 +533,12 @@ typedef struct SvReferenceImageSlot {
     unsigned int words[2];
 } SvReferenceImageSlot;
 
-/* _imageMapper's symbol-table size is 40 mapper records followed by these
- * forty two-word reference-image slots. */
+/* _imageMapper runs from 0x3ED680 to sefGlobalTransform (0x80A40 bytes): 56 whole type lists and 0x2420 bytes more.
+ * svInitImageMapper clears and sets up 57 lists (57 * 0x241C bytes, 4 more than the object), so how the
+ * last list and the tail divide is not settled. */
 typedef struct SvImageMapperStorage {
-    SvTypeList typeLists[8];
-    unsigned char unmodeled_tail[2208];
+    SvTypeList typeLists[56];
+    unsigned char unmodeled_tail[0x2420];
 } SvImageMapperStorage;
 
 SvTypeList *svGetTypeList(int type);
@@ -609,7 +593,7 @@ SvTypeList * svGetTypeList(int type) {
     return &_imageMapper.typeLists[type];
 }
 
-void *svGetImageListItemSub(int type, unsigned int flags)
+SvTypeListEntry *svGetImageListItemSub(int type, unsigned int flags)
 {
     SvTypeList *typeList;
     SvTypeListEntry *entry;
@@ -629,7 +613,7 @@ void *svGetImageListItemSub(int type, unsigned int flags)
 }
 
 /* Looks the list up with the type 0 for flag 0x100, else with the given type; a negative type returns 0. */
-void *svGetImageListItem(int type, unsigned int flags) {
+SvTypeListEntry *svGetImageListItem(int type, unsigned int flags) {
     if ((flags & 0x100) != 0) {
         type = 0;
     }
@@ -661,14 +645,6 @@ extern char *strcpy(char *destination, const char *source);
 typedef struct SvSuffix {
     char text[4];
 } SvSuffix;
-
-typedef struct SvTexParam {
-    u64 tex0;
-    float scaledWidth;
-    float scaledHeight;
-    const void *primaryData;
-    const void *companionData;
-} SvTexParam;
 
 /*
  * Builds the texture parameters of a bitmap and its CLUT from a base name,
@@ -708,8 +684,8 @@ SvTexParam *svGetPrmFromName(const char *resourceName, int type, SvTexParam *par
     if (primary != 0 && companion != 0) {
         if (isPxy != 0) {
             /* The two pointer locals stay: direct field stores changed the code. */
-            const void *primaryPointer = primary->data;
-            const void *companionPointer = companion->data;
+            PxyHeader *primaryPointer = primary->data;
+            TxyBlock *companionPointer = companion->data;
 
             parameter->primaryData = primaryPointer;
             parameter->companionData = companionPointer;
@@ -737,7 +713,7 @@ SvTexParam *svGetPrmFromName(const char *resourceName, int type, SvTexParam *par
 }
 
 /* Small data after the bitmap name strings of svGetPrmFromName: the draw path flag and the visible entry count. */
-short D_0069DB3C = 0;
+short svPolygonClipFlag = 0;
 int svVisibleEntryCount = 0;
 
 /* Number of 128-pixel pages of a texture: 128x64 pages for PSMT8, 128x128 for PSMT4, width * height / 128 otherwise. */
@@ -772,7 +748,7 @@ int svGetTextureBufferWidth(int pixelFormat, int width) {
     return 0;
 }
 
-int func_0012BA78(void *packet, u16 basePointer, int psm, int bufferWidth, const void *data, int quadwordCount, int, int, int, int);
+int sceVif1PkRefLoadImage(void *packet, u16 basePointer, int psm, int bufferWidth, const void *data, int quadwordCount, int, int, int, int);
 
 void svLoadTexture(SvTypeListEntry *entry) {
     int psm;
@@ -791,7 +767,7 @@ void svLoadTexture(SvTypeListEntry *entry) {
     }
     quadwordCount = (entry->bufferWidthPixels * height) / 16;
     packet = xglPacketGetCurrent();
-    func_0012BA78(packet, basePointer, psm, (entry->bufferWidthPixels >> 6) + 1, entry->data, quadwordCount, 0, 0, width, height);
+    sceVif1PkRefLoadImage(packet, basePointer, psm, (entry->bufferWidthPixels >> 6) + 1, entry->data, quadwordCount, 0, 0, width, height);
 }
 
 /* Uploads a palette: 16x16 for 8-bit entries, 8x2 for 4-bit, to the current packet. */
@@ -802,10 +778,10 @@ void svLoadClut(SvTypeListEntry *entry) {
     basePointer = entry->basePointer;
     packet = xglPacketGetCurrent();
     if (entry->bitsPerPixel == 8) {
-        func_0012BA78(packet, basePointer, 0, 1, entry->data, 0x40, 0, 0, 0x10, 0x10);
+        sceVif1PkRefLoadImage(packet, basePointer, 0, 1, entry->data, 0x40, 0, 0, 0x10, 0x10);
         return;
     }
-    func_0012BA78(packet, basePointer, 0, 1, entry->data, 4, 0, 0, 8, 2);
+    sceVif1PkRefLoadImage(packet, basePointer, 0, 1, entry->data, 4, 0, 0, 8, 2);
 }
 
 int svLoadImageList(SvTypeList *typeList) {
@@ -1135,7 +1111,7 @@ void svDeleteImageMapper(int typeListId) {
     }
 }
 
-void svDeleteImageMapperByEntryCount(int entryCount) {
+void svDeleteImageMapperID(int entryCount) {
     int listIndex;
 
     for (listIndex = 1; listIndex < 9; listIndex++) {
@@ -1157,7 +1133,7 @@ void svDeleteImageMapperByDimensions(int dimensions) {
     }
 }
 
-void svDeleteImageMapperByTag(int tag) {
+void svDeleteImageMapperData(int tag) {
     int listIndex;
 
     for (listIndex = 1; listIndex < 9; listIndex++) {
@@ -1169,7 +1145,7 @@ void svDeleteImageMapperByTag(int tag) {
 }
 
 #define SRS_KEPT_KEY_COUNT 6
-/* The type list whose entry 0 is a direct effect (svGetScriptEntry returns it without a name search). */
+/* The type list whose entry 0 is a direct effect (svGetScript returns it without a name search). */
 #define SV_DIRECT_ENTRY_LIST 9
 /* svSetZTestEnv's TEST_1 words: Z test on (GEQUAL) and always pass. */
 #define SV_ZTEST_ON 0x5000D
@@ -1188,8 +1164,6 @@ int srsFindFreeEffectSlot(void)
     return -1;
 }
 
-void smFree(void *block);
-int GameResBlockFreeByBuffer(void *buffer);
 
 /* Clears effect slot index: frees the buffer its record owns (by the record's kind), then
  * zeroes the record. */
@@ -1216,7 +1190,6 @@ void srsUnloadEffectSlot(unsigned int index)
     }
 }
 
-int sefOnlyOwnerInUse(int key);
 
 /* Unloads the least recently used slot whose owner-only effect is not busy and whose kind is
  * 0. Returns its index, or -1 when no slot qualifies. */
@@ -1235,7 +1208,7 @@ int srsEvictEffectSlot(void)
             continue;
         }
         key = srsRecordTable.slots[index].key;
-        if (!sefOnlyOwnerInUse(key)) {
+        if (!sefIsFinishEffect2(key)) {
             continue;
         }
         if (srsRecordTable.slots[index].stamp <=
@@ -1250,7 +1223,6 @@ int srsEvictEffectSlot(void)
     return -1;
 }
 
-int smFindFree(int size);
 
 /* Evicts least recently used slots until a block of `size` can be allocated. Returns the
  * allocation, or the negative eviction result when no slot is left to evict. */
@@ -1265,7 +1237,7 @@ int srsEvictEffectSlotsForSize(int size)
         if (evicted < 0) {
             return evicted;
         }
-        allocation = smFindFree(size);
+        allocation = (int)smFindFree(size); /* the free cell address; the function returns it or a negative result */
         if (allocation != 0) {
             break;
         }
@@ -1288,7 +1260,6 @@ int srsIsEffectKeyListed(int key)
     return 0;
 }
 
-int sefGetCurrentOwner(void);
 /* Unloads every in-use effect slot that is not owned by the current owner, not busy, not of
  * kind 2 and not listed in srsKeptEffectKeys. */
 void srsReleaseOtherOwnerEffectSlots(void)
@@ -1313,22 +1284,19 @@ void srsReleaseOtherOwnerEffectSlots(void)
         if (srsIsEffectKeyListed(srsRecordTable.slots[index].key)) {
             continue;
         }
-        if (sefOnlyOwnerInUse(srsRecordTable.slots[index].key)) {
+        if (sefIsFinishEffect2(srsRecordTable.slots[index].key)) {
             srsUnloadEffectSlot(index);
         }
     }
 }
 
-void *GameResBufferAlloc(int size);
-void loadWaitAdd(int id, int slot);
-int sefCanonicalEffectId(int effectId);
 
 /* Makes effect effectId (a type 9 effect) resident in an effect slot. An effect already in a slot only takes
  * the current owner and a new stamp (0). Otherwise a free slot is taken, after releasing other owners'
  * slots (owner bits 28..29 set) or evicting slots for the file size; the slot uses buffer when given (kind
  * 2), else a buffer from smAlloc (kind 0) or, for owner mode 1, GameResBufferAlloc (kind 1). Returns 1 when
  * the data load starts, -1 on a bad id or a failed load, -2 when no slot or buffer is free (a mode 0 effect
- * is then queued with loadWaitAdd). */
+ * is then queued with sefSetLoadQue). */
 int srsLoadEffectSlot(void *buffer, int effectId, int arg)
 {
     int charNo;
@@ -1376,7 +1344,7 @@ int srsLoadEffectSlot(void *buffer, int effectId, int arg)
             if (ownerMode != 0) {
                 return -2;
             }
-            loadWaitAdd(effectId, arg);
+            sefSetLoadQue(effectId, arg);
             return -2;
         }
         memset(&srsRecordTable.slots[slot], 0, sizeof(SrsRecord));
@@ -1409,7 +1377,7 @@ int srsLoadEffectSlot(void *buffer, int effectId, int arg)
                     if (ownerMode != 0) {
                         return -2;
                     }
-                    loadWaitAdd(effectId, arg);
+                    sefSetLoadQue(effectId, arg);
                     return -2;
                 }
             }
@@ -1426,12 +1394,10 @@ int srsLoadEffectSlot(void *buffer, int effectId, int arg)
 }
 
 void sefInitClipViewVolume(void *view);
-void sdvDrawAlters(int layer);
-int sefFindRecordIndex(int key);
 int strncmp(const char *left, const char *right, unsigned int length);
 
 /* Finds the entry for an effect id: entry 0 of a mapper from index 9 on when it is used and has a kind, else the first script entry whose name matches the effect's stem. */
-SvTypeListEntry *svGetScriptEntry(int effectId)
+SvTypeListEntry *svGetScript(int effectId)
 {
     int canonicalId;
     int typeListIndex;
@@ -1444,7 +1410,7 @@ SvTypeListEntry *svGetScriptEntry(int effectId)
         return 0;
     }
     canonicalId = sefCanonicalEffectId(effectId);
-    typeListIndex = sefFindRecordIndex(canonicalId);
+    typeListIndex = sefSearchMapperIndex(canonicalId);
     if (typeListIndex < 0) {
         return 0;
     }
@@ -1491,7 +1457,6 @@ typedef struct SvDrawItem {
 } SvDrawItem;
 
 void svDrawScene(void);
-f32 MMathVectorDotProduct(const Vector4 *first, const Vector4 *second);
 extern unsigned char svMapperPacketEnv[];
 
 /* Refers the current packet to the three-quadword environment block svMapperPacketEnv; runs after every mapper switch. */
@@ -1505,23 +1470,23 @@ typedef struct SvDrawTagArea {
     unsigned char unmodeled_28[0x18];
 } SvDrawTagArea;
 
-extern SvDrawTagArea D_003ED600;
+extern SvDrawTagArea svZTestPacketEnv;
 
 void svSetZTestEnv(int enable) {
     if (enable != 0) {
-        D_003ED600.tag = SV_ZTEST_ON;
+        svZTestPacketEnv.tag = SV_ZTEST_ON;
     } else {
-        D_003ED600.tag = SV_ZTEST_OFF;
+        svZTestPacketEnv.tag = SV_ZTEST_OFF;
     }
     svZTestEnable = enable;
-    svDrawTestWord = D_003ED600.tag;
+    svDrawTestWord = svZTestPacketEnv.tag;
 }
 
 void sefInitClipViewVolume(void *view) {
     Vu0SetClipMatrices(view);
 }
 
-extern s16 sefClipTestDisabled;
+extern s16 _sefBattleMode;
 
 /*
  * sefClipViewVolumeA: the whole VU0 clip test as one hand-written block (the flag
@@ -1612,11 +1577,11 @@ int sefClipViewVolumeA(const Vector4 *model, float limit)
         "4:\n\t"
         ".set reorder"
         :
-        : "m"(sefClipTestDisabled)
+        : "m"(_sefBattleMode)
         : "$2", "$3", "$4", "$5", "$f0", "$f1", "memory");
 }
 
-extern Vector4 D_003ED640;
+extern Vector4 svColorMaxVector;
 
 /* The texture object at SvDrawState+0x1EC: its tex0 word is at +0x10. */
 typedef struct SvDrawTexture {
@@ -1680,16 +1645,16 @@ typedef struct SvDrawRecordC {
  * word, the first point, the vertex (scaled by svVertexScale when set), the primary prim, the extra state,
  * the coordinates (u, v, 0, 1), the second point and the state's matrix.
  */
-void svDrawListAppendRecordC(SvDrawState *state, u64 alpha)
+void svDrawListAppendSpriteRecord(SvDrawState *state, u64 alpha)
 {
     SvDrawRecordC *record;
     Vector4 *vertexDst;
-    Vector4 *vertexScale;
+    const Vector4 *vertexScale;
     Vector4 *extraDst;
     Vector4 *extraSrc;
     DoublewordVector4 *coordsDst;
 
-    record = (SvDrawRecordC *) (svDrawList.entries + svDrawList.end_index * 0x10);
+    record = (SvDrawRecordC *) (svDrawList.entries + svDrawList.end_index);
     record->gif.words[0] = 0xD02A400000008001ULL;
     record->gif.words[1] = 0x000525252521EEEEULL;
     record->texture.words[0] = state->uv->tex0;
@@ -1709,7 +1674,7 @@ void svDrawListAppendRecordC(SvDrawState *state, u64 alpha)
             "vmul.xyzw vf1, vf1, vf2\n\t"
             "vmini.xyz vf1, vf1, vf3\n\t"
             "vftoi0.xyzw vf1, vf1"
-            : : "r"(vertexScale), "r"(&D_003ED640) : "memory");
+            : : "r"(vertexScale), "r"(&svColorMaxVector) : "memory");
     }
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(vertexDst));
     QuadwordCopyT0(&record->pointA, &state->pointA);
@@ -1731,21 +1696,21 @@ void svDrawListAppendRecordC(SvDrawState *state, u64 alpha)
  * tex0, the fixed test word 0x31003 and alpha 0x4A; the second the UV block's tex0, svDrawTestWord and the alpha
  * argument. The vertex (scaled by svVertexScale when set) goes to both, the first point to the first, the
  * secondary and primary prims to the first and second, then the extra state, coordinates (u, v, 0, 1),
- * second point and matrix like svDrawListAppendRecordC.
+ * second point and matrix like svDrawListAppendSpriteRecord.
  */
-void svDrawListAppendRecordCPair(SvDrawState *state, u64 alpha)
+void svDrawListAppendSpriteRecordPair(SvDrawState *state, u64 alpha)
 {
     Vector4 *extraSrc;
     Vector4 *extraDst;
     DoublewordVector4 *coordsDst;
     SvDrawRecordC *record;
-    Vector4 *vertexScale;
+    const Vector4 *vertexScale;
     int *vertexDst;
     const u64 alphaRegister = GS_ALPHA_1;
     const u64 testRegister = GS_TEST_1;
     u64 testWord;
 
-    record = (SvDrawRecordC *) (svDrawList.entries + svDrawList.end_index * 0x10);
+    record = (SvDrawRecordC *) (svDrawList.entries + svDrawList.end_index);
     testWord = svDrawTestWord;
     record[0].gif.words[0] = 0xD02A400000008001ULL;
     record[0].gif.words[1] = 0x000525252521EEEEULL;
@@ -1772,7 +1737,7 @@ void svDrawListAppendRecordCPair(SvDrawState *state, u64 alpha)
             "vmul.xyzw vf1, vf1, vf2\n\t"
             "vmini.xyz vf1, vf1, vf3\n\t"
             "vftoi0.xyzw vf1, vf1"
-            : : "r"(vertexScale), "r"(&D_003ED640) : "memory");
+            : : "r"(vertexScale), "r"(&svColorMaxVector) : "memory");
     }
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(vertexDst));
     record[1].vertex.quad = record[0].vertex.quad;
@@ -1792,13 +1757,9 @@ void svDrawListAppendRecordCPair(SvDrawState *state, u64 alpha)
     svDrawList.end_index += 28;
 }
 
-void vu0CurMatrixMul(void *matrix);
-void vu0TransformPoint(Vector4 *point);
-void vu0CurMatrixMulRight3(Vector4 *rows);
-extern Matrix4 D_006B4A40;
-extern Vector4 D_006B4A80;
+extern Matrix4 svEffectMatrix;
+extern Vector4 svEffectScaleVector;
 extern int svFogValue;
-extern Vector4 vu0IdentityMatrix[3];
 extern Vector4 sefCameraMatrix[3];
 
 /* The part block of a transform block: its flags at +0x1C and its kind at +0x1E. */
@@ -1809,7 +1770,8 @@ typedef struct SvDrawPart {
 } SvDrawPart;
 
 typedef struct SvTransformBlock {
-    unsigned char unmodeled_00[0x80];
+    Matrix4 matrix;
+    unsigned char unmodeled_40[0x40];
     Vector4 rotated_rows[3];
     unsigned char unmodeled_B0[0x140 - 0xB0];
     Vector4 rotation_aux;      /* +0x140 */
@@ -1835,16 +1797,16 @@ void svBuildItemMatrix(Vector4 *point, SvTransformBlock *transform, int useFixed
             "lqc2 vf27, 16(%0)\n\t"
             "lqc2 vf28, 32(%0)\n\t"
             "lqc2 vf29, 48(%0)"
-            : : "r"(D_006B4A40));
+            : : "r"(svEffectMatrix));
         vu0TransformPoint(point);
-        vu0CurMatrixMul(transform);
+        vu0CurMatrixMul(transform->matrix);
         __asm__ __volatile__(
             "lqc2 vf1, 0(%0)\n\t"
             "vmulx.xyzw vf26, vf26, vf1x\n\t"
             "vmuly.xyzw vf27, vf27, vf1y\n\t"
             "vmulz.xyzw vf28, vf28, vf1z\n\t"
             "vmulw.xyzw vf29, vf29, vf1w"
-            : : "r"(&D_006B4A80));
+            : : "r"(&svEffectScaleVector));
     } else {
         if (svRecordMatrix != 0) {
             __asm__ __volatile__(
@@ -1862,7 +1824,7 @@ void svBuildItemMatrix(Vector4 *point, SvTransformBlock *transform, int useFixed
                 : : "r"(vu0IdentityMatrix));
             __asm__ __volatile__("lqc2 vf29, 0(%0)" : : "r"(point));
         }
-        vu0CurMatrixMul(transform);
+        vu0CurMatrixMul(transform->matrix);
     }
     if (svFogValue != 0) {
         __asm__ __volatile__(
@@ -1897,7 +1859,7 @@ void svBuildItemMatrix(Vector4 *point, SvTransformBlock *transform, int useFixed
             "vmuly.xyzw vf27, vf27, vf1y\n\t"
             "vmulz.xyzw vf28, vf28, vf1z\n\t"
             "vmulw.xyzw vf29, vf29, vf1w"
-            : : "r"(&D_006B4A80));
+            : : "r"(&svEffectScaleVector));
         __asm__ __volatile__(
             "lqc2 vf1, 0(%0)\n\t"
             "vmulx.xyzw vf26, vf26, vf1x\n\t"
@@ -1905,11 +1867,10 @@ void svBuildItemMatrix(Vector4 *point, SvTransformBlock *transform, int useFixed
             "vmulz.xyzw vf28, vf28, vf1z\n\t"
             "vmulw.xyzw vf29, vf29, vf1w"
             : : "r"(&transform->scale));
-        vu0CurMatrixMulRight3(sefCameraMatrix);
+        vu0CurMatrixMulRows3(sefCameraMatrix);
     }
 }
 
-#include "main/nml_model_set.h"
 
 /* Partial view of the render item svSetModelRenderState draws: the scale vector at +0x160, the fixed-point position at +0x1D0 whose w word at +0x1DC is the transparency (0x80 is opaque), the part at +0x1E8, the bias at +0x248 and the stencil index at +0x28C. */
 typedef struct SvRenderItem {
@@ -1926,58 +1887,39 @@ typedef struct SvRenderItem {
     int stencilIndex;
 } SvRenderItem;
 
-/* The part of the render item: the block pxySubmitModel takes at +0x8 and the block pxySetTxyBlock takes at +0xC. */
+/* The part of the render item: the block pxySubmitModel takes at +0x8 and the block nmlModelSetTexture takes at +0xC. */
 typedef struct SvRenderPart {
     unsigned char unmodeled_00[0x8];
-    void *submitBlock;
-    void *txyBlock;
+    PxyHeader *submitBlock;
+    TxyBlock *txyBlock;
 } SvRenderPart;
 
-/* The fog override block sefOverrideFlagPtr returns: enabled at +0x00, four fog distances at +0x10, the fog colour at +0x20. */
-typedef struct SvFogOverride {
-    int enabled;
-    unsigned char unmodeled_04[0x10 - 0x04];
-    float dist[4];
-    float fogColor[4];
-} SvFogOverride;
-
+/* The view block svSetModelRenderState writes: the scaled vertex position at +0xD0 and its copy at +0xE0. */
 typedef struct SvViewBlock {
     unsigned char unmodeled_00[0xD0];
     AlignedVector4 scaled;
     AlignedVector4 scaledCopy;
 } SvViewBlock;
 
-extern const u64 D_0068C1B8[];
-extern void *D_0069DAE4;
-extern const f32 D_0069B2B4;
-void func_001BA9A0(float value);
-void func_001BAC70(int flags);
-void func_001BB3CC(float value);
-void func_001BB99C(void *block);
-void pxySetFogColor(const float *colour);
-void pxySetFogDist(float a, float b, float c, float d);
-void pxySetTxyBlock(void *block);
-void pxySetModelScale(const Vector4 *scale);
-void pxySubmitModel(void *block);
-void nmlModelSetZwrite(int enabled);
-void nmlModelSetTransparency(float value);
-void *sefOverrideFlagPtr(void);
+extern const u64 svStencilTable[];
+extern void *svActiveLightSet;
+extern const f32 svSortOffsetScale;
 
-/* Sets the render state of one model item and submits it: the stencil word from the table at D_0068C1B8, the scaled position into the view block, the matrix, the transparency, the flag bits and the fog override, then the scale and the submit. */
+/* Sets the render state of one model item and submits it: the stencil word from the table at svStencilTable, the scaled position into the view block, the matrix, the transparency, the flag bits and the fog override, then the scale and the submit. */
 void svSetModelRenderState(SvRenderItem *item, Matrix4 *matrix, int scale)
 {
     u64 stencil;
-    void *vertexScale;
+    const Vector4 *vertexScale;
     AlignedVector4 *vertexOut;
     SvViewBlock *view;
-    SvFogOverride *fog;
+    SefFogOverride *fog;
     int itemFlags;
     AlignedVector4 vertex;
 
     if (item->stencilIndex == 0 && item->transparency == 0x80) {
         stencil = 0;
     } else {
-        stencil = D_0068C1B8[item->stencilIndex];
+        stencil = svStencilTable[item->stencilIndex];
     }
     __asm__ __volatile__(
         "li.s $f0, 0.0078125\n\t"
@@ -1987,7 +1929,7 @@ void svSetModelRenderState(SvRenderItem *item, Matrix4 *matrix, int scale)
         "vitof0.xyzw vf2, vf2\n\t"
         "vmulx.xyz vf2, vf2, vf1x\n\t"
         "sqc2 vf2, 0(%1)"
-        : : "r"(item->position), "r"((AlignedVector4 *) &D_006AF7C0[208]) : "$8", "$f0");
+        : : "r"(item->position), "r"((AlignedVector4 *) &svEffectLightSet[208]) : "$8", "$f0");
     do {
         vertexScale = svVertexScale;
     } while (0);
@@ -2001,10 +1943,10 @@ void svSetModelRenderState(SvRenderItem *item, Matrix4 *matrix, int scale)
             "vmul.xyzw vf1, vf1, vf2\n\t"
             "vmini.xyz vf1, vf1, vf3\n\t"
             "vftoi0.xyzw vf1, vf1"
-            : : "r"(&D_003ED640), "r"(vertexScale));
+            : : "r"(&svColorMaxVector), "r"(vertexScale));
     }
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(vertexOut));
-    view = D_0069DAE4;
+    view = svActiveLightSet;
     __asm__ __volatile__("li.s $f0, 0.0078125" : : : "$f0");
     __asm__ __volatile__(
         "mfc1 $8, $f0\n\t"
@@ -2022,14 +1964,14 @@ void svSetModelRenderState(SvRenderItem *item, Matrix4 *matrix, int scale)
     }
 
     if (item->part->txyBlock != 0 && item->part->submitBlock != 0) {
-        itemFlags = D_0069E318;
-        func_001BB99C(D_0069DAE4);
-        func_001BA9A0(item->bias);
-        pxySetTxyBlock(item->part->txyBlock);
-        nmlModelSetDrawMatrix(matrix);
+        itemFlags = svItemDrawFlags;
+        pxySetLightCopy(svActiveLightSet);
+        pxySetAnimTime(item->bias);
+        nmlModelSetTexture(item->part->txyBlock);
+        nmlModelSetDrawMatrix(*matrix);
         nmlModelSetTransparency((float) item->transparency * 0.0078125f);
         if ((itemFlags & 1) != 0) {
-            func_001BAC70(4);
+            nmlModelSetRenderLevel(4);
         }
         if ((itemFlags & 8) != 0) {
             nmlModelSetZwrite(1);
@@ -2037,39 +1979,28 @@ void svSetModelRenderState(SvRenderItem *item, Matrix4 *matrix, int scale)
             nmlModelSetZwrite(0);
         }
         if ((itemFlags & 2) != 0) {
-            func_001BAC70(8);
+            nmlModelSetRenderLevel(8);
         }
         if ((itemFlags & 0x80) != 0) {
-            func_001BAC70(0x200);
+            nmlModelSetRenderLevel(0x200);
         }
         if ((itemFlags & 0x40) != 0) {
-            func_001BAC70(0x100);
+            nmlModelSetRenderLevel(0x100);
         } else {
-            fog = sefOverrideFlagPtr();
+            fog = sefGetFogOverrideBlock();
             if (fog->enabled != 0) {
-                pxySetFogColor(fog->fogColor);
-                pxySetFogDist(fog->dist[0], fog->dist[1], fog->dist[2], fog->dist[3]);
+                nmlModelSetFogCol(&fog->fogColor);
+                nmlModelSetFogDist(fog->dist[0], fog->dist[1], fog->dist[2], fog->dist[3]);
             }
         }
         if (scale > 0) {
-            func_001BB3CC((float) scale * D_0069B2B4);
+            nmlModelSetSortOffset((float) scale * svSortOffsetScale);
         }
-        pxySetModelScale(&item->scale);
+        nmlModelSetScale(&item->scale);
         pxySubmitModel(item->part->submitBlock);
     }
 }
 
-/* Partial view of the object sefInitPartTransform fills: the 4x4 matrix, the position vector at +0x40 and the scale and kind fields after it. */
-typedef struct SefPartTransform {
-    Matrix4 matrix;   /* +0x00: rows 0..2 are the scaled identity; row 3 (+0x30) is (position, 1) */
-    Vector4 position; /* +0x40 */
-    float scale;      /* +0x50 */
-    short scaled;     /* +0x54 */
-    short kind;       /* +0x56 */
-} SefPartTransform;
-
-f32 sefGetEntryScale(int);
-void sefGetPosition(Vector4 *position, Vector4 *source, int kind);
 
 /* Screen vertex written by svProjectVertex: x and y in 12.4 fixed point, then z and the clip flags. */
 typedef struct SvScreenVertex {
@@ -2082,7 +2013,6 @@ typedef struct SvScreenVertex {
 /* One unit of screen space is 16 subpixel steps (the GS 12.4 coordinate format). */
 #define SV_SUBPIXEL_STEPS 16.0f
 
-Vector4 *MMathApplyMatrix(Vector4 *out, Matrix4 *matrix, const Vector4 *vector);
 
 /* Projects a homogeneous vertex to the screen: divides by w, flags 0x8000 when the result lies outside the unit cube, then applies the active camera's screen scale and offset. Returns the flags. */
 int svProjectVertex(SvScreenVertex *out, Matrix4 *matrix, const Vector4 *vector) {
@@ -2193,7 +2123,7 @@ typedef struct SvClipVertex {
 
 /* Clips the draw state quad, transformed by matrix, against the first five planes of the active camera's view
  * volume (Sutherland-Hodgman, two vertex buffers). Each surviving vertex goes to out as a pair: the position
- * with w = 1, then D_0068C030 with x and y replaced by the position's projections on the quad's two edges.
+ * with w = 1, then svUnitQuadCornerMatrix with x and y replaced by the position's projections on the quad's two edges.
  * Returns the vertex count, 0 when the quad is degenerate or clipped away. */
 int sefClipPolygon(void *slot, Matrix4 *matrix, SvClipVertex *out)
 {
@@ -2278,7 +2208,7 @@ int sefClipPolygon(void *slot, Matrix4 *matrix, SvClipVertex *out)
                              : "=m"(dst[0].x), "=m"(dst[0].y), "=m"(dst[0].z), "=m"(dst[0].w)
                              : "r"(&dst[0]), "m"(*(clipBuffers[currentBuffer] + i)) : "$8", "memory");
         dst[0].w = 1.0f;
-        SefCopyVector(&dst[1], &D_0068C030);
+        SefCopyVector(&dst[1], &svUnitQuadCornerMatrix);
         SefSubVectorXYZ(&offset, &dst[0], origin);
         dst[1].x = MMathVectorDotProduct(&offset, &edges[0]) / edgeLengths[0];
         dst[1].y = MMathVectorDotProduct(&offset, &edges[1]) / edgeLengths[1];
@@ -2299,6 +2229,17 @@ typedef struct SvPolygonPart {
     unsigned char unmodeled_08[0x10 - 0x08];
     u64 tex0;
 } SvPolygonPart;
+
+/* The argument block the item draw (svDrawItemSlots) and the sorted-image draw (svDrawSortedImages) hand to the slot
+ * callees, which read only quad: the vector at +0x4 (the entry's scale vector, or the slot state's second point),
+ * then the two reference blocks at +0x8 and +0xC and the draw-mode bits (-1 before the first line). */
+typedef struct SvDrawCall {
+    unsigned char unmodeled_00[4];
+    Vector4 *quad;
+    const void *texture;            /* +0x08 */
+    const void *uv;                 /* +0x0C */
+    int mode;                       /* +0x10 */
+} SvDrawCall;
 
 /* The polygon item svDrawPolygonItem draws: its matrix, the scale vector at +0x160, the fixed-point colour at +0x1D0,
  * the base and overlay parts with their texture offsets, the alpha table index at +0x28C and the point at +0x290. */
@@ -2337,17 +2278,15 @@ typedef struct SvPolygonVertex {
     Quadword position;
 } SvPolygonVertex;
 
-extern void vu0CurMatrixMulRight(Vector4 *rows);
 
-extern SefPartTransform sefGlobalTransform; /* the same object as sef.c's SefGlobalTransform (0x58 bytes) */
 
-extern short D_0069DB3C;
-extern const u64 D_0068C010[];
+extern short svPolygonClipFlag;
+extern const u64 svPairAlphaTable[];
 
-/* Draws the item's clipped polygon: the item matrix scaled by the part's axes (D_0069E308 picks the axes) goes to
+/* Draws the item's clipped polygon: the item matrix scaled by the part's axes (svPolygonAxesMode picks the axes) goes to
  * sefClipPolygon, then the vertices are packed with the item colour, once with the overlay part over the base part
- * when D_0069DB3C is set, otherwise once with the base part. */
-void svDrawPolygonItem(SvPolygonItem *item, Vector4 *position, void *quadRef, int flag)
+ * when svPolygonClipFlag is set, otherwise once with the base part. */
+void svDrawPolygonItem(SvPolygonItem *item, Vector4 *position, SvDrawCall *quadRef, int flag)
 {
     Matrix4 matrix;
     Vector4 axes;
@@ -2359,13 +2298,13 @@ void svDrawPolygonItem(SvPolygonItem *item, Vector4 *position, void *quadRef, in
     SvPolygonPacket *packet;
     SvPolygonVertex *vertex;
     SvPolygonPart *part;
-    void *vertexScale;
+    const Vector4 *vertexScale;
     int clipCount;
     int i;
     int mode;
     float offsetX;
 
-    vertex = (SvPolygonVertex *) (svDrawList.entries + svDrawList.end_index * 0x10);
+    vertex = (SvPolygonVertex *) (svDrawList.entries + svDrawList.end_index);
     part = item->part;
     __asm__ __volatile__(
         "lqc2 vf26, 0(%0)\n\t"
@@ -2373,7 +2312,7 @@ void svDrawPolygonItem(SvPolygonItem *item, Vector4 *position, void *quadRef, in
         "lqc2 vf28, 32(%0)"
         : : "r"(vu0IdentityMatrix));
     __asm__ __volatile__("lqc2 vf29, 0(%0)" : : "r"(position));
-    vu0CurMatrixMul(item);
+    vu0CurMatrixMul(item->matrix);
     if (sefGlobalTransform.scaled != 0) {
         __asm__ __volatile__(
             "mfc1 $8, %0\n\t"
@@ -2405,7 +2344,7 @@ void svDrawPolygonItem(SvPolygonItem *item, Vector4 *position, void *quadRef, in
             : : "r"(&item->scale));
     }
     __asm__ __volatile__("vmaxw.xyzw vf1, vf0, vf0w\n\tsqc2 vf1, 0(%0)" : : "r"(&axes) : "memory");
-    mode = D_0069E308;
+    mode = svPolygonAxesMode;
     if (mode == 5) {
         axes.x = part->scaleX;
         axes.y = part->scaleY;
@@ -2450,10 +2389,10 @@ void svDrawPolygonItem(SvPolygonItem *item, Vector4 *position, void *quadRef, in
             "vmul.xyzw vf1, vf1, vf2\n\t"
             "vmini.xyz vf1, vf1, vf3\n\t"
             "vftoi0.xyzw vf1, vf1"
-            : : "r"(vertexScale), "r"(&D_003ED640) : "memory");
+            : : "r"(vertexScale), "r"(&svColorMaxVector) : "memory");
     }
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(colorOut) : "memory");
-    if (D_0069DB3C != 0) {
+    if (svPolygonClipFlag != 0) {
         packet = (SvPolygonPacket *) vertex;
         packet->gif.words[0] = 0x1000000000008004ULL;
         packet->gif.words[1] = GIF_AD;
@@ -2483,7 +2422,7 @@ void svDrawPolygonItem(SvPolygonItem *item, Vector4 *position, void *quadRef, in
         packet->tex.words[1] = GS_TEX0_1;
         packet->test.words[0] = svDrawTestWord;
         packet->test.words[1] = GS_TEST_1;
-        packet->alpha.words[0] = D_0068C010[item->drawIndex];
+        packet->alpha.words[0] = svPairAlphaTable[item->drawIndex];
         packet->alpha.words[1] = GS_ALPHA_1;
         packet->clamp = *(Quadword *) &svDrawStatePacket->clamp;
         packet->vertexTag.words[0] = (clipCount | 0x8000) | ((u64) 0xC0AB << 46);
@@ -2555,12 +2494,6 @@ typedef struct SefSlotRecord {
     unsigned char unmodeled_2A0[0x2C0 - 0x2A0];
 } SefSlotRecord;
 
-/* The argument block of svDrawListAppendSlot: its +4 pointer is the 16-byte state copied into the draw packet. */
-typedef struct SvSlotDrawArgs {
-    unsigned char unmodeled_00[4];
-    const Vector4 *state;
-} SvSlotDrawArgs;
-
 /* A mode word holds either a float coordinate or a zero written as an integer word. */
 typedef union SvModeWord {
     float f;
@@ -2586,22 +2519,21 @@ typedef struct SvSlotDrawPacket {
     Matrix4 matrix;
 } SvSlotDrawPacket;
 
-extern float D_0046E110[];
 
 /* Appends one slot draw record to svDrawList: tags, the part and state words, the scaled matrix rows and the position block. */
-void svDrawListAppendSlot(SefSlotRecord *slot, const Vector4 *position, const SvSlotDrawArgs *args, int useScale)
+void svDrawListAppendSlot(SefSlotRecord *slot, const Vector4 *position, const SvDrawCall *args, int useScale)
 {
     SvSlotDrawPacket *packet;
     long long gifTagLow;
     long long gifTagHigh;
-    void *vertexScale;
+    const Vector4 *vertexScale;
     Vector4 *scaledDst;
     Vector4 *stateDst;
     Vector4 *positionOut;
 
     gifTagLow = ((long long)0x2A4000 << 0x20) | 0x8001;
     gifTagHigh = (((long long)0x51251251 << 0x10) | 0x2512) << 0x10 | 0xEEEE;
-    packet = (SvSlotDrawPacket *) (svDrawList.entries + svDrawList.end_index * 0x10);
+    packet = (SvSlotDrawPacket *) (svDrawList.entries + svDrawList.end_index);
     packet->gif.words[0] = gifTagLow;
     packet->gif.words[1] = gifTagHigh;
     packet->tex.words[0] = slot->part->word10;
@@ -2619,7 +2551,7 @@ void svDrawListAppendSlot(SefSlotRecord *slot, const Vector4 *position, const Sv
     __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(slot->scaleBlock) : "memory");
     if (vertexScale != 0) {
         Vector4 *clampMax;
-        clampMax = &D_003ED640;
+        clampMax = &svColorMaxVector;
         __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(vertexScale) : "memory");
         __asm__ __volatile__("lqc2 vf3, 0(%0)" : : "r"(clampMax) : "memory");
         __asm__ __volatile__("vitof0.xyzw vf1, vf1" : : : "memory");
@@ -2662,20 +2594,20 @@ void svDrawListAppendSlot(SefSlotRecord *slot, const Vector4 *position, const Sv
         __asm__ __volatile__("vmaxw.xyzw vf1, vf0, vf0w" : : : "memory");
         __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(stateDst) : "memory");
     } else {
-        QuadwordCopyT0(&packet->state, args->state);
+        QuadwordCopyT0(&packet->state, args->quad);
     }
     __asm__ __volatile__("lqc2 vf26, 0(%0)" : : "r"(slot->matrix) : "memory");
     __asm__ __volatile__("lqc2 vf27, 16(%0)" : : "r"(slot->matrix) : "memory");
     __asm__ __volatile__("lqc2 vf28, 32(%0)" : : "r"(slot->matrix) : "memory");
     __asm__ __volatile__("lqc2 vf29, 48(%0)" : : "r"(slot->matrix) : "memory");
-    if (D_0069E310 != 0) {
-        __asm__ __volatile__("mfc1 $8, %0\n\tqmtc2 $8, vf1" : : "f"(D_0046E110[0]) : "$8", "memory");
+    if (svPivotAddress != 0) {
+        __asm__ __volatile__("mfc1 $8, %0\n\tqmtc2 $8, vf1" : : "f"(sefGlobalTransform.scale) : "$8", "memory");
         __asm__ __volatile__("vmulx.xyz vf26, vf26, vf1x" : : : "memory");
         __asm__ __volatile__("vmulx.xyz vf27, vf27, vf1x" : : : "memory");
         __asm__ __volatile__("vmulx.xyz vf28, vf28, vf1x" : : : "memory");
     }
     if (useScale != 0) {
-        __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&D_006B4A80) : "memory");
+        __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&svEffectScaleVector) : "memory");
         __asm__ __volatile__("vmulx.xyz vf26, vf26, vf1x" : : : "memory");
         __asm__ __volatile__("vmuly.xyz vf27, vf27, vf1y" : : : "memory");
         __asm__ __volatile__("vmulz.xyz vf28, vf28, vf1z" : : : "memory");
@@ -2686,14 +2618,6 @@ void svDrawListAppendSlot(SefSlotRecord *slot, const Vector4 *position, const Sv
     __asm__ __volatile__("sqc2 vf29, 48(%0)" : : "r"(packet->matrix) : "memory");
     svDrawList.end_index += 0x11;
 }
-
-typedef struct SvDrawQuadRef {
-    unsigned char unmodeled_00[0x4];
-    Vector4 *quad;
-    const void *texture;            /* +0x08 */
-    const void *uv;                 /* +0x0C */
-    int mode;                       /* +0x10: the draw-mode bits, -1 before the first line */
-} SvDrawQuadRef;
 
 /* A draw record of 17 quadwords (0x110 bytes): the A+D registers, the position, the prim, the vertex, the extra state, the float coordinates, the quadword of the reference and the matrix. */
 typedef struct SvDrawRecordB {
@@ -2712,17 +2636,17 @@ typedef struct SvDrawRecordB {
 } SvDrawRecordB;
 
 /*
- * Appends a pair of kind B draw records (34 quadwords): the first carries the GIF tag, the texture block's tex0, the fixed test word 0x31003 and alpha 0x4A; the second the UV block's tex0, svDrawTestWord and the D_0068C010 entry of the table index. The point, the prims, the vertex (scaled by svVertexScale when set), the extra state, the coordinates (placed by the svDrawMode mode), the quadword and the state's matrix (scaled by D_0046E110 and D_006B4A80) follow.
+ * Appends a pair of kind B draw records (34 quadwords): the first carries the GIF tag, the texture block's tex0, the fixed test word 0x31003 and alpha 0x4A; the second the UV block's tex0, svDrawTestWord and the svPairAlphaTable entry of the table index. The point, the prims, the vertex (scaled by svVertexScale when set), the extra state, the coordinates (placed by the svDrawMode mode), the quadword and the state's matrix (scaled by sefGlobalTransformScale and svEffectScaleVector) follow.
  */
-void svDrawListAppendRecordBPair(SvDrawState *state, Vector4 *point, SvDrawQuadRef *quadRef, int useScale)
+void svDrawListAppendRecordBPair(SvDrawState *state, Vector4 *point, SvDrawCall *quadRef, int useScale)
 {
     Vector4 *positionDst;
     Vector4 *vertexDst;
     SvDrawRecordB *record;
-    Vector4 *vertexScale;
+    const Vector4 *vertexScale;
     u64 testWord;
 
-    record = (SvDrawRecordB *) (svDrawList.entries + svDrawList.end_index * 0x10);
+    record = (SvDrawRecordB *) (svDrawList.entries + svDrawList.end_index);
     testWord = svDrawTestWord;
     record[0].gif.words[0] = 0x002A400000008001ULL;
     record[0].gif.words[1] = 0x512512512512EEEEULL;
@@ -2735,7 +2659,7 @@ void svDrawListAppendRecordBPair(SvDrawState *state, Vector4 *point, SvDrawQuadR
     record[1].test.words[0] = testWord;
     record[0].test.words[1] = GS_TEST_1;
     record[0].alpha.words[0] = 0x4A;
-    record[1].alpha.words[0] = D_0068C010[state->tableIndex];
+    record[1].alpha.words[0] = svPairAlphaTable[state->tableIndex];
     record[1].alpha.words[1] = GS_ALPHA_1;
     record[0].alpha.words[1] = GS_ALPHA_1;
     positionDst = &record[0].position;
@@ -2755,7 +2679,7 @@ void svDrawListAppendRecordBPair(SvDrawState *state, Vector4 *point, SvDrawQuadR
             "vmul.xyzw vf1, vf1, vf2\n\t"
             "vmini.xyz vf1, vf1, vf3\n\t"
             "vftoi0.xyzw vf1, vf1"
-            : : "r"(vertexScale), "r"(&D_003ED640) : "memory");
+            : : "r"(vertexScale), "r"(&svColorMaxVector) : "memory");
     }
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(vertexDst));
     QuadwordCopyT0(&record[0].extraState, &state->extraState);
@@ -2782,14 +2706,14 @@ void svDrawListAppendRecordBPair(SvDrawState *state, Vector4 *point, SvDrawQuadR
         "lqc2 vf28, 32(%0)\n"
         "lqc2 vf29, 48(%0)\n"
         : : "r"(state->matrix));
-    if (D_0069E310 != 0) {
+    if (svPivotAddress != 0) {
         __asm__ __volatile__(
             "mfc1 $8, %0\n"
             "qmtc2 $8, vf1\n"
             "vmulx.xyz vf26, vf26, vf1x\n"
             "vmulx.xyz vf27, vf27, vf1x\n"
             "vmulx.xyz vf28, vf28, vf1x\n"
-            : : "f"(D_0046E110[0]) : "$8", "memory");
+            : : "f"(sefGlobalTransform.scale) : "$8", "memory");
     }
     if (useScale != 0) {
         __asm__ __volatile__(
@@ -2797,7 +2721,7 @@ void svDrawListAppendRecordBPair(SvDrawState *state, Vector4 *point, SvDrawQuadR
             "vmulx.xyz vf26, vf26, vf1x\n"
             "vmuly.xyz vf27, vf27, vf1y\n"
             "vmulz.xyz vf28, vf28, vf1z\n"
-            : : "r"(&D_006B4A80));
+            : : "r"(&svEffectScaleVector));
     }
     __asm__ __volatile__(
         "sqc2 vf26, 0(%0)\n"
@@ -2829,23 +2753,22 @@ typedef struct SvDrawRecordA {
 #define SV_TEST_FIXED_DATA 0x31003
 #define SV_ALPHA_FIXED_DATA 0x4A
 
-void vu0RotateCurrentZ(float angle);
 
 /*
  * Appends a kind A draw record at the end cursor: the GIF tag and registers, the texture, test and alpha registers, the vertex scaled by svVertexScale when set, the prim, the extra state, the coordinates (u, v, 0, 1), the quadword of the reference (or all ones when the UV flags have 0x10) and the matrix rows. The rows are transformed by vu0TransformPoint and the current matrix; a Z rotation is applied when the two angles sum to a non-zero value. end_index moves on by 14.
  */
-void svDrawListAppendRecordA(SvDrawState *state, Vector4 *point, SvDrawQuadRef *quadRef, int useFixedMatrix)
+void svDrawListAppendRecordA(SvDrawState *state, Vector4 *point, SvDrawCall *quadRef, int useFixedMatrix)
 {
     Vector4 *extraSrc;
     Vector4 *extraDst;
     DoublewordVector4 *coordsDst;
     SvDrawRecordA *record;
-    Vector4 *vertexScale;
+    const Vector4 *vertexScale;
     int *vertexDst;
     float zAngle;
     DrawStatePacket *packet;
 
-    record = (SvDrawRecordA *) (svDrawList.entries + svDrawList.end_index * 0x10);
+    record = (SvDrawRecordA *) (svDrawList.entries + svDrawList.end_index);
     record->gif.words[0] = 0xD02A400000008001ULL;
     record->gif.words[1] = 0x000525252521EEEEULL;
     record->texture.words[0] = state->uv->tex0;
@@ -2865,7 +2788,7 @@ void svDrawListAppendRecordA(SvDrawState *state, Vector4 *point, SvDrawQuadRef *
             "vmul.xyzw vf1, vf1, vf2\n\t"
             "vmini.xyz vf1, vf1, vf3\n\t"
             "vftoi0.xyzw vf1, vf1"
-            : : "r"(vertexScale), "r"(&D_003ED640) : "memory");
+            : : "r"(vertexScale), "r"(&svColorMaxVector) : "memory");
     }
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(vertexDst) : "memory");
     QuadwordCopyT0(&record->prim, &state->primaryPrim);
@@ -2890,10 +2813,10 @@ void svDrawListAppendRecordA(SvDrawState *state, Vector4 *point, SvDrawQuadRef *
             "lqc2 vf27, 16(%0)\n"
             "lqc2 vf28, 32(%0)\n"
             "lqc2 vf29, 48(%0)\n"
-            : : "r"(&D_006B4A40));
+            : : "r"(&svEffectMatrix));
         vu0TransformPoint(point);
-        vu0CurMatrixMul(state);
-        __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&D_006B4A80));
+        vu0CurMatrixMul(state->matrix);
+        __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&svEffectScaleVector));
         __asm__ __volatile__(
             "vmulx.xyzw vf26, vf26, vf1x\n"
             "vmuly.xyzw vf27, vf27, vf1y\n"
@@ -2917,16 +2840,16 @@ void svDrawListAppendRecordA(SvDrawState *state, Vector4 *point, SvDrawQuadRef *
                 "lqc2 vf29, 0(%1)\n"
                 : : "r"(vu0IdentityMatrix), "r"(point));
         }
-        vu0CurMatrixMul(state);
+        vu0CurMatrixMul(state->matrix);
     }
-    if (D_0069E310 != 0) {
+    if (svPivotAddress != 0) {
         __asm__ __volatile__(
             "mfc1 $8, %0\n"
             "qmtc2 $8, vf1\n"
             "vmulx.xyzw vf26, vf26, vf1x\n"
             "vmulx.xyzw vf27, vf27, vf1x\n"
             "vmulx.xyzw vf28, vf28, vf1x\n"
-            : : "f"(D_0046E110[0]) : "$8", "memory");
+            : : "f"(sefGlobalTransform.scale) : "$8", "memory");
     }
     if (svFogValue != 0) {
         __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(quadRef->quad));
@@ -2971,21 +2894,21 @@ void svDrawListAppendRecordA(SvDrawState *state, Vector4 *point, SvDrawQuadRef *
 }
 
 /*
- * Appends a pair of kind A draw records (28 quadwords): the first carries the GIF tag, the texture block's tex0, the fixed test word 0x31003 and alpha 0x4A; the second the UV block's tex0, svDrawTestWord and the D_0068C010 entry of the table index. The vertex (scaled by svVertexScale when set) goes to both, the secondary and primary prims to the first and second, then the extra state, coordinates, quadword and matrix like svDrawListAppendRecordA.
+ * Appends a pair of kind A draw records (28 quadwords): the first carries the GIF tag, the texture block's tex0, the fixed test word 0x31003 and alpha 0x4A; the second the UV block's tex0, svDrawTestWord and the svPairAlphaTable entry of the table index. The vertex (scaled by svVertexScale when set) goes to both, the secondary and primary prims to the first and second, then the extra state, coordinates, quadword and matrix like svDrawListAppendRecordA.
  */
-void svDrawListAppendRecordAPair(SvDrawState *state, Vector4 *point, SvDrawQuadRef *quadRef, int useFixedMatrix)
+void svDrawListAppendRecordAPair(SvDrawState *state, Vector4 *point, SvDrawCall *quadRef, int useFixedMatrix)
 {
     Vector4 *extraSrc;
     Vector4 *extraDst;
     DoublewordVector4 *coordsDst;
     SvDrawRecordA *record;
-    Vector4 *vertexScale;
+    const Vector4 *vertexScale;
     int *vertexDst;
     u64 testWord;
     float zAngle;
     DrawStatePacket *packet;
 
-    record = (SvDrawRecordA *) (svDrawList.entries + svDrawList.end_index * 0x10);
+    record = (SvDrawRecordA *) (svDrawList.entries + svDrawList.end_index);
     testWord = svDrawTestWord;
     record[0].gif.words[0] = 0xD02A400000008001ULL;
     record[0].gif.words[1] = 0x000525252521EEEEULL;
@@ -3000,7 +2923,7 @@ void svDrawListAppendRecordAPair(SvDrawState *state, Vector4 *point, SvDrawQuadR
     record[0].alpha.words[0] = SV_ALPHA_FIXED_DATA;
     vertexDst = record[0].vertex.words;
     vertexScale = svVertexScale;
-    record[1].alpha.words[0] = D_0068C010[state->tableIndex];
+    record[1].alpha.words[0] = svPairAlphaTable[state->tableIndex];
     record[1].alpha.words[1] = GS_ALPHA_1;
     record[0].alpha.words[1] = GS_ALPHA_1;
     __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(state->vertex) : "memory");
@@ -3012,7 +2935,7 @@ void svDrawListAppendRecordAPair(SvDrawState *state, Vector4 *point, SvDrawQuadR
             "vmul.xyzw vf1, vf1, vf2\n\t"
             "vmini.xyz vf1, vf1, vf3\n\t"
             "vftoi0.xyzw vf1, vf1"
-            : : "r"(vertexScale), "r"(&D_003ED640) : "memory");
+            : : "r"(vertexScale), "r"(&svColorMaxVector) : "memory");
     }
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(vertexDst));
     record[1].vertex.quad = record[0].vertex.quad;
@@ -3040,10 +2963,10 @@ void svDrawListAppendRecordAPair(SvDrawState *state, Vector4 *point, SvDrawQuadR
             "lqc2 vf27, 16(%0)\n"
             "lqc2 vf28, 32(%0)\n"
             "lqc2 vf29, 48(%0)\n"
-            : : "r"(&D_006B4A40));
+            : : "r"(&svEffectMatrix));
         vu0TransformPoint(point);
-        vu0CurMatrixMul(state);
-        __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&D_006B4A80));
+        vu0CurMatrixMul(state->matrix);
+        __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&svEffectScaleVector));
         __asm__ __volatile__(
             "vmulx.xyzw vf26, vf26, vf1x\n"
             "vmuly.xyzw vf27, vf27, vf1y\n"
@@ -3067,16 +2990,16 @@ void svDrawListAppendRecordAPair(SvDrawState *state, Vector4 *point, SvDrawQuadR
                 "lqc2 vf29, 0(%1)\n"
                 : : "r"(vu0IdentityMatrix), "r"(point));
         }
-        vu0CurMatrixMul(state);
+        vu0CurMatrixMul(state->matrix);
     }
-    if (D_0069E310 != 0) {
+    if (svPivotAddress != 0) {
         __asm__ __volatile__(
             "mfc1 $8, %0\n"
             "qmtc2 $8, vf1\n"
             "vmulx.xyzw vf26, vf26, vf1x\n"
             "vmulx.xyzw vf27, vf27, vf1x\n"
             "vmulx.xyzw vf28, vf28, vf1x\n"
-            : : "f"(D_0046E110[0]) : "$8", "memory");
+            : : "f"(sefGlobalTransform.scale) : "$8", "memory");
     }
     if (svFogValue != 0) {
         __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(quadRef->quad));
@@ -3141,12 +3064,6 @@ typedef struct SvPart {
     Vector4 extentB;                /* +0x290 */
 } SvPart;
 
-/* A pointer to a vector, read at +4 of the caller's reference block. */
-typedef struct SvQuadRef {
-    unsigned char unmodeled_00[4];
-    const Vector4 *quad;            /* +0x04 */
-} SvQuadRef;
-
 /* One quadword as two doublewords. */
 typedef struct DrawQuad {
     u64 low;
@@ -3174,13 +3091,13 @@ static inline void svCopyQuadword(Vector4 *destination, const Vector4 *source)
     QuadwordCopyT0(destination, source);
 }
 
-/* Appends one part packet to svDrawList: the transformed matrix rows (scaled by D_006B4A80 when `scaled`), then the position, the extents and the source. */
-void svDrawListAppendPart(SvPart *part, const Vector4 *vertex, SvQuadRef *ref, int scaleRows) {
+/* Appends one part packet to svDrawList: the transformed matrix rows (scaled by svEffectScaleVector when `scaled`), then the position, the extents and the source. */
+void svDrawListAppendPart(SvPart *part, const Vector4 *vertex, SvDrawCall *ref, int scaleRows) {
     SvPartPacket *packet;
     int *positionDst;
-    Vector4 *scaleVector;
+    const Vector4 *scaleVector;
 
-    packet = (SvPartPacket *) (svDrawList.entries + svDrawList.end_index * 0x10);
+    packet = (SvPartPacket *) (svDrawList.entries + svDrawList.end_index);
     packet->gif.words[0] = 0xD02A400000008001ULL;
     packet->gif.words[1] = 0x000525252521EEEEULL;
     packet->tex.words[0] = part->source->registerData;
@@ -3200,7 +3117,7 @@ void svDrawListAppendPart(SvPart *part, const Vector4 *vertex, SvQuadRef *ref, i
             "vmul.xyzw vf1, vf1, vf2\n\t"
             "vmini.xyz vf1, vf1, vf3\n\t"
             "vftoi0.xyzw vf1, vf1"
-            : : "r"(scaleVector), "r"(&D_003ED640) : "memory");
+            : : "r"(scaleVector), "r"(&svColorMaxVector) : "memory");
     }
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(positionDst) : "memory");
     QuadwordCopyT0(&packet->vertex, vertex);
@@ -3227,7 +3144,7 @@ void svDrawListAppendPart(SvPart *part, const Vector4 *vertex, SvQuadRef *ref, i
             "vmuly.xyzw vf27, vf27, vf1y\n\t"
             "vmulz.xyzw vf28, vf28, vf1z\n\t"
             "vmulw.xyzw vf29, vf29, vf1w"
-            : : "r"(&D_006B4A80) : "memory");
+            : : "r"(&svEffectScaleVector) : "memory");
     }
     __asm__ __volatile__(
         "sqc2 vf26, 0(%0)\n\t"
@@ -3239,20 +3156,20 @@ void svDrawListAppendPart(SvPart *part, const Vector4 *vertex, SvQuadRef *ref, i
 }
 
 /*
- * Appends a pair of kind A draw records (28 quadwords) like svDrawListAppendRecordAPair, but places the point directly: the point goes to the first record's position, and the matrix is the state's own, scaled per row by D_006B4A80 when flag is set.
+ * Appends a pair of kind A draw records (28 quadwords) like svDrawListAppendRecordAPair, but places the point directly: the point goes to the first record's position, and the matrix is the state's own, scaled per row by svEffectScaleVector when flag is set.
  */
-void svDrawListAppendStatePair(SvDrawState *state, Vector4 *point, SvDrawQuadRef *quadRef, int scaleRows)
+void svDrawListAppendStatePair(SvDrawState *state, Vector4 *point, SvDrawCall *quadRef, int scaleRows)
 {
     Vector4 *pointDst;
     Vector4 *extraStateSrc;
     Vector4 *extraStateDst;
     DoublewordVector4 *coordsDst;
     SvDrawRecordA *pairRecords;
-    Vector4 *vertexScale;
+    const Vector4 *vertexScale;
     int *vertexDst;
     u64 testWord;
 
-    pairRecords = (SvDrawRecordA *) (svDrawList.entries + svDrawList.end_index * 0x10);
+    pairRecords = (SvDrawRecordA *) (svDrawList.entries + svDrawList.end_index);
     testWord = svDrawTestWord;
     pairRecords[0].gif.words[0] = 0xD02A400000008001ULL;
     pairRecords[0].gif.words[1] = 0x000525252521EEEEULL;
@@ -3267,7 +3184,7 @@ void svDrawListAppendStatePair(SvDrawState *state, Vector4 *point, SvDrawQuadRef
     pairRecords[0].alpha.words[0] = SV_ALPHA_FIXED_DATA;
     vertexDst = pairRecords[0].vertex.words;
     vertexScale = svVertexScale;
-    pairRecords[1].alpha.words[0] = D_0068C010[state->tableIndex];
+    pairRecords[1].alpha.words[0] = svPairAlphaTable[state->tableIndex];
     pairRecords[1].alpha.words[1] = GS_ALPHA_1;
     pairRecords[0].alpha.words[1] = GS_ALPHA_1;
     __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(state->vertex) : "memory");
@@ -3279,7 +3196,7 @@ void svDrawListAppendStatePair(SvDrawState *state, Vector4 *point, SvDrawQuadRef
             "vmul.xyzw vf1, vf1, vf2\n\t"
             "vmini.xyz vf1, vf1, vf3\n\t"
             "vftoi0.xyzw vf1, vf1"
-            : : "r"(vertexScale), "r"(&D_003ED640) : "memory");
+            : : "r"(vertexScale), "r"(&svColorMaxVector) : "memory");
     }
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(vertexDst));
     pairRecords[1].vertex.quad = pairRecords[0].vertex.quad;
@@ -3309,7 +3226,7 @@ void svDrawListAppendStatePair(SvDrawState *state, Vector4 *point, SvDrawQuadRef
             "vmuly.xyzw vf27, vf27, vf1y\n"
             "vmulz.xyzw vf28, vf28, vf1z\n"
             "vmulw.xyzw vf29, vf29, vf1w\n"
-            : : "r"(&D_006B4A80));
+            : : "r"(&svEffectScaleVector));
     }
     __asm__ __volatile__(
         "sqc2 vf26, 0(%0)\n"
@@ -3323,7 +3240,7 @@ void svDrawListAppendStatePair(SvDrawState *state, Vector4 *point, SvDrawQuadRef
 /* Sets the part's scale from one of three keys (0x40, 0x80, 0x100 select scaleKey40, scaleKey80 or scaleKey100); a unit scale leaves scaled at 0. Otherwise the matrix becomes the scaled identity with the position in row 3. Returns kind. */
 int sefInitPartTransform(SefPartTransform *part, int kind, int scaleKey40, int scaleKey80, int scaleKey100) {
     float partScale = 1.0f;
-    Matrix4 *unitMatrix;
+    const Matrix4 *unitMatrix;
 
     if ((kind & 0x40) != 0) {
         partScale = sefGetEntryScale(scaleKey40);
@@ -3379,34 +3296,19 @@ typedef struct SefCurrentRecord {
     int drawSelector;          /* +0x74 */
 } SefCurrentRecord;
 
-/* The argument block the item draw passes to the slot callees: the entry's scale vector at +0x4 and the two state tables at +0x8 and +0xC. */
-typedef struct SvDrawCall {
-    unsigned char unmodeled_00[4];
-    Vector4 *scale;
-    const DrawStateWords *tableA;
-    const DrawStateWords *tableB;
-    int keyByte;               /* the item's s19 mode bits */
-} SvDrawCall;
-
 extern SefCurrentRecord *sefCurrentRecord;
 extern unsigned short svSceneFlags;
-/* Stays asm-labelled: D_0069E310 is also read as an int; a single pointer declaration changed the code. */
-extern Vector4 *svPivot[1] __asm__("D_0069E310");
-/* Stays asm-labelled: D_006B4980 is also declared as Matrix4[2]; the one-matrix size is in the object. */
-extern Vector4 D_003ED650[3];
-extern const DrawStateWords D_0068C070;
-extern const DrawStateWords D_0068C0B0;
-extern const DrawStateWords D_0068C0F0;
-extern const DrawStateWords D_0068C130;
-extern const u64 D_0068C180[2];
-extern const Vector4 D_0068C170;
-extern unsigned char D_006AF340[];
-int sefFlagTest(int mask);
-unsigned char *sefGetSlotData(int slotIndex);
-Matrix4 *MMathMulMatrix(Matrix4 *out, Matrix4 *rhs, Matrix4 *lhs);
-Matrix4 *MMathScaleMatrix(Matrix4 *out, Matrix4 *matrix, const Vector4 *scale);
-short MMathIsVectorEqual(const Vector4 *a, const Vector4 *b);
-Matrix4 *MMathScaleMatrixRotS(Matrix4 *out, Matrix4 *matrix, float scale);
+/* Stays asm-labelled: svPivotAddress is also read as an int; a single pointer declaration changed the code. */
+extern Vector4 *svPivot[1] __asm__("svPivotAddress");
+/* Stays asm-labelled: svEffectCameraMatrices is also declared as Matrix4[2]; the one-matrix size is in the object. */
+extern Vector4 svDefaultScaleVectors[3];
+extern const DrawStateWords svDefaultDrawStateTable;
+extern const DrawStateWords svMode7DrawStateTable;
+extern const DrawStateWords svMode9DrawStateTable;
+extern const DrawStateWords svSpriteDrawStateTable;
+extern const u64 svDrawRefUvWords[2];
+extern const Vector4 svDefaultVertexScale;
+extern unsigned char sefAppliedLightSet[];
 
 /* Unused in this file; the original compiled it here (it takes one label number ahead of svDrawImageItem). */
 static inline void svClearFlags(int *flags, int mask)
@@ -3435,7 +3337,7 @@ static inline void svCopyVector(Vector4 *destination, Vector4 *source)
         : "$8");
 }
 
-extern Matrix4 D_006B49C0;
+extern Matrix4 svEffectCameraProjectionMatrix;
 
 /* Draws one item: the 256 drawIndex rows select slots whose kind and _draw3D mode pick the draw call. */
 void svDrawImageItem(SvDrawItem *item, int renderState)
@@ -3499,25 +3401,25 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
     reflectFlag = modeFlags & 0x1;
     showFlagged = svSceneFlags & 0x2;
     s19Mask8 = 0;
-    slots = (SvTransformBlock *) sefGetSlotData(0);
-    stateTable = &D_0068C070;
-    if (D_0069E2F4 == 0) {
+    slots = (SvTransformBlock *) sevGetPtAllocator2(0);
+    stateTable = &svDefaultDrawStateTable;
+    if (svRecordSourcePointer == 0) {
         flagsMode = 0;
     }
     svFogValue = -1;
     itemMatrix = 0;
     flags = item->imageFlags;
-    D_0069E318 = flags & 0xCB;
-    D_0069E2FC = flagsMode;
-    if (sefClipTestDisabled != 0) {
+    svItemDrawFlags = flags & 0xCB;
+    svItemModeFlags = flagsMode;
+    if (_sefBattleMode != 0) {
         if (item->keyHeaders != 0 && item->keyHeaders[-1].kind != 0) {
-            D_0069E318 |= 0x40;
+            svItemDrawFlags |= 0x40;
         }
         if ((unsigned int) (sefCurrentRecord->drawSelector - 55) < 3U) {
-            D_0069E318 |= 0x40;
+            svItemDrawFlags |= 0x40;
         }
         if ((unsigned int) (sefCurrentRecord->drawSelector - 0x32001) < 16U) {
-            D_0069E318 |= 0x40;
+            svItemDrawFlags |= 0x40;
         }
     }
     if ((flags & 0x10) != 0 && showFlagged == 0) {
@@ -3529,14 +3431,14 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
     if (drawMode != SV_RENDER_2D_SPRITE && isKind8) {
         return;
     }
-    ctx.tableA = (const DrawStateWords *) D_0068C030;
-    ctx.tableB = &D_0068C180;
-    ctx.keyByte = s19;
+    ctx.texture = svUnitQuadCornerMatrix;
+    ctx.uv = svDrawRefUvWords;
+    ctx.mode = s19;
     svPivot[0] = 0;
     scalePart = &sefGlobalTransform;
     scalePart->scaled = 0;
     if (hasRecordMatrix != 0) {
-        scaledRecord = MMathIsVectorEqual(&D_006B4A80, &D_003ED650) == 0 ? hasRecordMatrix : 0;
+        scaledRecord = MMathIsVectorEqual(&svEffectScaleVector, svDefaultScaleVectors) == 0 ? hasRecordMatrix : 0;
     }
     if (drawMode != SV_RENDER_2D_SPRITE && (item->modeFlags & 0x2000) != 0) {
         currentRecord = sefCurrentRecord;
@@ -3545,57 +3447,57 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
     }
     if (drawMode == SV_RENDER_2D_SPRITE) {
         svDrawMode = clipFlag != 0 ? 4 : 3;
-        stateTable = &D_0068C130;
+        stateTable = &svSpriteDrawStateTable;
     } else if (drawMode == SV_RENDER_2D) {
         if ((item->modeFlags & 0x80) != 0 || svZTestEnable == 0) {
             svDrawTestWord = SV_ZTEST_OFF;
         } else {
             svDrawTestWord = SV_ZTEST_ON;
         }
-        if (ctx.keyByte == 0) {
+        if (ctx.mode == 0) {
             drawState = clipFlag != 0 ? 2 : 1;
-            D_0069E318 &= ~2;
+            svItemDrawFlags &= ~2;
             svDrawMode = drawState;
-            D_0069E308 = drawState;
+            svPolygonAxesMode = drawState;
         } else {
             if ((s19 & 1) != 0) {
                 svDrawMode = 5;
             } else if ((s19 & 2) != 0) {
                 svDrawMode = 7;
-                stateTable = &D_0068C0B0;
+                stateTable = &svMode7DrawStateTable;
             } else if ((s19 & 8) != 0) {
-                D_0069E318 &= ~2;
+                svItemDrawFlags &= ~2;
                 s19Bit3Flag = 1;
                 svDrawMode = 11;
             } else {
                 svDrawMode = 9;
-                stateTable = &D_0068C0F0;
+                stateTable = &svMode9DrawStateTable;
             }
-            D_0069E308 = svDrawMode;
-            if ((D_0069E318 & 2) != 0) {
+            svPolygonAxesMode = svDrawMode;
+            if ((svItemDrawFlags & 2) != 0) {
                 svDrawMode = 13;
             }
             if (clipFlag != 0) {
-                D_0069DB3C = 1;
+                svPolygonClipFlag = 1;
                 svDrawMode = svDrawMode + 1;
             } else {
-                D_0069DB3C = 0;
+                svPolygonClipFlag = 0;
             }
         }
     } else {
         s19 &= 0x8;
         s19Mask8 = s19;
         svDrawMode = 0;
-        D_0069E308 = 0;
-        D_0069DAE4 = ((item->imageFlags & 0x4) != 0) ? D_006AF340 : D_006AF7C0;
+        svPolygonAxesMode = 0;
+        svActiveLightSet = ((item->imageFlags & 0x4) != 0) ? sefAppliedLightSet : svEffectLightSet;
     }
 
     svDrawStatePacket->stateWords = *stateTable;
     if (usesItemMatrix != 0) {
         if (item->entries[-2] == 2) {
-            itemMatrix = &D_006B4980[0];
+            itemMatrix = &svEffectCameraMatrices[0];
         } else {
-            itemMatrix = &D_006B49C0;
+            itemMatrix = &svEffectCameraProjectionMatrix;
         }
         __asm__ __volatile__(
             "lqc2 vf1, 32(%0)\n\t"
@@ -3617,16 +3519,16 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
     }
     if (s19Bit3Flag != 0) {
         QuadwordCopyMatrixT0(&svDrawStatePacket->matrixA, svViewMatrix);
-    } else if (svRecordMatrix != 0 && (D_0069E318 & 0x2) == 0) {
+    } else if (svRecordMatrix != 0 && (svItemDrawFlags & 0x2) == 0) {
         if (scaledRecord != 0) {
             MMathMulMatrix(&svDrawStatePacket->matrixA, &svDrawStatePacket->matrixA,
-                           &D_006B4A40);
+                           &svEffectMatrix);
         } else {
             MMathMulMatrix(&svDrawStatePacket->matrixA, &svDrawStatePacket->matrixA,
                            svRecordMatrix);
         }
     }
-    if (hasPartScale != 0 && (D_0069E318 & 0x2) == 0) {
+    if (hasPartScale != 0 && (svItemDrawFlags & 0x2) == 0) {
         MMathScaleMatrixRotS(&svDrawStatePacket->baseMatrix, &svDrawStatePacket->baseMatrix,
                              sefGlobalTransform.scale);
         svDrawStatePacket->baseMatrix[3][3] = 1.0f;
@@ -3640,9 +3542,9 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
         svDrawListAppend(SV_DRAW_LIST_FLUSH_CODE, 0, svFogValue);
     }
     if ((flagsMode & 0x2) != 0) {
-        D_0069E300 = (int) D_0069E2F4 + 256;
+        svRecordSourceRowsPointer = (Vector4 *) ((u8 *) svRecordSourcePointer + 256);
     } else {
-        D_0069E300 = 0;
+        svRecordSourceRowsPointer = 0;
     }
 
     indexPtr = item->pointHandles;
@@ -3657,7 +3559,7 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
         }
         svVertexScale = svRecordScale;
         if (drawMode != SV_RENDER_3D_MODEL && sefFlagTest(2) != 0 && slot->index == 0) {
-            svVertexScale = &D_0068C170;
+            svVertexScale = &svDefaultVertexScale;
         }
 
         switch (drawMode) {
@@ -3679,8 +3581,8 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
             } else {
                 svBuildItemMatrix(&slot->rotation_aux, slot, scaledRecord, s19Mask8);
             }
-            if (D_0069E300 != 0) {
-                vu0CurMatrixMulRight((Vector4 *) D_0069E300);
+            if (svRecordSourceRowsPointer != 0) {
+                vu0CurMatrixMulRight(svRecordSourceRowsPointer);
             }
             if (usesItemMatrix != 0) {
                 vu0CurMatrixMulRight((Vector4 *) itemMatrix);
@@ -3698,9 +3600,9 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
                 continue;
             }
             if (clipFlag != 0) {
-                svDrawListAppendRecordCPair((SvDrawState *) slot, D_0068C010[slot->index]);
+                svDrawListAppendSpriteRecordPair((SvDrawState *) slot, svPairAlphaTable[slot->index]);
             } else {
-                svDrawListAppendRecordC((SvDrawState *) slot, svAlphaTestTable[slot->index]);
+                svDrawListAppendSpriteRecord((SvDrawState *) slot, svAlphaTestTable[slot->index]);
             }
             svDrawListTryFlush();
             break;
@@ -3708,7 +3610,7 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
             if (slot->part->kind != 4) {
                 continue;
             }
-            ctx.scale = &slot->scale;
+            ctx.quad = &slot->scale;
             slotPosition = &slot->rotation_aux;
             if (hasPartScale != 0) {
                 __asm__ __volatile__("lqc2 vf20, 0(%0)" : : "r"(slotPosition));
@@ -3746,31 +3648,31 @@ void svDrawImageItem(SvDrawItem *item, int renderState)
                 __asm__ __volatile__("sqc2 vf20, 0(%0)" : : "r"(&scaledPosition) : "memory");
                 slotPosition = &scaledPosition;
             }
-            if (ctx.keyByte == 0) {
+            if (ctx.mode == 0) {
                 if (clipFlag != 0) {
-                    svDrawListAppendStatePair((SvDrawState *) slot, slotPosition, (SvDrawQuadRef *) &ctx, scaledRecord);
+                    svDrawListAppendStatePair((SvDrawState *) slot, slotPosition, (SvDrawCall *) &ctx, scaledRecord);
                 } else {
-                    svDrawListAppendPart((SvPart *) slot, slotPosition, (SvQuadRef *) &ctx, scaledRecord);
+                    svDrawListAppendPart((SvPart *) slot, slotPosition, &ctx, scaledRecord);
                 }
             } else if (clipFlag != 0) {
                 if (svDrawMode == 12) {
-                    svDrawListAppendRecordAPair((SvDrawState *) slot, slotPosition, (SvDrawQuadRef *) &ctx, scaledRecord);
+                    svDrawListAppendRecordAPair((SvDrawState *) slot, slotPosition, (SvDrawCall *) &ctx, scaledRecord);
                 } else if (svDrawMode == 14) {
                     svDrawListFlush(svDrawList.end_index - svDrawList.begin_index);
                     svDrawPolygonItem((SvPolygonItem *) slot, slotPosition, &ctx, scaledRecord);
                     svDrawListFlush(svDrawList.end_index - svDrawList.begin_index);
                 } else {
-                    svDrawListAppendRecordBPair((SvDrawState *) slot, slotPosition, (SvDrawQuadRef *) &ctx, scaledRecord);
+                    svDrawListAppendRecordBPair((SvDrawState *) slot, slotPosition, (SvDrawCall *) &ctx, scaledRecord);
                 }
             } else {
                 if (svDrawMode == 11) {
-                    svDrawListAppendRecordA((SvDrawState *) slot, slotPosition, (SvDrawQuadRef *) &ctx, scaledRecord);
+                    svDrawListAppendRecordA((SvDrawState *) slot, slotPosition, (SvDrawCall *) &ctx, scaledRecord);
                 } else if (svDrawMode == 13) {
                     svDrawListFlush(svDrawList.end_index - svDrawList.begin_index);
                     svDrawPolygonItem((SvPolygonItem *) slot, slotPosition, &ctx, scaledRecord);
                     svDrawListFlush(svDrawList.end_index - svDrawList.begin_index);
                 } else {
-                    svDrawListAppendSlot((SefSlotRecord *) slot, slotPosition, (SvSlotDrawArgs *) &ctx, scaledRecord);
+                    svDrawListAppendSlot((SefSlotRecord *) slot, slotPosition, &ctx, scaledRecord);
                 }
             }
             svDrawListTryFlush();
@@ -3793,7 +3695,7 @@ void svSelectImageMapper(int index) {
     }
 }
 
-/* Chooses the mapper for an item: mapper 0 when its 0x2000 flag is set, else the requested index D_0069E2EC. Does nothing while _draw3D is 2. */
+/* Chooses the mapper for an item: mapper 0 when its 0x2000 flag is set, else the requested index svRequestedMapperIndex. Does nothing while _draw3D is 2. */
 void svSelectImageMapperForItem(SvDrawItem *item) {
     int index;
 
@@ -3805,7 +3707,7 @@ void svSelectImageMapperForItem(SvDrawItem *item) {
                 svRefMapperPacket();
             }
         } else {
-            index = D_0069E2EC;
+            index = svRequestedMapperIndex;
             if (svActiveMapperIndex != index) {
                 svActiveMapperIndex = index;
                 svLoadImageList(&_imageMapper.typeLists[index]);
@@ -3815,62 +3717,27 @@ void svSelectImageMapperForItem(SvDrawItem *item) {
     }
 }
 
-/* One 76-byte entry of an effect record: 32 line indices (negative means none), 32 second bytes, and a flag word whose bit 31 marks the entry active. */
-typedef struct SefEffectEntry {
-    signed char lineIndex[32];
-    signed char sortKey[32];
-    unsigned char unmodeled_40[0x44 - 0x40];
-    unsigned int flags;
-    unsigned char unmodeled_48[0x4C - 0x48];
-} SefEffectEntry;
-
-typedef struct SvEffectRecord {
-    Vector4 position;                /* +0x00: the point sefTransformClipPoint takes */
-    Vector4 rotation;                /* +0x10 */
-    Vector4 scale;                   /* +0x20 */
-    Vector4 size;                    /* +0x30: vertex scale, (1, 1, 1) for none */
-    unsigned char unmodeled_40[0x44 - 0x40];
-    int flags;                       /* +0x44 */
-    int inUse;                       /* +0x48 */
-    unsigned char unmodeled_4c[0x50 - 0x4C];
-    void * params[7];                   /* +0x50: sefLoadRequestBuffer's arguments */
-    short kind;                      /* +0x6C */
-    short gate;                      /* +0x6E */
-    unsigned char unmodeled_70[0x74 - 0x70];
-    int ownerKey;                    /* +0x74 */
-    unsigned char unmodeled_78[0x84 - 0x78];
-    SefEffectEntry entries[32];      /* +0x84: the entry table svCollectSortedLines and svSortLineSlots read */
-    unsigned char unmodeled_a04[0xA5C - 0xA04];
-    float requestValue;              /* +0xA5C */
-    float radius;                    /* +0xA60 */
-    unsigned char unmodeled_a64[0xA6C - 0xA64];
-    signed char requestByte;         /* +0xA6C */
-    unsigned char unmodeled_a6d[0xA70 - 0xA6D];
-} SvEffectRecord;
-
 /* sefCurrentRecord seen as a one-member record slot. */
 typedef struct SefCurrentRecordSlot {
-    SvEffectRecord *record;
+    SefEffectRecord *record;
 } SefCurrentRecordSlot;
 
-extern short D_0046E114[];
 /* The definition in sef.c returns SefLocalData *; this file views the same record as SvDrawItem. */
 struct SefLocalData;
-struct SefLocalData *sefGetLineData(int entryIndex);
 
 /* Draws the depth-sorted image slots of the current effect record: walks the 512 sort buckets from the back, switches the
  * draw state (mode, texture-state block, clamp, fog) whenever the line changes, then appends each image slot through the
  * record builder of its mode. */
-void svDrawSortedImages(SvEffectRecord *effectRecord)
+void svDrawSortedImages(SefEffectRecord *effectRecord)
 {
-    SvDrawQuadRef drawRef;
+    SvDrawCall drawRef;
     int bucketIndex;
     SvDrawItem *lineData;
     SortItem *sortItem;
     SvDrawState *slotState;
     unsigned char *slotBase;
-    u64 *stateTable;
-    u64 *lastStateTable;
+    const u64 *stateTable;
+    const u64 *lastStateTable;
     unsigned short additiveBit;
     short lineMode;
     int lastLineIndex;
@@ -3881,15 +3748,15 @@ void svDrawSortedImages(SvEffectRecord *effectRecord)
     lastStateTable = 0;
     pendingCount = 0;
     additiveBit = 0;
-    stateTable = D_0068C070.words;
+    stateTable = svDefaultDrawStateTable.words;
     lastLineIndex = -1;
-    slotBase = sefGetSlotData(0);
-    drawRef.texture = D_0068C030;
-    drawRef.uv = &D_0068C180;
+    slotBase = sevGetPtAllocator2(0);
+    drawRef.texture = svUnitQuadCornerMatrix;
+    drawRef.uv = svDrawRefUvWords;
     svDrawMode = 5;
-    D_0046E114[0] = 0;
+    sefGlobalTransform.scaled = 0;
     drawRef.mode = -1;
-    D_0069E310 = 0;
+    svPivotAddress = 0;
     ((DoublewordVector4 *) &svDrawStatePacket->clamp)->words[1] = 8;
     ((DoublewordVector4 *) &svDrawStatePacket->clamp)->words[0] = 5;
     MMathMulMatrix(&svDrawStatePacket->baseMatrix, svViewMatrix, (Matrix4 *) sefCameraMatrix);
@@ -3901,7 +3768,7 @@ void svDrawSortedImages(SvEffectRecord *effectRecord)
         while (sortItem->next >= 0) {
             itemIndex = sortItem->next;
             sortItem = &svSortItems[itemIndex];
-            lineData = (SvDrawItem *) sefGetLineData(sortItem->flags);
+            lineData = (SvDrawItem *) sefGetLineAdr(sortItem->flags);
             if (lineData == 0) {
                 continue;
             }
@@ -3930,20 +3797,20 @@ void svDrawSortedImages(SvEffectRecord *effectRecord)
                 }
                 if (lineMode == 0) {
                     svDrawMode = additiveBit ? 2 : 1;
-                    stateTable = D_0068C070.words;
+                    stateTable = svDefaultDrawStateTable.words;
                 } else {
                     if (lineMode & 1) {
-                        stateTable = D_0068C070.words;
+                        stateTable = svDefaultDrawStateTable.words;
                         svDrawMode = 5;
                     } else if (lineMode & 2) {
                         svDrawMode = 7;
-                        stateTable = D_0068C0B0.words;
+                        stateTable = svMode7DrawStateTable.words;
                     } else if (lineMode & 8) {
-                        stateTable = D_0068C070.words;
+                        stateTable = svDefaultDrawStateTable.words;
                         svDrawMode = 11;
                     } else {
                         svDrawMode = 9;
-                        stateTable = D_0068C0F0.words;
+                        stateTable = svMode9DrawStateTable.words;
                     }
                     if (additiveBit) {
                         svDrawMode++;
@@ -3967,7 +3834,7 @@ void svDrawSortedImages(SvEffectRecord *effectRecord)
                 }
                 svDrawListAppend(0x28, 0, svFogValue);
             }
-            /* Kept: sefGetSlotData returns unsigned char *, so the 0x2C0-byte slot stride stays a byte offset. */
+            /* Kept: sevGetPtAllocator2 returns unsigned char *, so the 0x2C0-byte slot stride stays a byte offset. */
             slotState = (SvDrawState *) (slotBase + sortItem->id * 0x2C0);
             if (slotState->uv->kind != 4) {
                 continue;
@@ -3975,7 +3842,7 @@ void svDrawSortedImages(SvEffectRecord *effectRecord)
             svVertexScale = svRecordScale;
             if (sefFlagTest(2)) {
                 if (slotState->tableIndex == 0) {
-                    svVertexScale = &D_0068C170;
+                    svVertexScale = &svDefaultVertexScale;
                 }
             }
             drawRef.quad = &slotState->pointB;
@@ -3983,7 +3850,7 @@ void svDrawSortedImages(SvEffectRecord *effectRecord)
                 if (additiveBit) {
                     svDrawListAppendStatePair(slotState, &slotState->pointA, &drawRef, 0);
                 } else {
-                    svDrawListAppendPart((SvPart *) slotState, &slotState->pointA, (SvQuadRef *) &drawRef, 0);
+                    svDrawListAppendPart((SvPart *) slotState, &slotState->pointA, &drawRef, 0);
                 }
             } else if (additiveBit) {
                 if (svDrawMode == 12) {
@@ -3994,7 +3861,7 @@ void svDrawSortedImages(SvEffectRecord *effectRecord)
             } else if (svDrawMode == 11) {
                 svDrawListAppendRecordA(slotState, &slotState->pointA, &drawRef, 0);
             } else {
-                svDrawListAppendSlot((SefSlotRecord *) slotState, &slotState->pointA, (SvSlotDrawArgs *) &drawRef, 0);
+                svDrawListAppendSlot((SefSlotRecord *) slotState, &slotState->pointA, &drawRef, 0);
             }
             pendingCount++;
             svDrawListTryFlush();
@@ -4019,7 +3886,7 @@ typedef struct SvDrawContext {
 } SvDrawContext;
 
 /* Adds each drawn slot of the pairs' lines to the depth sort, with the view-space z of its position under the current matrix as depth; returns the summed line count. */
-int svSortLineSlots(SvEffectRecord *record, SvEntryPair *pairs, int pairCount, SvDrawContext *context) {
+int svSortLineSlots(SefEffectRecord *record, SvEntryPair *pairs, int pairCount, SvDrawContext *context) {
     unsigned char *slotBase;
     SvDrawItem *lineData;
     SefSlotRecord *slotRecord;
@@ -4035,7 +3902,7 @@ int svSortLineSlots(SvEffectRecord *record, SvEntryPair *pairs, int pairCount, S
     int wantedPartKind;
     Vector4 depthVector;
 
-    slotBase = sefGetSlotData(0);
+    slotBase = sevGetPtAllocator2(0);
     lineTotal = 0;
     showFlagged = svSceneFlags & 2;
     svSortReset();
@@ -4049,7 +3916,7 @@ int svSortLineSlots(SvEffectRecord *record, SvEntryPair *pairs, int pairCount, S
         pair = pairs;
         for (pairsLeft = pairCount; pairsLeft != 0; pairsLeft--, pair++) {
             lineIndex = pair->lineIndex;
-            lineData = (SvDrawItem *) sefGetLineData(lineIndex);
+            lineData = (SvDrawItem *) sefGetLineAdr(lineIndex);
             if (lineData->count == 0 || lineData->entries[-2] == 8) {
                 continue;
             }
@@ -4091,7 +3958,7 @@ int svSortLineSlots(SvEffectRecord *record, SvEntryPair *pairs, int pairCount, S
 }
 
 /* Gathers the line index and sort key of every line of the active entries into out, sorts the pairs ascending by sort key and returns their count. */
-int svCollectSortedLines(SvEffectRecord *record, SvEntryPair *out) {
+int svCollectSortedLines(SefEffectRecord *record, SvEntryPair *out) {
     SefEffectEntry *effectEntry;
     SvDrawItem *lineData;
     SvEntryPair *pair;
@@ -4112,7 +3979,7 @@ int svCollectSortedLines(SvEffectRecord *record, SvEntryPair *out) {
             pair = (SvEntryPair *)((pairCount << 2) + (int)out);
             for (i = 0; i < 32; i++) {
                 if (effectEntry->lineIndex[i] >= 0) {
-                    lineData = (SvDrawItem *) sefGetLineData(effectEntry->lineIndex[i]);
+                    lineData = (SvDrawItem *) sefGetLineAdr(effectEntry->lineIndex[i]);
                     if (!(lineData->imageFlags & 0x10) || showFlagged != 0) {
                         pairCount++;
                         pair->lineIndex = effectEntry->lineIndex[i];
@@ -4153,29 +4020,15 @@ void svBuildDrawStatePacket(void) {
     packet = xglPacketGetCurrent();
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddCode(packet, 0x11000000);
-    func_0012B6E0(packet, 0x14, 0x6C, 4, 4);
-    func_0012BCE8(packet, svDrawStatePacket, 0x10);
-    func_0012B770(packet);
+    sceVif1PkOpenUpkCode(packet, 0x14, 0x6C, 4, 4);
+    sceVif1PkAddUpkData128N(packet, svDrawStatePacket, 0x10);
+    sceVif1PkCloseUpkCode(packet);
 }
 
-/* The owner's declaration is SefEffectRecord *sefGetEffectRecords(void) in sef.h: the same 0xA70-byte record table, this file's view. */
-SvEffectRecord *sefGetEffectRecords(void);
 
-typedef struct SvRequestView {
-    int argument[7];
-    int kind;
-    unsigned char unmodeled_020[0x0C];
-    short mode;
-    unsigned char unmodeled_02E[0x314 - 0x2E];
-    float value;
-} SvRequestView;
-
-extern Matrix4 D_006B4A00;
+extern Matrix4 svEffectScaledMatrix;
 void svDrawSendViewSetup(void);
-void svDrawSortedImages(SvEffectRecord *record);
-SvRequestView *sefGetRequestBuffer(void);
-void sefLoadRequestBuffer(int p0, int p1, int p2, int p3, int p4, int p5, int p6, int p7);
-int sefBuildEffectMatrix(const Vector4 *rotation, const Vector4 *translation, const Vector4 *scale, Matrix4 *out);
+void svDrawSortedImages(SefEffectRecord *record);
 
 /* Draws effect record `index`: publishes it as the current record, loads its
  * request parameters, builds its matrices (the view, and the effect's own
@@ -4183,8 +4036,8 @@ int sefBuildEffectMatrix(const Vector4 *rotation, const Vector4 *translation, co
  * lines either through the depth sort (2D with flag 0x800000) or one by one. */
 void svDrawEntry(int recordIndex)
 {
-    SvEffectRecord *effectRecord;
-    SvRequestView *request;
+    SefEffectRecord *effectRecord;
+    SefLinkedContext *request;
     XglCamera *camera;
     Matrix4 *viewMatrix;
     Matrix4 *effectMatrix;
@@ -4193,7 +4046,7 @@ void svDrawEntry(int recordIndex)
     int pairIndex;
     Vector4 *scale;
 
-    effectRecord = sefGetEffectRecords() + recordIndex;
+    effectRecord = sefGetScheduler() + recordIndex;
     if (effectRecord->inUse == 0 || effectRecord->gate == 0) {
         return;
     }
@@ -4202,15 +4055,16 @@ void svDrawEntry(int recordIndex)
     }
     /* Record-slot view of sefCurrentRecord: the typed pointer store reordered the global accesses. */
     ((SefCurrentRecordSlot *) &sefCurrentRecord)->record = effectRecord;
-    D_0069E2F4 = effectRecord->params[0];
-    D_0069E2F8 = effectRecord->params[2];
-    request = sefGetRequestBuffer();
+    svRecordSourcePointer = (void *) effectRecord->owner;
+    svRecordTargetPointer = effectRecord->object;
+    request = sefGetBattleData();
     request->kind = effectRecord->ownerKey;
-    request->mode = effectRecord->requestByte;
-    request->value = effectRecord->requestValue;
-    sefLoadRequestBuffer((int)effectRecord->params[0], (int)effectRecord->params[1], (int)effectRecord->params[2], (int)effectRecord->params[3], (int)effectRecord->params[4], (int)effectRecord->params[5], (int)effectRecord->params[6], effectRecord->flags & 0x400);
+    request->mode = (signed char) effectRecord->requestMode;
+    request->kind1VectorY = effectRecord->fieldA5C;
+    /* The owner word is read as a pointer, as sef.c's sefExecScheduler does: an int load reorders the argument loads. */
+    sefLoadRequestBuffer((int) *(void **) &effectRecord->owner, (int)effectRecord->ownerHigh, (int)effectRecord->object, effectRecord->values[0], effectRecord->values[1], effectRecord->values[2], effectRecord->requestTail, effectRecord->flags & 0x400);
     svRecordMatrix = 0;
-    effectMatrix = &D_006B4A40;
+    effectMatrix = &svEffectMatrix;
     __asm__ __volatile__(
         "lqc2 vf1, 0x20(%1)\n"
         "lqc2 vf2, 0x10(%1)\n"
@@ -4227,28 +4081,28 @@ void svDrawEntry(int recordIndex)
     svViewMatrix = viewMatrix;
     QuadwordCopyMatrixT0(svDrawStatePacket, viewMatrix);
     if (effectRecord->flags & 0x1000000) {
-        sefBuildEffectMatrix(&effectRecord->rotation, &effectRecord->position, 0, effectMatrix);
+        sefCalcRotTransSMatrix(&effectRecord->rotation, &effectRecord->position, 0, effectMatrix);
         scale = &effectRecord->scale;
-        MMathScaleMatrix(&D_006B4A00, effectMatrix, scale);
-        svRecordMatrix = &D_006B4A00;
-        MMathMulMatrix((Matrix4 *)svDrawStatePacket, svViewMatrix, &D_006B4A00);
+        MMathScaleMatrix(&svEffectScaledMatrix, effectMatrix, scale);
+        svRecordMatrix = &svEffectScaledMatrix;
+        MMathMulMatrix((Matrix4 *)svDrawStatePacket, svViewMatrix, &svEffectScaledMatrix);
     } else {
         scale = &effectRecord->scale;
     }
-    /* QuadwordCopyT0(&D_006B4A80, scale), with the scale read as memory operands. */
+    /* QuadwordCopyT0(&svEffectScaleVector, scale), with the scale read as memory operands. */
     __asm__ __volatile__(
         "lq $8, 0(%1)\n"
         "sq $8, 0(%0)\n"
         :
-        : "r"(&D_006B4A80), "r"(scale), "m"(*scale), "m"(scale->w)
+        : "r"(&svEffectScaleVector), "r"(scale), "m"(*scale), "m"(scale->w)
         : "$8", "memory");
     MMathMulMatrix((Matrix4 *)svDrawStatePacket + 1, viewMatrix, (Matrix4 *)sefCameraMatrix);
     sortedPairs = (SvEntryPair *)SV_SCRATCHPAD;
     pairCount = svCollectSortedLines(effectRecord, sortedPairs);
-    if (effectRecord->size.x == 1.0f && effectRecord->size.y == 1.0f && effectRecord->size.z == 1.0f) {
+    if (effectRecord->vertexScale.x == 1.0f && effectRecord->vertexScale.y == 1.0f && effectRecord->vertexScale.z == 1.0f) {
         svVertexScale = 0;
     } else {
-        svVertexScale = &effectRecord->size;
+        svVertexScale = &effectRecord->vertexScale;
     }
     svRecordScale = svVertexScale;
     if (_draw3D == SV_RENDER_2D && (effectRecord->flags & 0x800000)) {
@@ -4257,7 +4111,7 @@ void svDrawEntry(int recordIndex)
     } else {
         /* The sorted (lineIndex, sortKey) pairs svCollectSortedLines left in the scratchpad. */
         for (pairIndex = 0; pairIndex < pairCount; pairIndex++) {
-            svDrawImageItem((SvDrawItem *) sefGetLineData(((short *)SV_SCRATCHPAD)[pairIndex * 2]), ((short *)SV_SCRATCHPAD)[pairIndex * 2 + 1]);
+            svDrawImageItem((SvDrawItem *) sefGetLineAdr(((short *)SV_SCRATCHPAD)[pairIndex * 2]), ((short *)SV_SCRATCHPAD)[pairIndex * 2 + 1]);
         }
     }
 }
@@ -4276,23 +4130,16 @@ void sefTransformClipPoint(Vector4 *out, const Vector4 *in) {
     __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(out) : "memory");
 }
 
-typedef struct SvDrawSlot {
-    short recordIndex;
-    short disabled;
-    float depth;                     /* +0x4: the sort key, the record's clip depth */
-} SvDrawSlot;
-
-extern SvDrawSlot D_0046E120[];
+extern SvDrawSlot svVisibleSlots[];
 extern int svVisibleEntryCount;
 extern int sefEffectRecordCount;
-void sefCullResourceSlots(void);
 
-/* Culls the effect records into D_0046E120 (visible ones only, with their depth), then sorts them by depth, largest first. */
+/* Culls the effect records into svVisibleSlots (visible ones only, with their depth), then sorts them by depth, largest first. */
 void sefCullSchedulerEntries(void) {
     int i;
     int insertPos;
     int visibleCount;
-    SvEffectRecord *record;
+    SefEffectRecord *record;
     Vector4 *clipPoint;
     XglCamera *camera;
     SvDrawSlot *visibleSlots;
@@ -4302,9 +4149,9 @@ void sefCullSchedulerEntries(void) {
 
     visibleCount = 0;
     clipPoint = (Vector4 *) SV_SCRATCHPAD;
-    record = sefGetEffectRecords();
+    record = sefGetScheduler();
     camera = xglStudioGetActiveCamera();
-    visibleSlots = D_0046E120;
+    visibleSlots = svVisibleSlots;
     memset(visibleSlots, 0, 0x800);
     __asm__ __volatile__(
         "lqc2 vf21, 0(%0)\n\t"
@@ -4322,7 +4169,7 @@ void sefCullSchedulerEntries(void) {
         visibleSlots[visibleCount].recordIndex = i;
         visibleSlots[visibleCount].disabled = 0;
         if (record->flags & 0x01000000) {
-            radius = record->radius;
+            radius = record->fieldA60;
             sefTransformClipPoint((Vector4 *) SV_SCRATCHPAD, &record->position);
             if (1.0f < record->scale.x) {
                 radius *= record->scale.x;
@@ -4338,7 +4185,7 @@ void sefCullSchedulerEntries(void) {
         }
     }
     svVisibleEntryCount = visibleCount;
-    if (sefClipTestDisabled == 0) {
+    if (_sefBattleMode == 0) {
         sefCullResourceSlots();
         visibleCount = svVisibleEntryCount;
     }
@@ -4359,19 +4206,19 @@ void sefCullSchedulerEntries(void) {
 }
 
 void svDrawEntriesByKind(int kind, int flags) {
-    SvEffectRecord *records;
-    SvEffectRecord *record;
+    SefEffectRecord *records;
+    SefEffectRecord *record;
     int visibleIndex;
     int recordIndex;
 
-    records = sefGetEffectRecords();
+    records = sefGetScheduler();
     for (visibleIndex = 0; visibleIndex < svVisibleEntryCount; visibleIndex++) {
-        recordIndex = D_0046E120[visibleIndex].recordIndex;
-        if (D_0046E120[visibleIndex].disabled != 0) {
+        recordIndex = svVisibleSlots[visibleIndex].recordIndex;
+        if (svVisibleSlots[visibleIndex].disabled != 0) {
             continue;
         }
         record = &records[recordIndex];
-        if (record->kind != kind) {
+        if (record->entryId != kind) {
             continue;
         }
         if (_draw3D != SV_RENDER_3D_MODEL) {
@@ -4397,16 +4244,13 @@ void svDrawAlters(int layer)
     }
 }
 
-/* One 20-byte entry of the table func_00259638 indexes: the first two words are the buffer pair, +8 is the count of draw entries of that kind. */
+/* One 20-byte entry of the table sefEntryCountsEntryGet indexes: the first two words are the buffer pair, +8 is the count of draw entries of that kind. */
 typedef struct DrawKindEntry {
     DrawBufferPair buffers;
     int count;
     unsigned char unmodeled_0c[8];
 } DrawKindEntry;
 
-void sefDrawResources(int index);
-void sdvDrawOwnerAlters(int index);
-int sefGetActiveCount(void);
 
 /* Draws the scene. Mapper 0 is loaded first (also when effects are active), with its kind-0 entries pending when the
  * draw buffer of the current mode holds any. In 2D with flag 1 of svSceneFlags every visible effect record is then drawn
@@ -4416,8 +4260,8 @@ void svDrawScene(void)
 {
     DrawKindEntry *entries;
     DrawKindEntry *entry;
-    SvEffectRecord *records;
-    SvEffectRecord *record;
+    SefEffectRecord *records;
+    SefEffectRecord *record;
     SvTypeList *mapper;
     int drawMode;
     int hasStaticEntries;
@@ -4431,7 +4275,7 @@ void svDrawScene(void)
     hasStaticEntries = 0;
     activeMapper = -1;
     drawMode = _draw3D;
-    entries = (DrawKindEntry *)func_00259638(0);
+    entries = sefEntryCountsEntryGet(0);
     svDrawSendStaticRef();
     svDrawSendViewSetup();
     svSetZTestEnv(1);
@@ -4441,23 +4285,23 @@ void svDrawScene(void)
     mapper = &_imageMapper.typeLists[0];
     if (mapper->pendingCount > 0 || sefGetActiveCount() > 0) {
         svActiveMapperIndex = 0;
-        D_0069E2EC = 0;
+        svRequestedMapperIndex = 0;
         svLoadImageList(mapper);
         svRefMapperPacket();
     }
     /* The 32-bit read of svSceneFlags: a typed unsigned short read changed the code. */
     if ((*(u32 *) &svSceneFlags & 1) && drawMode == SV_RENDER_2D) {
-        records = sefGetEffectRecords();
+        records = sefGetScheduler();
         for (visibleIndex = 0; visibleIndex < svVisibleEntryCount; visibleIndex++) {
-            recordIndex = D_0046E120[visibleIndex].recordIndex;
-            if (D_0046E120[visibleIndex].disabled == 0) {
+            recordIndex = svVisibleSlots[visibleIndex].recordIndex;
+            if (svVisibleSlots[visibleIndex].disabled == 0) {
                 record = &records[recordIndex];
-                recordKind = record->kind;
+                recordKind = record->entryId;
                 if (recordKind != 0 && recordKind != activeMapper) {
                     if (_imageMapper.typeLists[recordKind].pendingCount > 0) {
                         activeMapper = recordKind;
                         svActiveMapperIndex = activeMapper;
-                        D_0069E2EC = activeMapper;
+                        svRequestedMapperIndex = activeMapper;
                         svLoadImageList(&_imageMapper.typeLists[recordKind]);
                         svRefMapperPacket();
                     }
@@ -4477,7 +4321,7 @@ void svDrawScene(void)
     }
     if (hasStaticEntries) {
         svActiveMapperIndex = 0;
-        D_0069E2EC = 0;
+        svRequestedMapperIndex = 0;
         svDrawEntriesByKind(0, 0);
     }
     svDrawAlters(0);
@@ -4489,7 +4333,7 @@ void svDrawScene(void)
         }
         if (_imageMapper.typeLists[mapperIndex].pendingCount > 0) {
             svActiveMapperIndex = mapperIndex;
-            D_0069E2EC = mapperIndex;
+            svRequestedMapperIndex = mapperIndex;
             svLoadImageList(&_imageMapper.typeLists[mapperIndex]);
             svRefMapperPacket();
             if (hasDrawEntries) {
@@ -4516,23 +4360,22 @@ void svDrawScene2D(void) {
     }
 }
 
-extern const Matrix4 D_0068C1D0;
-void xglMatrixInverse(Matrix4 *destination, Matrix4 *matrix);
+extern const Matrix4 svEffectProjectionMatrix;
 
 void svDrawEffectRecords3D(void) {
     DrawKindEntry *kindEntries;
-    Matrix4 inverse;
+    Matrix inverse;
     XglCamera *camera;
     int i;
 
-    kindEntries = (DrawKindEntry *) func_00259638(0);
+    kindEntries = sefEntryCountsEntryGet(0);
     _draw3D = SV_RENDER_3D_MODEL;
     camera = xglStudioGetActiveCamera();
-    QuadwordCopyMatrixT0(D_006B4980[0], camera->travel.transform);
-    xglMatrixInverse(&inverse, &camera->volume[0].viewMatrix);
-    MMathMulMatrix(&D_006B4980[1], &inverse, &D_0068C1D0);
-    memset(D_006AF7C0, 0, 384);
-    QuadwordCopyT0(&D_006AF7C0[96], vu0IdentityMatrix);
+    QuadwordCopyMatrixT0(svEffectCameraMatrices[0], camera->travel.transform);
+    xglMatrixInverse(&inverse, (Matrix *)&camera->volume[0].viewMatrix);
+    MMathMulMatrix(&svEffectCameraMatrices[1], &inverse.rows, &svEffectProjectionMatrix);
+    memset(svEffectLightSet, 0, 384);
+    QuadwordCopyT0(&svEffectLightSet[96], vu0IdentityMatrix);
     sefCullSchedulerEntries();
     for (i = 0; i < 57; i++) {
         if (kindEntries[i].count > 0) {
@@ -4541,9 +4384,9 @@ void svDrawEffectRecords3D(void) {
     }
 }
 
-/* Read-only scaffold items after the C-owned literals: the stencil table D_0068C1B8 and the matrix D_0068C1D0. */
-const u64 D_0068C1B8[3] = { 0x44ULL, 0x48ULL, 0x42ULL };
-const Matrix4 D_0068C1D0 = {
+/* Read-only scaffold items after the C-owned literals: the stencil table svStencilTable and the matrix svEffectProjectionMatrix. */
+const u64 svStencilTable[3] = { 0x44ULL, 0x48ULL, 0x42ULL };
+const Matrix4 svEffectProjectionMatrix = {
     { 0.264445007f, 0.0f, 0.0f, 0.0f },
     { 0.0f, 0.343434989f, 0.0f, 0.0f },
     { 0.0f, 0.0f, -1.00000203f, -1.0f },
@@ -4551,15 +4394,15 @@ const Matrix4 D_0068C1D0 = {
 };
 
 /* .data of this TU: definitions in address order (data recovery pass 2). */
-const float D_0069B2B4 = -0.1f;
-float D_003ED490[4] = {
+const float svSortOffsetScale = -0.1f;
+float svDefaultScreenParamsTail[4] = {
     1.0f,
     -1.1428571939468384f,
     0.0625f,
     1.0f
 };
 
-u32 D_003ED4A0[] = { 0 };
+u32 svDrawModeTagTable[] = { 0 };
 
 u32 svDrawRecordDivisors[31] = {
     0x00000000u, 0x000006D0u, 0x0000000Eu, 0x000009D8u, 0x0000001Cu, 0x000001D8u, 0x0000000Eu, 0x00000430u,
@@ -4582,15 +4425,15 @@ int srsKeptEffectKeys[8] = {
 
 unsigned char svMapperPacketEnv[48] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x51, 0x01, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-SvDrawTagArea D_003ED600 = {
+SvDrawTagArea svZTestPacketEnv = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x51, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
     0x5000DULL,
     { 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x31, 0x01, 0x00, 0x00, 0x00, 0x4E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
 };
 
-Vector4 D_003ED640 = { 255.0f, 255.0f, 255.0f, 255.0f };
+Vector4 svColorMaxVector = { 255.0f, 255.0f, 255.0f, 255.0f };
 
-Vector4 D_003ED650[3] = {
+Vector4 svDefaultScaleVectors[3] = {
     { 1.0f, 1.0f, 1.0f, 1.0f },
     { 0.0f, 0.0f, 0.0f, 0.0f },
     { 0.0f, 0.0f, 0.0f, 0.0f }
@@ -4598,27 +4441,15 @@ Vector4 D_003ED650[3] = {
 
 SvImageMapperStorage _imageMapper = { 0 };
 
-unsigned char D_00400000[864] = { 0 };
-
-unsigned char D_00400360[64672] = { 0 };
-
-unsigned char D_00410000[65780] = { 0 };
-
-unsigned char D_004200F4[130828] = { 0 };
-
-unsigned char D_00440000[131072] = { 0 };
-
-unsigned char D_00460000[57536] = { 0 };
-
-/* sefGlobalTransform (0x58 bytes): its position, scale and flags are the inner labels D_0046E100, D_0046E110 and D_0046E114. */
+/* sefGlobalTransform (0x58 bytes): its position is at 0x46E100, its scale at 0x46E110 and its scaled flag at 0x46E114. */
 SefPartTransform sefGlobalTransform = { 0 };
 
-SvDrawSlot D_0046E120[260] = { 0 };
+SvDrawSlot svVisibleSlots[260] = { 0 };
 
 
 
-/* svDrawStatePacket: the pointer the draw-state code reads, initialized to the scratch block D_006B4A90 (data recovery pass 4). */
-DrawStatePacket *svDrawStatePacket = (DrawStatePacket *) D_006B4A90;
+/* svDrawStatePacket: the pointer the draw-state code reads, initialized to the scratch block svDrawStatePacketBuffer (data recovery pass 4). */
+DrawStatePacket *svDrawStatePacket = (DrawStatePacket *) svDrawStatePacketBuffer;
 
 /* _imageList (0x46E940..0x471D90): header, SV_ENTRY_COUNT items, a 0x28-byte gap and the 1024-entry float table at 0x470D84, one object. */
 static SvImageListStorage _imageList = { { 0 }, { { { 0 } } }, { 0 }, {

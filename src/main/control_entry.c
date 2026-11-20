@@ -1,27 +1,37 @@
 #include "common.h"
+#include "main/xgl_mc.h"
 #include "shared.h"
-#include "main/control_entry.h"
+#include "main/xgl_thread.h"
 #include "main/xgl_render.h"
 #include "main/xgl_studio.h"
-#include "main/tu017.h"
-#include "main/tu021.h"
-#include "main/tu022.h"
-#include "main/tu024.h"
+#include "main/movie_player.h"
+#include "main/se_bank_load.h"
+#include "main/sound_driver.h"
+#include "main/xgl_dma_handler.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_menu.h"
+#include "main/xgl_task.h"
+#include "main/xgl_pad.h"
+#include "main/xgl_dma.h"
+#include "main/control_entry.h"
+#include "main/xgl_font.h"
+#include "ov02/logo.h"
+#include "ov02/boot_display.h"
+#include "ov02/title.h"
+#include "main/xgl_packet.h"
 
+#include "main/xgl_2.h"
 /* First address of the work heap WorkEnd tracks. */
 #define WORK_HEAP_START 0xB00000
 
 /* sceCdMmode media: DVD. */
 #define SCECdDVD 2
 
-/* Packet buffer of xglPacketSystemInit: base, size and rate. */
+/* Packet buffer of xglPacketInit: base, size and rate. */
 #define PACKET_BUFFER_BASE 0xC00000
 #define PACKET_BUFFER_SIZE 0x400000
 #define PACKET_RATE 50.0f
 
-extern u8 *WorkEnd;
 
 extern const char iopRebootImagePath[];
 extern char sio2manModuleName[];
@@ -45,14 +55,6 @@ int sceSifLoadFileReset(void);
 int sceCdMmode(int media);
 int sceFsReset(void);
 
-void xglPadInitial(void);
-void xglMcInitial(void);
-void *xglTaskInitial(void *manager, int capacity, int reset_gs);
-void xglDmaInitial(void);
-void xglGeometryInit(void);
-void xglPacketSystemInit(u32 buffer, u32 size, float rate);
-void xglRenderInit(void);
-void xglFontInitial(void);
 
 /*
  * Reboots the IOP with IOPRP271, loads the SIF/CD/memory-card/pad/sound IOP
@@ -89,26 +91,19 @@ void InitializeSystem(void) {
     xglDmaInitial();
     xglIntrInit();
     xglGeometryInit();
-    xglPacketSystemInit(PACKET_BUFFER_BASE, PACKET_BUFFER_SIZE, PACKET_RATE);
+    xglPacketInit(PACKET_BUFFER_BASE, PACKET_BUFFER_SIZE, PACKET_RATE);
     xglRenderInit();
     xglFontInitial();
     xglMovieInit();
     xglMenuInitial();
 }
 
-void xglRenderAndMovieInit(void);
-void xglStudioSetup(void);
-void xglRenderDispOn(void);
 
 /* ov02 (the title overlay): an empty function, the logo screen and the title screen. */
-void func_00A80790(void);
-void LogoFirst(void);
-unsigned int Title(void);
 
 extern int mainParamArgc;
 extern char **mainParamArgv;
 extern const char soundEffectBankName[];
-extern signed char uwamonoDrawDisabled;
 
 /* Title's result: the low 24 bits are the entry address of the chosen screen, the top byte its overlay. */
 #define TITLE_ENTRY_MASK 0xFFFFFF
@@ -136,7 +131,7 @@ int main(int argc, char **argv) {
 
     mainParamArgc = argc;
     mainParamArgv = argv;
-    func_00A80790();
+    BootDisplay();
     InitializeSystem();
     xglCdOpenDevice();
     xglRenderAndMovieInit();
@@ -162,26 +157,6 @@ int main(int argc, char **argv) {
         xglCdLoadOverlay(selection >> TITLE_OVERLAY_SHIFT);
         entry();
     }
-}
-
-
-void xglSleep(void) {
-    xglRenderFrame();
-    xglCdControlThread();
-    xglStudioUpdate();
-}
-
-/*
- * EE Timer 0.  T0_COUNT is the free-running counter and T0_MODE its control
- * word; bit 7 (0x80) of T0_MODE is CUE, which starts the count.
- */
-#define T0_COUNT ((volatile u32 *)0x10000000)
-#define T0_MODE ((volatile u32 *)0x10000010)
-#define T0_MODE_CUE 0x80
-
-void xglTimer0Reset(int mode) {
-    *T0_COUNT = 0;
-    *T0_MODE = mode + T0_MODE_CUE;
 }
 
 const char iopRebootImagePath[32] = "cdrom0:\\IOP\\IOPRP271.IMG;1";

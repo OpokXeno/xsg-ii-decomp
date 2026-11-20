@@ -1,41 +1,9 @@
 #include "common.h"
-#include "main/sdv_033.h"
+#include "main/xgl_camera.h"
 #include "shared.h"
 #include "main/xgl_studio.h"
 
 
-typedef float RgVector[4];
-
-/*
- * main/tu149's light editor (DB_lightWrite, updateLight) indexes these
- * vectors as float[4] rows (component offsets fold into the row's index, not
- * the load displacement), so each vector also has its RgVector row.
- */
-typedef struct StudioLightEntry {
-    union { Vector4 color; RgVector color_row; };
-    union { Vector4 direction; RgVector direction_row; };
-} StudioLightEntry;
-
-/* The light block of a studio record, also the light record of an Actor
- * (+0x510). Whole-block copies (game.c GameStateSave/RestoreCameraLight) are
- * ld/sd, while the Studio records holding it are only 8-aligned (xgl_studio
- * .bss): the block is 8-aligned, which the doubleword view of its first vector
- * gives. */
-typedef struct StudioLight {
-    union {
-        struct {
-            union { Vector4 ambient_color; RgVector ambient_color_row; u64 ambient_color_words[2]; };
-            StudioLightEntry lights[3];
-        };
-        Vector4 parameters[7];          /* the seven quadwords xglLightCalcMatrix loads: ambient, then three colour/direction pairs */
-    };
-    float normal_matrix[4][4];          /* +0x70: map_1.c's MapDrawLight view */
-    float color_modifier_matrix[4][4];  /* +0xb0: map_1.c's MapDrawLight view */
-} StudioLight;
-
-extern void xglStudioFlushActiveCamera(void);
-XglCamera *xglStudioGetCamera2(int camera_index);
-void xglCameraMove(XglCamera *camera);
 
 /*
  * XglCamera (include/shared.h; config/header-canon.json,
@@ -63,17 +31,16 @@ typedef struct Studio {
     XglCamera cameras[8];
 } Studio;
 
-extern StudioLight *xglStudioGetLight2(void);
 static Studio *pCurrentStudio;
 
-int D_0069E078 = 0;
+int studioSceneFlag = 0;
 
-void func_001B2724(void) {
-    D_0069E078 = 1;
+void studioSceneFlagSet(void) {
+    studioSceneFlag = 1;
 }
 
-void func_001B274C(void) {
-    D_0069E078 = 0;
+void studioSceneFlagClear(void) {
+    studioSceneFlag = 0;
 }
 
 /* The studio records, 0x3180 bytes each: four of them, as one byte array because the code adds
@@ -86,7 +53,7 @@ void xglStudioChange(int studio_index)
     pCurrentStudio = (Studio *) (asStudioSource + studio_index * 0x3180);
 }
 
-/* The studio index that xglStudioChangeActive selects and xglStudioMove compares with. */
+/* The studio index that xglStudioMainCameraMove selects and xglStudioMove compares with. */
 static int activeStudioIndex;
 
 void xglStudioSetActiveIndex(int studio_index)
@@ -171,18 +138,16 @@ void xglStudioMainCameraInit(void)
     xglStudioChange(0);
 }
 
-void xglStudioChangeActive(void) {
-    int result;
+void xglStudioMainCameraMove(void) {
+    XglCamera *camera;
 
     xglStudioChange(activeStudioIndex);
     /* xglStudioGetCamera2(0) is the active studio's first camera; the value is not used here. */
-    result = xglStudioGetCamera2(0);
+    camera = xglStudioGetCamera2(0);
 }
 
 int StudioEntrySkip = 0;
 
-void xglStudioLightReset(void *state);
-void xglCameraInit(XglCamera *camera);
 
 /* Resets every studio: its light block and its eight cameras, then selects studio 0. */
 void xglStudioInit(void)
@@ -191,7 +156,7 @@ void xglStudioInit(void)
     int camera_index;
 
     StudioEntrySkip = 0;
-    func_001B274C();
+    studioSceneFlagClear();
     for (studio_index = 0; studio_index < 4; studio_index++) {
         xglStudioChange(studio_index);
         xglStudioLightReset(xglStudioGetLight2());
@@ -204,7 +169,6 @@ void xglStudioInit(void)
     activeStudioIndex = 0;
 }
 
-void xglCameraUpdate(XglCamera *camera);
 
 void xglStudioMove(void)
 {
@@ -218,7 +182,7 @@ void xglStudioMove(void)
             camera = xglStudioGetCamera2(camera_index);
             if (camera->active == 1) {
                 if (studio_index == activeStudioIndex && studioCameraUpdateEnabled)
-                    xglCameraUpdate(camera);
+                    xglCameraTravelProc(camera);
                 xglCameraMove(camera);
             }
         }
@@ -233,7 +197,7 @@ void xglStudioSetup(void) {
 
 void xglStudioUpdate(void) {
     if (StudioEntrySkip == 0) {
-        xglStudioChangeActive();
+        xglStudioMainCameraMove();
         xglStudioMove();
     }
 }

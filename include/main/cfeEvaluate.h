@@ -2,9 +2,10 @@
 #define INCLUDE_MAIN_CFEEVALUATE_H
 
 #include "shared.h"
-#include "main/tu144.h"
-#include "main/xgl_1_016.h"
+#include "main/cfe_list.h"
+#include "main/xgl_1.h"
 #include "main/xgl_2.h"
+#include "main/xgl_light.h"
 
 /* One 0x80-byte command of cfeCommands: an effect (its id built from a page index and a page offset,
  * cfeCommandSetOwnerFlags), where and how it is spawned, and the tracks that drive those values. */
@@ -58,7 +59,7 @@ enum CfeSlotSource {
 
 /* Global block at cfeEvalGlobal (cfeGlobalEvaluate): the fog switch, two vectors and eight source handles. */
 typedef struct CfeEvalGlobal {
-    int fogEnabled;             /* sampled from source[7]; cfe_0024DF60 sets the fog when it is set */
+    int fogEnabled;             /* sampled from source[7]; cfeCmdStepFrame sets the fog when it is set */
     unsigned char unmodeled_04[0x0C];
     Vector4 evaluated[2];
     CfeTrackNode *source[8];
@@ -68,16 +69,12 @@ typedef struct CfeEvalGlobal {
  * reaches it through a union: after every store the record pointer is loaded again (alias set 0), and
  * cfeEvalEntriesInit addresses each component by index (every store has the whole offset in its address,
  * so the loop walks one pointer at the last component). */
-typedef union CfeEvalVector {
-    Vector4 vector;
-    float component[4];
-} CfeEvalVector;
 
 /* Record written by cfeRecordEvaluate: three vectors of results, the starting position and angles and nine source
  * handles. */
 typedef struct CfeEvalRecord {
-    CfeEvalVector evaluated[3]; /* +0x00: position (w = 1), angles, scale */
-    CfeEvalVector initial[2];   /* +0x30: the position and angles the record starts from (cfeMapInitRecords) */
+    Vector4Elements evaluated[3]; /* +0x00: position (w = 1), angles, scale */
+    Vector4Elements initial[2];   /* +0x30: the position and angles the record starts from (cfeMapInitRecords) */
     CfeTrackNode *source[9];    /* +0x50 */
     unsigned char unmodeled_74[0x80 - 0x74];
 } CfeEvalRecord;
@@ -136,10 +133,10 @@ typedef struct CfeEvalEntry {
      * bufferIndex is nonzero while imageAddress[0] holds the frame to show, else [1]. */
     XglMovieWork movie;         /* +0x000 */
     char name[0x40];            /* +0x0D0: the movie file name */
-    CfeEvalVector evaluated[3]; /* +0x110: position, angles, scale */
+    Vector4Elements evaluated[3]; /* +0x110: position, angles, scale */
     AlignedVector4 corners[4];  /* +0x140: the quad the entry is drawn with (cfeEvalEntriesInit) */
     unsigned char unmodeled_180[0x80];
-    int rewind;                 /* +0x200: sampled from source[9]; cfeUpdateEntries rewinds the movie when set */
+    int rewind;                 /* +0x200: sampled from source[9]; cfeEntryTableUpdate rewinds the movie when set */
     CfeTrackNode *source[10];
     unsigned char unmodeled_22c[4];
 } CfeEvalEntry;
@@ -191,9 +188,9 @@ typedef struct CfeActor {
     unsigned char unmodeled_000[0xC0];
     struct XenoActor *actor;    /* +0x0C0: pAct */
     unsigned char unmodeled_0c4[0xD0 - 0xC4];
-    AlignedVector4 vectorD0;    /* +0x0D0: cfeActorInitialVector (cfeEvalRecordsInit) */
+    AlignedVector4 vectorD0;    /* +0x0D0: cfeActorInitialVector (cfeActorTableInit) */
     /* +0x0E0: the sampled offset, then in front of the actor. Reached through a union in the original:
-     * cfeEvaluateNode loads the actor pointer again after the store to position.x (alias set 0). */
+     * cfeActorEvaluate loads the actor pointer again after the store to position.x (alias set 0). */
     union {
         AlignedVector4 position;
     };
@@ -279,15 +276,15 @@ extern XglLightSet cfeLightSet;
 extern CfeStudioView cfeCamera;
 
 /* Functions of src/main/cfeEvaluate.c that cfePlugIn.c calls. */
-int cfeEvaluateNodes(int sample_param);
+int cfeActorTableEvaluate(int sample_param);
 void cfeGroupTableEvaluate(int time);
 void cfeCameraEvaluate(int time, int paused);
 void cfeCommandTableEvaluate(int time);
-void cfeEvaluateDirections(int time);
+void cfeLightTableEvaluate(int time);
 void cfeGlobalEvaluate(int sample_param);
 int cfeEntryTableEvaluate(int sample_param);
 void cfeSlotTableEvaluate(int sample_param);
-void cfeSndSetTarget(int target);
-void cfeUpdateEntries(int noPlay);
+void cfeSndTableEvaluate(int target);
+void cfeEntryTableUpdate(int noPlay);
 
 #endif /* INCLUDE_MAIN_CFEEVALUATE_H */

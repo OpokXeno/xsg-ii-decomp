@@ -1,7 +1,7 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_dma.h"
-#include "main/pad_raw.h"
+#include "main/pad.h"
 
 extern u8 *buffer;
 
@@ -262,12 +262,9 @@ XglDmaChannel *tbl[12] = {
     (XglDmaChannel *)0x1000D400, 0, 0,
 };
 
-unsigned char PadData[40] = { 0 };
-u16 D_0063EDA8[] = { 0 };
+/* The two controller port records (0x80 bytes each; xglPadRead in xgl_pad.c fills them). */
+PadRecord PadData[2] = { 0 };
 
-unsigned short textOptionFlags = 0;
-int D_0063EDAC = 0;
-PadRawWords dataPadRawWords[1] = { { { 0 } } };
-int D_0063EDB8[6] = { 0 };
-unsigned char D_0063EDD0 = 0;
-unsigned char D_0063EDD1[15] = { 0 };
+/* Returns at once with no effect. Only caller: InitializeSystem. */
+void xglDmaInitial(void) {
+}

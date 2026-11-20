@@ -1,58 +1,6 @@
 #include "common.h"
 #include "shared.h"
-
-typedef struct XglTaskPrefix XglTaskPrefix;
-typedef struct XglTaskScheduler XglTaskScheduler;
-
-/*
- * Only the link/callback prefix is evidenced by this allocation.  The
- * complete task records are allocated with a 0x80-byte stride, and callers
- * write task-specific payload beyond this 0x10-byte prefix.  This declaration
- * must not be read as the complete task layout or allocation size.
- */
-struct XglTaskPrefix {
-    XglTaskScheduler *scheduler;
-    XglTaskPrefix *next;
-    XglTaskPrefix *previous;
-    int (*callback)(XglTaskPrefix *task);
-};
-
-struct XglTaskScheduler {
-    XglTaskPrefix *free_tasks;
-    XglTaskPrefix *active_head;
-    XglTaskPrefix *active_tail;
-    XglTaskPrefix *next_to_visit;
-};
-
-extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
-                                int (*callback)(XglTaskPrefix *task),
-                                XglTaskPrefix *entry);
-
-int xglTaskWaitRemove(XglTaskPrefix *task);
-
-void xglTaskExecute(XglTaskScheduler *scheduler);
-void *xglTaskInitial(void *manager, int capacity, int reset_gs);
-
-int xglTaskRemove(XglTaskPrefix *task);
-
-extern XglTaskPrefix *xglTaskEntryPrev(XglTaskScheduler *scheduler,
-                                int (*callback)(XglTaskPrefix *task),
-                                XglTaskPrefix *entry);
-
-extern void *xglTaskInitial(void *manager, int capacity, int reset_gs);
-
-/* Every task slot of the pool reserves this many bytes. */
-#define XGL_TASK_SLOT_SIZE 0x80
-
-typedef union XglTaskSlot {
-    XglTaskPrefix prefix;
-    char reserved[XGL_TASK_SLOT_SIZE];
-} XglTaskSlot;
-
-typedef struct XglTaskManager {
-    XglTaskScheduler scheduler;
-    XglTaskSlot pool[1];
-} XglTaskManager;
+#include "main/xgl_task.h"
 
 extern int sceGsResetGraph(int interlace, int omode, int ffmode, int errorjump);
 
@@ -66,6 +14,7 @@ extern int sceGsResetGraph(int interlace, int omode, int ffmode, int errorjump);
  */
 void *xglTaskInitial(void *manager, int capacity, int reset_gs)
 {
+    XglTaskManager *taskManager = manager;
     XglTaskScheduler *scheduler;
     XglTaskSlot *task;
     XglTaskSlot *next;
@@ -73,8 +22,8 @@ void *xglTaskInitial(void *manager, int capacity, int reset_gs)
     int remaining;
 
     afterPool = 0;
-    scheduler = (XglTaskScheduler *) manager;
-    task = ((XglTaskManager *) manager)->pool;
+    scheduler = &taskManager->scheduler;
+    task = taskManager->pool;
     if (capacity != 0)
     {
         if (reset_gs != 0)

@@ -1,45 +1,17 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_2.h"
+#include "main/xgl_task.h"
+#include "main/game_defocus.h"
+#include "main/xgl_packet.h"
+#include "main/xgl_render.h"
+#include "main/gr_screen.h"
 
 typedef struct XglPacket XglPacket;
 
 /* EE scratchpad RAM. */
 #define SCRATCHPAD_BASE 0x70000000
 
-typedef struct XglTaskPrefix XglTaskPrefix;
-
-typedef struct XglTaskScheduler XglTaskScheduler;
-
-/*
- * Only the link/callback prefix is evidenced by this allocation.  The
- * complete task records are allocated with a 0x80-byte stride, and callers
- * write task-specific payload beyond this 0x10-byte prefix.  This declaration
- * must not be read as the complete task layout or allocation size.
- */
-struct XglTaskPrefix {
-    XglTaskScheduler *scheduler;
-    XglTaskPrefix *next;
-    XglTaskPrefix *previous;
-    int (*callback)(XglTaskPrefix *task);
-};
-
-struct XglTaskScheduler {
-    XglTaskPrefix *free_tasks;
-    XglTaskPrefix *active_head;
-    XglTaskPrefix *active_tail;
-    XglTaskPrefix *next_to_visit;
-};
-
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-float xglSin(float angle);
-float xglCos(float angle);
-extern XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
-                                int (*callback)(XglTaskPrefix *task),
-                                XglTaskPrefix *entry);
-float I2F(int value);
-int F2I(float value);
-float xglFRand(void);
 
 #define NULL ((void *)0)
 #define DEFOCUS_SCRATCH ((DefocusSolidPacket *)SCRATCHPAD_BASE)
@@ -72,17 +44,9 @@ float xglFRand(void);
 #define DEFOCUS_STAR_HEADER ((DefocusStarHeader *)(SCRATCHPAD_BASE + 0x318))
 #define DEFOCUS_STAR_STRIP ((DefocusStarVertex *)(SCRATCHPAD_BASE + 0x338))
 #define DEFOCUS_STAR_WORD(index) (((int *)(SCRATCHPAD_BASE + 0x318))[index])
+/* The scratchpad as raw words, for the packets whose layout is not modelled. */
+#define DEFOCUS_SCRATCH_WORD(index) (((int *)SCRATCHPAD_BASE)[index])
 #define DEFOCUS_RING_TABLE ((DefocusRingTable *)SCRATCHPAD_BASE)
-
-typedef struct {
-    u8 unmodeled_00[0x14];
-    u16 framebuffer_page;     /* +0x14 */
-    u8 unmodeled_16[0x0a];
-    u16 buffer_select;        /* +0x20 */
-    u16 draw_buffer_base;     /* +0x22 */
-    u8 unmodeled_24[0x3c - 0x24];
-    void (*callback)(XglPacket *packet);
-} DefocusRenderState;
 
 /* Partial view of one GameDefocusParam entry: 16 entries, stride 0x44.
  * The first three bytes are used by the recovered state handlers and the
@@ -94,62 +58,6 @@ typedef struct {
     u8 unmodeled_03;
     int parameters[DEFOCUS_LAYER_PARAMETERS];
 } DefocusLayer;
-
-/* GS registers inside the display-environment block at DispEnv. */
-typedef struct {
-    unsigned int en1 : 1;
-    unsigned int en2 : 1;
-    unsigned int crtmd : 3;
-    unsigned int mmod : 1;
-    unsigned int amod : 1;
-    unsigned int slbg : 1;
-    unsigned int alp : 8;
-    unsigned int unmodeled_16 : 16;
-    unsigned int unmodeled_32 : 32;
-} DefocusPmode;
-
-typedef struct {
-    u64 fbp : 9;
-    u64 unmodeled_09 : 55;
-} DefocusDispfb;
-
-typedef struct {
-    unsigned int dx : 12;
-    unsigned int dy : 11;
-    unsigned int magh : 4;
-    unsigned int magv : 2;
-    unsigned int unmodeled_29 : 3;
-    unsigned int dw : 12;
-    unsigned int dh : 11;
-    unsigned int unmodeled_55 : 9;
-} DefocusDisplay;
-
-typedef struct {
-    unsigned int sx : 12;
-    unsigned int sy : 11;
-    unsigned int smph : 4;
-    unsigned int smpv : 2;
-    unsigned int unmodeled_29 : 3;
-    unsigned int ww : 12;
-    unsigned int wh : 11;
-    unsigned int unmodeled_55 : 9;
-} DefocusExtdata;
-
-typedef struct {
-    union {
-        u64 flags;
-        DefocusPmode pmode;
-    };
-    u8 unmodeled_08[8];
-    u8 unmodeled_10[8];
-    DefocusDisplay display1;
-    u8 unmodeled_20[8];
-    DefocusDispfb dispfb2;
-    DefocusDisplay display2;
-    u64 extbuf;
-    DefocusExtdata extdata;
-    u64 extwrite;
-} DefocusDispEnv;
 
 /* The word layout shared by the scratchpad packets below: a VIF DIRECTHL word, then the GIF tag
  * (gif_tag and gs_mode are the two words of its first doubleword: NLOOP/EOP, then PRE/PRIM/NREG;
@@ -345,14 +253,10 @@ typedef struct {
     int adc;
 } DefocusStarVertex;
 
-extern DefocusRenderState sRender;
 extern DefocusLayer GameDefocusParam[DEFOCUS_LAYER_COUNT];
-extern DefocusDispEnv DispEnv;
-extern int ScanLineInterpolate;
-extern void (*func_14[11])(DefocusLayer *layer, XglPacket *packet);
+extern void (*DefocusMainTypeTable[11])(DefocusLayer *layer, XglPacket *packet);
 void DefocusMain(XglPacket *packet);
 static void DefocusMainType09Final(DefocusLayer *layer);
-extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 extern int printf(const char *format, ...);
 void DefocusMainType01(DefocusLayer *layer, XglPacket *packet);
 void DefocusMainType06(DefocusLayer *layer, XglPacket *packet);
@@ -379,20 +283,18 @@ extern DefocusTexturedHeader Head_12;
 extern DefocusTexturedHeader Head_7;
 extern DefocusSolidPacketHeader Head_8;
 extern u8 rate_9[48];
-void GameDefocusCheck(void);
-void GameDefocusSet(int index, int type, const int *settings);
 
 static u64 GetTex0(int type, int tex_cc)
 {
     switch (type) {
     case 0:
-        return ((u64)0x24020000 | (u64)(sRender.buffer_select << 5) |
+        return ((u64)0x24020000 | (u64)(sRender.display_buffer_base << 5) |
                 ((u64)0x9000 << 18) | ((u64)(u32)tex_cc << 34));
     case 1:
         return ((u64)0x24020000 | (u64)(sRender.draw_buffer_base << 5) |
                 ((u64)0x9000 << 18) | ((u64)(u32)tex_cc << 34));
     case 2:
-        return ((u64)0x24020000 | (u64)(sRender.framebuffer_page << 5) |
+        return ((u64)0x24020000 | (u64)(sRender.vram.flip_base << 5) |
                 ((u64)0x9000 << 18) | ((u64)(u32)tex_cc << 34));
     default:
         return 0;
@@ -451,22 +353,22 @@ void DefocusMainType02(DefocusLayer *layer, XglPacket *packet)
 {
     int depth;
 
-    TestPrim_1.framebuffer = (u64)sRender.framebuffer_page | 0x80000;
-    TestPrim_1.texture = (u64)0x24020000 | (sRender.buffer_select << 5) |
+    TestPrim_1.framebuffer = (u64)sRender.vram.flip_base | 0x80000;
+    TestPrim_1.texture = (u64)0x24020000 | (sRender.display_buffer_base << 5) |
                         ((u64)0xc800 << 19);
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddDataN(packet, &TestPrim_1, 60);
     depth = layer->parameters[1];
     if (depth != 0) {
         TestPrim_2.first_z = depth;
-        TestPrim_2.source_frame = (u64)sRender.framebuffer_page | 0x80000;
+        TestPrim_2.source_frame = (u64)sRender.vram.flip_base | 0x80000;
         TestPrim_2.second_z = layer->parameters[1];
-        TestPrim_2.destination_frame = (u64)sRender.buffer_select | 0x80000;
+        TestPrim_2.destination_frame = (u64)sRender.display_buffer_base | 0x80000;
         sceVif1PkCnt(packet, 0);
         sceVif1PkAddDataN(packet, &TestPrim_2, 36);
         return;
     }
-    TestPrim_3[4] = (u64)sRender.buffer_select | 0x80000;
+    TestPrim_3[4] = (u64)sRender.display_buffer_base | 0x80000;
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddDataN(packet, TestPrim_3, 12);
 }
@@ -683,34 +585,34 @@ void DefocusMainType07(DefocusLayer *layer, XglPacket *packet)
             offset_v = F2I(sin_angle * uv_radius_y);
             offset_x = F2I(cos_angle * screen_radius_x);
             offset_y = F2I(sin_angle * screen_radius_y);
-            ((int *)SCRATCHPAD_BASE)[0] = (layer->parameters[2] + offset_u) << 4;
-            ((int *)SCRATCHPAD_BASE)[1] = (layer->parameters[3] + offset_v) << 4;
-            ((int *)SCRATCHPAD_BASE)[4] =
+            DEFOCUS_SCRATCH_WORD(0) = (layer->parameters[2] + offset_u) << 4;
+            DEFOCUS_SCRATCH_WORD(1) = (layer->parameters[3] + offset_v) << 4;
+            DEFOCUS_SCRATCH_WORD(4) =
                 ((layer->parameters[2] + offset_x) << 4) + DEFOCUS_SCREEN_X_BIAS;
-            ((int *)SCRATCHPAD_BASE)[5] =
+            DEFOCUS_SCRATCH_WORD(5) =
                 ((layer->parameters[3] + offset_y) << 4) + DEFOCUS_SCREEN_Y_BIAS;
-            ((int *)SCRATCHPAD_BASE)[6] = layer->parameters[0];
-            ((int *)SCRATCHPAD_BASE)[7] = flags;
+            DEFOCUS_SCRATCH_WORD(6) = layer->parameters[0];
+            DEFOCUS_SCRATCH_WORD(7) = flags;
             offset_u = F2I(cos_next * uv_radius_x);
             offset_v = F2I(sin_next * uv_radius_y);
             offset_x = F2I(cos_next * screen_radius_x);
             offset_y = F2I(sin_next * screen_radius_y);
-            ((int *)SCRATCHPAD_BASE)[8] = (layer->parameters[2] + offset_u) << 4;
-            ((int *)SCRATCHPAD_BASE)[9] = (layer->parameters[3] + offset_v) << 4;
-            ((int *)SCRATCHPAD_BASE)[12] =
+            DEFOCUS_SCRATCH_WORD(8) = (layer->parameters[2] + offset_u) << 4;
+            DEFOCUS_SCRATCH_WORD(9) = (layer->parameters[3] + offset_v) << 4;
+            DEFOCUS_SCRATCH_WORD(12) =
                 ((layer->parameters[2] + offset_x) << 4) + DEFOCUS_SCREEN_X_BIAS;
-            ((int *)SCRATCHPAD_BASE)[13] =
+            DEFOCUS_SCRATCH_WORD(13) =
                 ((layer->parameters[3] + offset_y) << 4) + DEFOCUS_SCREEN_Y_BIAS;
-            ((int *)SCRATCHPAD_BASE)[14] = layer->parameters[0];
-            ((int *)SCRATCHPAD_BASE)[15] = flags;
+            DEFOCUS_SCRATCH_WORD(14) = layer->parameters[0];
+            DEFOCUS_SCRATCH_WORD(15) = flags;
             sceVif1PkAddDataN(packet, DEFOCUS_RADIAL_VERTICES, 16);
         }
-        ((int *)SCRATCHPAD_BASE)[0] = layer->parameters[2] << 4;
-        ((int *)SCRATCHPAD_BASE)[1] = layer->parameters[3] << 4;
-        ((int *)SCRATCHPAD_BASE)[4] = (layer->parameters[2] << 4) + DEFOCUS_SCREEN_X_BIAS;
-        ((int *)SCRATCHPAD_BASE)[5] = (layer->parameters[3] << 4) + DEFOCUS_SCREEN_Y_BIAS;
-        ((int *)SCRATCHPAD_BASE)[6] = layer->parameters[0];
-        ((int *)SCRATCHPAD_BASE)[7] = 0;
+        DEFOCUS_SCRATCH_WORD(0) = layer->parameters[2] << 4;
+        DEFOCUS_SCRATCH_WORD(1) = layer->parameters[3] << 4;
+        DEFOCUS_SCRATCH_WORD(4) = (layer->parameters[2] << 4) + DEFOCUS_SCREEN_X_BIAS;
+        DEFOCUS_SCRATCH_WORD(5) = (layer->parameters[3] << 4) + DEFOCUS_SCREEN_Y_BIAS;
+        DEFOCUS_SCRATCH_WORD(6) = layer->parameters[0];
+        DEFOCUS_SCRATCH_WORD(7) = 0;
         sceVif1PkAddDataN(packet, DEFOCUS_RADIAL_VERTICES, 8);
     }
 }
@@ -943,19 +845,19 @@ void DefocusMainType09(DefocusLayer *layer, XglPacket *packet)
         layer->state = 1;
     } else {
         ScanLineInterpolate = 2;
-        DispEnv.dispfb2.fbp = sRender.framebuffer_page;
+        DispEnv.dispfb2.field.fbp = sRender.vram.flip_base;
         DispEnv.pmode.en1 = 1;
         DispEnv.pmode.alp = 255;
-        DispEnv.display2.dy = DispEnv.display1.dy;
+        DispEnv.display2.field.dy = DispEnv.display1.field.dy;
     }
     extbuf = &DispEnv.extbuf;
-    *extbuf = 0x2120000 | (sRender.framebuffer_page << 5);
-    DispEnv.extdata.sx = DispEnv.display1.dx + 7;
-    DispEnv.extdata.sy = DispEnv.display1.dy / 2;
-    DispEnv.extdata.smph = DispEnv.display1.magh;
-    DispEnv.extdata.smpv = DispEnv.display1.magv;
-    DispEnv.extdata.ww = 511;
-    DispEnv.extdata.wh = 223;
+    *extbuf = 0x2120000 | (sRender.vram.flip_base << 5);
+    DispEnv.extdata.field.sx = DispEnv.display1.field.dx + 7;
+    DispEnv.extdata.field.sy = DispEnv.display1.field.dy / 2;
+    DispEnv.extdata.field.smph = DispEnv.display1.field.magh;
+    DispEnv.extdata.field.smpv = DispEnv.display1.field.magv;
+    DispEnv.extdata.field.ww = 511;
+    DispEnv.extdata.field.wh = 223;
     DispEnv.extwrite |= 1;
 }
 
@@ -970,7 +872,6 @@ static void DefocusMainType09Final(DefocusLayer *layer)
 
 void DefocusMainType10(DefocusLayer *layer, XglPacket *packet)
 {
-    extern void GameDefocusSet(int index, int type, const int *settings);
     DefocusTexturedPacket *draw = (DefocusTexturedPacket *)SCRATCHPAD_BASE;
     u8 red;
     u8 green;
@@ -985,8 +886,8 @@ void DefocusMainType10(DefocusLayer *layer, XglPacket *packet)
 
     switch (layer->state) {
     case 0:
-        Copy_10.texture = 0x80000 | (u64)(sRender.buffer_select << 5) |
-                          ((u64)sRender.framebuffer_page << 37) |
+        Copy_10.texture = 0x80000 | (u64)(sRender.display_buffer_base << 5) |
+                          ((u64)sRender.vram.flip_base << 37) |
                           (0x8000ULL << 36);
         sceVif1PkCnt(packet, 0);
         sceVif1PkAddDataN(packet, &Copy_10, 28);
@@ -1107,10 +1008,10 @@ void DefocusMainType11(DefocusLayer *layer, XglPacket *packet)
             F2I(xglSin(phase_y) * I2F(layer->parameters[5]));
         phase_y += I2F(layer->parameters[6]) * (1.0f / 4096.0f);
     }
-    ((int *)SCRATCHPAD_BASE)[16] = 0;
-    ((int *)SCRATCHPAD_BASE)[0] = 0;
-    ((int *)SCRATCHPAD_BASE)[31] = 0;
-    ((int *)SCRATCHPAD_BASE)[17] = 0;
+    DEFOCUS_SCRATCH_WORD(16) = 0;
+    DEFOCUS_SCRATCH_WORD(0) = 0;
+    DEFOCUS_SCRATCH_WORD(31) = 0;
+    DEFOCUS_SCRATCH_WORD(17) = 0;
     for (row = 0, wave_y = DEFOCUS_WAVE_TABLE->y, y = 0; row < 14; row++, y = row * 512) {
         column = 0;
         sprite_y = y + DEFOCUS_SCREEN_Y_BIAS;
@@ -1120,18 +1021,18 @@ void DefocusMainType11(DefocusLayer *layer, XglPacket *packet)
         for (; column < 16; column++) {
             x = column * 512;
             next_x = x + 512;
-            ((int *)SCRATCHPAD_BASE)[32] = x + wave_x[0];
-            ((int *)SCRATCHPAD_BASE)[33] = y + wave_y[0];
-            ((int *)SCRATCHPAD_BASE)[36] = x + DEFOCUS_SCREEN_X_BIAS;
-            ((int *)SCRATCHPAD_BASE)[37] = sprite_y;
-            ((int *)SCRATCHPAD_BASE)[38] = layer->parameters[0];
-            ((int *)SCRATCHPAD_BASE)[39] = 0;
-            ((int *)SCRATCHPAD_BASE)[40] = next_x + wave_x[1];
-            ((int *)SCRATCHPAD_BASE)[41] = next_y + wave_y[1];
-            ((int *)SCRATCHPAD_BASE)[44] = x + 29176;
-            ((int *)SCRATCHPAD_BASE)[45] = sprite_next_y;
-            ((int *)SCRATCHPAD_BASE)[46] = layer->parameters[0];
-            ((int *)SCRATCHPAD_BASE)[47] = 0;
+            DEFOCUS_SCRATCH_WORD(32) = x + wave_x[0];
+            DEFOCUS_SCRATCH_WORD(33) = y + wave_y[0];
+            DEFOCUS_SCRATCH_WORD(36) = x + DEFOCUS_SCREEN_X_BIAS;
+            DEFOCUS_SCRATCH_WORD(37) = sprite_y;
+            DEFOCUS_SCRATCH_WORD(38) = layer->parameters[0];
+            DEFOCUS_SCRATCH_WORD(39) = 0;
+            DEFOCUS_SCRATCH_WORD(40) = next_x + wave_x[1];
+            DEFOCUS_SCRATCH_WORD(41) = next_y + wave_y[1];
+            DEFOCUS_SCRATCH_WORD(44) = x + 29176;
+            DEFOCUS_SCRATCH_WORD(45) = sprite_next_y;
+            DEFOCUS_SCRATCH_WORD(46) = layer->parameters[0];
+            DEFOCUS_SCRATCH_WORD(47) = 0;
             sceVif1PkAddDataN(packet, DEFOCUS_WAVE_SPRITE, 16);
             wave_x++;
         }
@@ -1183,10 +1084,10 @@ void GameDefocusCheck(void)
         layer_index++;
     }
     if (active == 0) {
-        sRender.callback = NULL;
+        sRender.final_packet_callback[6] = NULL;
         return;
     }
-    sRender.callback = DefocusMain;
+    sRender.final_packet_callback[6] = DefocusMain;
 }
 
 void GameDefocusFinalize(int index)

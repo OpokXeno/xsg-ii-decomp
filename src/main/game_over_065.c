@@ -1,38 +1,14 @@
 #include "common.h"
-#include "main/sdv_033.h"
+#include "main/xgl_camera.h"
+#include "main/xgl_packet.h"
+#include "main/gr_screen.h"
 #include "shared.h"
-#include "main/tu048.h"
+#include "main/game_over_059.h"
+#include "main/game_over_065.h"
+#include "main/game_data.h"
 
-extern void sceVif1PkRef(XglPacket *packet, const void *environment,
-                         int count, int mode, int offset, int flags);
-extern void sceVif1PkCnt(XglPacket *packet, int count);
-extern XglPacket *xglPacketGetCurrent(void);
-
-typedef unsigned int XglQuadword __attribute__((mode(TI)));
-
-/* DrawBack reads the framebuffer-page halfword at sRender +0x14. */
-typedef struct {
-    u8 unmodeled_00[0x10];
-    u16 width;
-    u16 height;
-    u16 framebuffer_page;
-    u8 unmodeled_16[0x0a];
-    u16 buffer_select;
-} DrawImageRenderState;
-
-typedef union GameOverDmaPacket4 {
-    u64 words[4];
-    XglQuadword quadwords[2];
-} GameOverDmaPacket4;
-
-typedef union GameOverDmaPacket6 {
-    u64 words[6];
-    XglQuadword quadwords[3];
-} GameOverDmaPacket6;
 
 void DrawImage_001EE618(XglQuadword *framebuffer);
-extern DrawImageRenderState sRender;
-extern void sceVif1PkAddDataN(XglPacket *packet, const void *data, int count);
 extern u64 TestEnv_0_002BD4C0[12];
 extern GameOverDmaPacket4 TransEnv_1_002BD520;
 extern GameOverDmaPacket6 FlushEnv_2_002BD540;
@@ -42,7 +18,7 @@ void DrawImage_001EE618(XglQuadword *framebuffer)
     XglPacket *packet;
 
     packet = xglPacketGetCurrent();
-    TestEnv_0_002BD4C0[4] = ((u64)sRender.buffer_select << 0x25) | ((u64)0x8000 << 0x24);
+    TestEnv_0_002BD4C0[4] = ((u64)sRender.display_buffer_base << 0x25) | ((u64)0x8000 << 0x24);
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddDataN(packet, TestEnv_0_002BD4C0, 0x18);
     sceVif1PkRef(packet, TransEnv_1_002BD520.words, 2, 0, 0, 0);
@@ -52,29 +28,23 @@ void DrawImage_001EE618(XglQuadword *framebuffer)
     sceVif1PkRef(packet, FlushEnv_2_002BD540.words, 3, 0, 0, 0);
 }
 
-#include "main/control_entry.h"
+#include "main/xgl_thread.h"
 #include "main/pad.h"
-#include "main/tu021.h"
-#include "main/tu051.h"
-#include "main/tu101.h"
+#include "main/se_bank_load.h"
+#include "main/game_camera.h"
+#include "main/xgl_mc_request.h"
+#include "main/menu_draw.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_font.h"
 #include "main/xgl_jpeg.h"
-/* Sound effects played with seVoiceStartDefault (the ids game_over_059.c and tu098.c use). */
+#include "main/gs_display.h"
+/* Sound effects played with seVoiceStartDefault (the ids game_over_059.c and cursor_buffer.c use). */
 #define SE_DISPLAY_CURSOR_MOVE 0x01000001
 #define SE_DISPLAY_DECIDE 0x01000002
 #define SE_DISPLAY_RESET 0x01000002
 #define SE_DISPLAY_CANCEL 0x01000008
 #define TYA_DISPLAY_OFFSET_LIMIT 20
 
-/* PadData port record from +0x30: the held directions (pad.h leaves them unmodeled). */
-typedef struct TyaPadDirections {
-    u8 unmodeled_00[0x30];
-    unsigned short directionHeld; /* +0x30 */
-} TyaPadDirections;
-
-extern PadRecord PadData[2];
-extern ConfigSaveSettings SaveData;
 extern void *memset(void *dst, int value, unsigned int size);
 
 /*
@@ -84,27 +54,13 @@ extern void *memset(void *dst, int value, unsigned int size);
  * each frame. The offset it applies is SaveData +0x32 (horizontal) and +0x34
  * (vertical), the same fields as X1.
  */
-/* GS DISPLAY register: data is the whole 64-bit value, the struct its fields. */
-typedef union GsDisplay64 {
-    u64 data;
-    struct {
-        unsigned int dx : 12;
-        unsigned int dy : 11;
-        unsigned int magh : 4;
-        unsigned int magv : 2;
-        unsigned int unmodeled_29 : 3;
-        unsigned int dw : 12;
-        unsigned int dh : 11;
-        unsigned int unmodeled_55 : 9;
-    };
-} GsDisplay64;
-
-/* +0x50 is the base dx/dy the offset is measured from (see tyaSetDisplayOffset). */
+/* DispEnv (xgl_render.h) seen past its 0x50 bytes: +0x50 holds the base dx/dy the offset is measured from
+ * (dispEnvTailWork[0] in xgl_render.c; see tyaSetDisplayOffset). The access has to go through DispEnv's own symbol. */
 typedef struct TyaDisplayEnv {
     u8 unmodeled_00[0x18];
-    GsDisplay64 display1; /* +0x18 */
+    GsDisplayRegister display1; /* +0x18 */
     u8 unmodeled_20[0x30];
-    GsDisplay64 base;      /* +0x50 */
+    GsDisplayRegister base;     /* +0x50 */
 } TyaDisplayEnv;
 
 extern TyaDisplayEnv DispEnv;
@@ -129,16 +85,16 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
     saved_x = SaveData.displayOffsetX;
     saved_y = SaveData.displayOffsetY;
 
-    if (framebuffer_or_mode == (u8 *)0) {
-        DispEnv.display1.dx = DispEnv.base.dx + saved_x * 5;
-        DispEnv.display1.dy = DispEnv.base.dy + saved_y;
+    if (framebuffer_or_mode == TYA_DISPLAY_APPLY) {
+        DispEnv.display1.field.dx = DispEnv.base.field.dx + saved_x * 5;
+        DispEnv.display1.field.dy = DispEnv.base.field.dy + saved_y;
         return;
     }
-    if (framebuffer_or_mode == (u8 *)1) {
+    if (framebuffer_or_mode == TYA_DISPLAY_RESET) {
         SaveData.displayOffsetX = 0;
         SaveData.displayOffsetY = 0;
-        DispEnv.display1.dx = DispEnv.base.dx;
-        DispEnv.display1.dy = DispEnv.base.dy;
+        DispEnv.display1.field.dx = DispEnv.base.field.dx;
+        DispEnv.display1.field.dy = DispEnv.base.field.dy;
         return;
     }
     {
@@ -147,7 +103,7 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
 
         do {
         } while (xglCdServiceIfPending() != 0);
-        xglCdReadFile("yajima\\mnt_set.jpg", image_source, 0, 1);
+        xglCdReadFile("yajima\\mnt_set.jpg", image_source, 0, CD_NOTIFY_DUMMY);
         memset(&request, 0, sizeof(request));
         request.source = image_source;
         request.destination = framebuffer_or_mode;
@@ -157,8 +113,8 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
     while (1) {
         if ((PadData[0].heldAndPressed & PAD_SOFT_RESET) == PAD_SOFT_RESET) {
             SaveData.displayOffsetY = saved_y;
-            DispEnv.display1.dx = DispEnv.base.dx + saved_x * 5;
-            DispEnv.display1.dy = DispEnv.base.dy + saved_y;
+            DispEnv.display1.field.dx = DispEnv.base.field.dx + saved_x * 5;
+            DispEnv.display1.field.dy = DispEnv.base.field.dy + saved_y;
             ((TyaOffsetHalfword *)&SaveData.displayOffsetX)->value = saved_x;
             gameWork.control |= CONTROL_SOFT_RESET;
             break;
@@ -201,15 +157,15 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
             vertical = TYA_DISPLAY_OFFSET_LIMIT;
         }
         if (SaveData.displayOffsetX != horizontal || SaveData.displayOffsetY != vertical) {
-            if (((TyaPadDirections *)PadData)->directionHeld & 0xF000) {
+            if (PadData[0].directionHeld & 0xF000) {
                 seVoiceStartDefault(SE_DISPLAY_CURSOR_MOVE);
             }
         }
 
         SaveData.displayOffsetX = horizontal;
         SaveData.displayOffsetY = vertical;
-        DispEnv.display1.dx = DispEnv.base.dx + horizontal * 5;
-        DispEnv.display1.dy = DispEnv.base.dy + vertical;
+        DispEnv.display1.field.dx = DispEnv.base.field.dx + horizontal * 5;
+        DispEnv.display1.field.dy = DispEnv.base.field.dy + vertical;
 
         if (PadData[0].pressed & PAD_CIRCLE) {
             seVoiceStartDefault(SE_DISPLAY_DECIDE);
@@ -220,7 +176,7 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
             break;
         }
         xglFontDebugPrintf(8, 8, "%04x %04x\n%04x %04x",
-                           DispEnv.display1.dx, DispEnv.display1.dy,
+                           DispEnv.display1.field.dx, DispEnv.display1.field.dy,
                            SaveData.displayOffsetX, SaveData.displayOffsetY);
         DrawImage_001EE618((XglQuadword *)framebuffer_or_mode);
         xglSleep();
@@ -234,8 +190,8 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
  */
 void tyaSetDisplayOffset(int horizontal, int vertical)
 {
-    DispEnv.display1.dx = DispEnv.base.dx + horizontal * 5;
-    DispEnv.display1.dy = DispEnv.base.dy + vertical;
+    DispEnv.display1.field.dx = DispEnv.base.field.dx + horizontal * 5;
+    DispEnv.display1.field.dy = DispEnv.base.field.dy + vertical;
 }
 
 /* The DMA environment of the overlay's three framebuffer packets, in address order (DrawImage_001EE618 reads them). */

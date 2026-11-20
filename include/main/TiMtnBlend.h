@@ -3,11 +3,12 @@
 
 /* Functions of src/main/TiMtnBlend.c that other files call. */
 
-struct TiMtnBlendContext;
+#include "main/TiMRPackage.h"
 
-void tiMtnBlendSwapLocal(struct TiMtnBlendContext *ctx, int *flags);
-void tiMtnBlendLerpMatrix(float (*dst)[4], float (*a)[4], float (*b)[4], float t);
-void tiMtnBlendUpdateGlobal(struct TiMtnBlendContext *ctx);
-void tiMtnBlendUpdateLocal(struct TiMtnBlendContext *ctx);
+void tiMtnBlendSwapGlobal(TiMRPackage *ctx, int *flags);
+void tiMtnBlendSwapLocal(TiMRPackage *ctx, int *flags);
+void tiMtnBlendLerpMatrix(Matrix4 dst, Matrix4 a, Matrix4 b, float t);
+void tiMtnBlendUpdateGlobal(TiMRPackage *ctx);
+void tiMtnBlendUpdateLocal(TiMRPackage *ctx);
 
 #endif /* INCLUDE_MAIN_TIMTNBLEND_H */

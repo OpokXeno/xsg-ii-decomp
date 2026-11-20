@@ -1,70 +1,21 @@
 #include "common.h"
-#include "main/tu024.h"
+#include "main/xgl_dma_handler.h"
 #include "shared.h"
-#include "main/tu017.h"
-#include "main/tu022.h"
+#include "main/movie_player.h"
+#include "main/sound_driver.h"
 #include "main/xgl_dma.h"
 #include "main/xgl_render.h"
-
-typedef struct XglPacket XglPacket;
+#include "main/gr_screen.h"
+#include "main/xgl_camera.h"
+#include "main/xgl_packet.h"
+#include "main/xgl_pad.h"
+#include "main/xgl_font.h"
+#include "main/gifState.h"
+#include "main/nml_model_set.h"
+#include "main/xgl_studio.h"
+#include "main/sef.h"
 
 typedef unsigned int XglQuadword __attribute__((mode(TI)));
-
-/*
- * The VIF1 direct-mode packet builder object. xglPacketInit constructs two
- * of them back to back inside asPacketSource, 0x28 bytes apart (main
- * 0x0022c458-0x0022c4b4 writes both entries' +0x20 and +0x24 at that
- * stride), so sizeof(XglPacket) is 0x28. Only the members the functions of
- * this TU touch are named; everything the sceVif1Pk* library alone reads or
- * writes stays unmodeled.
- */
-struct XglPacket {
-    /* xglFontReloadTexture decrements this forward cursor by four words. */
-    u32 *write_cursor;
-    /*
-     * +0x04: the address xglPacketSend hands to xglDmaDirectSrcChain as the
-     * DMA source-chain start whenever a packet is pending (main
-     * 0x0022c520-0x0022c548). No function of this TU writes it -- neither
-     * xglPacketInit nor xglPacketMove touches +0x04 -- so it is set by the
-     * sceVif1Pk* library: sceVif1PkInit (main 0x0020ac68) stores its base
-     * argument at +0x00 and +0x04, and xglPacketInit passes it each entry's
-     * buffer base (0x00c00000 and 0x00e00000).
-     */
-    u32 start;
-    /*
- * +0x08 and +0x0c: xglPrimAddGifTagDirect (main 0x00222c00 lw v0,8(s0);
- * main 0x00222c0c lw v0,0xc(s0)) tests both for non-zero to decide
- * whether a direct-mode block the sceVif1Pk* library opened is still
- * open, so it appends to that block instead of resetting/opening/
- * closing a new one (compare SGsSendPacket, src/main/sv_get_image_
- * item.c, which always resets/opens/closes without this check).
- * Neither word is written by any function of this TU, so both are set
- * by the sceVif1Pk* library.
- */
-    u32 directCode;
-    u32 *directState;
-    unsigned char unmodeled_10[0x10];
-    /*
-     * +0x20: the packet's fixed top-of-buffer address. xglPacketInit sets it
-     * once per entry after both sceVif1PkInit calls (main 0x0022c49c for the
-     * first entry, value 0x00e00000; main 0x0022c4a0 for the second, value
-     * 0x01000000): the end of the buffer whose base went to sceVif1PkInit.
-     */
-    u32 limit;
-    /*
-     * +0x24: the write cursor. xglPacketInit seeds it equal to `limit` (main
-     * 0x0022c48c/0x0022c490) and xglPacketMove reloads `limit` into it at
-     * the start of every frame (main 0x0022c4e4/0x0022c4f0), so writers that
-     * fill the packet backward from the top always restart from the same
-     * address. main/tu107's nmlPacketSetAttributeData and
-     * nmlPacketSetAttributeAlloc16N read it, decrement it by the size being
-     * requested and store it back, then use the new value as the memcpy
-     * destination or return it as the allocation (main 0x00238e28-0x00238e3c
-     * and 0x00238fe0-0x00238ff4),
-     * which is why the member is byte-addressed instead of scaled.
-     */
-    u8 *cursor;
-};
 
 /* GIF tag fields. */
 #define GIF_TAG_EOP 0x8000
@@ -94,8 +45,6 @@ struct XglPacket {
 #define GS_ALPHA_OPAQUE 0x80
 #define XGL_DMA_CHANNEL_GIF 2
 
-extern void xglStudioInit(void);
-extern void xglStudioMainCameraInit(void);
 
 /* GIF_STAT and VIF1_STAT, polled by the VSync callback. */
 #define GIF_STAT_ADDRESS 0x10003020
@@ -130,104 +79,6 @@ extern void xglStudioMainCameraInit(void);
  * A+D (state), RGBAQ, XYZ2, XYZ2 (two corners), plus a closing A+D for the clear packet. */
 #define RENDER_CLEAR_GIF_REGS (GIF_REG_AD | (GIF_REG_RGBAQ << 4) | (GIF_REG_XYZ2 << 8) | (GIF_REG_XYZ2 << 12))
 #define RENDER_CLEAR_QWORDS 6
-
-/*
- * GS clear-environment block (0x004A9080, size 0x60). xglRenderClearDepth
- * and xglRenderClearFrame each write only the 8-byte tag at +0x10 (a
- * GS-register-shaped value selecting what a queued clear targets);
- * xglRenderClearColor splits a packed 0xAABBGGRR colour into the four
- * one-byte-per-word fields at +0x20..+0x2c. Bytes no claimed function
- * touches stay unmodeled.
- */
-typedef struct GsClearEnv {
-    u32 gif_tag_low;
-    u32 gif_tag_high;
-    u32 gif_registers_low;
-    u32 gif_registers_high;
-    u64 target;
-    u64 target_address;
-    u32 color_r;
-    u32 color_g;
-    u32 color_b;
-    u32 color_a;
-    u32 left;
-    u32 top;
-    unsigned char unmodeled_38[0x08];
-    u32 right;
-    u32 bottom;
-    unsigned char unmodeled_48[0x08];
-    u64 restore_target;
-    u64 restore_target_address;
-} GsClearEnv;
-
-typedef union GsClearPacket {
-    GsClearEnv value;
-    XglQuadword quadwords[6];
-} GsClearPacket;
-
-/* GS PMODE register: display circuit enables and the alpha blend value. */
-typedef struct GsPmode {
-    unsigned int en1 : 1;
-    unsigned int en2 : 1;
-    unsigned int crtmd : 3;
-    unsigned int mmod : 1;
-    unsigned int amod : 1;
-    unsigned int slbg : 1;
-    unsigned int alp : 8;
-    unsigned int unmodeled_16 : 16;
-    unsigned int unmodeled_32 : 32;
-} GsPmode;
-
-typedef struct GsDispfb {
-    unsigned int fbp : 9;
-    unsigned int fbw : 6;
-    unsigned int psm : 5;
-    unsigned int unmodeled_20 : 12;
-    unsigned int dbx : 11;
-    unsigned int dby : 11;
-    unsigned int unmodeled_54 : 10;
-} GsDispfb;
-
-typedef struct GsDisplay {
-    unsigned int dx : 12;
-    unsigned int dy : 11;
-    unsigned int magh : 4;
-    unsigned int magv : 2;
-    unsigned int unmodeled_29 : 3;
-    unsigned int dw : 12;
-    unsigned int dh : 11;
-    unsigned int unmodeled_55 : 9;
-} GsDisplay;
-
-typedef union GsDispfbRegister {
-    u64 value;
-    GsDispfb field;
-} GsDispfbRegister;
-
-typedef union GsDisplayRegister {
-    u64 value;
-    GsDisplay field;
-} GsDisplayRegister;
-
-/*
- * GS display-environment block (0x004A9000, size 0x50). xglRenderDispOff/On
- * only touch the 8-byte flag word at +0x00 (bit 0x2 gates display output).
- */
-typedef struct GsDispEnv {
-    union {
-        u64 flags;
-        GsPmode pmode;
-    };
-    unsigned char unmodeled_08[8];
-    GsDispfbRegister dispfb1;          /* +0x10 */
-    GsDisplayRegister display1;        /* +0x18 */
-    unsigned char unmodeled_20[8];
-    GsDispfbRegister dispfb2;          /* +0x28 */
-    GsDisplayRegister display2;        /* +0x30 */
-    u64 extbuf;                        /* +0x38 */
-    u64 extdata;                       /* +0x40 */
-    u64 extwrite;                      /* +0x48 */
-} GsDispEnv;
 
 /*
  * Packed GS registers of the draw-environment block below, laid out as
@@ -401,70 +252,24 @@ typedef union GsDrawPacket {
     XglQuadword quadwords[16];
 } GsDrawPacket;
 
-typedef void (*XglRenderFadeCallback)(XglPacket *packet);
-
-/* One row of asDispReso: the display geometry sceGsSetDefDispEnv and the draw environment take. */
-typedef struct XglRenderReso {
-    short depth_psm;                   /* +0x00 */
-    short frame_psm;                   /* +0x02 */
-    short frame_width;                 /* +0x04 */
-    short frame_height;                /* +0x06 */
-} XglRenderReso;
-
-/* One row of asVramBase: the GS frame-buffer pages of a resolution. */
-typedef struct XglRenderVram {
-    unsigned short depth_base;         /* +0x08 */
-    unsigned short unmodeled_0a[3];
-    u16 width;                         /* +0x10 */
-    u16 height;                        /* +0x12 */
-    unsigned short flip_base;          /* +0x14 */
-    unsigned short unmodeled_16[5];
-} XglRenderVram;
-
-typedef union XglRenderResoSlot {
-    XglRenderReso row;
-    short value[4];
-} XglRenderResoSlot;
-
-typedef union XglRenderVramSlot {
-    XglRenderVram row;
-    unsigned short value[12];
-} XglRenderVramSlot;
-
-typedef struct XglRenderState {
-    XglRenderResoSlot reso;            /* +0x00 */
-    XglRenderVramSlot vram;            /* +0x08 */
-    u16 display_buffer_base;            /* +0x20 */
-    u16 draw_buffer_base;               /* +0x22 */
-    XglRenderFadeCallback final_packet_callback[8]; /* +0x24 */
-    XglRenderFadeCallback fade_callback; /* +0x44 */
-    u32 render_status;                  /* +0x48 */
-    u32 frame_delta;                    /* +0x4c */
-    u32 frame_count;                    /* +0x50 */
-} XglRenderState;
-
 extern GsDrawPacket DrawEnv;
-extern GsClearPacket ClearEnv;
-extern GsDispEnv DispEnv;
-extern XglRenderState sRender;
 extern void xglRenderSetReso(int index);
 extern void SyncDCache(void *start, void *end);
 int xglRenderVSyncCallback(int unused);
-extern void sceGsSetDefDispEnv(GsDispEnv *env, int psm, int width, int height, int dx, int dy);
 extern void sceGsPutDrawEnv(GsDrawEnv *env);
 /* xgl_render's .sdata, 0x69E084-0x69E0AC, in address order. */
 signed char pxyTickScaleDouble = 0;
 int xglRenderGlobalFadeColor = 0; /* packed fade colour 0xAABBGGRR, written by xglRenderGlobalFadeSet */
 int xglRenderCpUDispFlag = 0;     /* 0 by xglRenderCpUDispOff, 1 by xglRenderCpUDispOn */
 int xglRenderClearSkip = 0;       /* 1 by xglRenderClearSkipOn, 0 by xglRenderClearSkipOff */
-signed char D_0069E094 = 0;
-int D_0069E098 = 0;
+signed char xglRenderVSyncInterval = 0;
+int xglRenderMoveCount = 0;
 int LoopCount = 0;
 /* The GS VSync interrupt callback increments this counter while
  * xglRenderSyncMove polls it on the render thread. */
 volatile u32 VSyncCount = 0;
 int ScanLineInterpolate = 0;
-int D_0069E0A8 = 0;
+int xglCullingMapEmptyName = 0;
 extern XglRenderReso asDispReso[RENDER_COUNT_RESO];
 extern XglRenderVram asVramBase[RENDER_COUNT_RESO];
 int xglRenderVSyncCallback(int unused);
@@ -479,11 +284,6 @@ void xglRenderCpUDispOn(void) {
     xglRenderCpUDispFlag = 1;
 }
 
-typedef struct XglGifAd {
-    u64 data;
-    u64 address;
-} XglGifAd;
-
 extern s16 sRenderPsm;
 extern u16 sRenderDisplayBase;
 extern u16 sRenderFrameBase;
@@ -496,7 +296,7 @@ void xglRenderDrawFlip(void)
     u16 frameBase;
     u64 *packet;
 
-    packet = (u64 *) 0x70000000;
+    packet = (u64 *) SCRATCHPAD_BASE;
     frameBase = sRenderDisplayBase;
     sRenderDisplayBase = sRenderFrameBase;
     sRenderFrameBase = frameBase;
@@ -514,32 +314,32 @@ void xglRenderDrawFlip(void)
     xglDmaDirectNormal(2, (unsigned int) packet, 3);
 }
 
-extern u16 D_00645842;
+extern u16 sRenderFlipBase;
 
 void xglRenderCopyDisp2Draw(void)
 {
-    XglGifAd *scratch;
+    GsAdPair *scratch;
     int count;
 
-    scratch = (XglGifAd *) 0x70000000;
+    scratch = (GsAdPair *) SCRATCHPAD_BASE;
     count = 0;
     count = 0;
     scratch[count].data = 0x1000000000008000ULL;
-    scratch[count++].address = GIF_REG_AD;
+    scratch[count++].reg = GIF_REG_AD;
     scratch[count].data = 0;
-    scratch[count++].address = 0x3F;
+    scratch[count++].reg = 0x3F;
     scratch[count].data = ((u64) (sRenderDisplayBase << 5) | 0x80000)
         | ((u64) sRenderPsm << 24)
-        | ((u64) (D_00645842 << 5) << 32)
+        | ((u64) (sRenderFlipBase << 5) << 32)
         | ((u64) sRenderPsm << 56)
         | ((u64) 0x8000 << 36);
-    scratch[count++].address = 0x50;
+    scratch[count++].reg = 0x50;
     scratch[count].data = 0;
-    scratch[count++].address = 0x51;
+    scratch[count++].reg = 0x51;
     scratch[count].data = ((u64) 448 << 32) | 0x200;
-    scratch[count++].address = 0x52;
+    scratch[count++].reg = 0x52;
     scratch[count].data = 2;
-    scratch[count++].address = 0x53;
+    scratch[count++].reg = 0x53;
     scratch[0].data += count - 1;
     /* sync: the GIF packet stores must reach memory before the DMA engine reads them */
     __asm__ volatile("sync" ::: "memory");
@@ -549,28 +349,28 @@ void xglRenderCopyDisp2Draw(void)
 
 void xglRenderCopyDisp2Flip(void)
 {
-    XglGifAd *scratch;
+    GsAdPair *scratch;
     int count;
 
-    scratch = (XglGifAd *) 0x70000000;
+    scratch = (GsAdPair *) SCRATCHPAD_BASE;
     count = 0;
     count = 0;
     scratch[count].data = 0x1000000000008000ULL;
-    scratch[count++].address = GIF_REG_AD;
+    scratch[count++].reg = GIF_REG_AD;
     scratch[count].data = 0;
-    scratch[count++].address = 0x3F;
+    scratch[count++].reg = 0x3F;
     scratch[count].data = ((u64) (sRenderDisplayBase << 5) | 0x80000)
         | ((u64) sRenderPsm << 24)
         | ((u64) (sRenderFrameBase << 5) << 32)
         | ((u64) sRenderPsm << 56)
         | ((u64) 0x8000 << 36);
-    scratch[count++].address = 0x50;
+    scratch[count++].reg = 0x50;
     scratch[count].data = 0;
-    scratch[count++].address = 0x51;
+    scratch[count++].reg = 0x51;
     scratch[count].data = ((u64) 448 << 32) | 0x200;
-    scratch[count++].address = 0x52;
+    scratch[count++].reg = 0x52;
     scratch[count].data = 2;
-    scratch[count++].address = 0x53;
+    scratch[count++].reg = 0x53;
     scratch[0].data += count - 1;
     /* sync: the GIF packet stores must reach memory before the DMA engine reads them */
     __asm__ volatile("sync" ::: "memory");
@@ -580,28 +380,28 @@ void xglRenderCopyDisp2Flip(void)
 
 void xglRenderCopyDraw2Flip(void)
 {
-    XglGifAd *scratch;
+    GsAdPair *scratch;
     int count;
 
-    scratch = (XglGifAd *) 0x70000000;
+    scratch = (GsAdPair *) SCRATCHPAD_BASE;
     count = 0;
     count = 0;
     scratch[count].data = 0x1000000000008000ULL;
-    scratch[count++].address = GIF_REG_AD;
+    scratch[count++].reg = GIF_REG_AD;
     scratch[count].data = 0;
-    scratch[count++].address = 0x3F;
-    scratch[count].data = ((u64) (D_00645842 << 5) | 0x80000)
+    scratch[count++].reg = 0x3F;
+    scratch[count].data = ((u64) (sRenderFlipBase << 5) | 0x80000)
         | ((u64) sRenderPsm << 24)
         | ((u64) (sRenderFrameBase << 5) << 32)
         | ((u64) sRenderPsm << 56)
         | ((u64) 0x8000 << 36);
-    scratch[count++].address = 0x50;
+    scratch[count++].reg = 0x50;
     scratch[count].data = 0;
-    scratch[count++].address = 0x51;
+    scratch[count++].reg = 0x51;
     scratch[count].data = ((u64) 448 << 32) | 0x200;
-    scratch[count++].address = 0x52;
+    scratch[count++].reg = 0x52;
     scratch[count].data = 2;
-    scratch[count++].address = 0x53;
+    scratch[count++].reg = 0x53;
     scratch[0].data += count - 1;
     /* sync: the GIF packet stores must reach memory before the DMA engine reads them */
     __asm__ volatile("sync" ::: "memory");
@@ -609,34 +409,30 @@ void xglRenderCopyDraw2Flip(void)
     xglDmaDirectNormal(2, (unsigned int) scratch, count);
 }
 
-void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-void sceVif1PkCnt(XglPacket *packet, int count);
-void sceVif1PkOpenDirectHLCode(XglPacket *packet, int count);
-void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int qwc);
 
 void xglRenderDrawFlipPk(XglPacket *packet)
 {
-    XglGifAd *scratch;
+    GsAdPair *scratch;
     int count;
 
-    scratch = (XglGifAd *) 0x70000000;
+    scratch = (GsAdPair *) SCRATCHPAD_BASE;
     count = 0;
     scratch[count].data = 0x1000000000008000ULL;
-    scratch[count++].address = GIF_REG_AD;
+    scratch[count++].reg = GIF_REG_AD;
     scratch[count].data = 0;
-    scratch[count++].address = 0x3F;
+    scratch[count++].reg = 0x3F;
     scratch[count].data = (u64) ((sRender.draw_buffer_base << 5) | 0x80000)
-        | ((u64) sRender.reso.row.frame_psm << 24)
-        | ((u64) (sRender.vram.row.flip_base << 5) << 32)
-        | ((u64) sRender.reso.row.frame_psm << 56)
+        | ((u64) sRender.reso.frame_psm << 24)
+        | ((u64) (sRender.vram.flip_base << 5) << 32)
+        | ((u64) sRender.reso.frame_psm << 56)
         | 0x0008000000000000ULL;
-    scratch[count++].address = 0x50;
+    scratch[count++].reg = 0x50;
     scratch[count].data = 0;
-    scratch[count++].address = 0x51;
+    scratch[count++].reg = 0x51;
     scratch[count].data = ((u64) 448 << 32) | 0x200;
-    scratch[count++].address = 0x52;
+    scratch[count++].reg = 0x52;
     scratch[count].data = 2;
-    scratch[count++].address = 0x53;
+    scratch[count++].reg = 0x53;
     scratch[0].data += count - 1;
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
@@ -644,23 +440,23 @@ void xglRenderDrawFlipPk(XglPacket *packet)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-extern int D_00645898[];
-extern int D_0064589C[];
+extern int xglRenderPathBusyFlag[];
+extern int xglRenderVSyncTickCount[];
 
 int xglRenderVSyncCallback(int unused)
 {
-    void func_0017D138(int);
+    void ADXM_ExecVint(int);
 
     VSyncCount = VSyncCount + 1;
-    D_0064589C[0] = D_0064589C[0] + 1;
-    if (VSyncCount >= (u32) D_0069E094 &&
+    xglRenderVSyncTickCount[0] = xglRenderVSyncTickCount[0] + 1;
+    if (VSyncCount >= (u32) xglRenderVSyncInterval &&
         ((*(u32 *) GIF_STAT_ADDRESS & GIF_STAT_APATH_MASK) != 0 ||
          (*(u32 *) VIF1_STAT_ADDRESS & VIF1_STAT_VPS_MASK) != 0)) {
-        D_00645898[0] = 1;
+        xglRenderPathBusyFlag[0] = 1;
     } else {
-        D_00645898[0] = 0;
+        xglRenderPathBusyFlag[0] = 0;
     }
-    func_0017D138(0);
+    ADXM_ExecVint(0);
     /* sync: orders the GIF/VIF status reads and the flag store before the VSync interrupt returns */
     __asm__ volatile("sync" ::: "memory");
     /* ei: re-enables interrupts for the VSync interrupt context this callback runs in */
@@ -676,12 +472,12 @@ void xglRenderSyncInit(void)
 
 void xglRenderSyncMove(void)
 {
-    extern u16 D_00645830;
-    extern u16 D_00645832;
+    extern u16 sRenderDispfbBase;
+    extern u16 sRenderPrevDispfbBase;
     extern int xglRenderFrameDelta[];
-    void func_00152EA8(void);
-    void func_00129C28(void);
-    void func_0012A510(int);
+    void mwPlyExecServer(void);
+    void sceGsResetPath(void);
+    void sceGsSyncV(int);
     int sceGsSyncPath(int, int);
     int sceGsResetGraph(int, int, int, int);
     int pollCount;
@@ -689,14 +485,14 @@ void xglRenderSyncMove(void)
     u64 *packet;
 
     /* VSyncCount is advanced by the VSync interrupt, so every read of it is volatile. */
-    if ((u32) D_0069E094 < VSyncCount) {
+    if ((u32) xglRenderVSyncInterval < VSyncCount) {
         xglRenderFrameDelta[0] = 1;
     } else {
         xglRenderFrameDelta[0] = 0;
     }
 
     if (pxyTickScaleDouble == 1) {
-        func_00152EA8();
+        mwPlyExecServer();
         sceGsSyncPath(0, 0);
         return;
     }
@@ -705,10 +501,10 @@ void xglRenderSyncMove(void)
     pollCount = 0;
     while (pollCount < 0x80) {
         pathBusy = sceGsSyncPath(1, 0);
-        if (pathBusy == 0 && VSyncCount >= (u32) D_0069E094) {
+        if (pathBusy == 0 && VSyncCount >= (u32) xglRenderVSyncInterval) {
             break;
         }
-        func_00152EA8();
+        mwPlyExecServer();
         pollCount++;
     }
 
@@ -717,17 +513,17 @@ void xglRenderSyncMove(void)
         *(u32 *) D1_CHCR = 0;
         *(u32 *) D2_CHCR = 0;
         *(u32 *) D_ENABLEW = 0;
-        func_00129C28();
+        sceGsResetPath();
         sceGsResetGraph(1, 0, 0, 0);
         sceGsSyncPath(0, 0);
 
-        packet = (u64 *) 0x70000000;
+        packet = (u64 *) SCRATCHPAD_BASE;
         packet[0] = 0x1000000000008006ULL;
         packet[1] = GIF_REG_AD;
         packet[2] = 0;
         packet[3] = 0x3F;
-        packet[4] = ((u64) (D_00645830 << 5) | 0x80000) | ((u64) sRenderPsm << 24)
-            | ((u64) (D_00645832 << 5) << 32) | ((u64) sRenderPsm << 56) | ((u64) 0x8000 << 36);
+        packet[4] = ((u64) (sRenderDispfbBase << 5) | 0x80000) | ((u64) sRenderPsm << 24)
+            | ((u64) (sRenderPrevDispfbBase << 5) << 32) | ((u64) sRenderPsm << 56) | ((u64) 0x8000 << 36);
         packet[5] = 0x50;
         packet[6] = 0;
         packet[7] = 0x51;
@@ -743,7 +539,7 @@ void xglRenderSyncMove(void)
         FlushCache(0);
         xglDmaDirectNormal(2, (unsigned int) packet, 7);
         sceGsSyncPath(0, 0);
-        func_0012A510(0);
+        sceGsSyncV(0);
     }
 
     VSyncCount = 0;
@@ -758,22 +554,22 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.gif_tag.flg = 0;
     DrawEnv.value.gif_tag.nreg = 1;
     DrawEnv.value.gif_registers.regs0 = GIF_REG_AD;
-    DrawEnv.value.frame1.fbp = sRender.vram.row.height;
-    DrawEnv.value.frame1.fbw = sRender.reso.row.frame_width / 64;
-    DrawEnv.value.frame1.psm = sRender.reso.row.frame_psm;
+    DrawEnv.value.frame1.fbp = sRender.vram.height;
+    DrawEnv.value.frame1.fbw = sRender.reso.frame_width / 64;
+    DrawEnv.value.frame1.psm = sRender.reso.frame_psm;
     DrawEnv.value.frame1.fbmsk = 0;
     DrawEnv.value.frame1_address = SCE_GS_FRAME_1;
-    DrawEnv.value.zbuf1.zbp = sRender.vram.row.depth_base;
-    DrawEnv.value.zbuf1.psm = sRender.reso.row.depth_psm;
+    DrawEnv.value.zbuf1.zbp = sRender.vram.depth_base;
+    DrawEnv.value.zbuf1.psm = sRender.reso.depth_psm;
     DrawEnv.value.zbuf1.zmsk = 0;
     DrawEnv.value.zbuf1_address = SCE_GS_ZBUF_1;
-    DrawEnv.value.xyoffset1.ofx = (GS_COORD_CENTER - (sRender.reso.row.frame_width >> 1)) << 4;
-    DrawEnv.value.xyoffset1.ofy = (GS_COORD_CENTER - (sRender.reso.row.frame_height >> 1)) << 4;
+    DrawEnv.value.xyoffset1.ofx = (GS_COORD_CENTER - (sRender.reso.frame_width >> 1)) << 4;
+    DrawEnv.value.xyoffset1.ofy = (GS_COORD_CENTER - (sRender.reso.frame_height >> 1)) << 4;
     DrawEnv.value.xyoffset1_address = SCE_GS_XYOFFSET_1;
     DrawEnv.value.scissor1.scax0 = 0;
-    DrawEnv.value.scissor1.scax1 = sRender.reso.row.frame_width - 1;
+    DrawEnv.value.scissor1.scax1 = sRender.reso.frame_width - 1;
     DrawEnv.value.scissor1.scay0 = 0;
-    DrawEnv.value.scissor1.scay1 = sRender.reso.row.frame_height - 1;
+    DrawEnv.value.scissor1.scay1 = sRender.reso.frame_height - 1;
     DrawEnv.value.scissor1_address = SCE_GS_SCISSOR_1;
     DrawEnv.value.test1.ate = 0;
     DrawEnv.value.test1.atst = 0;
@@ -784,22 +580,22 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.test1.zte = 1;
     DrawEnv.value.test1.ztst = GS_ZTST_GEQUAL;
     DrawEnv.value.test1_address = SCE_GS_TEST_1;
-    DrawEnv.value.frame2.fbp = sRender.vram.row.height;
-    DrawEnv.value.frame2.fbw = sRender.reso.row.frame_width / 64;
-    DrawEnv.value.frame2.psm = sRender.reso.row.frame_psm;
+    DrawEnv.value.frame2.fbp = sRender.vram.height;
+    DrawEnv.value.frame2.fbw = sRender.reso.frame_width / 64;
+    DrawEnv.value.frame2.psm = sRender.reso.frame_psm;
     DrawEnv.value.frame2.fbmsk = 0;
     DrawEnv.value.frame2_address = SCE_GS_FRAME_2;
-    DrawEnv.value.zbuf2.zbp = sRender.vram.row.depth_base;
-    DrawEnv.value.zbuf2.psm = sRender.reso.row.depth_psm;
+    DrawEnv.value.zbuf2.zbp = sRender.vram.depth_base;
+    DrawEnv.value.zbuf2.psm = sRender.reso.depth_psm;
     DrawEnv.value.zbuf2.zmsk = 0;
     DrawEnv.value.zbuf2_address = SCE_GS_ZBUF_2;
-    DrawEnv.value.xyoffset2.ofx = (GS_COORD_CENTER - (sRender.reso.row.frame_width >> 1)) << 4;
-    DrawEnv.value.xyoffset2.ofy = (GS_COORD_CENTER - (sRender.reso.row.frame_height >> 1)) << 4;
+    DrawEnv.value.xyoffset2.ofx = (GS_COORD_CENTER - (sRender.reso.frame_width >> 1)) << 4;
+    DrawEnv.value.xyoffset2.ofy = (GS_COORD_CENTER - (sRender.reso.frame_height >> 1)) << 4;
     DrawEnv.value.xyoffset2_address = SCE_GS_XYOFFSET_2;
     DrawEnv.value.scissor2.scax0 = 0;
-    DrawEnv.value.scissor2.scax1 = sRender.reso.row.frame_width - 1;
+    DrawEnv.value.scissor2.scax1 = sRender.reso.frame_width - 1;
     DrawEnv.value.scissor2.scay0 = 0;
-    DrawEnv.value.scissor2.scay1 = sRender.reso.row.frame_height - 1;
+    DrawEnv.value.scissor2.scay1 = sRender.reso.frame_height - 1;
     DrawEnv.value.scissor2_address = SCE_GS_SCISSOR_2;
     DrawEnv.value.test2.ate = 0;
     DrawEnv.value.test2.atst = 0;
@@ -841,73 +637,73 @@ static void xglRenderDrawEnvInit(void)
 
 void xglRenderDrawEnvMove(void)
 {
-    DrawEnv.value.frame1.fbp = sRender.vram.row.height;
-    DrawEnv.value.frame2.fbp = sRender.vram.row.height;
-    DrawEnv.value.zbuf1.zbp = sRender.vram.row.depth_base;
-    DrawEnv.value.zbuf2.zbp = sRender.vram.row.depth_base;
+    DrawEnv.value.frame1.fbp = sRender.vram.height;
+    DrawEnv.value.frame2.fbp = sRender.vram.height;
+    DrawEnv.value.zbuf1.zbp = sRender.vram.depth_base;
+    DrawEnv.value.zbuf2.zbp = sRender.vram.depth_base;
     SyncDCache(&DrawEnv.value, &DrawEnv.value + 1);
     sceGsPutDrawEnv(&DrawEnv.value);
 }
 
-void func_00129D40(GsDispEnv *env, s16 psm, s16 width, s16 height, int dx, int dy);
+void sceGsSetDefDispEnv(GsDispEnv *env, s16 psm, s16 width, s16 height, int dx, int dy);
 /*
- * D_00645750..D_00645788 are fields of DispEnv (0x00645740, GsDispEnv above):
+ * dispEnvDispfb1..dispEnvExtwrite are fields of DispEnv (0x00645740, GsDispEnv above):
  * dispfb1 (+0x10), display1 (+0x18), dispfb2 (+0x28), display2 (+0x30),
- * extbuf (+0x38), extdata (+0x40), extwrite (+0x48). D_00645790 lies just past
+ * extbuf (+0x38), extdata (+0x40), extwrite (+0x48). dispEnvTailWork lies just past
  * the 0x50 bytes of GsDispEnv.
  */
-extern u64 D_00645750;
-extern u64 D_00645758;
-extern u64 D_00645768;
-extern u64 D_00645770;
-extern u64 D_00645778;
-extern u64 D_00645780;
-extern u64 D_00645788;
-extern u64 D_00645790[6];
+extern GsDispfbRegister dispEnvDispfb1;
+extern GsDisplayRegister dispEnvDisplay1;
+extern GsDispfbRegister dispEnvDispfb2;
+extern GsDisplayRegister dispEnvDisplay2;
+extern u64 dispEnvExtbuf;
+extern u64 dispEnvExtdata;
+extern u64 dispEnvExtwrite;
+extern u64 dispEnvTailWork[6];
 extern s16 cameraScreenWidth;
 extern s16 cameraScreenHeight;
 
 void xglRenderDispEnvInit(void) {
-    func_00129D40(&DispEnv, sRenderPsm, cameraScreenWidth, cameraScreenHeight, 0, 0);
+    sceGsSetDefDispEnv(&DispEnv, sRenderPsm, cameraScreenWidth, cameraScreenHeight, 0, 0);
     DispEnv.flags &= ~2;
     DispEnv.flags &= ~0x40;
-    D_00645790[0] = D_00645758;
-    D_00645768 = D_00645750;
-    D_00645770 = D_00645758;
-    D_00645778 = 0;
-    D_00645780 = 0;
-    D_00645788 = 0;
+    dispEnvTailWork[0] = dispEnvDisplay1.value;
+    dispEnvDispfb2.value = dispEnvDispfb1.value;
+    dispEnvDisplay2.value = dispEnvDisplay1.value;
+    dispEnvExtbuf = 0;
+    dispEnvExtdata = 0;
+    dispEnvExtwrite = 0;
 }
 
-extern u64 D_00645798[];
-extern u16 D_00645830;
-void func_0012A0B8(GsDispEnv *env);
+extern u64 dispEnvCacheEnd[];
+extern u16 sRenderDispfbBase;
+void sceGsPutDispEnv(GsDispEnv *env);
 
 void xglRenderDispEnvMove(void)
 {
-    ((GsDispfbRegister *) &D_00645768)->field.fbp = (unsigned int) D_00645830;
-    ((GsDispfbRegister *) &D_00645750)->field.fbp = (unsigned int) D_00645830;
+    dispEnvDispfb2.field.fbp = sRenderDispfbBase;
+    dispEnvDispfb1.field.fbp = sRenderDispfbBase;
     switch (ScanLineInterpolate) {
     case 0:
         DispEnv.pmode.en1 = 0;
         break;
     case 1:
-        ((GsDispfbRegister *) &D_00645768)->field.fbp = (unsigned int) D_00645830;
+        dispEnvDispfb2.field.fbp = sRenderDispfbBase;
         DispEnv.pmode.en1 = DispEnv.pmode.en2;
         DispEnv.pmode.alp = 0x80;
-        ((GsDisplayRegister *) &D_00645770)->field.dx = ((GsDisplayRegister *) &D_00645758)->field.dx;
-        ((GsDisplayRegister *) &D_00645770)->field.dy = ((GsDisplayRegister *) &D_00645758)->field.dy - 1;
+        dispEnvDisplay2.field.dx = dispEnvDisplay1.field.dx;
+        dispEnvDisplay2.field.dy = dispEnvDisplay1.field.dy - 1;
         break;
     case 2:
         break;
     }
-    SyncDCache(&DispEnv, &D_00645798);
-    func_0012A0B8(&DispEnv);
-    *(volatile u64 *) GS_DISPFB1 = D_00645768;
-    *(volatile u64 *) GS_DISPLAY1 = D_00645770;
-    *(volatile u64 *) GS_EXTBUF = D_00645778;
-    *(volatile u64 *) GS_EXTDATA = D_00645780;
-    *(volatile u64 *) GS_EXTWRITE = D_00645788;
+    SyncDCache(&DispEnv, &dispEnvCacheEnd);
+    sceGsPutDispEnv(&DispEnv);
+    *(volatile u64 *) GS_DISPFB1 = dispEnvDispfb2.value;
+    *(volatile u64 *) GS_DISPLAY1 = dispEnvDisplay2.value;
+    *(volatile u64 *) GS_EXTBUF = dispEnvExtbuf;
+    *(volatile u64 *) GS_EXTDATA = dispEnvExtdata;
+    *(volatile u64 *) GS_EXTWRITE = dispEnvExtwrite;
     *(volatile u64 *) GS_CSR = 16;
 }
 
@@ -954,10 +750,10 @@ void xglRenderClearEnvMove(void)
 
 void xglRenderSetReso(int resolution)
 {
-    sRender.reso.row = asDispReso[resolution];
-    sRender.vram.row = asVramBase[resolution];
-    sRender.display_buffer_base = sRender.vram.row.width;
-    sRender.draw_buffer_base = sRender.vram.row.height;
+    sRender.reso = asDispReso[resolution];
+    sRender.vram = asVramBase[resolution];
+    sRender.display_buffer_base = sRender.vram.width;
+    sRender.draw_buffer_base = sRender.vram.height;
     xglRenderDrawEnvInit();
     xglRenderDispEnvInit();
     xglRenderClearEnvInit();
@@ -965,7 +761,7 @@ void xglRenderSetReso(int resolution)
     xglStudioMainCameraInit();
 }
 
-extern s16 D_00645832;
+extern s16 sRenderPrevDispfbBase;
 extern int xglRenderStatus[];
 extern int xglRenderFrameDelta[];
 extern int xglRenderFrameCount[];
@@ -975,10 +771,10 @@ void xglRenderSwapBase(void)
     u16 previous_display_base;
 
     previous_display_base = sRenderDisplayBase;
-    D_00645832 = D_00645830;
-    D_00645830 = D_00645842;
-    sRenderDisplayBase = D_00645842;
-    D_00645842 = previous_display_base;
+    sRenderPrevDispfbBase = sRenderDispfbBase;
+    sRenderDispfbBase = sRenderFlipBase;
+    sRenderDisplayBase = sRenderFlipBase;
+    sRenderFlipBase = previous_display_base;
     xglRenderStatus[0] = 0;
     xglRenderFrameCount[0] += xglRenderFrameDelta[0];
 }
@@ -1004,46 +800,43 @@ void xglRenderClearSkipOff(void) {
 }
 
 extern int sceGsResetGraph(int, int, int, int);
-extern int D_006458A0[];
-extern unsigned char D_006458A4[252];
-void func_00129C28(void);
-void func_0012A510(int);
-void xglRenderGlobalFadeReset(void);
-void pxyInit(void);
+extern int xglRenderSkippedFrameCount[];
+extern unsigned char pxyGlyphDigitTable[252];
+void sceGsResetPath(void);
+void sceGsSyncV(int);
 
 void xglRenderInit(void)
 {
     int i;
 
-    func_00129C28();
+    sceGsResetPath();
     *(volatile u32 *) VIF0_ERR = 0;
     *(volatile u32 *) VIF1_ERR = 0;
-    func_0012A510(0);
+    sceGsSyncV(0);
     sceGsResetGraph(0, 1, 2, 0);
     xglRenderSyncInit();
     xglRenderSetReso(1);
-    D_0069E098 = 0;
+    xglRenderMoveCount = 0;
     LoopCount = 0;
-    D_0069E094 = 2;
+    xglRenderVSyncInterval = 2;
     ScanLineInterpolate = 1;
     xglRenderStatus[0] = 0;
     xglRenderFrameCount[0] = 0;
     xglRenderFrameDelta[0] = 0;
-    D_00645898[0] = 0;
-    D_0064589C[0] = 0;
-    D_006458A0[0] = 0;
-    D_006458A4[0] = 0;
+    xglRenderPathBusyFlag[0] = 0;
+    xglRenderVSyncTickCount[0] = 0;
+    xglRenderSkippedFrameCount[0] = 0;
+    pxyGlyphDigitTable[0] = 0;
     for (i = 0; i < 17; i++) {
         sRender.final_packet_callback[i] = 0;
     }
-    xglRenderGlobalFadeReset();
-    pxyInit();
+    xglRenderGlobalFadeInit();
+    nmlModelConstruct();
     xglRenderCpUDispOff();
     xglIntcEnable(5);
     xglRenderClearSkip = 0;
 }
 
-XglPacket *xglPacketGetCurrent(void);
 
 void xglRenderFinalPacket(void)
 {
@@ -1058,11 +851,11 @@ void xglRenderFinalPacket(void)
     }
 }
 
-/* xglRenderGlobalFadeCallback: cleared by xglRenderGlobalFadeReset; referenced by xglRenderGlobalFade (the fade draw). */
+/* xglRenderGlobalFadeCallback: cleared by xglRenderGlobalFadeInit; referenced by xglRenderGlobalFade (the fade draw). */
 extern int xglRenderGlobalFadeCallback[];
 /* xglRenderGlobalFadeColor: packed fade colour, one byte per channel as 0xAABBGGRR; written by xglRenderGlobalFadeSet. */
 
-void xglRenderGlobalFadeReset(void) {
+void xglRenderGlobalFadeInit(void) {
     xglRenderGlobalFadeColor = 0;
     xglRenderGlobalFadeCallback[0] = 0;
 }
@@ -1116,32 +909,32 @@ void xglRenderGlobalFade(void)
         ((XglRenderFadeCallback) xglRenderGlobalFadeCallback[0])(packet);
     }
     if (alpha != 0 && xglRenderGlobalFadeColor != 0) {
-        XglGifAd *scratch;
+        GsAdPair *scratch;
         int count;
         int i;
 
-        scratch = (XglGifAd *) 0x70000000;
+        scratch = (GsAdPair *) SCRATCHPAD_BASE;
         count = 0;
         scratch[count].data = 0x1000000000008000ULL;
-        scratch[count++].address = GIF_REG_AD;
+        scratch[count++].reg = GIF_REG_AD;
         scratch[count].data = ((u64) alpha << 32) | 0x64;
-        scratch[count++].address = 0x42;
+        scratch[count++].reg = 0x42;
         scratch[count].data = 0x30000;
-        scratch[count++].address = SCE_GS_TEST_1;
+        scratch[count++].reg = SCE_GS_TEST_1;
         scratch[count].data = ((u64) ((unsigned int) xglRenderGlobalFadeColor & 0xff))
             | ((u64) (((unsigned int) xglRenderGlobalFadeColor >> 8) & 0xff) << 8)
             | ((u64) (((unsigned int) xglRenderGlobalFadeColor >> 16) & 0xff) << 16)
             | (0xFE00ULL << 46);
-        scratch[count++].address = GIF_REG_RGBAQ;
+        scratch[count++].reg = GIF_REG_RGBAQ;
         scratch[count].data = 0x46;
-        scratch[count++].address = 0;
+        scratch[count++].reg = 0;
         scratch[count].data = 0x72007000ULL;
-        scratch[count++].address = 4;
+        scratch[count++].reg = 4;
         scratch[count].data = 0x8E009000ULL;
-        scratch[count++].address = 4;
+        scratch[count++].reg = 4;
         for (i = 0; i < 80; i++) {
             scratch[count].data = 0x68;
-            scratch[count++].address = 0x42;
+            scratch[count++].reg = 0x42;
         }
         scratch[0].data += count - 1;
         sceVif1PkCnt(packet, 0);
@@ -1149,29 +942,29 @@ void xglRenderGlobalFade(void)
         sceVif1PkAddDirectDataN(packet, scratch, count);
         sceVif1PkCloseDirectHLCode(packet);
     } else {
-        XglGifAd *scratch;
+        GsAdPair *scratch;
         int count;
         int i;
 
-        scratch = (XglGifAd *) 0x70000000;
+        scratch = (GsAdPair *) SCRATCHPAD_BASE;
         count = 0;
         scratch[count].data = 0x1000000000008000ULL;
-        scratch[count++].address = GIF_REG_AD;
+        scratch[count++].reg = GIF_REG_AD;
         scratch[count].data = 0x68;
-        scratch[count++].address = 0x42;
+        scratch[count++].reg = 0x42;
         scratch[count].data = 0x30000;
-        scratch[count++].address = SCE_GS_TEST_1;
+        scratch[count++].reg = SCE_GS_TEST_1;
         scratch[count].data = 0x3F80000080808500ULL;
-        scratch[count++].address = GIF_REG_RGBAQ;
+        scratch[count++].reg = GIF_REG_RGBAQ;
         scratch[count].data = 0x46;
-        scratch[count++].address = 0;
+        scratch[count++].reg = 0;
         scratch[count].data = 0x72007000ULL;
-        scratch[count++].address = 4;
+        scratch[count++].reg = 4;
         scratch[count].data = 0x8E009000ULL;
-        scratch[count++].address = 4;
+        scratch[count++].reg = 4;
         for (i = 0; i < 80; i++) {
             scratch[count].data = 0x68;
-            scratch[count++].address = 0x42;
+            scratch[count++].reg = 0x42;
         }
         scratch[0].data += count - 1;
         sceVif1PkCnt(packet, 0);
@@ -1181,53 +974,42 @@ void xglRenderGlobalFade(void)
     }
 }
 
-void func_001CC4EC(void);
-void sefDrawEffect(void);
-void pxyFlush(void);
-void pxyResetState(void);
-void gifStateUpdateDrawHook(void);
-void xglFontFlush(void);
 void xglRenderFinalPacket(void);
-void xglPacketInterpolate(void);
-void func_001CC51C(void);
-void xglPacketSwapBuffers(void);
 void xglRenderSyncMove(void);
 void xglRenderSwapBase(void);
 void xglRenderDrawEnvMove(void);
 void xglRenderDispEnvMove(void);
 void xglRenderClearEnvMove(void);
-void xglPacketSend(void);
-void pxyBeginFrame(void);
 
 void xglRenderMove(void)
 {
-            extern int D_0069E098;
+            extern int xglRenderMoveCount;
     extern int LoopCount;
 
-    func_001CC4EC();
-    if (D_006458A4[0] == 0) {
+    xglRenderFrameBeginFlushEIrq();
+    if (pxyGlyphDigitTable[0] == 0) {
         sefDrawEffect();
     }
-    if (D_006458A4[0] == 0) {
+    if (pxyGlyphDigitTable[0] == 0) {
         pxyFlush();
     } else {
-        pxyResetState();
+        nmlModelFlushClear();
     }
     gifStateUpdateDrawHook();
-    if (D_006458A4[0] == 0) {
+    if (pxyGlyphDigitTable[0] == 0) {
         xglRenderFinalPacket();
     }
     xglFontFlush();
-    if (D_006458A4[0] == 0) {
+    if (pxyGlyphDigitTable[0] == 0) {
         xglRenderGlobalFade();
     }
-    if (ScanLineInterpolate == 2 && D_006458A4[0] == 0) {
+    if (ScanLineInterpolate == 2 && pxyGlyphDigitTable[0] == 0) {
         xglPacketInterpolate();
     }
-    func_001CC51C();
-    xglPacketSwapBuffers();
+    xglRenderFrameEndFlushEIrq();
+    xglPacketMove();
     xglRenderSyncMove();
-    D_0069E098++;
+    xglRenderMoveCount++;
     LoopCount++;
     sceGsResetGraph(1, 0, 0, 0);
     xglRenderSwapBase();
@@ -1237,23 +1019,21 @@ void xglRenderMove(void)
         xglRenderClearEnvMove();
     }
     xglPacketSend();
-    D_006458A0[0] = D_0064589C[0] / 2 - 1;
-    if (D_006458A0[0] < 0) {
-        D_006458A0[0] = 0;
+    xglRenderSkippedFrameCount[0] = xglRenderVSyncTickCount[0] / 2 - 1;
+    if (xglRenderSkippedFrameCount[0] < 0) {
+        xglRenderSkippedFrameCount[0] = 0;
     }
-    D_0064589C[0] = 0;
+    xglRenderVSyncTickCount[0] = 0;
     pxyBeginFrame();
 }
 
-void xglRenderInit(void);
 
 void xglRenderAndMovieInit(void) {
     xglRenderInit();
-    moviePlayerInit();
+    moviePlayerLibraryInit();
 }
 
 void xglRenderMove(void);
-void xglPadRead(void);
 
 void xglRenderFrame(void) {
     xglRenderMove();
@@ -1271,30 +1051,30 @@ XglRenderReso asDispReso[RENDER_COUNT_RESO] = {
     { 0x31, 0x0, 256, 448 }
 };
 XglRenderVram asVramBase[RENDER_COUNT_RESO] = {
-    { 0x0, { 0x8C, 0x118, 0x1A4 }, 0x8C, 0x118, 0x1A4, { 0x230, 0x2BC, 0x1A4, 0x1C4, 0x1E4 } },
-    { 0x0, { 0x70, 0xE0, 0x150 }, 0x70, 0xE0, 0x150, { 0x1C0, 0x230, 0x1C0, 0x1E0, 0x200 } },
-    { 0x0, { 0x62, 0xC4, 0x126 }, 0x62, 0xC4, 0x126, { 0x188, 0x1EA, 0x188, 0x1A8, 0x1C8 } },
-    { 0x0, { 0x54, 0xA8, 0xFC }, 0x54, 0xA8, 0xFC, { 0x150, 0x1A4, 0x1A4, 0x1C4, 0x1E4 } },
-    { 0x0, { 0x46, 0x8C, 0xD2 }, 0x46, 0x8C, 0xD2, { 0x118, 0x15E, 0x1A4, 0x1C4, 0x1E4 } },
-    { 0x0, { 0x38, 0x70, 0xA8 }, 0x38, 0x70, 0xA8, { 0xE0, 0x118, 0x150, 0x170, 0x190 } }
+    { 0x0, { 0x8C, 0x118, 0x1A4 }, 0x8C, 0x118, 0x1A4, { 0x230, 0x2BC }, 0x1A4, { 0x1C4, 0x1E4 } },
+    { 0x0, { 0x70, 0xE0, 0x150 }, 0x70, 0xE0, 0x150, { 0x1C0, 0x230 }, 0x1C0, { 0x1E0, 0x200 } },
+    { 0x0, { 0x62, 0xC4, 0x126 }, 0x62, 0xC4, 0x126, { 0x188, 0x1EA }, 0x188, { 0x1A8, 0x1C8 } },
+    { 0x0, { 0x54, 0xA8, 0xFC }, 0x54, 0xA8, 0xFC, { 0x150, 0x1A4 }, 0x1A4, { 0x1C4, 0x1E4 } },
+    { 0x0, { 0x46, 0x8C, 0xD2 }, 0x46, 0x8C, 0xD2, { 0x118, 0x15E }, 0x1A4, { 0x1C4, 0x1E4 } },
+    { 0x0, { 0x38, 0x70, 0xA8 }, 0x38, 0x70, 0xA8, { 0xE0, 0x118 }, 0x150, { 0x170, 0x190 } }
 };
 GsDrawPacket DrawEnv = { 0 };
 GsDispEnv DispEnv = { 0 };
-/* Six doublewords after DispEnv (0x645790-0x6457C0); D_00645798 is the second. */
-u64 D_00645790[6] = { 0 };
+/* Six doublewords after DispEnv (0x645790-0x6457C0); dispEnvCacheEnd is the second. */
+u64 dispEnvTailWork[6] = { 0 };
 GsClearPacket ClearEnv = { 0 };
 XglRenderState sRender = { 0 };
 
 /* .data of this file after its own (0x645874-0x6459A0): hooks and render state read by several files. */
-void (*D_00645874[])(void) = { 0 };
+void (*pxyEntryGroupHooks[])(int) = { 0 }; /* called with the entry group */
 
-void (*D_00645878[])(void) = { 0 };
+void (*pxyFrameCopyHooks[])(XglPacket *) = { 0 };
 
 void (*msgFrameHooks[])(void) = { 0 };
 
-int gifStateEffectHook[] = { 0 };
+void (*gifStateEffectHook[])(XglPacket *) = { 0 };
 
-void (*pauseDrawHook[])(void) = { 0 };
+void (*pauseDrawHook[])(XglPacket *) = { 0 };
 
 int xglRenderGlobalFadeCallback[] = { 0 };
 
@@ -1304,13 +1084,13 @@ int xglRenderFrameDelta[] = { 0 };
 
 int xglRenderFrameCount[] = { 0 };
 
-int D_00645898[] = { 0 };
+int xglRenderPathBusyFlag[] = { 0 };
 
-int D_0064589C[] = { 0 };
+int xglRenderVSyncTickCount[] = { 0 };
 
-int D_006458A0[] = { 0 };
+int xglRenderSkippedFrameCount[] = { 0 };
 
-unsigned char D_006458A4[252] = {
+unsigned char pxyGlyphDigitTable[252] = {
     0x00, 0x00, 0x00, 0x00, 0x07, 0x01, 0x02, 0x01, 0x06, 0x02, 0x07, 0x04,
     0x07, 0x05, 0x06, 0x05, 0x02, 0x04, 0x01, 0x02, 0x01, 0x01, 0x02, 0xfe,
     0xfe, 0x05, 0x02, 0x01, 0x06, 0x05, 0x02, 0xff, 0x00, 0x00, 0x00, 0x00,

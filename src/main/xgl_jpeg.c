@@ -3,17 +3,15 @@
 #include "shared.h"
 #include "main/xgl_jpeg.h"
 
-extern const char D_0068E158[];
 
+#include "main/xgl_2.h"
 /* EE scratchpad RAM. */
 #define SCRATCHPAD_BASE 0x70000000
 
 extern u8 *buffer;
 extern void *memset(void *destination, int value, unsigned int count);
 
-float I2F(int value);
 
-int F2I(float value);
 
 /* JPEG block geometry: 8x8 coefficient blocks, six per MCU (up to four Y, then Cb, Cr). */
 #define JPEG_BLOCK_DIM 8
@@ -28,13 +26,6 @@ int F2I(float value);
 #define JPEG_YUV_ROW_FLOATS (JPEG_MCU_PIXELS * 3)
 
 #define JPEG_LEVEL_SHIFT 128.0f
-
-/* Chroma subsampling of the first component (JPEG SOF sampling factors, H << 4 | V). */
-typedef enum JpegSamplingMode {
-    JPEG_SAMPLING_444,
-    JPEG_SAMPLING_422,
-    JPEG_SAMPLING_420
-} JpegSamplingMode;
 
 #define JPEG_SAMPLING_FACTORS_444 0x11
 #define JPEG_SAMPLING_FACTORS_422 0x21
@@ -519,22 +510,6 @@ void ExtractHuffmanTableSub(JpegHuffCode *table, const u8 *symbols, int tableSiz
 #define JPEG_CR_FROM_R 0.5f
 #define JPEG_CR_FROM_G -0.41869f
 #define JPEG_CR_FROM_B -0.08131f
-
-typedef struct JpegEncodeRequest {
-    u8 unmodeled_00[4];
-    u8 *outputBuffer;
-    int outputSize;
-    short frameBufferBase;  /* +0x0C: sceGsSetDefStoreImage fbp */
-    short frameBufferWidth; /* +0x0E: fbw */
-    short originX;
-    short originY;
-    short width;
-    short height;
-    u8 luminanceQuality;
-    u8 chrominanceQuality;
-    u8 samplingMode;
-    u8 unmodeled_1b;
-} JpegEncodeRequest;
 
 extern u8 headerALL[];
 int sceGsSetDefStoreImage(void *image, short fbp, short fbw, short psm, short x, short y,

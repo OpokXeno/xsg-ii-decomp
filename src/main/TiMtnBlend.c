@@ -1,95 +1,64 @@
 #include "common.h"
 #include "main/TiMtnBlend.h"
-#include "main/tu026.h"
+#include "main/TiMRPackage.h"
+#include "main/ti_dynamics_node.h"
+#include "main/assert_fail.h"
 #include "shared.h"
 
-/* TiMtnBlendChannel.flags: 0x2 the blend window runs, 0x4 selects the local slot (clear: global), 0x40 the blend request. */
+#include "main/xrg_rand_int.h"
+/* TiMRState.flags of a state block: 0x2 the blend window runs, 0x4 selects the local slot (clear: global), 0x40 the blend request. */
 #define TI_MTN_BLEND_RUNNING 0x2
 #define TI_MTN_BLEND_LOCAL 0x4
 #define TI_MTN_BLEND_REQUEST 0x40
 
-/* Slots of TiMtnBlendContext.matArray: the matrix arrays a blend reads and writes. */
-enum TiMtnBlendSlot {
-    TI_MTN_BLEND_SLOT_LOCAL = 0,
-    TI_MTN_BLEND_SLOT_GLOBAL = 1,
-    TI_MTN_BLEND_SLOT_BLEND = 2
-};
-
-struct TiMtnBlendChannel {
-    /* 0x0 */ int flags;
-    /* 0x4 */ unsigned char unmodeled_0x4[4];
-    /* 0x8 */ float duration;
-    /* 0xC */ float blendSpan;
-    /* 0x10 */ int elapsed;
-    /* 0x14 */ unsigned char unmodeled_0x14[0x3C];
-};
-
-struct TiMtnBlendSet {
-    /* 0x0 */ unsigned char unmodeled_0x0[0x10];
-    /* 0x10 */ int count[4];
-};
-
-struct TiMtnBlendContext {
-    /* 0x0 */ unsigned char unmodeled_0x0[0x10];
-    /* 0x10 */ struct TiMtnBlendChannel channel[2];
-    /* 0xB0 */ unsigned char unmodeled_0xB0[0x10];
-    /* 0xC0 */ int enabledA;
-    /* 0xC4 */ unsigned char unmodeled_0xC4[4];
-    /* 0xC8 */ int enabledB;
-    /* 0xCC */ unsigned char unmodeled_0xCC[4];
-    /* 0xD0 */ struct TiMtnBlendSet *set;
-    /* 0xD4 */ unsigned char unmodeled_0xD4[8];
-    /* 0xDC */ Matrix4 *matArray[3]; /* 0xDC: local, 0xE0: global, 0xE4: blend; each holds the address of a 0x40-byte matrix array */
-};
-
-extern const char D_0068F868[];
-extern const char D_0068F870[];
-extern const char D_0068F888[];
-extern const char D_0068F8A0[];
-extern const char D_0068F8B8[];
+extern const char tiMtnBlendPackAssertExpr[];
+extern const char tiMtnBlendSourceFile[];
+extern const char tiMtnBlendPackGlobalMatAssertExpr[];
+extern const char tiMtnBlendPackBlendMatAssertExpr[];
+extern const char tiMtnBlendPackLocalMatAssertExpr[];
 
 /* Swaps the global and blend matrix arrays when flag 0x4 is clear. */
-void tiMtnBlendSwapGlobal(struct TiMtnBlendContext *ctx, int *flags) {
+void tiMtnBlendSwapGlobal(TiMRPackage *ctx, int *flags) {
     Matrix4 *swap;
 
     if (!(*flags & TI_MTN_BLEND_LOCAL)) {
         if (ctx == 0) {
-            assertFailed(D_0068F868, D_0068F870, 14);
+            assertFailed(tiMtnBlendPackAssertExpr, tiMtnBlendSourceFile, 14);
         }
-        if (ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] == 0) {
-            assertFailed(D_0068F888, D_0068F870, 15);
+        if (ctx->globalMat == 0) {
+            assertFailed(tiMtnBlendPackGlobalMatAssertExpr, tiMtnBlendSourceFile, 15);
         }
-        if (ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] == 0) {
-            assertFailed(D_0068F8A0, D_0068F870, 16);
+        if (ctx->blendMat == 0) {
+            assertFailed(tiMtnBlendPackBlendMatAssertExpr, tiMtnBlendSourceFile, 16);
         }
-        swap = ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL];
-        ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] = ctx->matArray[TI_MTN_BLEND_SLOT_BLEND];
-        ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] = swap;
+        swap = ctx->globalMat;
+        ctx->globalMat = ctx->blendMat;
+        ctx->blendMat = swap;
     }
 }
 
 /* Swaps the local and blend matrix arrays when flag 0x4 is set. */
-void tiMtnBlendSwapLocal(struct TiMtnBlendContext *ctx, int *flags) {
+void tiMtnBlendSwapLocal(TiMRPackage *ctx, int *flags) {
     Matrix4 *swap;
 
     if (*flags & TI_MTN_BLEND_LOCAL) {
         if (ctx == 0) {
-            assertFailed(D_0068F868, D_0068F870, 34);
+            assertFailed(tiMtnBlendPackAssertExpr, tiMtnBlendSourceFile, 34);
         }
-        if (ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] == 0) {
-            assertFailed(D_0068F8B8, D_0068F870, 35);
+        if (ctx->localMat == 0) {
+            assertFailed(tiMtnBlendPackLocalMatAssertExpr, tiMtnBlendSourceFile, 35);
         }
-        if (ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] == 0) {
-            assertFailed(D_0068F8A0, D_0068F870, 36);
+        if (ctx->blendMat == 0) {
+            assertFailed(tiMtnBlendPackBlendMatAssertExpr, tiMtnBlendSourceFile, 36);
         }
-        swap = ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL];
-        ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] = ctx->matArray[TI_MTN_BLEND_SLOT_BLEND];
-        ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] = swap;
+        swap = ctx->localMat;
+        ctx->localMat = ctx->blendMat;
+        ctx->blendMat = swap;
     }
 }
 
 /* Blends two 4x4 matrices: dst = a * (1 - t) + b * t. The elements are addressed by byte offset: the typed [row][col] form changed the code. */
-void tiMtnBlendLerpMatrix(float (*dst)[4], float (*a)[4], float (*b)[4], float t) {
+void tiMtnBlendLerpMatrix(Matrix4 dst, Matrix4 a, Matrix4 b, float t) {
     int byteOffset;
     int row;
     int col;
@@ -108,12 +77,9 @@ void tiMtnBlendLerpMatrix(float (*dst)[4], float (*a)[4], float (*b)[4], float t
     }
 }
 
-extern const char D_0068F8D0[];
-extern const char D_0068F8D8[];
-extern const char D_0068F8E0[];
-void xglMatrix2Quaternion(Vector4 *quaternion, Matrix4 *source);
-void XrgQuaternionSlerp(Vector4 *result, Vector4 *from, Vector4 *to, float t);
-void XrgQuaternionToMatrix(Matrix4 matrix, const Vector4 *quaternion);
+extern const char tiMtnBlendDestAssertExpr[];
+extern const char tiMtnBlendMat1AssertExpr[];
+extern const char tiMtnBlendMat2AssertExpr[];
 
 /* Blends two matrices: the rotation by quaternion slerp, the translation by lerp. */
 void tiMtnBlendMatrix(Matrix4 *dst, Matrix4 *matA, Matrix4 *matB, float t) {
@@ -130,13 +96,13 @@ void tiMtnBlendMatrix(Matrix4 *dst, Matrix4 *matA, Matrix4 *matB, float t) {
     float length;
 
     if (dst == 0) {
-        assertFailed(D_0068F8D0, D_0068F870, 71);
+        assertFailed(tiMtnBlendDestAssertExpr, tiMtnBlendSourceFile, 71);
     }
     if (matA == 0) {
-        assertFailed(D_0068F8D8, D_0068F870, 72);
+        assertFailed(tiMtnBlendMat1AssertExpr, tiMtnBlendSourceFile, 72);
     }
     if (matB == 0) {
-        assertFailed(D_0068F8E0, D_0068F870, 73);
+        assertFailed(tiMtnBlendMat2AssertExpr, tiMtnBlendSourceFile, 73);
     }
 
     translation[0] = (*matA)[3][0] * oneMinusT + (*matB)[3][0] * t;
@@ -154,180 +120,179 @@ void tiMtnBlendMatrix(Matrix4 *dst, Matrix4 *matA, Matrix4 *matB, float t) {
         }
     }
 
-    xglMatrix2Quaternion(&startQuat, matA);
-    xglMatrix2Quaternion(&endQuat, matB);
+    XrgMatrixToQuaternion(&startQuat.x, *matA);
+    XrgMatrixToQuaternion(&endQuat.x, *matB);
     XrgQuaternionSlerp(&blendQuat, &startQuat, &endQuat, t);
     XrgQuaternionToMatrix(*dst, &blendQuat);
     (*dst)[3][0] = translation[0];
     (*dst)[3][1] = translation[1];
     (*dst)[3][2] = translation[2];
 }
-void tiWordClearBits(int *word, int bits);
 
-void tiMtnBlendUpdateGlobal(struct TiMtnBlendContext *ctx) {
+void tiMtnBlendUpdateGlobal(TiMRPackage *ctx) {
     float progress;
     float remaining;
 
     if (ctx == 0) {
-        assertFailed(D_0068F868, D_0068F870, 121);
+        assertFailed(tiMtnBlendPackAssertExpr, tiMtnBlendSourceFile, 121);
     }
-    if (ctx->enabledA != 0) {
+    if (ctx->entryA != 0) {
         unsigned int item;
         int matrixIndex;
 
-        if ((ctx->channel[0].flags & TI_MTN_BLEND_REQUEST) == 0) {
-            tiWordClearBits(&ctx->channel[0].flags, TI_MTN_BLEND_RUNNING);
-        } else if ((*(long long *)&ctx->channel[0].flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == TI_MTN_BLEND_RUNNING) {
-            remaining = ctx->channel[0].duration - (float)ctx->channel[0].elapsed;
-            if (ctx->channel[0].blendSpan == 0.0f || ctx->channel[0].blendSpan <= remaining || remaining < 0.0f) {
-                tiWordClearBits(&ctx->channel[0].flags, TI_MTN_BLEND_RUNNING);
-                tiWordClearBits(&ctx->channel[0].flags, TI_MTN_BLEND_REQUEST);
+        if ((ctx->state_a.flags & TI_MTN_BLEND_REQUEST) == 0) {
+            tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_RUNNING);
+        } else if ((*(long long *)&ctx->state_a.flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == TI_MTN_BLEND_RUNNING) {
+            remaining = ctx->state_a.position - (float)ctx->state_a.rangeMin;
+            if (ctx->state_a.value == 0.0f || ctx->state_a.value <= remaining || remaining < 0.0f) {
+                tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_RUNNING);
+                tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_REQUEST);
                 return;
             }
-            if (ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] == 0) {
-                assertFailed(D_0068F8A0, D_0068F870, 145);
+            if (ctx->blendMat == 0) {
+                assertFailed(tiMtnBlendPackBlendMatAssertExpr, tiMtnBlendSourceFile, 145);
             }
-            if (ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] == 0) {
-                assertFailed(D_0068F888, D_0068F870, 146);
+            if (ctx->globalMat == 0) {
+                assertFailed(tiMtnBlendPackGlobalMatAssertExpr, tiMtnBlendSourceFile, 146);
             }
-            progress = remaining / ctx->channel[0].blendSpan;
+            progress = remaining / ctx->state_a.value;
             matrixIndex = 0;
             if (progress < 0.0f) {
                 progress = 0.0f;
             } else if (1.0f < progress) {
                 progress = 1.0f;
             }
-            for (item = 0; item < ctx->set->count[0]; item++) {
-                tiMtnBlendMatrix(ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] + matrixIndex, ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] + matrixIndex,
-                                 ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] + matrixIndex, progress);
+            for (item = 0; item < ctx->hrcData->jointCount; item++) {
+                tiMtnBlendMatrix(ctx->globalMat + matrixIndex, ctx->blendMat + matrixIndex,
+                                 ctx->globalMat + matrixIndex, progress);
                 matrixIndex++;
             }
-            for (item = 0; item < ctx->set->count[1]; item++) {
-                tiMtnBlendMatrix(ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] + matrixIndex, ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] + matrixIndex,
-                                 ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] + matrixIndex, progress);
+            for (item = 0; item < ctx->hrcData->joint2Count; item++) {
+                tiMtnBlendMatrix(ctx->globalMat + matrixIndex, ctx->blendMat + matrixIndex,
+                                 ctx->globalMat + matrixIndex, progress);
                 matrixIndex++;
             }
-            for (item = 0; item < ctx->set->count[2]; item++) {
-                tiMtnBlendMatrix(ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] + matrixIndex, ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] + matrixIndex,
-                                 ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] + matrixIndex, progress);
+            for (item = 0; item < ctx->hrcData->joint3Count; item++) {
+                tiMtnBlendMatrix(ctx->globalMat + matrixIndex, ctx->blendMat + matrixIndex,
+                                 ctx->globalMat + matrixIndex, progress);
                 matrixIndex++;
             }
         }
     }
-    if (ctx->enabledB != 0) {
+    if (ctx->entryB != 0) {
         unsigned int item;
         int matrixIndex;
 
-        if ((ctx->channel[1].flags & TI_MTN_BLEND_REQUEST) == 0) {
-            tiWordClearBits(&ctx->channel[1].flags, TI_MTN_BLEND_RUNNING);
-        } else if ((*(long long *)&ctx->channel[1].flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == TI_MTN_BLEND_RUNNING) {
-            remaining = ctx->channel[1].duration - (float)ctx->channel[1].elapsed;
-            if (ctx->channel[1].blendSpan == 0.0f || ctx->channel[1].blendSpan <= remaining || remaining < 0.0f) {
-                tiWordClearBits(&ctx->channel[1].flags, TI_MTN_BLEND_RUNNING);
-                tiWordClearBits(&ctx->channel[1].flags, TI_MTN_BLEND_REQUEST);
+        if ((ctx->state_b.flags & TI_MTN_BLEND_REQUEST) == 0) {
+            tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_RUNNING);
+        } else if ((*(long long *)&ctx->state_b.flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == TI_MTN_BLEND_RUNNING) {
+            remaining = ctx->state_b.position - (float)ctx->state_b.rangeMin;
+            if (ctx->state_b.value == 0.0f || ctx->state_b.value <= remaining || remaining < 0.0f) {
+                tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_RUNNING);
+                tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_REQUEST);
                 return;
             }
-            if (ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] == 0) {
-                assertFailed(D_0068F8A0, D_0068F870, 191);
+            if (ctx->blendMat == 0) {
+                assertFailed(tiMtnBlendPackBlendMatAssertExpr, tiMtnBlendSourceFile, 191);
             }
-            if (ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] == 0) {
-                assertFailed(D_0068F888, D_0068F870, 192);
+            if (ctx->globalMat == 0) {
+                assertFailed(tiMtnBlendPackGlobalMatAssertExpr, tiMtnBlendSourceFile, 192);
             }
-            progress = remaining / ctx->channel[1].blendSpan;
-            matrixIndex = ctx->set->count[0] + ctx->set->count[1] + ctx->set->count[2];
+            progress = remaining / ctx->state_b.value;
+            matrixIndex = ctx->hrcData->jointCount + ctx->hrcData->joint2Count + ctx->hrcData->joint3Count;
             if (progress < 0.0f) {
                 progress = 0.0f;
             } else if (1.0f < progress) {
                 progress = 1.0f;
             }
-            for (item = 0; item < ctx->set->count[3]; item++) {
-                tiMtnBlendMatrix(ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] + matrixIndex, ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] + matrixIndex,
-                                 ctx->matArray[TI_MTN_BLEND_SLOT_GLOBAL] + matrixIndex, progress);
+            for (item = 0; item < ctx->hrcData->skipCount; item++) {
+                tiMtnBlendMatrix(ctx->globalMat + matrixIndex, ctx->blendMat + matrixIndex,
+                                 ctx->globalMat + matrixIndex, progress);
                 matrixIndex++;
             }
         }
     }
 }
 
-void tiMtnBlendUpdateLocal(struct TiMtnBlendContext *ctx) {
+void tiMtnBlendUpdateLocal(TiMRPackage *ctx) {
     float progress;
     float remaining;
 
     if (ctx == 0) {
-        assertFailed(D_0068F868, D_0068F870, 217);
+        assertFailed(tiMtnBlendPackAssertExpr, tiMtnBlendSourceFile, 217);
     }
-    if (ctx->enabledA != 0) {
+    if (ctx->entryA != 0) {
         unsigned int item;
         int matrixIndex;
 
-        if ((ctx->channel[0].flags & TI_MTN_BLEND_REQUEST) == 0) {
-            tiWordClearBits(&ctx->channel[0].flags, TI_MTN_BLEND_RUNNING);
-        } else if ((*(long long *)&ctx->channel[0].flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) {
-            remaining = ctx->channel[0].duration - (float)ctx->channel[0].elapsed;
-            if (ctx->channel[0].blendSpan == 0.0f || ctx->channel[0].blendSpan <= remaining || remaining < 0.0f) {
-                tiWordClearBits(&ctx->channel[0].flags, TI_MTN_BLEND_RUNNING);
-                tiWordClearBits(&ctx->channel[0].flags, TI_MTN_BLEND_REQUEST);
+        if ((ctx->state_a.flags & TI_MTN_BLEND_REQUEST) == 0) {
+            tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_RUNNING);
+        } else if ((*(long long *)&ctx->state_a.flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) {
+            remaining = ctx->state_a.position - (float)ctx->state_a.rangeMin;
+            if (ctx->state_a.value == 0.0f || ctx->state_a.value <= remaining || remaining < 0.0f) {
+                tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_RUNNING);
+                tiWordClearBits(&ctx->state_a.flags, TI_MTN_BLEND_REQUEST);
                 return;
             }
-            if (ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] == 0) {
-                assertFailed(D_0068F8A0, D_0068F870, 241);
+            if (ctx->blendMat == 0) {
+                assertFailed(tiMtnBlendPackBlendMatAssertExpr, tiMtnBlendSourceFile, 241);
             }
-            if (ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] == 0) {
-                assertFailed(D_0068F8B8, D_0068F870, 242);
+            if (ctx->localMat == 0) {
+                assertFailed(tiMtnBlendPackLocalMatAssertExpr, tiMtnBlendSourceFile, 242);
             }
-            progress = remaining / ctx->channel[0].blendSpan;
+            progress = remaining / ctx->state_a.value;
             matrixIndex = 0;
             if (progress < 0.0f) {
                 progress = 0.0f;
             } else if (1.0f < progress) {
                 progress = 1.0f;
             }
-            for (item = 0; item < ctx->set->count[0]; item++) {
-                tiMtnBlendMatrix(ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] + matrixIndex, ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] + matrixIndex,
-                                 ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] + matrixIndex, progress);
+            for (item = 0; item < ctx->hrcData->jointCount; item++) {
+                tiMtnBlendMatrix(ctx->localMat + matrixIndex, ctx->blendMat + matrixIndex,
+                                 ctx->localMat + matrixIndex, progress);
                 matrixIndex++;
             }
-            for (item = 0; item < ctx->set->count[1]; item++) {
-                tiMtnBlendMatrix(ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] + matrixIndex, ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] + matrixIndex,
-                                 ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] + matrixIndex, progress);
+            for (item = 0; item < ctx->hrcData->joint2Count; item++) {
+                tiMtnBlendMatrix(ctx->localMat + matrixIndex, ctx->blendMat + matrixIndex,
+                                 ctx->localMat + matrixIndex, progress);
                 matrixIndex++;
             }
-            for (item = 0; item < ctx->set->count[2]; item++) {
-                tiMtnBlendMatrix(ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] + matrixIndex, ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] + matrixIndex,
-                                 ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] + matrixIndex, progress);
+            for (item = 0; item < ctx->hrcData->joint3Count; item++) {
+                tiMtnBlendMatrix(ctx->localMat + matrixIndex, ctx->blendMat + matrixIndex,
+                                 ctx->localMat + matrixIndex, progress);
                 matrixIndex++;
             }
         }
     }
-    if (ctx->enabledB != 0) {
+    if (ctx->entryB != 0) {
         unsigned int item;
         int matrixIndex;
 
-        if ((ctx->channel[1].flags & TI_MTN_BLEND_REQUEST) == 0) {
-            tiWordClearBits(&ctx->channel[1].flags, TI_MTN_BLEND_RUNNING);
-        } else if ((*(long long *)&ctx->channel[1].flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) {
-            remaining = ctx->channel[1].duration - (float)ctx->channel[1].elapsed;
-            if (ctx->channel[1].blendSpan == 0.0f || ctx->channel[1].blendSpan <= remaining || remaining < 0.0f) {
-                tiWordClearBits(&ctx->channel[1].flags, TI_MTN_BLEND_RUNNING);
-                tiWordClearBits(&ctx->channel[1].flags, TI_MTN_BLEND_REQUEST);
+        if ((ctx->state_b.flags & TI_MTN_BLEND_REQUEST) == 0) {
+            tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_RUNNING);
+        } else if ((*(long long *)&ctx->state_b.flags & (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) == (TI_MTN_BLEND_RUNNING | TI_MTN_BLEND_LOCAL)) {
+            remaining = ctx->state_b.position - (float)ctx->state_b.rangeMin;
+            if (ctx->state_b.value == 0.0f || ctx->state_b.value <= remaining || remaining < 0.0f) {
+                tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_RUNNING);
+                tiWordClearBits(&ctx->state_b.flags, TI_MTN_BLEND_REQUEST);
                 return;
             }
-            if (ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] == 0) {
-                assertFailed(D_0068F8A0, D_0068F870, 287);
+            if (ctx->blendMat == 0) {
+                assertFailed(tiMtnBlendPackBlendMatAssertExpr, tiMtnBlendSourceFile, 287);
             }
-            if (ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] == 0) {
-                assertFailed(D_0068F8B8, D_0068F870, 288);
+            if (ctx->localMat == 0) {
+                assertFailed(tiMtnBlendPackLocalMatAssertExpr, tiMtnBlendSourceFile, 288);
             }
-            progress = remaining / ctx->channel[1].blendSpan;
-            matrixIndex = ctx->set->count[0] + ctx->set->count[1] + ctx->set->count[2];
+            progress = remaining / ctx->state_b.value;
+            matrixIndex = ctx->hrcData->jointCount + ctx->hrcData->joint2Count + ctx->hrcData->joint3Count;
             if (progress < 0.0f) {
                 progress = 0.0f;
             } else if (1.0f < progress) {
                 progress = 1.0f;
             }
-            for (item = 0; item < ctx->set->count[3]; item++) {
-                tiMtnBlendMatrix(ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] + matrixIndex, ctx->matArray[TI_MTN_BLEND_SLOT_BLEND] + matrixIndex,
-                                 ctx->matArray[TI_MTN_BLEND_SLOT_LOCAL] + matrixIndex, progress);
+            for (item = 0; item < ctx->hrcData->skipCount; item++) {
+                tiMtnBlendMatrix(ctx->localMat + matrixIndex, ctx->blendMat + matrixIndex,
+                                 ctx->localMat + matrixIndex, progress);
                 matrixIndex++;
             }
         }
@@ -335,11 +300,11 @@ void tiMtnBlendUpdateLocal(struct TiMtnBlendContext *ctx) {
 }
 
 /* Assert strings: each one is shared by several routines, so each is one named array. */
-const char D_0068F868[] = "pPack";
-const char D_0068F870[] = "../TiMtnBlend.euc.c";
-const char D_0068F888[] = "pPack->pGlobalMat";
-const char D_0068F8A0[] = "pPack->pBlendMat";
-const char D_0068F8B8[] = "pPack->pLocalMat";
-const char D_0068F8D0[] = "pDest";
-const char D_0068F8D8[] = "pMat1";
-const char D_0068F8E0[] = "pMat2";
+const char tiMtnBlendPackAssertExpr[] = "pPack";
+const char tiMtnBlendSourceFile[] = "../TiMtnBlend.euc.c";
+const char tiMtnBlendPackGlobalMatAssertExpr[] = "pPack->pGlobalMat";
+const char tiMtnBlendPackBlendMatAssertExpr[] = "pPack->pBlendMat";
+const char tiMtnBlendPackLocalMatAssertExpr[] = "pPack->pLocalMat";
+const char tiMtnBlendDestAssertExpr[] = "pDest";
+const char tiMtnBlendMat1AssertExpr[] = "pMat1";
+const char tiMtnBlendMat2AssertExpr[] = "pMat2";

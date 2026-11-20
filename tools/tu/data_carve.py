@@ -4969,7 +4969,7 @@ def refresh_nobits_spans(obj, elf, declared):
 
 
 def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declared, c_refs, per_func,
-                              split_mixed=False):
+                              split_mixed=False, keep_unprovable_legacy=False):
     """Refresh private placement requests from current C objects and originals.
 
     Original VA/extent ownership is retained. Only compiler coordinates change;
@@ -4977,6 +4977,14 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
     unique exact bytes/relocations and the producer's existing cc1 provenance
     proof. The ordinary splitter still requires complete input coverage.
     Nothing here writes a registry or supplies acceptance evidence.
+
+    `keep_unprovable_legacy` (the last retry only, see `_derive_current`): a
+    legacy run that the refresh re-routes as one anonymous span, and whose
+    coordinate no unique exact proof can establish (main/tu129 .rodata: the
+    callbacks[] table of testMenuRun relocates against external functions, which
+    no byte comparison checks, so its raw coordinate is ambiguous), stays the
+    legacy run it was instead of being dropped to scaffold. Dropping it leaves
+    its relocations unclaimed, and the split refuses.
 
     `split_mixed` (a retry only, see `_derive_current`) routes a legacy run
     whose owners are partly named C OBJECTs and partly anonymous emissions
@@ -5144,6 +5152,7 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
         return part
 
     dropped_owners = []
+    legacy_whole = {}
     for sec, runs in initialized.items():
         split_runs = {}
         for run in refreshed[sec]:
@@ -5255,6 +5264,7 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
                 elif names and _anonymous_span_names_are_scaffold(items.get(sec, []), set(names), lo, hi):
                     part = dict(section=raw_section_name(unit, sec), range=[h8(lo), h8(hi)],
                                 symbols=[], anonymous_emission=True, credit='verified')
+                    legacy_whole[id(run)] = copy.deepcopy(run)
                     run['range'] = [h8(lo), h8(hi)]
                     run['c_input_spans'] = [part]
                     anonymous.append((sec, run, part, lo, hi))
@@ -5522,6 +5532,10 @@ def refresh_initialized_spans(root, unit, unit_dir, tu_id, obj, elf, ctx, declar
                 # Reached only through another item's data and not proven
                 # emitted by C: leave it scaffold, exactly as before.
                 refreshed[sec] = [r for r in refreshed[sec] if r is not run]
+                continue
+            if not exact and keep_unprovable_legacy and id(run) in legacy_whole:
+                run.clear()
+                run.update(legacy_whole[id(run)])
                 continue
             if not exact and unit == 'main':
                 # Xenosaga II (2026-11-15): the scaffold items are splat labels, one per referenced
@@ -7432,6 +7446,22 @@ def _derive_current(root, unit, unit_dir, tu_id, source, obj, *, _declared=None,
                 if mixed_result is not None and \
                         normalize_runs(mixed_result['runs']) == normalize_runs(mixed_canonical):
                     canonical, refresh, result = mixed_canonical, mixed_refresh, mixed_result
+                else:
+                    # Last route: a legacy run no unique exact coordinate can
+                    # prove (relocations against external functions, main/tu129
+                    # .rodata) stays the legacy run it was. Reached only when
+                    # both routes above failed, so a TU they derive is untouched.
+                    try:
+                        kept_canonical, kept_refresh = refresh_initialized_spans(
+                            root, unit, unit_dir, tu_id, obj, elf, ctx, out['runs'], c_refs, per_func,
+                            keep_unprovable_legacy=True)
+                        kept_result = derive(root, unit, unit_dir, tu_id, source, obj, _declared=kept_canonical,
+                                             accepted_root=accepted_root, accepted_runs=accepted_runs)
+                    except CarveError:
+                        kept_result = None
+                    if kept_result is not None and not kept_result['problems'] and \
+                            normalize_runs(kept_result['runs']) == normalize_runs(kept_canonical):
+                        canonical, refresh, result = kept_canonical, kept_refresh, kept_result
             if 'declared_current' in out:
                 result['declared_current'] = out['declared_current']
                 result['withdrawn_candidate_data'] = out['withdrawn_candidate_data']

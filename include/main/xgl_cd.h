@@ -3,7 +3,25 @@
 
 /* Functions of src/main/xgl_cd.c that other files call. */
 
-/* xglCdGetFilePos and xglCdCheckFile fill a 0x30-byte file-position record;
+/* The clock reading xglClockRead fills and xglClockDayTime2UInt / xglClockUInt2DayTime convert. */
+typedef struct XglClock {
+    unsigned char status;
+    unsigned char second;
+    unsigned char minute;
+    unsigned char hour;
+    unsigned char day;
+    unsigned char month;
+    unsigned short year;
+} XglClock;
+
+/* xglClockRead fills clock from the PS2's real-time clock (read again every few calls);
+ * xglClockDayTime2UInt turns a reading into seconds since 2000-01-01 00:00:00 and xglClockUInt2DayTime
+ * does the reverse for a duration elapsed since then. */
+void xglClockRead(XglClock *clock);
+unsigned int xglClockDayTime2UInt(XglClock *clock_time);
+void xglClockUInt2DayTime(XglClock *clock_time, unsigned int elapsed);
+
+/* xglCdGetFilePos and xglCdGetFileData fill a 0x30-byte file-position record;
  * only its leading lbn word is evidenced by the callers in xgl_cd.c. */
 typedef struct CdFilePosition {
     unsigned int lbn;
@@ -44,7 +62,7 @@ struct StreamXssBuffer {
     short sectors;
 };
 
-/* A stream record; xgl_1_016.c reads movies through one. */
+/* A stream record; xgl_1.c reads movies through one. */
 struct CdStreamParam {
     /* The XSS interleave state; a stream that has one reads through
      * StreamReadRingCoreXss (xglCdStreamReadRingCore). */
@@ -70,19 +88,19 @@ struct CdStreamParam {
 #define CD_SECTOR_SHIFT 11
 
 /* Probes path and fills a CdFilePosition at record (lsn at +0, size at +4,
- * see tu022.c); -1 when the file is missing, 0 otherwise. The callers pass
+ * see sound_driver.c); -1 when the file is missing, 0 otherwise. The callers pass
  * work buffers they reuse for the record. */
-int xglCdCheckFile(const char *path, void *record);
+int xglCdGetFileData(const char *path, void *record);
 void xglCdArcCheck(void);
 /* A callback gets a third argument: the current read tag from xglCdGetFilePos (lw $6 at
  * 0x19BA04), the request's argument from the read service. */
 typedef void CdCompletionCallback(int event, int value, int tag);
 
 /* xglCdReadFilePart's callback argument may instead select one: the current global callback,
- * the dummy or the default one (xglCdReadFile passes its flags argument through as it). */
-#define CD_NOTIFY_CURRENT 0
-#define CD_NOTIFY_DUMMY 1
-#define CD_NOTIFY_DEFAULT 2
+ * the dummy or the default one (xglCdReadFile passes its notify argument through as it). */
+#define CD_NOTIFY_CURRENT ((CdCompletionCallback *) 0)
+#define CD_NOTIFY_DUMMY ((CdCompletionCallback *) 1)
+#define CD_NOTIFY_DEFAULT ((CdCompletionCallback *) 2)
 /* xglCdReadFilePart mode bits: queue or start the read and return at once; leave the data packed
  * where it was read; read even while another read is active (only as the whole mode). */
 #define CD_READ_SYNC 0
@@ -95,13 +113,19 @@ typedef void CdCompletionCallback(int event, int value, int tag);
 
 int xglCdReadFilePart(const char *name, void *buffer, int mode,
                       CdCompletionCallback *notify, int offset, int length);
-int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
+int xglCdReadFile(const char *name, void *buffer, int mode, CdCompletionCallback *notify);
 int xglCdSifLoadModule(const char *path, const char *args);
 void xglCdInitial(void);
 void xglCdOpenDevice(void);
 void xglCdControlThread(void);
 void xglCdLoadOverlay(int overlay);
 int xglCdServiceIfPending(void);
+/* The disc's archive flags, 0 with no disc, or a negative value while it cannot be used. */
+int xglCdDiskCheck(void);
+/* The stream-service flag; nonzero while a stream is being serviced. */
+signed char xglCdGetServicePending(void);
+/* Nonzero when the CD side has finished its last request. */
+int xglCdSyncDone(void);
 void xglCdSetReadTag(int value);
 int xglCdGetFileSize(const char *path);
 void xglCdReadCancel(int immediate);
@@ -113,5 +137,10 @@ int xglCdStreamSeek(CdStreamParam *stream, int sector);
 void xglCdStreamRewind(CdStreamParam *stream);
 int xglCdStreamStat(CdStreamParam *stream);
 void xglCdStreamParamInit(CdStreamParam *stream);
+
+/* Directory names of the game's three save-data folders (one per retail disc id); xglMcBasePaths points at them. */
+extern char xglMcSaveDirBaslus20469[24];
+extern char xglMcSaveDirBislps29005[24];
+extern char xglMcSaveDirBislps25353[16];
 
 #endif /* INCLUDE_MAIN_XGL_CD_H */

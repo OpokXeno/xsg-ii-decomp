@@ -1,19 +1,20 @@
 #ifndef INCLUDE_MAIN_TYA_DRAW_GAUGE_H
 #define INCLUDE_MAIN_TYA_DRAW_GAUGE_H
 
-/* Data of src/main/tya_draw_gauge.c that other files read (needs shared.h for Vector4). */
+/* Gauge geometry (in pixels) and the filled / unfilled colours. */
+typedef struct TyaGaugeArgs {
+    short x;
+    short y;
+    unsigned int vertex_attribute;
+    short width;
+    short height;
+    unsigned short current;
+    unsigned short maximum;
+    unsigned char filled_color[4];
+    unsigned char unfilled_color[4];
+} TyaGaugeArgs;
 
-#define UWAMONO_POINT_COUNT 16
-
-/* Point table entry, read by tu083.c. */
-typedef struct UwamonoPoint {
-    Vector4 position;                   /* +0x00: copied as one 16-byte block */
-    short key;                          /* +0x10 */
-    unsigned char unmodeled_12[2];
-    float value;                        /* +0x14 */
-    unsigned char unmodeled_18[8];
-} UwamonoPoint;
-
-extern UwamonoPoint uwamonoPoints[UWAMONO_POINT_COUNT];
+/* Draws a horizontal gauge filled to current / maximum of its width. */
+void tyaDrawGauge(TyaGaugeArgs *gauge);
 
 #endif /* INCLUDE_MAIN_TYA_DRAW_GAUGE_H */

@@ -1,13 +1,22 @@
 #include "common.h"
+#include "main/xenoActor.h"
 #include "main/xgl_timer0.h"
 #include "main/xgl_cd.h"
 #include "main/res_get_path.h"
-#include "main/tu048.h"
+#include "main/game_data.h"
+#include "ov01/sb_vm.h"
+#include "main/game_movie.h"
+#include "main/xgl_font.h"
+#include "main/game_disk_change.h"
+#include "main/game_over_059.h"
+#include "main/TiMRPackage.h"
+#include "main/undulate.h"
+#include "main/sef.h"
+#include "main/xgl_2.h"
 
-/* ---- old main/tu053: the footstep material keys ---- */
-
-/* Returns 0. Same 8-byte body as func_001DF088 in main/tu052. No caller found in the binary. */
-int func_001DF090(void) {
+/* Returns 0. Same 8-byte body as uwamonoUnusedReturnZero in main/uwamono_light_blend.c.
+ * No caller found in the binary. */
+int resUnusedReturnZero(void) {
     return 0;
 }
 
@@ -51,7 +60,7 @@ int footMaterialFind(const char *name) {
  */
 
 
-char *D_002B9CF8[58] = {
+char *xglCdPcModelNames[58] = {
     "model\\char\\pc\\", "shionH00", "shion00", "_",
     "shion05", "shion03", "shion04", "shionH03",
     "sh_box01", "kosmosH00", "kosmos00", "kosmos01",
@@ -69,7 +78,7 @@ char *D_002B9CF8[58] = {
     "chaosH02", "ziggyH01"
 };
 
-char *D_002B9DE0[90] = {
+char *xglCdNpcModelNames[90] = {
     "model\\char\\npc\\", "allenH01", "allen01", "albelt00",
     "albelt01", "albelt02", "albelt03", "helmer00",
     "helmer01", "marglis00", "marglis01", "pope00",
@@ -95,7 +104,7 @@ char *D_002B9DE0[90] = {
     "gaignunH05", "gaignunH06"
 };
 
-char *D_002B9F48[88] = {
+char *xglCdCfNpcModelNames[88] = {
     "model\\char\\cf_npc\\", "vecm100", "vecm200", "vecf100",
     "vecf200", "vecm300", "vecf300", "_",
     "gfgm00", "gfgf00", "urtvmH00", "urtvm00",
@@ -120,7 +129,7 @@ char *D_002B9F48[88] = {
     "gfgm03", "gfgf03", "du103", "umnm03"
 };
 
-char *D_002BA0A8[72] = {
+char *xglCdCitizenModelNames[72] = {
     "model\\char\\citizen\\", "kidm100", "kidm101", "kidm200",
     "kidm201", "kidf100", "kidf101", "kidf200",
     "kidf201", "boy100", "boy101", "boy200",
@@ -141,7 +150,7 @@ char *D_002BA0A8[72] = {
     "rat00", "ballet00", "robo01", "robo02"
 };
 
-char *D_002BA1C8[20] = {
+char *xglCdPcRoboModelNames[20] = {
     "model\\robo\\pc_robo\\", "pcr01a", "pcr02a", "pcr03",
     "_", "pcr05", "pcr05_sh01", "pcr05_mg01",
     "pcr02b", "pcr02c", "pcr02d", "pcr05b",
@@ -149,7 +158,7 @@ char *D_002BA1C8[20] = {
     "pcr05_br01", "pcr05_sr01", "pcr01b", 0
 };
 
-char *D_002BA218[34] = {
+char *xglCdNpcRoboModelNames[34] = {
     "model\\robo\\npc_robo\\", "npcr01", "npcr02a", "npcr02b",
     "npcr03", "npcr04", "npcr05", "npcr06",
     "npcr07", "npcr08", "npcr09a", "npcr10",
@@ -161,7 +170,7 @@ char *D_002BA218[34] = {
     "npcr10_sh01", 0
 };
 
-char *D_002BA2A0[82] = {
+char *xglCdGattaiRoboModelNames[82] = {
     "model\\robo\\gattai_robo\\", "gattai01", "gattai02", "gattai03",
     "gattai04", "gattai05", "gattai06", "gattai07",
     "gattai08", "gattai09", "gattai10", "gattai11",
@@ -185,7 +194,7 @@ char *D_002BA2A0[82] = {
     "gattai80", "gattai81"
 };
 
-char *D_002BA3E8[84] = {
+char *xglCdEnemyModelNames[84] = {
     "model\\enemy\\", "uso001", "uso002", "uro001",
     "uma001", "uma002", "uso003", "uso004",
     "uma003", "uro002", "uma004", "uma005",
@@ -209,7 +218,7 @@ char *D_002BA3E8[84] = {
     "uso001_rf01", "uso001_sg01", "uma013", 0
 };
 
-char *D_002BA538[32] = {
+char *xglCdBossModelNames[32] = {
     "model\\enemy\\", "bos001", "bos002", "bos003",
     "bos004", "bos005", "bos006", "bos007",
     "bos008", "bos009", "bos010", "bos011",
@@ -220,7 +229,7 @@ char *D_002BA538[32] = {
     "bos028", "bos029", "bos030", "bos031"
 };
 
-char *D_002BA5B8[362] = {
+char *xglCdMapModelNames[362] = {
     "model\\map\\", "kowashi_chara", "kowashi_robo", "idtest",
     "camera_test", "E2_TST01", "E2_TST02", "E2_TST03",
     "E2_TST04", "E2_TST05", "E2_TST06", "dummy_0b",
@@ -314,7 +323,7 @@ char *D_002BA5B8[362] = {
     "CFEVE21", "CFEVE22"
 };
 
-char *D_002BAB60[66] = {
+char *xglCdMotionNames[66] = {
     "motion\\", "chaos00", "jin00", "shion00",
     "momo00", "ziggy00", "jr00", "kosmos00",
     "kanan00", "pcr00", "pcr01", "pcr02",
@@ -334,13 +343,13 @@ char *D_002BAB60[66] = {
     "motion_ext50", "face_all"
 };
 
-char *D_002BAC68[10] = {
+char *xglCdEffectNames[10] = {
     "effect\\", "00", "01", "02",
     "03", "04", "05", "06",
     "07", 0
 };
 
-char *D_002BAC90[326] = {
+char *xglCdMobjModelNames[326] = {
     "model\\mobj\\", "mobj000", "mobj001", "mobj002",
     "mobj003", "mobj004", "mobj005", "mobj006",
     "mobj007", "mobj008", "mobj009", "mobj010",
@@ -425,7 +434,7 @@ char *D_002BAC90[326] = {
     "mobj153c", 0
 };
 
-char *D_002BB1A8[60] = {
+char *xglCdCfEnemyNames[60] = {
     "cf\\", "enemy001", "enemy002", "enemy003",
     "enemy004", "enemy005", "enemy006", "enemy007",
     "enemy008", "enemy009", "enemy010", "enemy011",
@@ -453,20 +462,20 @@ typedef struct CdFileGroup {
 } CdFileGroup;
 
 CdFileGroup xglCdFileGroups[15] = {
-    { 0x10000, 58, D_002B9CF8 },
-    { 0x11000, 90, D_002B9DE0 },
-    { 0x12000, 88, D_002B9F48 },
-    { 0x13000, 72, D_002BA0A8 },
-    { 0x14000, 19, D_002BA1C8 },
-    { 0x15000, 33, D_002BA218 },
-    { 0x16000, 82, D_002BA2A0 },
-    { 0x18000, 83, D_002BA3E8 },
-    { 0x19000, 32, D_002BA538 },
-    { 0x20000, 362, D_002BA5B8 },
-    { 0x30000, 66, D_002BAB60 },
-    { 0x40000, 9, D_002BAC68 },
-    { 0x70000, 325, D_002BAC90 },
-    { 0x80000, 60, D_002BB1A8 },
+    { 0x10000, 58, xglCdPcModelNames },
+    { 0x11000, 90, xglCdNpcModelNames },
+    { 0x12000, 88, xglCdCfNpcModelNames },
+    { 0x13000, 72, xglCdCitizenModelNames },
+    { 0x14000, 19, xglCdPcRoboModelNames },
+    { 0x15000, 33, xglCdNpcRoboModelNames },
+    { 0x16000, 82, xglCdGattaiRoboModelNames },
+    { 0x18000, 83, xglCdEnemyModelNames },
+    { 0x19000, 32, xglCdBossModelNames },
+    { 0x20000, 362, xglCdMapModelNames },
+    { 0x30000, 66, xglCdMotionNames },
+    { 0x40000, 9, xglCdEffectNames },
+    { 0x70000, 325, xglCdMobjModelNames },
+    { 0x80000, 60, xglCdCfEnemyNames },
     { 0xFFFFFFFF, 0, 0 }
 };
 
@@ -501,7 +510,7 @@ int footMaterialKeys[16] = {
 };
 
 /* Words read by res_get_path (the size argument of seBankLoad per kind; the last one is zero). Guessed type. */
-int D_002BB5B8[22] = {
+int seBankAddressTable[22] = {
     0x00019000, 0x00005000, 0x0007D000, 0x000BE000, 0x000BE000, 0x00000000,
     0x00000000, 0x00154000, 0x00176000, 0x0017A400, 0x0017E800, 0x00182C00,
     0x00187000, 0x0018D000, 0x00193000, 0x00199000, 0x0019F000, 0x001A5000,
@@ -509,49 +518,49 @@ int D_002BB5B8[22] = {
 };
 
 
-/* Command table of resScriptRun: the name stored in the scaffold strings of main/tu054 (its ';' prefix is not
- * part of the name) and the handler. Four handlers are defined with another signature, so the table casts them. */
+/* Command table of resScriptRun: the name stored in the scaffold strings of res_get_path.c (its ';' prefix is not
+ * part of the name) and the handler. */
 typedef struct {
     signed char *name;
     unsigned char *(*handler)(unsigned char *cursor);
 } ResCommand;
 
-void resCmdMap(int cursor);
-void resCmdAct(int cursor);
-void resCmdMot(int cursor);
-void resCmdMobj(int cursor);
+u8 *resCmdMap(u8 *cursor);
+u8 *resCmdAct(u8 *cursor);
+u8 *resCmdMot(u8 *cursor);
+u8 *resCmdMobj(u8 *cursor);
 u8 *resCmdEffect(u8 *cursor);
 u8 *resCmdMapse(u8 *script);
 u8 *resCmdRuntimeBgm(u8 *script);
 u8 *resCmdBgmVol(u8 *cursor);
 u8 *resCmdFoot(u8 *script);
 u8 *resCmdEnefoot(u8 *script);
-u8 *resCmdDisk(u8 *entry);
-u8 *resCmdSave(u8 *cursor);
-int resCmdMpeg2(int cursor);
+u8 *command_disk(u8 *entry);
+u8 *command_save(u8 *cursor);
+u8 *resCmdMpeg2(u8 *cursor);
 
-char D_0069CEE0[8] = "man.xap";
-char D_0069CEE8[8] = "CFS_SE";
-int D_0069CEF0 = (int) D_0069CEE8;
+char defaultXapName[8] = "man.xap";
+char cfsSeBankName[8] = "CFS_SE";
+char *cfsSeBankNamePointer = cfsSeBankName;
 
 ResCommand resCommandTable[14] = {
-    { "map", (unsigned char *(*)(unsigned char *)) resCmdMap },
-    { "act", (unsigned char *(*)(unsigned char *)) resCmdAct },
-    { "mot", (unsigned char *(*)(unsigned char *)) resCmdMot },
-    { "mobj", (unsigned char *(*)(unsigned char *)) resCmdMobj },
+    { "map", resCmdMap },
+    { "act", resCmdAct },
+    { "mot", resCmdMot },
+    { "mobj", resCmdMobj },
     { "effect", resCmdEffect },
     { "mapse", resCmdMapse },
     { "bgm", resCmdRuntimeBgm },
     { "bgmvol", resCmdBgmVol },
     { "foot", resCmdFoot },
     { "enefoot", resCmdEnefoot },
-    { "disk", resCmdDisk },
-    { "save", resCmdSave },
-    { ";mpeg2", (unsigned char *(*)(unsigned char *)) resCmdMpeg2 },
+    { "disk", command_disk },
+    { "save", command_save },
+    { ";mpeg2", resCmdMpeg2 },
     { 0, 0 }
 };
 
-char *D_0069CF5C = "cf\\";
+char *cfDirectoryPath = "cf\\";
 
 
 /* ---- res_get_path ---- */
@@ -584,12 +593,12 @@ void xglCdFormatFileName(char *buffer, int number)
 #define GAME_RES_ID_MASK 0xFFFFFF
 
 /* Address range gameResArenaStart .. gameResArenaEnd whose blocks GameResBlockFindByOwner and GameResBlockFindByName skip. */
-static unsigned int gameResArenaStart;
-static unsigned int gameResArenaEnd;
+static void *gameResArenaStart;
+static void *gameResArenaEnd;
 
 /* The name key stored in a block header: name itself when it fits the header; for longer
  * names the original returns name - (GAME_RES_NAME_HEADER_SIZE - 1), not an offset into name. */
-char *func_001DF170(char *name)
+const char *gameResNameKey(const char *name)
 {
     int length;
 
@@ -633,8 +642,8 @@ int GameResBlockFindByOwner(int owner)
         return 0;
     }
     for (index = 1; index < GAME_RES_BLOCK_COUNT && xglCdSlotTable[index].buffer != 0; index++) {
-        if (((unsigned int) xglCdSlotTable[index].buffer < gameResArenaStart
-             || gameResArenaEnd < (unsigned int) xglCdSlotTable[index].buffer)
+        if ((xglCdSlotTable[index].buffer < gameResArenaStart
+             || gameResArenaEnd < xglCdSlotTable[index].buffer)
             && xglCdSlotTable[index].owner == owner) {
             return index;
         }
@@ -659,20 +668,20 @@ int GameResBlockFindByBuffer(void *buffer)
 }
 
 /* The block outside gameResArenaStart .. gameResArenaEnd whose owner is a GAME_RES_OWNER tag and whose
- * first bytes hold the key func_001DF170 makes of name; 0 when none. GameResLoadName writes
+ * first bytes hold the key gameResNameKey makes of name; 0 when none. GameResLoadName writes
  * that key as the header of the blocks it loads, but the test applies to every block
  * allocated without an owner, anonymous ones included. */
-int GameResBlockFindByName(char *name)
+int GameResBlockFindByName(const char *name)
 {
-    char *key;
-    char *wanted;
+    const char *key;
+    const char *wanted;
     char *stored;
     int index;
 
-    key = func_001DF170(name);
+    key = gameResNameKey(name);
     for (index = 1; index < GAME_RES_BLOCK_COUNT && xglCdSlotTable[index].buffer != 0; index++) {
-        if (((unsigned int) xglCdSlotTable[index].buffer < gameResArenaStart
-             || gameResArenaEnd < (unsigned int) xglCdSlotTable[index].buffer)
+        if ((xglCdSlotTable[index].buffer < gameResArenaStart
+             || gameResArenaEnd < xglCdSlotTable[index].buffer)
             && (xglCdSlotTable[index].owner & GAME_RES_OWNER_MASK) == GAME_RES_OWNER) {
             wanted = key;
             stored = xglCdSlotTable[index].buffer;
@@ -705,7 +714,7 @@ void *GameResBlockAssign(int index, int owner, unsigned int size)
         }
         entry[1].size = entry->size - size;
         entry->size = size;
-        entry[1].buffer = (char *) entry->buffer + size;
+        entry[1].buffer = entry->buffer + size;
         entry[1].owner = 0;
     }
     entry->owner = owner;
@@ -753,19 +762,16 @@ void GameResBlockFree(int index)
 
 #include "shared.h"
 
-/* Completion callback of xglCdReadFile: slot index, buffer, state word, value. */
-typedef void (*CdCallback)(int slot, void *buffer, int state, int value);
-
 static int xglCdEventState;
 
 /* Completion handler passed to xglCdReadFile (proposed xglCdSlotEvent): event 1 stores value as the
  * state word xglCdEventState (xglCdEventState); event 4 calls the slot's callback with that state word. */
 void xglCdSlotEvent(int event, int value, int slot) {
     CdSlot *entry;
-    CdCallback callback;
+    GameResCallback callback;
 
     entry = &xglCdSlotTable[slot];
-    callback = (CdCallback) entry->tag;
+    callback = (GameResCallback) entry->tag;
     if (callback != 0) {
         if (event == 1) {
             xglCdEventState = value;
@@ -921,7 +927,7 @@ int GameResBlockFindLargestFree(void)
 }
 
 /* Buffer and size of the largest free block (entry 0's when none is free). */
-void *func_001DF9F0(unsigned int *size)
+void *GameResourceGetFreeAddr(unsigned int *size)
 {
     int index;
 
@@ -947,19 +953,17 @@ void *GameResBufferAllocOwned(int owner, int size)
     return 0;
 }
 
-/* Called by GameResLoadID and GameResLoadName for a block that was already loaded:
- * block index, buffer, size and xglCdSlotValue. Stored as a block's read tag otherwise. */
-typedef void (*GameResCallback)(int index, void *buffer, unsigned int size, int value);
-
-static int xglCdSlotValue;
+/* GameResCallback (res_get_path.h) is called by GameResLoadID and GameResLoadName for a block that was already
+ * loaded: block index, buffer, size and xglCdSlotValue. Stored as a block's read tag otherwise. */
+static void *xglCdSlotValue;
 
 /* Sets the value that xglCdReadFileTagged and xglCdReadFileSlot copy into the slot (xglCdSlotValue). */
-void xglCdSetSlotValue(int value)
+void xglCdSetSlotValue(void *value)
 {
     xglCdSlotValue = value;
 }
 
-int xglCdReadFileTagged(const char *name, void *buffer, int unused_arg2, int tag) {
+int xglCdReadFileTagged(const char *name, void *buffer, int unused_arg2, GameResCallback tag) {
     int status;
 
     status = xglCdGetFileSize(name);
@@ -992,19 +996,19 @@ static u8 xglCdLoadSync;
 
 /* Starts a read into a slot (proposed xglCdReadFileSlot). tag 0 reads without a slot;
  * otherwise the slot (index 0 when slot >= 0x80) takes tag and xglCdSlotValue before xglCdReadFile. */
-void xglCdReadFileSlot(const char *name, void *buffer, int tag, u32 slot) {
+void xglCdReadFileSlot(const char *name, void *buffer, GameResCallback tag, u32 slot) {
     CdSlot *entry;
     u32 index;
     int in_table;
-    int value;
+    void *value;
 
     in_table = slot < 0x80U;
     if (tag == 0) {
         if (xglCdLoadSync != 0) {
-            xglCdReadFile(name, buffer, 1, 0);
+            xglCdReadFile(name, buffer, 1, CD_NOTIFY_CURRENT);
             return;
         }
-        xglCdReadFile(name, buffer, tag, 0);
+        xglCdReadFile(name, buffer, 0, CD_NOTIFY_CURRENT);
         return;
     }
     index = 0;
@@ -1025,7 +1029,7 @@ void xglCdReadFileSlot(const char *name, void *buffer, int tag, u32 slot) {
 }
 
 /* Writes the extension ".xap" with its NUL at extension, the end of path, then probes path
- * (xglCdCheckFile): -1 when the .xap file is missing, 0 otherwise. */
+ * (xglCdGetFileData): -1 when the .xap file is missing, 0 otherwise. */
 int xglCdCheckXapFile(const char *path, char *extension)
 {
     unsigned int record[0xC];
@@ -1035,7 +1039,7 @@ int xglCdCheckXapFile(const char *path, char *extension)
     extension[2] = 'a';
     extension[3] = 'p';
     extension[4] = 0;
-    return xglCdCheckFile(path, record);
+    return xglCdGetFileData(path, record);
 }
 
 /* Returns the name of the group that lists file_id, or 0 when no group does. */
@@ -1101,7 +1105,7 @@ enum ResEvent {
 /* Read-completion event of xglCdReadFile; "#scn" is the script header magic. */
 #define CD_EVENT_READ_DONE 4
 #define RES_SCRIPT_MAGIC 0x6E637323
-/* Jump records (resJumpRecords): kind of the end marker and of a record named by resJumpRecordSet. */
+/* Jump records (resJumpRecords): kind of the end marker and of a record resJumpRecordSet filled. */
 #define RES_JUMP_END 0xFF
 #define RES_JUMP_NAMED 0x7F
 /* Map block key class of a jump-point polygon; its low byte is the jump kind. */
@@ -1133,9 +1137,9 @@ typedef struct CdFileSetHeader {
 
 /* Returns the name of the group that lists file_id, or 0 when no group does. */ char *xglCdFindXapName(int file_id);
 /* Default .xap name "man.xap" for ids whose own and fallback names are all missing
- * (tu054's own .sdata, still asm-owned data). */
+ * (res_get_path.c's own .sdata, still asm-owned data). */
 
-extern char D_0069CEE0[8];
+extern char defaultXapName[8];
 
 /* Loads the file set of file_id into slot's block: a CdFileSetHeader, then the .xap file and
  * the name's .epf, .xhr, .txy and .pxy files, each rounded up to GAME_RES_BLOCK_ALIGN and the
@@ -1144,7 +1148,7 @@ extern char D_0069CEE0[8];
  * replaced by "00", and as the last resort (not for type 7) the default name "man.xap" is
  * appended to the group directory.
  * Returns the bytes the set takes. */
-int xglCdLoadFileSet(unsigned int file_id, unsigned int slot, int tag)
+int xglCdLoadFileSet(unsigned int file_id, unsigned int slot, GameResCallback tag)
 {
     char name[256];
     char path[256];
@@ -1205,7 +1209,7 @@ int xglCdLoadFileSet(unsigned int file_id, unsigned int slot, int tag)
             end[1] = '0';
             if (xglCdCheckXapFile(path, end + 2) != 0
                 && (file_id & CD_FILE_TYPE_MASK) != CD_FILE_TYPE(7)) {
-                for (source = D_0069CEE0; (*base++ = *source++) != 0;) {
+                for (source = defaultXapName; (*base++ = *source++) != 0;) {
                 }
             }
         }
@@ -1269,7 +1273,7 @@ void *memset(void *dest, int value, unsigned int count);
 
 /* Loads the .bin, language-specific .sbl, .id, .txy and .pxy files of file_id into slot's
  * block (with slot 0 it only measures them) and returns the bytes the set takes. */
-int xglCdLoadBinFileSet(unsigned int file_id, unsigned int slot, int tag)
+int xglCdLoadBinFileSet(unsigned int file_id, unsigned int slot, GameResCallback tag)
 {
     char name[256];
     char *start;
@@ -1351,7 +1355,7 @@ int xglCdLoadBinFileSet(unsigned int file_id, unsigned int slot, int tag)
                     char *sblTop;
 
                     sblTop = (char *) ((u32) gameWork.resBuffer + info->xapBytes);
-                    gameWork.imageEnd = (u32) sblTop;
+                    gameWork.imageEnd = (struct SbImageHeader *) sblTop;
                     sblBuffer = sblTop;
                 }
                 xglCdReadFileSlot(sblPath, sblBuffer, 0, 0);
@@ -1398,7 +1402,7 @@ int xglCdLoadBinFileSet(unsigned int file_id, unsigned int slot, int tag)
 
 /* Reads file_id as ".xap" (or ".fap" when no ".xap" exists) into slot's buffer; returns the
  * bytes it takes rounded up to CD_SECTOR_SIZE, 0 when the file is missing. */
-int xglCdLoadXapFile(unsigned int file_id, unsigned int slot, int tag)
+int xglCdLoadXapFile(unsigned int file_id, unsigned int slot, GameResCallback tag)
 {
     char name[256];
     char *extension;
@@ -1429,7 +1433,7 @@ int xglCdLoadXapFile(unsigned int file_id, unsigned int slot, int tag)
 }
 
 /* Same for ".ene" files, with no fallback extension. */
-int xglCdLoadEneFile(unsigned int file_id, unsigned int slot, int tag)
+int xglCdLoadEneFile(unsigned int file_id, unsigned int slot, GameResCallback tag)
 {
     char name[256];
     char *extension;
@@ -1455,10 +1459,11 @@ int xglCdLoadEneFile(unsigned int file_id, unsigned int slot, int tag)
     return buffer - start;
 }
 
-int xglCdLoadByKind(int id, unsigned int slot, int *size, int tag);
-/* Loads the .bin, language-specific .sbl, .id, .txy and .pxy files of file_id into slot's * block (with slot 0 it only measures them) and returns the bytes the set takes. */ int xglCdLoadBinFileSet(unsigned int file_id, unsigned int slot, int tag);
+/* slot is the index of a block of xglCdSlotTable or, from GAME_RES_BLOCK_COUNT up, the address to load to (0 only measures the set). */
+int xglCdLoadByKind(int id, unsigned int slot, int *size, GameResCallback tag);
+/* Loads the .bin, language-specific .sbl, .id, .txy and .pxy files of file_id into slot's * block (with slot 0 it only measures them) and returns the bytes the set takes. */ int xglCdLoadBinFileSet(unsigned int file_id, unsigned int slot, GameResCallback tag);
 
-int xglCdLoadByKind(int resourceId, unsigned int slot, int *outSize, int tag)
+int xglCdLoadByKind(int resourceId, unsigned int slot, int *outSize, GameResCallback tag)
 {
     unsigned int fileId;
     unsigned int type;
@@ -1502,12 +1507,12 @@ int xglCdLoadByKind(int resourceId, unsigned int slot, int *outSize, int tag)
 /* Loads the file name into a block whose GAME_RES_NAME_HEADER_SIZE header holds the name, unless a block
  * already holds it. Reports the data (past the header) and its size; returns the owner tag,
  * -1 when the file is missing or no block is free. */
-int GameResLoadName(char *name, void **data, unsigned int *size, GameResCallback callback)
+int GameResLoadName(const char *name, void **data, unsigned int *size, GameResCallback callback)
 {
     int index;
     int bytes;
     char *buffer;
-    char *source;
+    const char *source;
     char *header;
 
     index = GameResBlockFindByName(name);
@@ -1536,11 +1541,11 @@ int GameResLoadName(char *name, void **data, unsigned int *size, GameResCallback
         return -1;
     }
     buffer = xglCdSlotTable[index].buffer;
-    source = func_001DF170(name);
+    source = gameResNameKey(name);
     header = buffer;
     while ((*header++ = *source++) != 0) {
     }
-    xglCdSlotTable[index].tag = (int) callback;
+    xglCdSlotTable[index].tag = callback;
     xglCdSlotTable[index].value = xglCdSlotValue;
     buffer += GAME_RES_NAME_HEADER_SIZE;
     if (data != 0) {
@@ -1550,7 +1555,7 @@ int GameResLoadName(char *name, void **data, unsigned int *size, GameResCallback
         *size = bytes;
     }
     xglCdSetReadTag(index);
-    xglCdReadFile(name, buffer, 1, (int) xglCdSlotEvent);
+    xglCdReadFile(name, buffer, 1, xglCdSlotEvent);
     return xglCdSlotTable[index].owner;
 }
 
@@ -1585,7 +1590,7 @@ int GameResLoadID(int id, void **buffer, unsigned int *size, GameResCallback cal
     if (index == 0) {
         return -2;
     }
-    xglCdLoadByKind(id, index, size, (int) callback);
+    xglCdLoadByKind(id, index, size, callback);
     if (buffer != 0) {
         *buffer = xglCdSlotTable[index].buffer;
     }
@@ -1610,20 +1615,15 @@ void *GameResFindName(char *name, unsigned int *size)
     return 0;
 }
 
-/* ---- res_get_path part (old tu055 from 0x1E0B10; merged 2026-11-09) ---- */
-
-#include "common.h"
-#include "shared.h"
-#include "main/res_get_path.h"
-#include "main/tu021.h"
-#include "main/tu022.h"
+#include "main/se_bank_load.h"
+#include "main/sound_driver.h"
 
 int GameResBlockFindByOwner(int owner);
 
-/* Entry 0 of xglCdSlotTable (CdSlot above) is the header: resInitPathHeader stores the
+/* Entry 0 of xglCdSlotTable (CdSlot above) is the header: GameResourceInit stores the
    managed range start in its buffer and length in its size, and its owner holds the matched index. */
 
-int GameResFindID(int resourceId, int *outSize)
+void *GameResFindID(int resourceId, int *outSize)
 {
     int block;
 
@@ -1649,10 +1649,10 @@ void resSelectSlot(int search) {
     }
 }
 
-static int seBankNames[32];
-extern int D_0069CEF0;
+/* Name of the sound bank loaded into each of the 32 slots; slots 3 and 4 hold the map banks. */
+static char *seBankNames[32];
 static char *seBankNameCursor;
-static int seBankNamePool[64];
+static char seBankNamePool[256];
 static signed char resFootMaterials[16];
 static int resEnemyFootGroups[16];
 
@@ -1662,8 +1662,8 @@ void resResetDescriptorTables(void) {
     for (i = 0; i < 32; i++) {
         seBankNames[i] = 0;
     }
-    seBankNames[2] = D_0069CEF0;
-    seBankNameCursor = (char *)seBankNamePool;
+    seBankNames[2] = cfsSeBankNamePointer;
+    seBankNameCursor = seBankNamePool;
     for (i = 0; i < RES_FOOT_MATERIAL_MAX; i++) {
         resFootMaterials[i] = -1;
     }
@@ -1695,18 +1695,18 @@ typedef struct ResRecord {
 } ResRecord;
 
 static ResRecord resRecordTable[24];
-static unsigned char D_006A10E0[16];
-static unsigned char D_006A10F0[16];
+static unsigned char mapSeBankNameBuffer[16];
+static unsigned char mapSeSecondBankNameBuffer[16];
 static signed char seBgmName[32];
 
-/* Clears the type word of all 24 records and the three flags at seBgmName, D_006A10E0 and D_006A10F0 (proposed resClearRecordTable body). */
+/* Clears the type word of all 24 records and the three flags at seBgmName, mapSeBankNameBuffer and mapSeSecondBankNameBuffer (proposed resClearRecordTable body). */
 void resClearRecordTable(void)
 {
     int i;
 
     seBgmName[0] = 0;
-    D_006A10E0[0] = 0;
-    D_006A10F0[0] = 0;
+    mapSeBankNameBuffer[0] = 0;
+    mapSeSecondBankNameBuffer[0] = 0;
     for (i = SE_RECORD_COUNT - 1; i >= 0; i--) {
         resRecordTable[i].flags = 0;
     }
@@ -1720,10 +1720,9 @@ typedef struct SeVoiceEntry {
     unsigned int flags;
 } SeVoiceEntry;
 
-extern int D_002BB5B8[];
-void seFootBanksLoad(void);
+extern int seBankAddressTable[];
 
-void resResetKindState(int mode) {
+void seStateRestore(int mode) {
     int i;
     int j;
     u32 flags;
@@ -1735,7 +1734,7 @@ void resResetKindState(int mode) {
     }
     for (i = 0; i < 32; i++) {
         if (seBankNames[i] != 0) {
-            seBankLoad(i, seBankNames[i], D_002BB5B8[i]);
+            seBankLoad(i, seBankNames[i], seBankAddressTable[i]);
         }
     }
     seFootBanksLoad();
@@ -1767,21 +1766,21 @@ void resResetKindState(int mode) {
     }
 }
 
-void resResetKindState(int mode);
+void seStateRestore(int mode);
 
-void resResetActState(void) {
-    resResetKindState(0x10000);
+void seStateRestoreField(void) {
+    seStateRestore(0x10000);
 }
 
-/* Clears the type word of all 24 records and the three flags at seBgmName, D_006A10E0 and D_006A10F0 (proposed resClearRecordTable body). */ void resClearRecordTable(void);
+/* Clears the type word of all 24 records and the three flags at seBgmName, mapSeBankNameBuffer and mapSeSecondBankNameBuffer (proposed resClearRecordTable body). */ void resClearRecordTable(void);
 
-void resResetAllKinds(void) {
-    resResetKindState(-1);
+void seStateClear(void) {
+    seStateRestore(-1);
     resClearRecordTable();
 }
 
-void func_001E0E98(void) {
-    resResetKindState(0);
+void seStateRestoreDefault(void) {
+    seStateRestore(0);
 }
 
 typedef struct {
@@ -1817,7 +1816,7 @@ int seNameCopyIfChanged(char *dst, char *src)
     return changed;
 }
 
-#include "main/tu051.h"
+#include "main/game_camera.h"
 
 void resReleaseRecordsOfType(int kind, int forward) {
     int i;
@@ -1846,8 +1845,6 @@ void resReleaseRecordsOfType(int kind, int forward) {
     soundInitIfNeeded();
 }
 
-extern char *D_006A116C[];
-extern char *D_006A1170[];
 void resReleaseRecordsOfType(int kind, int forward);
 int seNameCopyIfChanged(char *dst, char *src);
 
@@ -1864,8 +1861,8 @@ int seBankSetName(int kind, char *text)
     if (name != 0) {
         switch (kind) {
         case 3:
-            cursor = D_006A10E0;
-            D_006A116C[0] = cursor;
+            cursor = mapSeBankNameBuffer;
+            seBankNames[3] = cursor;
             resReleaseRecordsOfType(kind, 1);
             if (seNameCopyIfChanged(cursor, name) == 0) {
                 return 0;
@@ -1873,8 +1870,8 @@ int seBankSetName(int kind, char *text)
             resReleaseRecordsOfType(kind, 0);
             break;
         case 4:
-            cursor = D_006A10F0;
-            D_006A1170[0] = cursor;
+            cursor = mapSeSecondBankNameBuffer;
+            seBankNames[4] = cursor;
             resReleaseRecordsOfType(kind, 1);
             if (seNameCopyIfChanged(cursor, name) == 0) {
                 return 0;
@@ -1889,7 +1886,7 @@ int seBankSetName(int kind, char *text)
             break;
         default:
             cursor = seBankNameCursor;
-            seBankNames[kind] = (u32)cursor;
+            seBankNames[kind] = cursor;
             source = (char *)textAddress;
             while ((*cursor++ = *source++) != 0) {
             }
@@ -1899,46 +1896,45 @@ int seBankSetName(int kind, char *text)
     } else {
         switch (kind) {
         case 3:
-            D_006A10E0[0] = 0;
+            mapSeBankNameBuffer[0] = 0;
             resReleaseRecordsOfType(kind, (int)textAddress);
             /* fall through */
         case 4:
-            D_006A10F0[0] = 0;
+            mapSeSecondBankNameBuffer[0] = 0;
             resReleaseRecordsOfType(kind, 0);
             break;
         }
     }
     if (kind == 3) {
         seBankLoad(4, 0, 0);
-        bankSize = seBankLoad(3, name, D_002BB5B8[3]);
-        D_002BB5B8[4] = 0xBE000 + ((bankSize + 255) & -256);
+        bankSize = seBankLoad(3, name, seBankAddressTable[3]);
+        seBankAddressTable[4] = 0xBE000 + ((bankSize + 255) & -256);
         return bankSize;
     }
-    return seBankLoad(kind, name, D_002BB5B8[kind]);
+    return seBankLoad(kind, name, seBankAddressTable[kind]);
 }
 
-void func_0013A618(int, int);
+void korgEvagPauseSeq(int, int);
 
 void soundRestart(void) {
     soundSlotsRestart();
-    func_0013A618(1, 1);
-    func_001A4010();
+    korgEvagPauseSeq(1, 1);
+    soundDriverReset();
 }
 
 void soundReset(void) {
     soundRestart();
     seSetMuted(1, 0);
-    func_001A3A18();
+    seBgmStop();
 }
 
-extern unsigned char D_0069CFD0;
 static signed char seBgmVolume;
 
-void seBgmNameSet(signed char *name)
+void seBgmNameSet(char *name)
 {
     if (*name == 0) {
         seBgmPlay(1, 0, 0x19000);
-        func_001A3A18();
+        seBgmStop();
         seBgmName[0] = 0;
         return;
     }
@@ -1989,10 +1985,8 @@ void seVoiceRecordSet(u32 voice, u32 volume, u32 pan) {
     }
 }
 
-extern u32 gameResArenaStart;
-extern u32 gameResArenaEnd;
-static u32 D_0069E1AC;
-static u32 D_0069E1B0;
+static void *gameResWorkStart;
+static void *gameResWorkEnd;
 
 typedef union {
     u32 w;
@@ -2023,11 +2017,10 @@ void seVoiceRecordAddAt(int voice, f32 *src)
         ((f32 *)&resRecordTable[freeSlot].u.params.pan)[1] = src[2];
     }
     if (!running) {
-        seVoiceStart((void *)voice, 0, 64);
+        seVoiceStart(voice, 0, 64);
     }
 }
 
-u32 seVoicePanVolumeFromPosition(ResRecord *rec);
 
 void seVoiceRecordsUpdatePan(void)
 {
@@ -2051,10 +2044,10 @@ void seVoiceRecordsUpdatePan(void)
         if (j == -1) {
             continue;
         }
-        loudest = seVoicePanVolumeFromPosition(&resRecordTable[i]);
+        loudest = seVoicePanVolumeFromPosition(resRecordTable[i].u.position);
         for (j = i + 1; j < SE_RECORD_COUNT; j++) {
             if (resRecordTable[i].flags == resRecordTable[j].flags) {
-                u32 candidate = seVoicePanVolumeFromPosition(&resRecordTable[j]);
+                u32 candidate = seVoicePanVolumeFromPosition(resRecordTable[j].u.position);
                 if (candidate > loudest) {
                     loudest = candidate;
                 }
@@ -2075,50 +2068,32 @@ f32 seSetMaxDistance(f32 maxDistance) {
     return seMaxDistance;
 }
 
-typedef struct {
-    u8 unmodeled_00[16];
-    f32 position[3];
-} SeEmitter;
-
-/* 0x870-byte entries of uwamonoSlotTable (the symbol is at 0x3400F0); the emitter pointer is the first word. */
-typedef struct {
-    SeEmitter *emitter;
-    u8 unmodeled_04[0x870 - 0x04];
-} SeListener;
-
 extern int uwamonoCurrentIndex;
-extern SeListener uwamonoSlotTable[];
-void xglVectorLength(f32 *destination, f32 *vector);
-f32 xglAtan2(f32 x, f32 z);
-int F2I(f32 value);
 
-u32 seVoicePanVolumeFromPosition(ResRecord *rec)
+u32 seVoicePanVolumeFromPosition(f32 *position)
 {
-    f32 *position = rec->u.position;
-    SeListener *listener;
-    SeEmitter *emitter;
+    struct XenoActor *emitter;
     f32 *target;
-    f32 offset[3];
+    Vector4 offset;
     f32 distance;
     f32 angle;
     int volume;
     int pan;
 
-    listener = &uwamonoSlotTable[uwamonoCurrentIndex];
-    emitter = listener->emitter;
+    emitter = uwamonoRecords[uwamonoCurrentIndex].body.actor;
     if (emitter == 0) {
         return 0;
     }
-    target = emitter->position;
-    offset[0] = position[0] - target[0];
-    offset[1] = position[1] - target[1];
-    offset[2] = position[2] - target[2];
-    xglVectorLength(&distance, offset);
+    target = &emitter->position.x;
+    offset.x = position[0] - target[0];
+    offset.y = position[1] - target[1];
+    offset.z = position[2] - target[2];
+    xglVectorLength(&distance, &offset);
     if (seMaxDistance < distance) {
         return 0;
     }
     volume = F2I((1.0f - distance / seMaxDistance) * 127.0f);
-    angle = xglAtan2(offset[0], offset[2]) + gameWork.camera.range.northAngle + 1.5707963705062866f;
+    angle = xglAtan2(offset.x, offset.z) + gameWork.camera.range.northAngle + 1.5707963705062866f;
     while (6.2831854820251465f < angle) {
         angle -= 6.2831854820251465f;
     }
@@ -2132,7 +2107,7 @@ u32 seVoicePanVolumeFromPosition(ResRecord *rec)
     return (volume << 8) + pan;
 }
 
-void *GameResArenaReserve(unsigned int bytesWanted)
+void *GameResourceWorkAlloc(unsigned int bytesWanted)
 {
     unsigned int first;
     unsigned int last;
@@ -2156,19 +2131,19 @@ void *GameResArenaReserve(unsigned int bytesWanted)
         gameResArenaStart = xglCdSlotTable[first].buffer;
         gameResArenaEnd = xglCdSlotTable[last].buffer;
     } else {
-        D_0069E1AC = xglCdSlotTable[first].buffer;
-        D_0069E1B0 = xglCdSlotTable[last].buffer;
+        gameResWorkStart = xglCdSlotTable[first].buffer;
+        gameResWorkEnd = xglCdSlotTable[last].buffer;
     }
     return xglCdSlotTable[first].buffer;
 }
 
-void GameResArenaReload(void)
+void GameResourceWorkReload(void)
 {
     int i;
     CdSlot *entry;
     CdSlot *first;
     CdSlot *table;
-    u32 blockStart;
+    void *blockStart;
 
     table = xglCdSlotTable;
     first = &table[1];
@@ -2178,8 +2153,8 @@ void GameResArenaReload(void)
         do {
             if (entry->owner != 0) {
                 blockStart = entry->buffer;
-                if ((blockStart < D_0069E1AC || blockStart > D_0069E1B0) && blockStart >= gameResArenaStart && blockStart <= gameResArenaEnd) {
-                    xglCdLoadByKind(entry->owner | RES_ID_SYNC_LOAD, blockStart, 0, 0);
+                if ((blockStart < gameResWorkStart || blockStart > gameResWorkEnd) && blockStart >= gameResArenaStart && blockStart <= gameResArenaEnd) {
+                    xglCdLoadByKind(entry->owner | RES_ID_SYNC_LOAD, (unsigned int) blockStart, 0, 0);
                 }
             }
             i++;
@@ -2194,16 +2169,16 @@ void GameResArenaRelease(void)
     CdSlot *entry;
     CdSlot *first;
     CdSlot *table;
-    u32 blockStart;
-    u32 lower;
-    u32 upper;
+    void *blockStart;
+    void *lower;
+    void *upper;
 
-    if (D_0069E1B0 == 0) {
+    if (gameResWorkEnd == 0) {
         lower = gameResArenaStart;
         upper = gameResArenaEnd;
     } else {
-        lower = D_0069E1AC;
-        upper = D_0069E1B0;
+        lower = gameResWorkStart;
+        upper = gameResWorkEnd;
     }
     table = xglCdSlotTable;
     first = &table[1];
@@ -2214,7 +2189,7 @@ void GameResArenaRelease(void)
             if (entry->owner != 0) {
                 blockStart = entry->buffer;
                 if (blockStart >= lower && blockStart <= upper) {
-                    xglCdLoadByKind(entry->owner, blockStart, 0, 0);
+                    xglCdLoadByKind(entry->owner, (unsigned int) blockStart, 0, 0);
                 }
             }
             i++;
@@ -2223,21 +2198,23 @@ void GameResArenaRelease(void)
     }
     gameResArenaStart = 0;
     gameResArenaEnd = 0;
-    D_0069E1AC = 0;
-    D_0069E1B0 = 0;
+    gameResWorkStart = 0;
+    gameResWorkEnd = 0;
 }
 
-void func_001E1B10(void) {
+void cdSlotTestOnStart(void) {
 }
 
+/* One of the four path slots: the start of its buffer block and the resource id loaded into it last
+ * (resPlayerSlotsLoadModels' model ids; 0 for none). */
 typedef struct PathSlot {
-    int base;
-    int unmodeled_04;
+    u8 *base;
+    int resource_id;
 } PathSlot;
 
 static PathSlot resPathSlots[4];
 
-void resResetSlotTable(void) {
+void GameResourceReset(void) {
     int i = xglCdSlotTable[0].owner;
 
     if (i == 1) {
@@ -2252,23 +2229,20 @@ void resResetSlotTable(void) {
     }
     gameResArenaStart = 0;
     gameResArenaEnd = 0;
-    D_0069E1AC = 0;
-    D_0069E1B0 = 0;
+    gameResWorkStart = 0;
+    gameResWorkEnd = 0;
 }
 
-void resSelectSlot(int search);
-void resResetDescriptorTables(void);
-void resResetSlotTable(void);
 
-/* Stores key and value in the header entry, then resets the path state (proposed resInitPathHeader). */
-void resInitPathHeader(int key, int value) {
-    xglCdSlotTable[0].buffer = key;
-    xglCdSlotTable[0].size = value;
+/* Stores the managed range in the header entry, then resets the path state (proposed GameResourceInit). */
+void GameResourceInit(void *base, unsigned int size) {
+    xglCdSlotTable[0].buffer = base;
+    xglCdSlotTable[0].size = size;
     resSelectSlot(0);
-    resResetSlotTable();
+    GameResourceReset();
     resResetDescriptorTables();
     resClearRecordTable();
-    D_0069CFD0 = 0;
+    bgmNameListIndex = 0;
 }
 
 u8 *next_line(u8 *cursor)
@@ -2357,6 +2331,8 @@ static char *resNameCursor;
  * Appends one word to resEntryTable; word 0 holds the next free index. Keys 0x40000, 0x90000 and 0xF00000
  * store key plus the offset of resNameCursor in resNamePool, then copy the NUL-terminated name at name
  * (when name is not null) to the cursor. Key 0xF10000 stores the integer name plus key, and other keys store key.
+ * The original passes the number of a RES_KIND_EVENT entry in this pointer parameter (the callers then
+ * warn); typing it u32 changes the generated code.
  */
 void resEntryAdd(u32 key, u8 *name)
 {
@@ -2398,10 +2374,9 @@ void resEntryAdd(u32 key, u8 *name)
 }
 
 u8 *resParseFileGroup(u8 *text, int kind, int *out);
-/* * Appends one word to resEntryTable; word 0 holds the next free index. Keys 0x40000, 0x90000 and 0xF00000 * store key plus the offset of resNameCursor in resNamePool, then copy the NUL-terminated name at name * (when name is not null) to the cursor. Key 0xF10000 stores the integer name plus key, and other keys store key. */ void resEntryAdd(u32 key, u8 *name);
 
 /* Parses a name at cursor for kind and records the match; returns the cursor (proposed resCmdResolve). */
-int resCmdResolve(int cursor, int kind) {
+u8 *resCmdResolve(u8 *cursor, int kind) {
     int entryId;
 
     resParseFileGroup(cursor, kind, &entryId);
@@ -2410,20 +2385,20 @@ int resCmdResolve(int cursor, int kind) {
 }
 
 /* Script command handlers; each passes its kind to resCmdResolve (act: 0x10000, map: 0x20000, mot: 0x30000, mobj: 0x70000). */
-void resCmdAct(int cursor) {
-    resCmdResolve(cursor, 0x10000);
+u8 *resCmdAct(u8 *cursor) {
+    return resCmdResolve(cursor, 0x10000);
 }
 
-void resCmdMap(int cursor) {
-    resCmdResolve(cursor, 0x20000);
+u8 *resCmdMap(u8 *cursor) {
+    return resCmdResolve(cursor, 0x20000);
 }
 
-void resCmdMot(int cursor) {
-    resCmdResolve(cursor, 0x30000);
+u8 *resCmdMot(u8 *cursor) {
+    return resCmdResolve(cursor, 0x30000);
 }
 
-void resCmdMobj(int cursor) {
-    resCmdResolve(cursor, 0x70000);
+u8 *resCmdMobj(u8 *cursor) {
+    return resCmdResolve(cursor, 0x70000);
 }
 
 /* Copies the name at cursor into the name buffer up to whitespace and returns the cursor after it. */
@@ -2499,9 +2474,9 @@ u8 *resCmdRuntimeBgm(u8 *script)
 
 u8 *resCmdBgmVol(u8 *cursor) {
     int volume = 0;
-    u8 **cursorSlot;
-    u8 *writePos;
-    u8 *next;
+    char **cursorSlot;
+    char *writePos;
+    char *next;
 
     if ((u8)(*cursor - '0') < 10) {
         do {
@@ -2523,9 +2498,9 @@ u8 *resCmdBgmVol(u8 *cursor) {
     return cursor;
 }
 
-static signed char D_006A1110[16];
+static signed char footMaterialList[16];
 u8 *resCmdFoot(u8 *script) {
-    u8 *materialList = D_006A1110;
+    u8 *materialList = footMaterialList;
     u8 *materialListStart = materialList;
     int material;
 
@@ -2594,7 +2569,7 @@ u8 *resCmdEnefoot(u8 *script)
         }
         *nameEnd++ = '_';
         for (materialIndex = 0; materialIndex < RES_FOOT_MATERIAL_MAX; materialIndex++) {
-            if (D_006A1110[materialIndex] == -1) {
+            if (footMaterialList[materialIndex] == -1) {
                 break;
             }
             {
@@ -2604,7 +2579,7 @@ u8 *resCmdEnefoot(u8 *script)
                 for (copyPos = footName; copyPos < nameEnd; copyPos++) {
                     *resNameCursor++ = *copyPos;
                 }
-                materialKey = footMaterialKey(D_006A1110[materialIndex]);
+                materialKey = footMaterialKey(footMaterialList[materialIndex]);
                 resNameCursor[0] = materialKey[0];
                 resNameCursor[1] = materialKey[1];
                 resNameCursor[2] = materialKey[2];
@@ -2629,12 +2604,12 @@ u8 *resCmdEnefoot(u8 *script)
 /* Integer event name of the disk command: first byte of the command plus this base (key 0xF10000 stores the integer name). */
 #define RES_DISK_EVENT_BASE 0x1D0
 
-u8 *resCmdDisk(u8 *entry) {
+u8 *command_disk(u8 *entry) {
     resEntryAdd(RES_KIND_EVENT, *entry + RES_DISK_EVENT_BASE);
     return entry;
 }
 
-u8 *resCmdSave(u8 *cursor) {
+u8 *command_save(u8 *cursor) {
     int saveId = 0;
 
     if ((u8)(*cursor - '0') < 10) {
@@ -2649,20 +2624,25 @@ u8 *resCmdSave(u8 *cursor) {
     return cursor;
 }
 
-void GameMovieCaptionPlay(void);
 
 /*
  * Script command ";mpeg2" (name and handler of its resCommandTable entry; proposed resCmdMpeg2).
- * It plays the caption and returns the script cursor unchanged, as the other resCmd handlers do.
+ * It plays the movie named by the script text at the cursor and returns the cursor unchanged, as the other
+ * resCmd handlers do.
  */
-int resCmdMpeg2(int cursor) {
-    GameMovieCaptionPlay();
+u8 *resCmdMpeg2(u8 *cursor) {
+    GameMpeg2Play(cursor);
     return cursor;
 }
 
-static void *resScriptBuffer[512];           /* script buffer, "#scn" header */
+/* The script text xglCdReadFile reads for resLoadCfFile (resScriptRun parses it); it starts with the "#scn"
+ * header word, which is 0 while no script is loaded. */
+static union {
+    u32 magic;
+    u8 bytes[0x800];
+} resScriptBuffer;
 extern ResCommand resCommandTable[];      /* script command table */
-static unsigned char D_006A0AC0[256];   /* u32 list, [0] = count incl. header */
+static u32 resOwnerTable[64];   /* owner list, [0] = count incl. header */
 typedef struct ResCfFile {
     s16 id;
     u8 kind;
@@ -2671,7 +2651,7 @@ typedef struct ResCfFile {
 /* Current CF file id and kind; kind also serves as the preload step index (resPreloadStep). */
 static ResCfFile resCfCurrent;
 
-void resScriptRun(int mode)
+void resScriptRun(int event, int value, int tag)
 {
     ResCommand *command;
     u8 *cursor;
@@ -2683,13 +2663,13 @@ void resScriptRun(int mode)
     u32 n, next;
     int i, j, m;
 
-    if (mode != CD_EVENT_READ_DONE) {
+    if (event != CD_EVENT_READ_DONE) {
         return;
     }
-    if (*(u32 *)resScriptBuffer != RES_SCRIPT_MAGIC) {
+    if (resScriptBuffer.magic != RES_SCRIPT_MAGIC) {
         return;
     }
-    cursor = next_line((u8 *)resScriptBuffer);
+    cursor = next_line(resScriptBuffer.bytes);
     while (1) {
         if (cursor[0] == '#') {
             if (cursor[1] == 'e' && cursor[2] == 'n' && cursor[3] == 'd') {
@@ -2768,12 +2748,12 @@ void resScriptRun(int mode)
                     } while (++m < resEntryTable[0]);
                 }
                 if (i >= (u32)xglCdSlotTable[0].owner && m >= resEntryTable[0]) {
-                    ((u32 *)D_006A0AC0)[n++] = xglCdSlotTable[i].owner;
+                    resOwnerTable[n++] = xglCdSlotTable[i].owner;
                 }
             }
         } while (++i < GAME_RES_BLOCK_COUNT && (next = xglCdSlotTable[i].owner, xglCdSlotTable[i].buffer != 0));
     }
-    ((u32 *)D_006A0AC0)[0] = n;
+    resOwnerTable[0] = n;
 
     /* Sort resEntryTable ascending; each swap restarts the scan. */
     {
@@ -2801,7 +2781,6 @@ void resScriptRun(int mode)
     resCfCurrent.kind = 1;
 }
 
-int xglCdGetServicePending(void);
 
 void resPreloadStep(int flag)
 {
@@ -2816,22 +2795,19 @@ void resPreloadStep(int flag)
     {
         u32 address = (u32)&resCfCurrent.kind;
         u8 *preloadIndex = (u8 *)(address + ((address & 0xFF) >> 8));
-        if (GameResLoadID(((u32 *)resEntryTable)[*preloadIndex] + RES_ID_SYNC_LOAD, &block, 0, 0) > 0) {
+        if (GameResLoadID(resEntryTable[*preloadIndex] + RES_ID_SYNC_LOAD, &block, 0, 0) > 0) {
             xglCdSlotTable[GameResBlockFindByBuffer(block)].owner |= RES_OWNER_PRELOADED;
         }
         *preloadIndex = *preloadIndex + 1;
-        if (*preloadIndex >= ((u32 *)resEntryTable)[0]) {
+        if (*preloadIndex >= resEntryTable[0]) {
             *preloadIndex = 0;
         }
     }
 }
 
-extern char *D_0069CF5C;
-extern void *resScriptBuffer[];
+extern char *cfDirectoryPath;
 void resPreloadStep(int flag);
 void xglCdFormatFileName(char *destination, int id);
-void resResetScriptState(void);
-void resScriptRun(int mode);
 
 void resLoadCfFile(int id) {
     char name[256];
@@ -2849,9 +2825,9 @@ void resLoadCfFile(int id) {
     resEntryAdd(RES_KIND_SOUND, 0);
     *resNameCursor++ = 12;
     *resNameCursor++ = 0;
-    resScriptBuffer[0] = 0;
+    resScriptBuffer.magic = 0;
     dst = name;
-    src = D_0069CF5C;
+    src = cfDirectoryPath;
     while (*src != 0) {
         *dst++ = *src++;
     }
@@ -2863,7 +2839,7 @@ void resLoadCfFile(int id) {
     dst[10] = 0;
     if (xglCdGetFileSize(name) > 0) {
         resCfCurrent.kind = RES_CF_LOADING;
-        xglCdReadFile(name, resScriptBuffer, 1, resScriptRun);
+        xglCdReadFile(name, resScriptBuffer.bytes, 1, resScriptRun);
     }
 }
 
@@ -2885,10 +2861,6 @@ u32 resReadHalfPairWord(u16 *p, ResHalfWordBits prev)
 
 typedef union { f32 f; int w; } JumpFloat;
 
-typedef struct ResSlotName {
-    u8 text[16];
-} ResSlotName;
-
 typedef struct JumpRecord {
     u8 kind;
     signed char flag;
@@ -2896,7 +2868,8 @@ typedef struct JumpRecord {
     u8 unmodeled_04[0x0C];
     union {
         JumpFloat unsetValue[4];
-        ResSlotName name;
+        Vector4 position;
+        ResJumpPoint point;
     };
 } JumpRecord;
 
@@ -2916,10 +2889,8 @@ typedef struct JumpNameEntry {
     int length;
 } JumpNameEntry;
 
-extern JumpTableHeader D_003C6DC0;
+extern JumpTableHeader mapSceneScriptBuffer;
 int strcmp(const char *, const char *);
-int func_A9D148(void *, void *);
-int func_A9DAD0(u16 op, int value);
 
 
 void resParseJumpTarget(void)
@@ -2939,7 +2910,7 @@ void resParseJumpTarget(void)
     int value;
     u16 op;
 
-    header = &D_003C6DC0;
+    header = &mapSceneScriptBuffer;
     start = (u16 *) ((u8 *) header + header->cursorOffset);
     cursor = start;
     names = (u8 *) header + header->nameTableOffset;
@@ -2954,7 +2925,7 @@ void resParseJumpTarget(void)
     if (cursor == start) {
         return;
     }
-    matchKey = func_A9D148("runtime", "jumpCF");
+    matchKey = sbFindNative("runtime", "jumpCF");
     do {
     } while (0);
     recordCount = 0;
@@ -2972,13 +2943,13 @@ void resParseJumpTarget(void)
                 if (op == SB_OP_LOOKUPSWITCH) {
                     break;
                 }
-                cursor += func_A9DAD0(op, value);
+                cursor += sbOpLength(op, value);
             }
             recordCount = value;
             cursor += 5;
             break;
         }
-        cursor += func_A9DAD0(op, value);
+        cursor += sbOpLength(op, value);
         op = cursor[0];
     }
 
@@ -3030,7 +3001,7 @@ void resParseJumpTarget(void)
                 stack -= 1;
                 break;
             }
-            cursor += func_A9DAD0(op, value);
+            cursor += sbOpLength(op, value);
         }
         if (op == SB_OP_END) {
             break;
@@ -3040,14 +3011,14 @@ void resParseJumpTarget(void)
 }
 
 /* Data defined after resParseJumpTarget: its "mapjump"/"runtime"/"jumpCF" literals precede these tables in .sdata. */
-u8 *D_002BB680[10] = {
+u8 *footGroupMaterialNames[10] = {
     "shi", "kos", "cha", "jrr", "mom",
     "zig", "jin", "r02", "r03", "r05"
 };
 
 
 /* Guessed type: a table of 4-byte words (pairs of 16-bit values, -1 separators); its reader is in other TUs. */
-int D_002BB6A8[40] = {
+int footGroupKeyTable[40] = {
     0x10002, 0x10005, 0x10006, 0x10004, -1, 0x1000A, 0x1000B, -1,
     0x10010, 0x10011, 0x10012, 0x10013, -1, 0x10016, 0x10017, 0x10018,
     0x10019, -1, 0x1001C, 0x1001D, 0x1001E, -1, 0x10023, 0x10024,
@@ -3055,11 +3026,11 @@ int D_002BB6A8[40] = {
     0x1400A, -1, 0x14003, -1, 0x14005, 0x1400B, -1, -1
 };
 
-u8 D_002BB748[16] = "fs_xxx_xxx";
-u8 D_002BB758[16] = "break_xxx";
+u8 footMaterialBankName[16] = "fs_xxx_xxx";
+u8 footBreakBankName[16] = "break_xxx";
 
 /* Guessed type: byte table read by resFootMaterialIndex (other TU). */
-unsigned char D_002BB768[56] = {
+unsigned char footMaterialIndexTable[56] = {
     0, 1, 2, 3, 4, 5, 6, 7,
     8, 9, 9, 9, 9, 9, 9, 9,
     9, 9, 9, 10, 10, 10, 10, 10,
@@ -3071,43 +3042,19 @@ unsigned char D_002BB768[56] = {
 
 CdSlot xglCdSlotTable[GAME_RES_BLOCK_COUNT] = { { 0 } };
 
-f32 I2F();
-void *mapFindBlockEntry();
-f32 xglPointLength();
 
-typedef struct MapKeyEntry {
-    int key;
-    int unmodeled_04;
-} MapKeyEntry;
-
-typedef struct MapBlockHeader {
-    u16 entryCount;
-    u16 unmodeled_02;
-    int vertexBase;
-    int unmodeled_08;
-    MapKeyEntry *keyTable;
-} MapBlockHeader;
-
-typedef struct MapEntry {
-    u16 keyIndex;
-    u16 unmodeled_02;
-    int unmodeled_04;
-    u16 vertexA;
-    u16 vertexB;
-    u16 vertexC;
-    u16 unmodeled_0E;
-} MapEntry;
-
+/* Averages the triangle centers of the RES_MAP_KEY_JUMP groups per jump record: a group record (MapRecord of undulate.h) names its key
+ * through the group's kind table and its triangle through the group's vertices. */
 void resJumpPointsBuild(void) {
     int entryIndex;
     int key;
-    int vertexBase;
-    MapKeyEntry *keyTable;
+    Vector4 *vertices;
+    MapRecordKind *keyTable;
     int i;
     int j;
     int k;
-    MapBlockHeader *block;
-    MapEntry *entry;
+    MapFixupEntry *block;
+    MapRecord *entry;
     JumpRecord *record;
     JumpFloat *vertexA;
     JumpFloat *vertexB;
@@ -3120,20 +3067,20 @@ void resJumpPointsBuild(void) {
 
     i = 0;
     do {
-        block = mapFindBlockEntry(RES_MAP_KEY_JUMP, i);
+        block = UnduDataGetHeader(RES_MAP_KEY_JUMP, i);
         if (block != 0) {
-            entry = (MapEntry *) (block + 1);
-            vertexBase = block->vertexBase;
-            keyTable = block->keyTable;
-            for (entryIndex = 0; entryIndex < block->entryCount; entryIndex++) {
-                key = keyTable[entry->keyIndex].key;
+            entry = block->records;
+            vertices = block->vertices;
+            keyTable = block->kindTable;
+            for (entryIndex = 0; entryIndex < block->recordCount; entryIndex++) {
+                key = keyTable[entry->kind].kindCode;
                 if ((key & ~0x1F) == RES_MAP_KEY_JUMP) {
                     for (k = 0; resJumpRecords[k].kind != RES_JUMP_END; k++) {
                         record = &resJumpRecords[k];
                         if (record->kind == (key & 0xFF)) {
-                            vertexA = (JumpFloat *) (vertexBase + entry->vertexA * 0x10);
-                            vertexB = (JumpFloat *) (vertexBase + entry->vertexB * 0x10);
-                            vertexC = (JumpFloat *) (vertexBase + entry->vertexC * 0x10);
+                            vertexA = (JumpFloat *) &vertices[entry->vertexIndex[0]];
+                            vertexB = (JumpFloat *) &vertices[entry->vertexIndex[1]];
+                            vertexC = (JumpFloat *) &vertices[entry->vertexIndex[2]];
                             center[0] = (vertexA[0].f + vertexB[0].f + vertexC[0].f) / 3.0f;
                             center[1] = (vertexA[1].f + vertexB[1].f + vertexC[1].f) / 3.0f;
                             center[2] = (vertexA[2].f + vertexB[2].f + vertexC[2].f) / 3.0f;
@@ -3160,7 +3107,7 @@ void resJumpPointsBuild(void) {
         minDistance = 100000.0f;
         for (j = 0; resJumpRecords[j].kind != RES_JUMP_END; j++) {
             if (i != j && resJumpRecords[i].stackWord != resJumpRecords[j].stackWord) {
-                distance = xglPointLength(&resJumpRecords[i].unsetValue[0].f, &resJumpRecords[j].unsetValue[0].f) * 0.5f;
+                distance = xglPointLength(&resJumpRecords[i].position, &resJumpRecords[j].position) * 0.5f;
                 if (distance < minDistance) {
                     minDistance = distance;
                 }
@@ -3170,8 +3117,8 @@ void resJumpPointsBuild(void) {
     }
 }
 
-void resJumpRecordSet(int index, int cfId, ResSlotName *name) {
-    if (name == 0) {
+void resJumpRecordSet(int index, int cfId, ResJumpPoint *point) {
+    if (point == 0) {
         return;
     }
     if (index < 0) {
@@ -3182,10 +3129,9 @@ void resJumpRecordSet(int index, int cfId, ResSlotName *name) {
     resJumpRecords[index].kind = RES_JUMP_NAMED;
     resJumpRecords[index].flag = 0;
     resJumpRecords[index].stackWord = cfId;
-    resJumpRecords[index].name = *name;
+    resJumpRecords[index].point = *point;
 }
 
-int xglCdSyncDone(void);
 
 /* Loads the cf file of the first jump point whose radius reaches the current map object. A jump
    record holds its point in unsetValue[0..2], the radius in unsetValue[3] and the cf file in stackWord;
@@ -3207,9 +3153,9 @@ void resJumpPointsUpdate(void)
     if (xglCdSyncDone() == 0) {
         return;
     }
-    position = &uwamonoRecords[uwamonoCurrentIndex].actor->position;
+    position = &uwamonoRecords[uwamonoCurrentIndex].body.actor->position;
     for (i = 0; resJumpRecords[i].kind != RES_JUMP_END; i++) {
-        if (xglPointLength(position, &resJumpRecords[i].unsetValue[0].f) < resJumpRecords[i].unsetValue[3].f) {
+        if (xglPointLength(position, &resJumpRecords[i].position) < resJumpRecords[i].unsetValue[3].f) {
             if (resJumpRecords[i].stackWord > 0) {
                 resLoadCfFile(resJumpRecords[i].stackWord);
                 return;
@@ -3218,23 +3164,16 @@ void resJumpPointsUpdate(void)
     }
 }
 
-extern u32 D_006A0BC0[];
-int func_0019C338(void);
-int func_001E0928(u32 addr, int *out, int a2, int a3);
-int func_001DF2D8(int value);
 
 typedef struct {
     u8 bytes[0x10];
 } ResBlock;
-
-extern unsigned char D_006A0AC0[];
 
 typedef struct {
     u16 value;
     u8 mode;
 } ResNameLatch;
 
-int GameResBlockFreeByOwner(int owner);
 
 void resResetNameTables(void)
 {
@@ -3247,8 +3186,8 @@ void resResetNameTables(void)
     u32 flags;
     u32 keepFlag;
 
-    ((u32 *)resEntryTable)[0] = 1;
-    ((u32 *)D_006A0AC0)[0] = 1;
+    resEntryTable[0] = 1;
+    resOwnerTable[0] = 1;
     resNameCursor = resNamePool;
     head = xglCdSlotTable;
     do {
@@ -3316,14 +3255,7 @@ void resRelocateRecord(int toAbsolute, int kindWord, int *record) {
     }
 }
 
-extern int mainObject;
 static unsigned char resEnemyFootCount;
-void mapLoadBlock(int block);
-void sefStartEffectByCode(int code, char *name);
-void Intermission(int mode);
-void GameDiskChange(int mode);
-void xglMemCopy16(void *dst, void *src, int count);
-int xglCdServiceIfPending(void);
 
 void resApplyCfFile(int id)
 {
@@ -3335,13 +3267,13 @@ void resApplyCfFile(int id)
     int size;
     int found;
     int idx;
-    unsigned int *base;
-    unsigned int *owners;
-    unsigned int *owner;
-    unsigned int *entries;
+    u32 *base;
+    u32 *owners;
+    u32 *owner;
+    u32 *entries;
     unsigned int entry;
     unsigned int kind;
-    unsigned char *name;
+    char *name;
     int code;
     int *oldRecord;
     CdSlot *slot;
@@ -3358,12 +3290,12 @@ void resApplyCfFile(int id)
     seBgmVolume = -1;
     while (xglCdServiceIfPending() != 0)
         ;
-    if (resScriptBuffer[0] == 0) {
-        resResetSlotTable();
+    if (resScriptBuffer.magic == 0) {
+        GameResourceReset();
         resClearRecordTable();
     }
 
-    base = (unsigned int *) D_006A0AC0;
+    base = resOwnerTable;
     i = 1;
     if (i < base[0]) {
         owners = base;
@@ -3399,12 +3331,12 @@ void resApplyCfFile(int id)
                 if (found == 0) {
                     xglCdSlotTable[i].owner &= 0xBFFFFFFF;
                 } else {
-                    oldRecord = (int *) xglCdSlotTable[i].buffer;
+                    oldRecord = xglCdSlotTable[i].buffer;
                     GameResBlockFreeByOwner(flags);
                     GameResBlockAssign(found, flags & 0xBFFFFFFF, size);
                     resRelocateRecord(0, flags, oldRecord);
                     xglMemCopy16(xglCdSlotTable[found].buffer, oldRecord, size / 16);
-                    resRelocateRecord(1, flags, (int *) xglCdSlotTable[found].buffer);
+                    resRelocateRecord(1, flags, xglCdSlotTable[found].buffer);
                     changed = 1;
                     break;
                 }
@@ -3412,33 +3344,33 @@ void resApplyCfFile(int id)
         }
     } while (changed);
 
-    entries = (unsigned int *) resEntryTable;
-    for (i = 1; i < ((unsigned int *) resEntryTable)[0]; i++) {
+    entries = resEntryTable;
+    for (i = 1; i < resEntryTable[0]; i++) {
         entry = entries[i];
-        name = (unsigned char *) resNamePool + (entry & 0xFFFF);
+        name = resNamePool + (entry & 0xFFFF);
         switch (entry & CD_FILE_TYPE_MASK) {
         case RES_KIND_SOUND:
-            switch ((signed char) name[0]) {
+            switch (name[0]) {
             case 0 ... 63:
-                if (((char *) name)[1] == 0) {
-                    if ((signed char) name[0] == SE_BANK_FOOT_MATERIAL) {
+                if (name[1] == 0) {
+                    if (name[0] == SE_BANK_FOOT_MATERIAL) {
                         for (k = SE_BANK_FOOT_MATERIAL; k < SE_BANK_FOOT_MATERIAL + 5; k++) {
                             seBankSetName(k, 0);
                         }
-                    } else if ((signed char) name[0] == SE_BANK_ENEMY_FOOT) {
+                    } else if (name[0] == SE_BANK_ENEMY_FOOT) {
                         for (k = SE_BANK_ENEMY_FOOT; k < SE_BANK_ENEMY_FOOT + 5; k++) {
                             seBankSetName(k, 0);
                         }
                     } else {
-                        seBankSetName((signed char) name[0], 0);
+                        seBankSetName(name[0], 0);
                     }
                 } else {
-                    seBankSetName((signed char) name[0], (char *) (name + 1));
+                    seBankSetName(name[0], name + 1);
                 }
                 break;
             /* footstep material k = name[1] has material name[2]; the list ends in 0xFF */
             case 'f':
-                k = (signed char) name[1];
+                k = name[1];
                 resFootMaterials[k] = name[2];
                 resFootMaterials[k + 1] = 0xFF;
                 resEnemyFootCount = k + 1;
@@ -3451,18 +3383,18 @@ void resApplyCfFile(int id)
                 word[1] = name[3];
                 word[2] = name[4];
                 word[3] = name[5];
-                resEnemyFootGroups[(signed char) name[1]] = *(int *) word;
+                resEnemyFootGroups[name[1]] = *(int *) word;
                 break;
             }
             /* BGM name list: skip names already played, then start the next (seBgmNameSet) */
             case 's':
                 name++;
-                while (D_0069CFD0 >= 2) {
+                while (bgmNameListIndex >= 2) {
                     while (*name++ != 0) {
                     }
-                    D_0069CFD0--;
+                    bgmNameListIndex--;
                 }
-                seBgmNameSet((signed char *) name);
+                seBgmNameSet(name);
                 break;
             /* BGM volume */
             case 'v':
@@ -3471,10 +3403,10 @@ void resApplyCfFile(int id)
             }
             break;
         case RES_KIND_EFFECT:
-            sefStartEffectByCode(0, (char *) name);
+            sefLoadEffectCfName(0, name);
             break;
         case GAME_RES_OWNER:
-            GameResLoadName((char *) name, 0, 0, 0);
+            GameResLoadName(name, 0, 0, 0);
             break;
         case RES_KIND_EVENT:
             code = ((unsigned char *) &entries[i])[0];
@@ -3495,12 +3427,12 @@ void resApplyCfFile(int id)
     resResetScriptState();
 }
 
-void resGetEntryTables(u8 **first, u8 **second) {
+void resGetEntryTables(u32 **first, u32 **second) {
     if (first != 0) {
-        *first = (u8 *)resEntryTable;
+        *first = resEntryTable;
     }
     if (second != 0) {
-        *second = D_006A0AC0;
+        *second = resOwnerTable;
     }
 }
 
@@ -3510,33 +3442,33 @@ typedef struct {
 } ResPadText;
 
 int sprintf(char *destination, const char *format, ...);
-const char D_006882E8[16] = "(Player#%d)";
-const ResPadText D_006882F8 = { "(padding)" };
+const char playerSlotPathFormat[16] = "(Player#%d)";
+const ResPadText pathPadText = { "(padding)" };
 
 /* Loads resource 0x30041 and sets up the three path buffers (each followed by its pad text) and,
    in slot 3, the largest free block. */
-void resPathSlotsInit(void)
+void resPlayerSlotsInit(void)
 {
-    unsigned char *buffer;
+    char *buffer;
     int i;
 
     GameResLoadID(0x30041, 0, 0, 0);
     for (i = 0; i < 3; i++) {
         buffer = GameResBufferAlloc(RES_PATH_BUFFER_SIZE);
-        resPathSlots[i].unmodeled_04 = 0;
-        resPathSlots[i].base = (int) buffer;
-        sprintf((char *) buffer, D_006882E8, i);
+        resPathSlots[i].resource_id = 0;
+        resPathSlots[i].base = buffer;
+        sprintf(buffer, playerSlotPathFormat, i);
         buffer = GameResBufferAlloc(RES_PATH_PAD_SIZE);
-        *(ResPadText *) buffer = D_006882F8;
+        *(ResPadText *) buffer = pathPadText;
     }
-    resPathSlots[3].base = (int) func_001DF9F0(0);
+    resPathSlots[3].base = GameResourceGetFreeAddr(0);
 }
 
-int resPathSlotFindByOwner(int owner) {
+int resPlayerSlotFindByOwner(int owner) {
     int i;
 
     for (i = 0; i < 3; i++) {
-        int index = GameResBlockFindByBuffer((void *) resPathSlots[i].base);
+        int index = GameResBlockFindByBuffer(resPathSlots[i].base);
         if (index > 0 && xglCdSlotTable[index].owner == owner) {
             return i;
         }
@@ -3544,51 +3476,49 @@ int resPathSlotFindByOwner(int owner) {
     return -1;
 }
 
-void XenoActorAllocMatrices(struct XenoActor *actor);
-void tiMRPackageInit(void *package);
-void tiMRPackageSetEntryA(void *package, int value);
 
-void func_001E4178(int owner) {
+void uwamonoActorsResetByKey(int owner) {
     int i;
 
     for (i = 0; i < 256; i++) {
         if (uwamonoRecords[i].key == owner) {
-            struct XenoActor *actor = uwamonoRecords[i].actor;
+            struct XenoActor *actor = uwamonoRecords[i].body.actor;
 
             if (actor != 0) {
                 actor->kind = 0;
-                actor->lookLink = 0;
+                actor->rsrc[XAct_Rsrc_EntryTableC] = 0;
                 actor->rsrc[XAct_Rsrc_XAP] = 0;
                 actor->rsrc[XAct_Rsrc_XHR] = 0;
                 actor->rsrc[XAct_Rsrc_TEX] = 0;
                 actor->rsrc[XAct_Rsrc_MDL] = 0;
                 XenoActorAllocMatrices(actor);
-                tiMRPackageInit(actor->channel);
-                tiMRPackageSetEntryA(actor->channel, 0);
+                tiMRPackageInit(XenoActorMotionPack(actor));
+                tiMRPackageSetAnimData(XenoActorMotionPack(actor), 0);
             }
         }
     }
 }
 
 #include "debug_break.h"
+#include "main/xgl_flags.h"
 
 void *GameResBlockAssign(int index, int owner, unsigned int size);
 void GameResBlockFree(int index);
-void func_001E4178(int handle);
+void uwamonoActorsResetByKey(int handle);
 
 typedef struct {
     char text[9];
 } PlayerName;
 
-extern const char D_00688318[];
+extern const char playerSlotDefaultName[];
 
-void resSetPathSlot(int slot, unsigned int base, unsigned int limit, int value)
+void resPlayerSlotSet(int slot, u8 *base, u8 *limit, void *value)
 {
     int i;
 
     do {
         for (i = 1; i < GAME_RES_BLOCK_COUNT; i++) {
-            int blockStart;
+            u8 *blockStart;
             int owner;
 
             if (xglCdSlotTable[i].buffer == 0) {
@@ -3604,20 +3534,20 @@ void resSetPathSlot(int slot, unsigned int base, unsigned int limit, int value)
                 continue;
             }
             if (base != value) {
-                func_001E4178(owner);
+                uwamonoActorsResetByKey(owner);
             }
             GameResBlockFree(i);
             break;
         }
     } while (i < GAME_RES_BLOCK_COUNT);
     if (base != value) {
-        i = GameResBlockFindByBuffer((void *)base);
+        i = GameResBlockFindByBuffer(base);
         if (i == 0) {
             printf("block lost\n");
             DEBUG_BREAK();
         }
         GameResBlockAssign(i, GAME_RES_OWNER, RES_PATH_BUFFER_SIZE);
-        *(PlayerName *)base = *(PlayerName *)D_00688318;
+        *(PlayerName *)base = *(PlayerName *)playerSlotDefaultName;
     }
     for (i = 1; i < GAME_RES_BLOCK_COUNT; i++) {
         if (xglCdSlotTable[i].buffer == value) {
@@ -3625,56 +3555,52 @@ void resSetPathSlot(int slot, unsigned int base, unsigned int limit, int value)
             break;
         }
     }
-    resPathSlots[slot].unmodeled_04 = 0;
+    resPathSlots[slot].resource_id = 0;
 }
 
-void resSetPathSlot(int slot, unsigned int base, unsigned int limit, int value);
-
-const char D_00688318[16] = "(Player)";
+const char playerSlotDefaultName[16] = "(Player)";
 
 
-void resUpdatePathSlot(int slot)
+void resPlayerSlotUpdate(int slot)
 {
-    int base;
+    u8 *base;
 
     if (slot < 0) {
         base = resPathSlots[2].base;
-        resSetPathSlot(2, base, base + 0xC6000, base);
+        resPlayerSlotSet(2, base, base + 0xC6000, base);
         if (slot < -1) {
             base = resPathSlots[1].base;
-            resSetPathSlot(1, base, base + 0xC6000, base);
+            resPlayerSlotSet(1, base, base + 0xC6000, base);
         }
         if (slot < -2) {
             base = resPathSlots[0].base;
-            resSetPathSlot(0, base, base + 0xC6000, base);
+            resPlayerSlotSet(0, base, base + 0xC6000, base);
         }
         return;
     }
     base = resPathSlots[slot].base;
-    resSetPathSlot(slot, base, base + 0xC5FC0, xglCdSlotTable[xglCdSlotTable[0].owner].buffer);
+    resPlayerSlotSet(slot, base, base + 0xC5FC0, xglCdSlotTable[xglCdSlotTable[0].owner].buffer);
 }
 
-int GameResFindID(int key, int *out);
-
-static inline void resRecordSlotBlock(int slot, int mask, int *out, int block) {
+static inline void resRecordSlotBlock(int slot, int mask, void **out, u8 *block) {
     if (out != 0) {
         *out = block;
     }
     if (block == resPathSlots[slot].base) {
-        resPathSlots[slot].unmodeled_04 = mask;
+        resPathSlots[slot].resource_id = mask;
     }
 }
 
-void resPathSlotLoadID(int slot, int value, int *out) {
+void resPlayerSlotLoadID(int slot, int value, void **out) {
     int resourceId;
-    int savedSelected;
-    int slotBase;
-    int limit;
+    void *savedSelected;
+    u8 *slotBase;
+    u8 *limit;
     int index;
-    int blockStart;
+    u8 *blockStart;
     int owner;
     int size;
-    int loaded;
+    void *loaded;
 
     resourceId = value & GAME_RES_ID_MASK;
     savedSelected = xglCdSlotTable[xglCdSlotTable[0].owner].buffer;
@@ -3684,7 +3610,7 @@ void resPathSlotLoadID(int slot, int value, int *out) {
             *out = slotBase;
         }
         if (slotBase == resPathSlots[slot].base) {
-            resPathSlots[slot].unmodeled_04 = resourceId;
+            resPathSlots[slot].resource_id = resourceId;
         }
         return;
     }
@@ -3692,18 +3618,18 @@ void resPathSlotLoadID(int slot, int value, int *out) {
     limit = slotBase + RES_PATH_BUFFER_SIZE;
     for (index = 1; index < GAME_RES_BLOCK_COUNT && xglCdSlotTable[index].buffer != 0; index++) {
         blockStart = xglCdSlotTable[index].buffer;
-        if ((u32) blockStart >= (u32) slotBase && (u32) blockStart < (u32) limit) {
+        if (blockStart >= slotBase && blockStart < limit) {
             owner = xglCdSlotTable[index].owner;
             if ((owner & GAME_RES_OWNER_MASK) == GAME_RES_OWNER || owner == 0) {
                 size = xglCdLoadByKind(value, 0, 0, 0);
                 if (size != 0) {
-                    loaded = (int) GameResBlockAssign(index, resourceId, size);
-                    xglCdLoadByKind(value, loaded, 0, 0);
+                    loaded = GameResBlockAssign(index, resourceId, size);
+                    xglCdLoadByKind(value, (unsigned int) loaded, 0, 0);
                     if (out != 0) {
                         *out = loaded;
                     }
                     if (loaded == resPathSlots[slot].base) {
-                        resPathSlots[slot].unmodeled_04 = resourceId;
+                        resPathSlots[slot].resource_id = resourceId;
                     }
                 }
                 break;
@@ -3718,54 +3644,41 @@ void resPathSlotLoadID(int slot, int value, int *out) {
     }
 }
 
-typedef struct {
-    char text[9];
-} ResPlayerName;
-
 /* A path slot: the buffer block, directly followed by the pad block holding the pad text. */
 typedef struct {
     unsigned char data[RES_PATH_BUFFER_SIZE];
     ResPadText pad;
 } ResPathSlotBuffer;
 
-void resPathSlotBlockReset(void *buffer) {
+void resPlayerSlotBlockReset(void *buffer) {
     int block;
 
     block = GameResBlockFindByBuffer(buffer);
     if (block != 0 && xglCdSlotTable[block].owner == 0) {
         GameResBlockAssign(block, GAME_RES_OWNER, RES_PATH_BUFFER_SIZE);
-        *(ResPlayerName *) buffer = *(ResPlayerName *) D_00688318;
+        *(PlayerName *) buffer = *(PlayerName *) playerSlotDefaultName;
         GameResBlockAssign(block + 1, GAME_RES_OWNER, RES_PATH_PAD_SIZE);
-        ((ResPathSlotBuffer *) buffer)->pad = D_006882F8;
+        ((ResPathSlotBuffer *) buffer)->pad = pathPadText;
     }
 }
 
-void resPathSlotsLoadModels(int, int, int);
-void resPathSlotBlockReset(void *buffer);
+void resPlayerSlotBlockReset(void *buffer);
 
-void resResetPathSlots(void) {
+void resPlayerSlotsReset(void) {
     int i;
 
-    resPathSlotBlockReset(resPathSlots[0].base);
-    resPathSlotBlockReset(resPathSlots[1].base);
-    resPathSlotBlockReset(resPathSlots[2].base);
+    resPlayerSlotBlockReset(resPathSlots[0].base);
+    resPlayerSlotBlockReset(resPathSlots[1].base);
+    resPlayerSlotBlockReset(resPathSlots[2].base);
     for (i = 1; i < 0x80; i++) {
         if (xglCdSlotTable[i].buffer == resPathSlots[3].base) {
             xglCdSlotTable[0].owner = i;
             break;
         }
     }
-    resPathSlotsLoadModels(resPathSlots[0].unmodeled_04, resPathSlots[1].unmodeled_04, resPathSlots[2].unmodeled_04);
+    resPlayerSlotsLoadModels(resPathSlots[0].resource_id, resPathSlots[1].resource_id, resPathSlots[2].resource_id);
 }
 
-typedef struct FootRecord {
-    int key;
-    u8 unk04[0x86C];
-} FootRecord;
-
-extern FootRecord D_0033FDC4[];
-int xglFlagsGet8(int flag);
-void seTonePlay(int mode);
 int seBankSetName(int kind, char *text);
 float seSetMaxDistance(float maxDistance);
 
@@ -3776,40 +3689,42 @@ void seFootBanksLoad(void) {
     int i;
     const u8 *groupMaterial;
 
-    footKey = D_0033FDC4[uwamonoCurrentIndex].key;
+    footKey = uwamonoRecords[uwamonoCurrentIndex].key;
     groupMaterial = 0;
     materialGroup = 0;
     listIndex = 0;
-    if (-1 != D_002BB6A8[0]) {
-        if (D_002BB6A8[0] == footKey) {
-            groupMaterial = D_002BB680[0];
+    if (-1 != footGroupKeyTable[0]) {
+        if (footGroupKeyTable[0] == footKey) {
+            groupMaterial = footGroupMaterialNames[0];
         } else {
             int listKey;
 
+            /* A goto-formed loop: no loop notes, so loop.c leaves it alone as in the original; for(;;) and
+             * do-while versions hoist the table addresses and change the object. */
         next:
-            if (D_002BB6A8[listIndex + 1] == -1) {
+            if (footGroupKeyTable[listIndex + 1] == -1) {
                 listIndex++;
                 materialGroup++;
             }
             listIndex++;
-            listKey = D_002BB6A8[listIndex];
+            listKey = footGroupKeyTable[listIndex];
             if (listKey == -1) {
                 goto done;
             }
             if (listKey != footKey) {
                 goto next;
             }
-            groupMaterial = D_002BB680[materialGroup];
+            groupMaterial = footGroupMaterialNames[materialGroup];
         }
     }
 done:
-    D_002BB748[3] = groupMaterial[0];
-    D_002BB758[6] = D_002BB748[3];
-    D_002BB748[4] = D_002BB758[7] = groupMaterial[1];
-    D_002BB748[5] = D_002BB758[8] = groupMaterial[2];
+    footMaterialBankName[3] = groupMaterial[0];
+    footBreakBankName[6] = footMaterialBankName[3];
+    footMaterialBankName[4] = footBreakBankName[7] = groupMaterial[1];
+    footMaterialBankName[5] = footBreakBankName[8] = groupMaterial[2];
     if (materialGroup == 6) {
         if (xglFlagsGet8(401) > 13) {
-            D_002BB748[5] = 0x32;
+            footMaterialBankName[5] = 0x32;
         }
     }
     if (materialGroup < 7) {
@@ -3823,7 +3738,7 @@ done:
     for (i = SE_BANK_FOOT_MATERIAL; i < SE_BANK_ENEMY_FOOT; i++) {
         seBankSetName(i, 0);
     }
-    seBankSetName(SE_BANK_FOOT, D_002BB758);
+    seBankSetName(SE_BANK_FOOT, footBreakBankName);
     for (i = SE_BANK_FOOT_MATERIAL; i < SE_BANK_ENEMY_FOOT; i++) {
         seBankSetName(i, 0);
     }
@@ -3831,21 +3746,21 @@ done:
         {
             u8 *footMaterial = footMaterialKey(resFootMaterials[i]);
 
-            D_002BB748[7] = footMaterial[0];
-            D_002BB748[8] = footMaterial[1];
-            D_002BB748[9] = footMaterial[2];
+            footMaterialBankName[7] = footMaterial[0];
+            footMaterialBankName[8] = footMaterial[1];
+            footMaterialBankName[9] = footMaterial[2];
         }
-        seBankSetName(i + SE_BANK_FOOT_MATERIAL, D_002BB748);
+        seBankSetName(i + SE_BANK_FOOT_MATERIAL, footMaterialBankName);
     }
 }
 
-extern unsigned char D_002BB768[];
+extern unsigned char footMaterialIndexTable[];
 
 int resFootMaterialIndex(int code) {
     int i;
 
     if ((code & 0xFFFFFF00) == 0x400) {
-        code = D_002BB768[code & 0xFF];
+        code = footMaterialIndexTable[code & 0xFF];
         for (i = 0; i < RES_FOOT_MATERIAL_MAX && resFootMaterials[i] != -1; i++) {
             if (resFootMaterials[i] == code) {
                 return i;
@@ -3855,17 +3770,7 @@ int resFootMaterialIndex(int code) {
     return -1;
 }
 
-typedef struct UwamonoWordRecord UwamonoWordRecord;
-
-/* One 0x870-byte record of D_00340330, indexed like uwamonoRecords; the first word holds the flags. */
-struct UwamonoWordRecord {
-    int flags;                  /* +0x00: bit 0x2 tested by seFootBankFromKind */
-    unsigned char unmodeled_04[0x870 - 4];
-};
-
-extern UwamonoWordRecord D_00340330[];
 extern unsigned char resEnemyFootCount;
-void xglFontDebugPrintf(int x, int y, const char *format, ...);
 int resFootMaterialIndex(int key);
 
 int seFootBankFromKind(int kind, int code) {
@@ -3875,7 +3780,7 @@ int seFootBankFromKind(int kind, int code) {
 
     kindClass = kind & 0xFFFFF000;
     if (kindClass == 0x10000 || kindClass == 0x14000) {
-        if (!(D_00340330[uwamonoCurrentIndex].flags & 2)) {
+        if (!(uwamonoRecords[uwamonoCurrentIndex].flags & 2)) {
             return -1;
         }
         slot = resFootMaterialIndex(code);
@@ -3912,6 +3817,6 @@ int seFootBankFromKind(int kind, int code) {
 }
 
 /* Follows the "%2x %2d" literal of seFootBankFromKind in .sdata. */
-unsigned char D_0069CFD0 = 0;
+unsigned char bgmNameListIndex = 0;
 
 

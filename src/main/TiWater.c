@@ -4,30 +4,31 @@
  * tables) and the drawing. Names are proposals (see the proposal file).
  */
 #include "common.h"
-#include "TiWater.h"
+#include "main/TiWater.h"
 #include "gs.h"
-#include "main/control_entry.h"
+#include "main/xgl_thread.h"
 #include "main/gifState.h"
 #include "main/nml_model_set.h"
 #include "main/pad.h"
-#include "main/sdv_033.h"
+#include "main/xgl_camera.h"
 #include "main/test_129.h"
-#include "main/tu026.h"
-#include "main/tu045.h"
-#include "main/tu051.h"
-#include "main/tu093.h"
+#include "main/assert_fail.h"
+#include "main/pxy_packet_state.h"
+#include "main/game_camera.h"
+#include "main/gr_screen.h"
 #include "main/xenoActor.h"
 #include "main/xgl_font.h"
 #include "main/xgl_studio.h"
 #include "main/xgl_render.h"
+#include "main/xgl_cur_mul.h"
+#include "main/xgl_cur_matrix.h"
+#include "main/TiWatSim.h"
+#include "main/xgl_packet.h"
+#include "main/xgl_packet_unpack.h"
 
-extern int tiWaterDebugMode;
 /* debug panel mode, toggled by select in the scene loop */
 static int tiWaterDebugIndex;
 /* selected debug parameter, 0..11 */
-extern float tiWaterEffectNum;
-extern int tiWaterSubCount;
-extern struct TiWaterSub *tiWaterSubList[];
 
 /* Resets the debug panel mode and its selected parameter to zero. */
 void tiWaterDebugReset(void) {
@@ -35,12 +36,8 @@ void tiWaterDebugReset(void) {
     tiWaterDebugIndex = 0;
 }
 
-extern PadRecord PadData[];
 extern const char tiWaterMenuFormat[];
 extern const char tiWaterMenuMarker[];
-extern const char *tiWaterDebugLabels[];
-extern float *tiWaterDebugValues[];
-extern float tiWaterDebugSteps[];
 
 /* Number of debug parameters the panel cycles through. */
 #define TI_WATER_DEBUG_PARAMS 12
@@ -78,14 +75,6 @@ void tiWaterDebugDrawParams(void)
     }
 }
 
-extern float tiWaterCx;
-extern float tiWaterCy;
-extern float tiWaterAlphaType;
-extern float tiWaterAlpha;
-extern float tiWaterDecrease;
-extern float tiWaterFbp;
-extern float tiWaterBlur;
-extern float tiWaterIntVals[4];
 
 /* Debug panel step: up and down on pad 0 select the parameter (wrapping), the panel is drawn and
  * every parameter is applied to the GIF state and the four model sub windows. */
@@ -113,12 +102,6 @@ void tiWaterDebugUpdate(void)
     nmlModelUseSubWindow(3, tiWaterIntVals[3]);
 }
 
-void xglCurSetTranslate(const Vector4 *vector);
-void xglCurMulRotateY(float angle);
-void xglCurMulScaleXYZ(const Vector4 *scale);
-void xglCurMatrixGet(Matrix4 matrix);
-void xglMatrixInverse(Matrix4 *destination, Matrix4 *matrix);
-void tiWatSimRandomizeItem(TiWatSimItem *item, int range);
 
 /* The "WAT " tag at the start of a water table. */
 #define TI_WATER_SUB_MAGIC 0x20544157
@@ -132,7 +115,7 @@ void tiWatSimRandomizeItem(TiWatSimItem *item, int range);
 /* Registers a water table in tiWaterSubList and sets each of its items up once: the block and the height
  * buffers (offsets from the table), the translate, rotate and scale transform, its inverse and random heights.
  * Returns 0 when the list is full or the table is not a water table, 1 otherwise. */
-int tiWaterRegisterSub(struct TiWaterSub *sub)
+int tiWaterRegisterSub(TiWaterSub *sub)
 {
     unsigned int i;
     int index;
@@ -159,9 +142,9 @@ int tiWaterRegisterSub(struct TiWaterSub *sub)
             item->block = (u8 *) sub;
             xglCurSetTranslate(&item->translate);
             xglCurMulRotateY(item->rotateY);
-            xglCurMulScaleXYZ(&item->scale);
-            xglCurMatrixGet(item->transform);
-            xglMatrixInverse(item->matrix, item->transform);
+            xglCurMulScaleXYZ(&item->scale.x);
+            xglCurMatrixGet(item->transform.rows);
+            xglMatrixInverse(&item->matrix, &item->transform);
             tiWatSimRandomizeItem(item, TI_WATER_RANDOM_RANGE);
             item->flags |= TI_WATER_ITEM_SET_UP;
         }
@@ -169,13 +152,6 @@ int tiWaterRegisterSub(struct TiWaterSub *sub)
     return 1;
 }
 
-XglPacket *xglPacketGetCurrent(void);
-void sceVif1PkCnt(XglPacket *packet, int flag);
-void sceVif1PkOpenDirectHLCode(XglPacket *packet, int flag);
-void sceVif1PkAddDataN(XglPacket *packet, void *data, int count);
-void sceVif1PkCloseDirectHLCode(XglPacket *packet);
-void gifStateReset(void);
-void gifStateFlush(void);
 /* The water state template sent by tiWaterSendStateTemplate, and its length for sceVif1PkAddDataN. */
 extern u64 tiWaterStateTemplate[];
 
@@ -190,20 +166,18 @@ void tiWaterSendStateTemplate(void)
 {
     XglPacket *packet = xglPacketGetCurrent();
 
-    tiWaterStateTemplate[TI_WATER_TEMPLATE_FRAME_1] = GS_SET_FRAME(sRender.frame_base, 8, 0, 0);
+    tiWaterStateTemplate[TI_WATER_TEMPLATE_FRAME_1] = GS_SET_FRAME(sRender.vram.flip_base, 8, 0, 0);
     tiWaterStateTemplate[TI_WATER_TEMPLATE_TEX0_1]
-        = GS_SET_TEX0(sRender.display_base << 5, 8, 0, 9, 9, 1, 0, 0, 0, 0, 0, 0);
+        = GS_SET_TEX0(sRender.display_buffer_base << 5, 8, 0, 9, 9, 1, 0, 0, 0, 0, 0, 0);
     sceVif1PkCnt(packet, 0);
     sceVif1PkOpenDirectHLCode(packet, 0);
     sceVif1PkAddDataN(packet, tiWaterStateTemplate, TI_WATER_STATE_TEMPLATE_COUNT);
     sceVif1PkCloseDirectHLCode(packet);
 }
 
-void tiWaterSendFrame(XglCamera *camera, Matrix4 transform);
-void tiWaterSendItemPair(float first, float second);
-void tiWaterSendDirection(XglCamera *camera, Matrix4 transform);
+/* The definition (xgl_packet_unpack.c) takes the item as its own view of the grid fields (WaterStripGrid, block as a u32):
+ * typing it TiWatSimItem (block as a pointer) reschedules tiWaterSendStrip, so the prototype stays here. */
 void tiWaterSendGrid(TiWatSimItem *item, void *program);
-void sceVif1PkAddCode(XglPacket *packet, unsigned int code);
 /* VU1 microprogram entry points of the water drawing (VU1 micro memory addresses, linked as absolute symbols
  * like sv_get_image_item.c's D_50 / D_80) and the grid tables sent with them. */
 extern unsigned char D_688[];
@@ -230,17 +204,17 @@ void tiWaterDrawItem(TiWatSimItem *item)
     XglPacket *packet = xglPacketGetCurrent();
     XglCamera *camera = xglStudioSelectGetActiveCamera(0);
 
-    tiWaterSendFrame(camera, item->transform);
+    tiWaterSendFrame(camera, item->transform.rows);
     tiWaterSendItemPair(item->drawPair[0], item->drawPair[1]);
-    tiWaterSendDirection(camera, item->transform);
+    tiWaterSendDirection(camera, item->transform.rows);
     if (item->flags & TI_WATER_ITEM_DRAW_SURFACE) {
         sceVif1PkCnt(packet, 0);
         sceVif1PkOpenDirectHLCode(packet, 0);
         gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(GS_REGION_CLAMP, GS_REGION_CLAMP, 256, 510, 0, 222));
         gifStateAddReg(GS_FBA_1, 1);
-        gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_base, 8, 0, 0));
+        gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_buffer_base, 8, 0, 0));
         gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 1, 2, 1, 0x4F));
-        gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.frame_base << 5, 8, 0, 9, 9, 0, 0, 0, 0, 0, 0, 0));
+        gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.flip_base << 5, 8, 0, 9, 9, 0, 0, 0, 0, 0, 0, 0));
         gifStateAddReg(GS_TEX1_1, GS_SET_TEX1(0, 0, 1, 1, 0, 0, 0));
         gifStateAddReg(GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
         gifStateAddReg(GS_TEXFLUSH, 0);
@@ -256,9 +230,9 @@ void tiWaterDrawItem(TiWatSimItem *item)
         sceVif1PkOpenDirectHLCode(packet, 0);
         gifStateAddReg(GS_CLAMP_1, GS_SET_CLAMP(GS_REGION_CLAMP, GS_REGION_CLAMP, 0, 254, 0, 222));
         gifStateAddReg(GS_FBA_1, 1);
-        gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_base, 8, 0, 0));
+        gifStateAddReg(GS_FRAME_1, GS_SET_FRAME(sRender.display_buffer_base, 8, 0, 0));
         gifStateAddReg(GS_ALPHA_1, GS_SET_ALPHA(0, 2, 2, 1, 0x40));
-        gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.frame_base << 5, 8, 0, 8, 8, 1, 0, 0, 0, 0, 0, 0));
+        gifStateAddReg(GS_TEX0_1, GS_SET_TEX0(sRender.vram.flip_base << 5, 8, 0, 8, 8, 1, 0, 0, 0, 0, 0, 0));
         gifStateAddReg(GS_TEX1_1, GS_SET_TEX1(0, 0, 1, 1, 0, 0, 0));
         gifStateAddReg(GS_TEST_1, GS_SET_TEST(0, 0, 0, 0, 0, 0, 1, 2));
         gifStateAddReg(GS_TEXFLUSH, 0);
@@ -275,7 +249,6 @@ void tiWaterDrawItem(TiWatSimItem *item)
     }
 }
 
-void xglPacketInitVuStateArg(int mode);
 
 /* Draw callback: in pass 0, draws every registered table (CLAMP_1 and the state template first when
  * it has items, then each item) and empties the list; the packet state is reset afterwards. */
@@ -308,13 +281,12 @@ void tiWaterDrawAll(int pass)
     tiWaterSubCount = 0;
     xglPacketModeReset();
     xglPacketInitVuStateArg(pass);
-    func_001CD134();
-    func_001CD1AC();
-    func_001CD160();
+    nmlPacketClrTextureCache();
+    nmlPacketClrModelCache();
+    nmlPacketClrMatrixCache();
 }
 
 float atanf(float value);
-extern float tiWaterTwoPi;
 
 /* The angle of (x, y) in [0, 2 pi): atan(y / x) moved into the right half turn. */
 float tiWaterVectorAngle(float x, float y)
@@ -347,25 +319,25 @@ void tiWaterUpdateSource(struct XenoActor *actor)
 
     actor->previousPosition.x = actor->position.x;
     actor->previousPosition.z = actor->position.z;
-    actor->position.x += PadData[0].directionX * TI_WATER_SOURCE_STEP;
-    actor->position.z += PadData[0].directionY * TI_WATER_SOURCE_STEP;
+    actor->position.x += PadData[0].leftX * TI_WATER_SOURCE_STEP;
+    actor->position.z += PadData[0].leftY * TI_WATER_SOURCE_STEP;
     if (PadData[0].held & PAD_CROSS) {
         XenoActorEnableChannel(actor);
     }
-    if (PadData[0].directionX != 0 || PadData[0].directionY != 0) {
-        actor->rotation.y = tiWaterVectorAngle(PadData[0].directionY, PadData[0].directionX);
+    if (PadData[0].leftX != 0 || PadData[0].leftY != 0) {
+        actor->rotation.y = tiWaterVectorAngle(PadData[0].leftY, PadData[0].leftX);
         for (i = 0; i < tiWaterSubCount; i++) {
             tiWatSimDisturbAll(tiWaterSubList[i], &actor->position);
         }
         /* The original computes the length of the direction here and drops it. */
-        (void) __builtin_sqrtf(PadData[0].directionY * PadData[0].directionY
-                               + PadData[0].directionX * PadData[0].directionX);
+        (void) __builtin_sqrtf(PadData[0].leftY * PadData[0].leftY
+                               + PadData[0].leftX * PadData[0].leftX);
     }
     tiWatSimStoreSourcePos(&actor->position);
 }
 
 /* Steps the rain and the simulation of every item of the sub-object. */
-void tiWaterStepSub(struct TiWaterSub *sub)
+void tiWaterStepSub(TiWaterSub *sub)
 {
     TiWatSimItem *item = sub->items;
     unsigned int i;
@@ -378,15 +350,11 @@ void tiWaterStepSub(struct TiWaterSub *sub)
 }
 
 void tiWaterSetEffectMode(void) {
-    func_00246AF8();
-    func_00246DD8(0xFFFFFF);
+    gifStateClearDepthAndFlip();
+    gifStateSetDepth(0xFFFFFF);
     gifStateSetMode((int) tiWaterEffectNum);
 }
 
-void tiWaterInitStudio(void);
-void XenoActorAllocMatrices(struct XenoActor *actor);
-void XenoActorSetMode(struct XenoActor *actor, int mode);
-void func_001BA68C(void);
 extern const char tiWaterLandscapeName[];
 extern const char tiWaterSourceFile[];
 extern const char tiWaterLandscapeModelPath[];
@@ -479,7 +447,7 @@ void tiWaterSceneLoop(void)
     nmlModelSetMulColor(&color);
     while ((PadData[0].heldAndPressed & TI_WATER_EXIT) != TI_WATER_EXIT) {
         xglRenderClearFrame();
-        func_001BA68C();
+        pxyRequestOverlayPass();
         if ((unsigned short) (PadData[0].pressed & PAD_L2)) {
             if (++tiWaterDebugMode >= 2) {
                 tiWaterDebugMode = 0;
@@ -506,21 +474,20 @@ void tiWaterSceneLoop(void)
     gifStateModeHook = 0;
 }
 
-void pxySetDrawCallback(void (*callback)(int pass));
-/* Registers a water table in tiWaterSubList and sets each of its items up once: the block and the height * buffers (offsets from the table), the translate, rotate and scale transform, its inverse and random heights. * Returns 0 when the list is full or the table is not a water table, 1 otherwise. */ int tiWaterRegisterSub(struct TiWaterSub *sub);
 
-/* Per-object update: registers the sub-table when it has items, steps it when stepMode is 0,
- * and installs the draw callback tiWaterDrawAll. */
-void tiWaterObjectUpdate(struct TiWaterObject *obj, int stepMode) {
-    struct TiWaterSub *sub;
 
-    sub = (struct TiWaterSub *) ((char *) obj + obj->sub_offset);
+/* Per-object update: the word at +0xC0 of the pxy header (waterFlag) is the offset of its water table; registers the
+ * table when it has items, steps it when stepMode is 0, and installs the draw callback tiWaterDrawAll. */
+void tiWaterObjectUpdate(PxyHeader *header, int stepMode) {
+    TiWaterSub *sub;
+
+    sub = (TiWaterSub *) ((char *) header + header->waterFlag);
     if (sub->active != 0) {
         tiWaterRegisterSub(sub);
         if (stepMode == 0) {
             tiWaterStepSub(sub);
         }
-        func_001BA658();
+        pxyRequestTextureCopyPass();
         pxySetDrawCallback(tiWaterDrawAll);
     }
 }
@@ -557,9 +524,9 @@ float sinf(float angle);
 /* The coarse camera step (the turn step is the fine one). */
 #define TI_WATER_CAMERA_STEP 5.0f
 
-/* Debug camera control on pad 0 (held buttons) like tiWaterCameraUpdateFine, with a step of 5;
+/* Debug camera control on pad 0 (held buttons) like tiWaterCameraPadControlFine, with a step of 5;
  * with start held, square/circle turn the roll instead of the heading. */
-void tiWaterCameraUpdate(XglCamera *camera)
+void tiWaterCameraPadControl(XglCamera *camera)
 {
     float step = TI_WATER_CAMERA_STEP;
     float forward = cosf(camera->travel.rotation.y) * step;
@@ -630,7 +597,7 @@ void tiWaterCameraUpdate(XglCamera *camera)
 /* Fine debug camera control on pad 0 (held buttons): the d-pad moves in the heading's plane, R2/R1
  * move down/up, triangle/cross change the pitch and square/circle the heading (both kept in
  * [0, 2 pi)). */
-void tiWaterCameraUpdateFine(XglCamera *camera)
+void tiWaterCameraPadControlFine(XglCamera *camera)
 {
     float step = TI_WATER_CAMERA_FINE_STEP;
     float forward = cosf(camera->travel.rotation.y) * step;

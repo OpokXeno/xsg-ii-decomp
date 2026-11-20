@@ -5,6 +5,8 @@
 #include "main/srs.h"
 #include "main/sv_get_image_item.h"
 #include "main/xgl_cd.h"
+#include "main/xgl_debug_file.h"
+#include "main/res_get_path.h"
 
 extern int sprintf(char *destination, const char *format, ...);
 extern char *strcpy(char *destination, const char *source);
@@ -51,16 +53,12 @@ enum SrsEffectFileKind {
 /* effectType written by srsAnalyzeEftNo for .esd effects (also its initial value). */
 #define SRS_EFFECT_TYPE_ESD 9
 
-extern void sresDataMapping(void);
 extern int sceOpen(const char *path, int flags, ...);
 extern int sceLseek(int descriptor, int offset, int whence);
 extern int sceRead(int descriptor, void *buffer, int bytes);
 extern int sceClose(int descriptor);
-/* Read-completion callback for xglCdReadFile, defined below. */
-void srsCdReadCallback(int readStatus);
 char srsViewPath[SRS_PATH_LENGTH] = "";
 extern signed char _srsEffect2IndexTbl[SRS_EFFECT2_INDEX_ROWS];
-int srsMakeFileName(char *buffer, const char *fileName);
 
 
 /* Classifies an effect key from its index (bits 12-21) and kind (bits 28-29):
@@ -128,9 +126,6 @@ char *srsGetEffectStem(int effectNo)
     return srsEffectStemBuffer;
 }
 
-extern int xglDebFileSize(const char *name);
-extern int xglDebFileRead(const char *name, void *buffer);
-extern void srsMapPendingResources(void);
 static char srsEftNameBuffer[256];
 extern char *strcat(char *dest, const char *src);
 
@@ -230,7 +225,7 @@ int srsMakeFileName(char *buffer, const char *fileName)
     return 1;
 }
 
-/* Script-record state that scGetKeyRecord (sdv_180.c) sets and sef.c reads: the
+/* Script-record state that scGetKeyRecord (sc_get.c) sets and sef.c reads: the
  * mode of the record found (SEF_START_MODE_* in sef.h), the group count of a
  * mode-0x3E record, the group key sefAdvanceGroupKey steps (a halfword), and
  * the entry of a mode-0x49 record (SefEntryHeader in sef.c). */
@@ -298,7 +293,7 @@ int fileLoad(void *buffer, const char *name, int readMode)
         return -1;
     }
     if (srsLoadMode == SRS_LOAD_MODE_CD) {
-        int readCallback;
+        CdCompletionCallback *readCallback;
         int readResult;
 
         srsChangeSeparator(path);
@@ -306,7 +301,7 @@ int fileLoad(void *buffer, const char *name, int readMode)
         if (size <= 0) {
             return -1;
         }
-        readCallback = (int)srsCdReadCallback;
+        readCallback = srsCdReadCallback;
         _nRead++;
         readResult = xglCdReadFile(path, buffer, readMode, readCallback);
         if (readResult == SRS_CD_READ_RETRY) {
@@ -332,18 +327,18 @@ int fileLoad(void *buffer, const char *name, int readMode)
         sceLseek(descriptor, 0, SRS_SEEK_SET);
         size = sceRead(descriptor, buffer, size);
         sceClose(descriptor);
-        srsMapPendingResources();
+        sresDataMapping();
     } else if (srsLoadMode == SRS_LOAD_MODE_DEB) {
         size = xglDebFileSize(path);
         if (size <= 0) {
             return -1;
         }
         xglDebFileRead(path, buffer);
-        srsMapPendingResources();
+        sresDataMapping();
     } else if (srsLoadMode == SRS_LOAD_MODE_USB) {
         size = xglDebFileRead(path, buffer);
         if (size > 0) {
-            srsMapPendingResources();
+            sresDataMapping();
         }
     }
     return size;
@@ -377,7 +372,7 @@ const char srsEspPathFormat[16] = "esp/%s.esp";
 static char srsEspNameBuffer[256];
 
 /* Returns esp/<stem>.esp for a positive effect number, in srsEspNameBuffer. */
-char *srsGetEspName(int effectNo)
+char *srsGetEffectName2(int effectNo)
 {
     char stem[256];
 
@@ -416,9 +411,9 @@ int srsLeaveCdRead(void)
 }
 
 /* Read-completion callback for xglCdReadFile. Code 4 finishes a read: _nRead
- * drops (never below 0) and srsMapPendingResources runs when none is left. Codes -1
+ * drops (never below 0) and sresDataMapping runs when none is left. Codes -1
  * and -2 drop _nRead the same way. */
-void srsCdReadCallback(int readStatus)
+void srsCdReadCallback(int readStatus, int value, int tag)
 {
     int remaining;
 
@@ -430,14 +425,14 @@ void srsCdReadCallback(int readStatus)
         }
         _nRead = remaining;
         if (remaining == 0) {
-            srsMapPendingResources();
+            sresDataMapping();
         }
         break;
     case -2:
     case -1:
         remaining = _nRead - 1;
         if (remaining >= 0) {
-            goto store;
+            goto store; /* store shared with the retry case (bgezl delay-slot store); if/else is if-converted to movn, and a fall-through into the retry case recomputes _nRead - 1 and renumbers registers (both tried) */
         }
         _nRead = 0;
         break;
@@ -468,7 +463,7 @@ int srsLoadEffectData(void *buffer, int effectNo)
 SrsTable srsRecordTable = { 0 };
 
 /* Clears the 58-record table srsRecordTable and srsEffectStamp. */
-void srsResetKeyTable(void)
+void sresInitMemoryRes(void)
 {
     srsEffectStamp = 0;
     memset(&srsRecordTable, 0, sizeof(srsRecordTable));
@@ -524,7 +519,7 @@ void srsLoadEspFile(int reload, int cfdef)
     svDeleteImageMapper(0);
     if (reload == 0 && srsRecordTable.package.key == key) {
         srsRecordTable.package.busy = 1;
-        srsMapPendingResources();
+        sresDataMapping();
         return;
     }
     srsRecordTable.package.busy = 1;
@@ -560,7 +555,6 @@ int srsCheckEffectKey(int effectKey)
     return index;
 }
 
-void smFree(void *block);
 
 /* Clears every wait-slot record (records 1..8) whose key index equals
  * index, releasing its image mapper and buffer first when it has one. */
@@ -581,7 +575,6 @@ void srsReleaseSlotsByIndex(int index)
     }
 }
 
-int GameResBlockFreeByBuffer(void *buffer);
 
 /* Releases records 9..56 (image mapper i + 9): the buffer goes back to smFree
  * or GameResBlockFreeByBuffer by kind, then the record is cleared. */
@@ -616,15 +609,15 @@ void srsReleaseAllSlots(void)
     }
 }
 
-void srsReleaseRecords(void)
+void sresFreeReloaderMemory(void)
 {
     srsReleaseAllSlots();
     srsReleaseEffectRecords();
 }
 
-void srsReleaseEspFile(void)
+void sresFreeMemoryRes(void)
 {
-    srsReleaseRecords();
+    sresFreeReloaderMemory();
     if (srsRecordTable.package.handle != 0) {
         svDeleteImageMapper(0);
         smFree(srsRecordTable.package.handle);
@@ -636,7 +629,7 @@ void srsReleaseEspFile(void)
  * busy (image mapper still owed): the effect package (mapper 0), the wait-slot
  * records (mappers 1..8, kind from key bits 28..29) and the effect records
  * (mappers 9..56). */
-void srsMapPendingResources(void)
+void sresDataMapping(void)
 {
     /* svAddImageMapper reads only chunk[0]. Declared as void *chunk[1] (compiled 2026-11-18) the frame is
      * 64 bytes and the saves sit 16 bytes lower; the original reserves 0x20 bytes for it (an 80-byte frame). */
@@ -676,7 +669,7 @@ void srsLoadPendingEffects(SefSlotTable *slotTable)
     for (i = 0; i < SRS_WAIT_SLOT_COUNT; i++) {
         if (slotTable->effectNo[i] > 0 && slotTable->loadPending[i] != 0) {
             slotTable->loadPending[i] = 0;
-            name = srsGetEspName(slotTable->effectNo[i] << 12);
+            name = srsGetEffectName2(slotTable->effectNo[i] << 12);
             if (srsRecordTable.waitSlots[i].handle == 0) {
                 srsRecordTable.waitSlots[i].handle = smAlloc(SRS_SLOT_BUFFER_SIZE);
             }
@@ -692,7 +685,6 @@ void srsLoadPendingEffects(SefSlotTable *slotTable)
     }
 }
 
-void sefReleaseRecordsByQuery(void);
 
 /* Loads the .esp package of effectKey (its low 10 bits dropped) into wait slot
  * 0 (record 1, image mapper 1), allocating its 0x10000-byte buffer on first
@@ -709,7 +701,7 @@ int srsLoadEffectBlock(int effectKey)
     if (buffer != 0 && srsRecordTable.waitSlots[0].key == key) {
         svDeleteImageMapper(1);
         srsRecordTable.waitSlots[0].busy = 1;
-        srsMapPendingResources();
+        sresDataMapping();
         return 1;
     }
     if (buffer == 0) {
@@ -718,10 +710,10 @@ int srsLoadEffectBlock(int effectKey)
         svDeleteImageMapper(1);
         memset(&srsRecordTable.waitSlots[0], 0, sizeof(SrsRecord));
         srsRecordTable.waitSlots[0].handle = buffer;
-        sefReleaseRecordsByQuery();
+        sefReleaseImageRecords();
     }
     if (srsRecordTable.waitSlots[0].handle != 0) {
-        name = srsGetEspName(key);
+        name = srsGetEffectName2(key);
         srsRecordTable.waitSlots[0].busy = 1;
         size = fileLoad(srsRecordTable.waitSlots[0].handle, name, 0);
         if (size <= 0) {

@@ -1,7 +1,10 @@
 #include "common.h"
 #include "shared.h"
 #include "main/TiMRPackage.h"
-#include "main/tu026.h"
+#include "main/xgl_vector_ops.h"
+#include "main/assert_fail.h"
+#include "main/TiMotionSolver.h"
+#include "main/xgl_studio.h"
 
 /* Flag bits of TiMRState.flags that the advance and selector functions set. */
 #define TI_MR_STATE_FLAG_OUT_OF_RANGE 0x8  /* set while the position is past its range, cleared inside it */
@@ -9,13 +12,9 @@
 
 extern const char tiMRPackageAssertExpr[];
 extern const char tiMRPackageSourceFile[];
-extern const char D_0068F4A8[];
-extern const char D_0068F4B0[];
-void tiWordZero(int *word);
-void tiMRPackageSetEntryA(TiMRPackage *pMRPackage, TiOffsetEntry *entry);
-void tiMRPackageSetHrcData(TiMRPackage *pMRPackage, TiVersionedBlock *value);
-void tiMRPackageFillNodes();
-void memset();
+extern const char tiMRPackageStateAssertExpr[];
+extern const char tiMRPackagePackAssertExpr[];
+void *memset(void *destination, int value, unsigned int count);
 
 /* Sets the bits of a flag word. */
 void tiWordSetBits(int *word, int bits) {
@@ -32,17 +31,6 @@ void tiWordZero(int *word) {
     *word = 0;
 }
 
-void tiMRPackageSetLocalMat(TiMRPackage *pMRPackage, int value);
-void tiMRPackageSetGlobalMat(TiMRPackage *pMRPackage, int value);
-void func_00291F80(TiMRPackage *pMRPackage, int value);
-void tiMRPackageSetPamFrame(TiMRPackage *pMRPackage, int value);
-void tiMRPackageSetClampRange(TiMRPackage *pMRPackage, TiMRClamp *clamp);
-void func_002922F0(TiMRPackage *pMRPackage, int value);
-void tiMRStateSetSpeed(TiMRState *pState, float value);
-void tiMRStateSetPosition(TiMRState *pState, float value);
-void tiMRStateSetValue(TiMRState *pState, float value);
-void tiMRPackageSetFirstWord(TiMRPackage *pMRPackage, int value);
-void tiMRPackageSetVector(TiMRPackage *pMRPackage, float x, float y, float z);
 
 /* Package initializer: clears everything, sets speed 1.0 and position 0.0 on both states, vector (1,1,1). */
 void tiMRPackageInit(TiMRPackage *pMRPackage) {
@@ -66,43 +54,43 @@ void tiMRPackageInit(TiMRPackage *pMRPackage) {
     tiMRPackageSetFirstWord(pMRPackage, 1);
     tiMRPackageSetVector(pMRPackage, 1.0f, 1.0f, 1.0f);
     tiMRPackageSetHrcData(pMRPackage, 0);
-    tiMRPackageSetEntryA(pMRPackage, 0);
+    tiMRPackageSetAnimData(pMRPackage, 0);
     tiMRPackageSetLocalMat(pMRPackage, 0);
     tiMRPackageSetGlobalMat(pMRPackage, 0);
-    func_00291F80(pMRPackage, 0);
-    tiMRPackageSetPamFrame(pMRPackage, 0);
+    tiMRPackageSetBlendMat(pMRPackage, 0);
+    tiMRPackageSetPartsMat(pMRPackage, 0);
     tiMRPackageSetClampRange(pMRPackage, 0);
-    func_002922F0(pMRPackage, 0);
+    tiMRPackageSetEntryTableC(pMRPackage, 0);
     tiMRPackageFillNodes(pMRPackage, 0);
-    pMRPackage->init_code = 0x1D;
+    pMRPackage->targetNode = 0x1D;
 }
 
-void tiMRPackageSetLocalMat(TiMRPackage *pMRPackage, int value) {
+void tiMRPackageSetLocalMat(TiMRPackage *pMRPackage, Matrix4 *value) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 70);
     }
     pMRPackage->localMat = value;
 }
 
-void tiMRPackageSetGlobalMat(TiMRPackage *pMRPackage, int value) {
+void tiMRPackageSetGlobalMat(TiMRPackage *pMRPackage, Matrix4 *value) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 80);
     }
     pMRPackage->globalMat = value;
 }
 
-void func_00291F80(TiMRPackage *pMRPackage, int value) {
+void tiMRPackageSetBlendMat(TiMRPackage *pMRPackage, Matrix4 *value) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 90);
     }
-    pMRPackage->setting_e4 = value;
+    pMRPackage->blendMat = value;
 }
 
-void tiMRPackageSetPamFrame(TiMRPackage *pMRPackage, int value) {
+void tiMRPackageSetPartsMat(TiMRPackage *pMRPackage, Matrix4 *value) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 100);
     }
-    pMRPackage->setting_e8 = value;
+    pMRPackage->partsMat = value;
 }
 
 /* Stores the integer range of a state (min at +0x10, max at +0x14); the advance functions loop over it. */
@@ -114,9 +102,9 @@ void tiMRStateSetRange(TiMRState *pState, int rangeMin, int rangeMax) {
 /*
  * Binds entry A: a null entry clears +0xC0; an entry whose float range at +8
  * and +C is valid (min <= max) is stored at +0xC0 and its range copied into
- * state A (tiMRStateSetRange). Same validity test as tiMRPackageIsEntryValidA.
+ * state A (tiMRStateSetRange). Same validity test as tiMRPackageIsAnimEntryValid.
  */
-void tiMRPackageSetEntryA(TiMRPackage *pMRPackage, TiOffsetEntry *entry) {
+void tiMRPackageSetAnimData(TiMRPackage *pMRPackage, TiOffsetEntry *entry) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 117);
     }
@@ -130,15 +118,15 @@ void tiMRPackageSetEntryA(TiMRPackage *pMRPackage, TiOffsetEntry *entry) {
     }
 }
 
-void tiMRPackageSetTableA(TiMRPackage *pMRPackage, OffsetTable *table) {
+void tiMRPackageSetAnimTable(TiMRPackage *pMRPackage, OffsetTable *table) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 137);
     }
     pMRPackage->entryTableA = table;
 }
 
-/* Binds entry B the same way as tiMRPackageSetEntryA, into +0xC8 and state B at +0x60. */
-void tiMRPackageSetEntryB(TiMRPackage *pMRPackage, TiOffsetEntry *entry) {
+/* Binds entry B the same way as tiMRPackageSetAnimData, into +0xC8 and state B at +0x60. */
+void tiMRPackageSetFaceAnimData(TiMRPackage *pMRPackage, TiOffsetEntry *entry) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 147);
     }
@@ -156,7 +144,7 @@ void tiMRPackageSetEntryB(TiMRPackage *pMRPackage, TiOffsetEntry *entry) {
  * Returns 1 when entry `index` of offset table A exists and its range is valid
  * (float at +8 <= float at +C); 0 otherwise. The second argument is not read.
  */
-int tiMRPackageIsEntryValidA(TiMRPackage *pMRPackage, int unused, unsigned int index) {
+int tiMRPackageIsAnimEntryValid(TiMRPackage *pMRPackage, int unused, unsigned int index) {
     OffsetTable *table;
     TiOffsetEntry *entry;
 
@@ -175,38 +163,38 @@ int tiMRPackageIsEntryValidA(TiMRPackage *pMRPackage, int unused, unsigned int i
     return 0;
 }
 
-void tiMRPackageSetTableB(TiMRPackage *pMRPackage, OffsetTable *table) {
+void tiMRPackageSetFaceAnimTable(TiMRPackage *pMRPackage, OffsetTable *table) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 191);
     }
     pMRPackage->entryTableB = table;
 }
 
-void tiMRPackageSetHrcData(TiMRPackage *pMRPackage, TiVersionedBlock *value) {
+void tiMRPackageSetHrcData(TiMRPackage *pMRPackage, TiHrcData *value) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 201);
     }
     pMRPackage->hrcData = value;
 }
 
-void tiMRPackageSetClampRange(TiMRPackage *pMRPackage, TiMRClamp *clamp) {
+void tiMRPackageSetClampRange(TiMRPackage *pMRPackage, TiPamData *pam) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 211);
     }
-    pMRPackage->clampRange = clamp;
+    pMRPackage->pamData = pam;
 }
 
-void func_002922F0(TiMRPackage *pMRPackage, int value) {
+void tiMRPackageSetEntryTableC(TiMRPackage *pMRPackage, TiNodeTable *value) {
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 221);
     }
-    pMRPackage->setting_d8 = value;
+    pMRPackage->nodeTable = value;
 }
 
 /* Stores the rate of a state (speed, +4). */
 void tiMRStateSetSpeed(TiMRState *pState, float value) {
     if (pState == 0) {
-        assertFailed(D_0068F4A8, tiMRPackageSourceFile, 231);
+        assertFailed(tiMRPackageStateAssertExpr, tiMRPackageSourceFile, 231);
     }
     pState->speed = value;
 }
@@ -214,14 +202,14 @@ void tiMRStateSetSpeed(TiMRState *pState, float value) {
 /* Stores the position of a state (+8), the value the advance functions accumulate. */
 void tiMRStateSetPosition(TiMRState *pState, float value) {
     if (pState == 0) {
-        assertFailed(D_0068F4A8, tiMRPackageSourceFile, 241);
+        assertFailed(tiMRPackageStateAssertExpr, tiMRPackageSourceFile, 241);
     }
     pState->position = value;
 }
 
 void tiMRStateSetValue(TiMRState *pState, float value) {
     if (pState == 0) {
-        assertFailed(D_0068F4A8, tiMRPackageSourceFile, 251);
+        assertFailed(tiMRPackageStateAssertExpr, tiMRPackageSourceFile, 251);
     }
     pState->value = value;
 }
@@ -229,38 +217,37 @@ void tiMRStateSetValue(TiMRState *pState, float value) {
 /* Stores the first word of the package (set to 1 by the initializer and by the per-frame update). */
 void tiMRPackageSetFirstWord(TiMRPackage *pMRPackage, int value) {
     if (pMRPackage == 0) {
-        assertFailed(D_0068F4B0, tiMRPackageSourceFile, 261);
+        assertFailed(tiMRPackagePackAssertExpr, tiMRPackageSourceFile, 261);
     }
     pMRPackage->first_word = value;
 }
 
-/* Sets x, y and z of the package to one value. */
+/* Sets the package scale vector to one value. */
 void tiMRPackageSetVectorUniform(TiMRPackage *pMRPackage, float value) {
-    pMRPackage->z = value;
-    pMRPackage->y = value;
-    pMRPackage->x = value;
+    pMRPackage->scale[2] = value;
+    pMRPackage->scale[1] = value;
+    pMRPackage->scale[0] = value;
 }
 
-/* Sets the package vector x, y, z. */
+/* Sets the package scale vector. */
 void tiMRPackageSetVector(TiMRPackage *pMRPackage, float x, float y, float z) {
-    pMRPackage->x = x;
-    pMRPackage->y = y;
-    pMRPackage->z = z;
+    pMRPackage->scale[0] = x;
+    pMRPackage->scale[1] = y;
+    pMRPackage->scale[2] = z;
 }
 
-#include "main/sdv_033.h"
+#include "main/xgl_camera.h"
 
-XglCamera *xglStudioGetCamera2(int camera_index);
 
 /*
  * Advances state A: position += speed times the global step; a position past
  * rangeMax wraps to rangeMin and a position below rangeMin jumps to rangeMax,
- * each setting flag 0x8 and clearing 0x2; a clamp record at +0xD4 then sets or
+ * each setting flag 0x8 and clearing 0x2; the limit shorts of the parts data at +0xD4 then sets or
  * clears 0x8 again. Called from XenoActorUpdateTree.
  */
-void tiMRPackageAdvanceA(TiMRPackage *pMRPackage) {
+void tiMRPackageAdvanceAnim(TiMRPackage *pMRPackage) {
     XglCamera *camera;
-    TiMRClamp *clamp;
+    TiPamData *limits;
 
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 287);
@@ -280,27 +267,27 @@ void tiMRPackageAdvanceA(TiMRPackage *pMRPackage) {
             tiWordClearBits(&pMRPackage->state_a.flags, TI_MR_STATE_FLAG_OUT_OF_RANGE);
         }
     }
-    clamp = pMRPackage->clampRange;
-    if (clamp == 0) {
+    limits = pMRPackage->pamData;
+    if (limits == 0) {
         return;
     }
-    if ((float) clamp->upperLimit <= pMRPackage->state_a.position) {
-        pMRPackage->state_a.position = (float) clamp->lowerLimit;
+    if ((float) limits->upperLimit <= pMRPackage->state_a.position) {
+        pMRPackage->state_a.position = (float) limits->lowerLimit;
         tiWordSetBits(&pMRPackage->state_a.flags, TI_MR_STATE_FLAG_OUT_OF_RANGE);
         return;
     }
-    if (pMRPackage->state_a.position < (float) clamp->lowerLimit) {
-        pMRPackage->state_a.position = (float) clamp->upperLimit;
+    if (pMRPackage->state_a.position < (float) limits->lowerLimit) {
+        pMRPackage->state_a.position = (float) limits->upperLimit;
         tiWordSetBits(&pMRPackage->state_a.flags, TI_MR_STATE_FLAG_OUT_OF_RANGE);
         return;
     }
     tiWordClearBits(&pMRPackage->state_a.flags, TI_MR_STATE_FLAG_OUT_OF_RANGE);
 }
 
-/* Advances state A like tiMRPackageAdvanceA; clears flag 0x2 only when it is set. */
-void tiMRPackageAdvanceAUnwrapped(TiMRPackage *pMRPackage) {
+/* Advances state A like tiMRPackageAdvanceAnim; clears flag 0x2 only when it is set. */
+void tiMRPackageAdvanceAnimUnwrapped(TiMRPackage *pMRPackage) {
     XglCamera *camera;
-    TiMRClamp *clamp;
+    TiPamData *limits;
 
     if (pMRPackage == 0) {
         assertFailed(tiMRPackageAssertExpr, tiMRPackageSourceFile, 344);
@@ -318,15 +305,15 @@ void tiMRPackageAdvanceAUnwrapped(TiMRPackage *pMRPackage) {
             tiWordClearBits(&pMRPackage->state_a.flags, TI_MR_STATE_FLAG_OUT_OF_RANGE);
         }
     }
-    clamp = pMRPackage->clampRange;
-    if (clamp == 0) {
+    limits = pMRPackage->pamData;
+    if (limits == 0) {
         return;
     }
-    if ((float) clamp->upperLimit <= pMRPackage->state_a.position) {
+    if ((float) limits->upperLimit <= pMRPackage->state_a.position) {
         tiWordSetBits(&pMRPackage->state_a.flags, TI_MR_STATE_FLAG_OUT_OF_RANGE);
         return;
     }
-    if (pMRPackage->state_a.position < (float) clamp->lowerLimit) {
+    if (pMRPackage->state_a.position < (float) limits->lowerLimit) {
         tiWordSetBits(&pMRPackage->state_a.flags, TI_MR_STATE_FLAG_OUT_OF_RANGE);
         return;
     }
@@ -334,7 +321,7 @@ void tiMRPackageAdvanceAUnwrapped(TiMRPackage *pMRPackage) {
 }
 
 /* Advances state B: position += speed times the global step, with the same wrap at its range. */
-void tiMRPackageAdvanceB(TiMRPackage *pMRPackage) {
+void tiMRPackageAdvanceFaceAnim(TiMRPackage *pMRPackage) {
     XglCamera *camera;
 
     if (pMRPackage == 0) {
@@ -360,8 +347,8 @@ void tiMRPackageAdvanceB(TiMRPackage *pMRPackage) {
     tiWordClearBits(&pMRPackage->state_b.flags, TI_MR_STATE_FLAG_OUT_OF_RANGE);
 }
 
-/* Advances state B like tiMRPackageAdvanceB; clears flag 0x2 only when it is set. */
-void tiMRPackageAdvanceBUnwrapped(TiMRPackage *pMRPackage) {
+/* Advances state B like tiMRPackageAdvanceFaceAnim; clears flag 0x2 only when it is set. */
+void tiMRPackageAdvanceFaceAnimUnwrapped(TiMRPackage *pMRPackage) {
     XglCamera *camera;
 
     if (pMRPackage == 0) {
@@ -394,12 +381,6 @@ extern const char tiMRPackageLocalMatAssertExpr[];
 extern const char tiMRPackageHrcVersionAssertExpr[];
 extern const char tiMRPackageAnimVersionAssertExpr[];
 extern const char tiMRPackageFaceVersionAssertExpr[];
-void tiMotionSolveLocalMatrices(TiMRPackage *pMRPackage);
-void tiMotionSolveLocalMatricesOld(TiMRPackage *pMRPackage);
-void tiMtnBlendUpdateLocal(TiMRPackage *pMRPackage);
-void tiMotionUpdateGlobal(TiMRPackage *pMRPackage);
-void tiMotionSolveSkipNodesOld(TiMRPackage *pMRPackage);
-void tiMotionSolveSkipNodes(TiMRPackage *pMRPackage);
 
 /*
  * Per-frame update of the package. Checks the matrices (pLocalMat +0xDC,
@@ -408,7 +389,7 @@ void tiMotionSolveSkipNodes(TiMRPackage *pMRPackage);
  * (+0xC8, fac), runs the animation updates and ends by setting first_word to 1.
  */
 void tiMRPackageUpdate(TiMRPackage *pMRPackage) {
-    TiVersionedBlock *block;
+    TiHrcData *block;
     TiOffsetEntry *entry;
     int i;
 
@@ -471,7 +452,7 @@ void tiMRPackageUpdate(TiMRPackage *pMRPackage) {
 }
 
 /* Binds entry `index` of table A to state A and sets flag 0x40 of state A. */
-void tiMRPackageSelectEntryA(TiMRPackage *pMRPackage, unsigned int index) {
+void tiMRPackageSelectAnimEntry(TiMRPackage *pMRPackage, unsigned int index) {
     OffsetTable *table;
     int entryOffset;
 
@@ -481,13 +462,13 @@ void tiMRPackageSelectEntryA(TiMRPackage *pMRPackage, unsigned int index) {
     }
     if (index < table->count) {
         entryOffset = index[table->entryOffsets];
-        tiMRPackageSetEntryA(pMRPackage, (TiOffsetEntry *) ((unsigned char *) table + entryOffset));
+        tiMRPackageSetAnimData(pMRPackage, (TiOffsetEntry *) ((unsigned char *) table + entryOffset));
         tiWordSetBits(&pMRPackage->state_a.flags, TI_MR_STATE_FLAG_ENTRY_BOUND);
     }
 }
 
-/* Stores table A (the argument), then binds entry `index` of it to state A as tiMRPackageSelectEntryA. */
-void tiMRPackageSetTableAndEntryA(TiMRPackage *pMRPackage, OffsetTable *table, unsigned int index) {
+/* Stores table A (the argument), then binds entry `index` of it to state A as tiMRPackageSelectAnimEntry. */
+void tiMRPackageSetAnimTableAndEntry(TiMRPackage *pMRPackage, OffsetTable *table, unsigned int index) {
     int entryOffset;
 
     if (table == 0) {
@@ -495,14 +476,14 @@ void tiMRPackageSetTableAndEntryA(TiMRPackage *pMRPackage, OffsetTable *table, u
     }
     if (index < table->count) {
         entryOffset = index[table->entryOffsets];
-        tiMRPackageSetTableA(pMRPackage, table);
-        tiMRPackageSetEntryA(pMRPackage, (TiOffsetEntry *) ((unsigned char *) table + entryOffset));
+        tiMRPackageSetAnimTable(pMRPackage, table);
+        tiMRPackageSetAnimData(pMRPackage, (TiOffsetEntry *) ((unsigned char *) table + entryOffset));
         tiWordSetBits(&pMRPackage->state_a.flags, TI_MR_STATE_FLAG_ENTRY_BOUND);
     }
 }
 
 /* Binds entry `index` of table B to state B and sets flag 0x40 of state B. */
-void tiMRPackageSelectEntryB(TiMRPackage *pMRPackage, unsigned int index) {
+void tiMRPackageSelectFaceAnimEntry(TiMRPackage *pMRPackage, unsigned int index) {
     OffsetTable *table;
     int entryOffset;
 
@@ -512,15 +493,15 @@ void tiMRPackageSelectEntryB(TiMRPackage *pMRPackage, unsigned int index) {
     }
     if (index < table->count) {
         entryOffset = index[table->entryOffsets];
-        tiMRPackageSetEntryB(pMRPackage, (TiOffsetEntry *) ((unsigned char *) table + entryOffset));
+        tiMRPackageSetFaceAnimData(pMRPackage, (TiOffsetEntry *) ((unsigned char *) table + entryOffset));
         tiWordSetBits(&pMRPackage->state_b.flags, TI_MR_STATE_FLAG_ENTRY_BOUND);
     }
 }
 
 const char tiMRPackageAssertExpr[16] = "pMRPackage";
 const char tiMRPackageSourceFile[24] = "../TiMRPackage.euc.c";
-const char D_0068F4A8[8] = "pState";
-const char D_0068F4B0[8] = "pMRPack";
+const char tiMRPackageStateAssertExpr[8] = "pState";
+const char tiMRPackagePackAssertExpr[8] = "pMRPack";
 const char tiMRPackageGlobalMatAssertExpr[24] = "pMRPackage->pGlobalMat";
 const char tiMRPackageLocalMatAssertExpr[24] = "pMRPackage->pLocalMat";
 const char tiMRPackageHrcVersionAssertExpr[88] = "pMRPackage->pHrcData->fileVersion >= CURRENT_XHR_VERSION && \"illegal xhr version\"";

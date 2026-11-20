@@ -1,20 +1,24 @@
 #include "common.h"
 #include "shared.h"
-#include "main/tu048.h"
+#include "main/game_data.h"
+#include "main/game_camera.h"
+#include "main/xgl_2.h"
 
-typedef struct UwamonoRecord UwamonoRecord;
-typedef struct UwamonoHitQuery UwamonoHitQuery;
+#include "vu0_macro.h"
+#include "main/get.h"
+#include "main/undulate.h"
+#include "main/init_uwamono_sys.h"
+
+#include "main/outer_product.h"
 /* Number of MapUnit[] slots (map_2.h's MapUnit table). */
 #define MAP_UNIT_COUNT 64
 
-int HitCheckMapUnitPos(const Vector4 *position);
-extern void xglVectorLength(float *destination, const Vector4 *vector);
 
 /* MapUnitRecord.flags */
 enum {
     MAP_UNIT_NO_DRAW = 0x4,             /* the model is not drawn */
     MAP_UNIT_ACTIVE = 0x10000,          /* the slot is live: updated and collidable */
-    MAP_UNIT_LANDED = 0x80000,          /* a falling unit has come to rest (uwamonoCheckHeight) */
+    MAP_UNIT_LANDED = 0x80000,          /* a falling unit has come to rest (CheckUwamonoHeight) */
     MAP_UNIT_BROKEN = 0x20000,          /* a breakable that has been destroyed */
     MAP_UNIT_SELECTABLE = 0x40000,      /* currently a valid shoot/aim target */
     MAP_UNIT_HIDDEN = 0x100000,         /* excluded from collision (the unit it stands in for is inactive) */
@@ -28,7 +32,7 @@ enum {
     UWAMONO_SHAPE_BOX = 2
 };
 
-/* Record mode: which collision test a record gets (uwamonoHitCheckRecordAt and uwamonoCrossPointAt dispatch on it). */
+/* Record mode: which collision test a record gets (HitCheckMapUnitAt and CrossPointUwamonoAt dispatch on it). */
 enum {
     UWAMONO_MODE_BOX = 1,
     UWAMONO_MODE_CIRCLE = 2
@@ -39,34 +43,9 @@ enum {
 /* Move and turn steps one record holds (the moveX/turnX tables). */
 #define UWAMONO_STEP_COUNT 0x20
 
-int HitCheckMapUnitPosSize(const Vector4 *position, float radius);
 
-float CheckDist2D(const Vector4 *first, const Vector4 *second);
-
-#include "vu0_macro.h"
 /* Actors collide against a unit at 1.5 times their radius. */
 #define UWAMONO_RADIUS_SCALE 1.5f
-
-/*
- * The unit's 4x4 world matrix (MapUnitRecord.basis) read as rows: x axis,
- * y axis, z axis and anchor (translation); the checks copy it whole.
- */
-typedef struct UwamonoCrossBasis {
-    union {
-        struct {
-            float xAxisX;
-            unsigned char unmodeled_04[4];
-            float xAxisZ;
-            unsigned char unmodeled_0c[0x14];
-            float zAxisX;
-            unsigned char unmodeled_24[4];
-            float zAxisZ;
-            unsigned char unmodeled_2c[4];
-            float anchor[4];
-        };
-        float rows[4][4]; /* the same matrix as MapUnitRecord.basis rows */
-    };
-} UwamonoCrossBasis;
 
 typedef struct UwamonoMapSlot UwamonoMapSlot;
 
@@ -112,61 +91,13 @@ struct UwamonoMapSlot {
 extern UwamonoMapSlot MapUnit[];
 extern const float mapUnitPosHitHeightScale;
 extern const float mapUnitPosHitBelowMargin;
-/* Box corner test of an actor against a unit: the box test decides, and a 2 result also needs the corner test. */ int HitCheckBoxCorner(UwamonoRecord *actor, UwamonoRecord *unit);
-unsigned int HitCheckMapUnitPosAt(UwamonoRecord *query, UwamonoRecord *record);
-int HitCheckCorner(UwamonoRecord *query, UwamonoRecord *record);
+/* Box corner test of an actor against a unit: the box test decides, and a 2 result also needs the corner test. */ int HitCheckBoxCorner(struct XenoActor *actor, UwamonoRecord *unit);
+unsigned int HitCheckMapUnitPosAt(struct XenoActor *query, UwamonoRecord *record);
+int HitCheckCorner(struct XenoActor *query, UwamonoRecord *record);
 void CheckNearPoint(const Vector4 *origin, const Vector4 *candA,
                     const Vector4 *candB, Vector4 *out);
 
-/* Per-entry transform that uwamonoUpdateTransform writes its translation into (+0x264 of UwamonoRecord). */
-typedef struct UwamonoTransform {
-    Matrix4 matrix;                     /* the rows; row 3 (+0x30) is the translation: x, y, z */
-} UwamonoTransform;
 
-struct UwamonoRecord {
-    short id;                    /* +0x00: zeroed by uwamonoClearMoveResetWord and uwamonoClearRotateResetWord */
-    unsigned char kind;                 /* +0x02: the scans match kind 2 */
-    unsigned char unmodeled_03;
-    int key;                            /* +0x04: compared by uwamonoHitCheckOther */
-    unsigned char unmodeled_08[4];
-    float pendingValue;                 /* +0x0c: stored by uwamonoSetPendingValue while uwamonoDrawDisabled is 0 */
-    AlignedVector4 position;            /* +0x10: x, y (+0x14), z */
-    unsigned char unmodeled_20[0x14];
-    float fallSpeed;                    /* +0x34: vertical velocity, written by uwamonoCheckHeight */
-    unsigned char unmodeled_38[0x08];
-    AlignedVector4 rotation;              /* +0x40: anchor.y at +0x44 */
-    unsigned char unmodeled_50[0x60];
-    float radius;                       /* +0xb0: added to other->extent.x by uwamonoNyuruCircle */
-    unsigned char unmodeled_b4[0x1b0];
-    /* The word view gives the pointer load alias set 0 (uwamonoCalcNearCrossPointBox; style debt). */
-    union {
-        UwamonoTransform *transform;    /* +0x264 */
-        int transformWord;
-    };
-    unsigned char unmodeled_268[0x88];
-    UwamonoCrossBasis matrix;            /* +0x2f0: the unit's cross basis (x axis, anchor) */
-    unsigned char unmodeled_330[0x10];
-    float moveX[0x20];                  /* +0x340: x of each move step, written by uwamonoAddMoveStep */
-    float moveY[0x20];                  /* +0x3c0: y of each move step */
-    short moveStepCount;                /* +0x440: steps added so far (below 32) */
-    unsigned char unmodeled_442[2];
-    float turnX[0x20];                  /* +0x444: x of each turn step, written by uwamonoAddRotateStep */
-    float turnY[0x20];                  /* +0x4c4: y of each turn step */
-    short turnStepCount;                /* +0x544: turn steps added so far (below 32) */
-    short target;                       /* +0x546: -1 when unset */
-    unsigned char unmodeled_548[0x28];
-    int flags;                          /* +0x570: bit 0x2 read by the scans, bits 0x2 and 0x8 by uwamonoUpdateTransform */
-    int landedFlags;                    /* +0x574: MAP_UNIT_LANDED set by uwamonoCheckHeight */
-    unsigned char unmodeled_578[0x08];
-    AlignedVector4 extent;              /* +0x580: x read by uwamonoNyuruCircle */
-    signed char mode;                   /* +0x590: 0 when inactive; 1 and 2 dispatch in uwamonoCrossPointAt */
-    unsigned char unmodeled_591[0x1af];
-    unsigned char hitBuffer[8];         /* +0x740: address passed to mapMoveProbe */
-    unsigned short hitFlags;            /* +0x748: |= 0x1000 by uwamonoNyuruCircle */
-    unsigned char unmodeled_74a[0x126];
-};
-
-extern UwamonoRecord uwamonoRecords[];
 
 /* Appends the move step (x, y) to the record's move table; returns 0 when the table is full. */
 int uwamonoAddMoveStep(int index, float x, float y)
@@ -198,39 +129,35 @@ int uwamonoAddRotateStep(int index, float x, float y)
     return 1;
 }
 
-extern UwamonoRecord uwamonoMoveRecords[];
-
 /* Zeroes the first word of one entry of the move reset table (setStepMove calls this). */
 void uwamonoClearMoveResetWord(int index) {
-    uwamonoMoveRecords[index].id = 0;
+    uwamonoRecords[index].moveStepCount = 0;
 }
-
-extern UwamonoRecord uwamonoRotateRecords[];
 
 /* Same as uwamonoClearMoveResetWord for the rotate reset table (setStepRotate calls this). */
 void uwamonoClearRotateResetWord(int index) {
-    uwamonoRotateRecords[index].id = 0;
+    uwamonoRecords[index].turnStepCount = 0;
 }
 
-int uwamonoHitCheckRecordAt(UwamonoHitQuery *query, UwamonoRecord *record);
+int HitCheckMapUnitAt(struct XenoActor *query, UwamonoRecord *record);
 
 /* Returns the index of the first active kind-2 record that the query hits, or -1. */
-int uwamonoHitCheckRecord(UwamonoHitQuery *query) {
+int HitCheckMapUnit(struct XenoActor *query) {
     int index;
 
     for (index = 0; index < UWAMONO_RECORD_COUNT; index++) {
         UwamonoRecord *record = &uwamonoRecords[index];
 
-        if (record->kind == 2 && (record->flags & 2) && record->mode != 0
-            && uwamonoHitCheckRecordAt(query, record) != 0) {
+        if (record->kind == 2 && (record->flags & 2) && record->searchMode != 0
+            && HitCheckMapUnitAt(query, record) != 0) {
             return index;
         }
     }
     return -1;
 }
 
-int uwamonoHitCheckNyuru(UwamonoRecord *record, UwamonoRecord *other);
-int uwamonoNyuruMatrix(UwamonoRecord *record, UwamonoRecord *other, int skipSnap);
+int HitCheckNyuru(struct XenoActor *record, UwamonoRecord *other);
+int NyuruMatrix(struct XenoActor *record, UwamonoRecord *other, int skipSnap);
 
 /*
  * A saved pose copy. Its stores go through a union member (alias set 0), so
@@ -241,10 +168,10 @@ typedef union UwamonoPoseSave {
 } UwamonoPoseSave;
 
 /*
- * Collects the kind-2 records that the record hits (index list ended by -1), then
- * pushes the record out of each of them, restoring its pose between the pushes.
+ * Collects the kind-2 records that the actor hits (index list ended by -1), then
+ * pushes the actor out of each of them, restoring its pose between the pushes.
  */
-int uwamonoHitCheckWithNyuru(UwamonoRecord *record)
+int HitCheckMapUnitWithNyuru(struct XenoActor *actor)
 {
     int hits[256];
     int hitCount;
@@ -260,8 +187,8 @@ int uwamonoHitCheckWithNyuru(UwamonoRecord *record)
     for (index = 0; index < UWAMONO_RECORD_COUNT; index++) {
         UwamonoRecord *other = &uwamonoRecords[index];
 
-        if (other->kind == 2 && !(other->flags & 0x02000000) && other->mode != 0
-            && uwamonoHitCheckRecordAt((UwamonoHitQuery *)record, other) != 0) {
+        if (other->kind == 2 && !(other->flags & 0x02000000) && other->searchMode != 0
+            && HitCheckMapUnitAt(actor, other) != 0) {
             hits[hitCount++] = index;
         }
     }
@@ -269,32 +196,32 @@ int uwamonoHitCheckWithNyuru(UwamonoRecord *record)
         return 0;
     }
     if (hitCount == 1) {
-        return uwamonoHitCheckNyuru(record, &uwamonoRecords[hits[0]]);
+        return HitCheckNyuru(actor, &uwamonoRecords[hits[0]]);
     }
     for (slot = 0; hits[slot] != -1; slot++) {
         UwamonoRecord *other;
 
-        savedPosition.vector = record->position;
-        savedAnchor.vector = record->rotation;
+        savedPosition.vector = actor->position;
+        savedAnchor.vector = actor->velocity;
         other = &uwamonoRecords[hits[slot]];
-        switch (other->mode) {
+        switch (other->searchMode) {
         case UWAMONO_MODE_BOX:
-            uwamonoNyuruMatrix(record, other, 1);
+            NyuruMatrix(actor, other, 1);
             break;
         case 2:
-            uwamonoNyuruCircle(record, other);
+            NyuruCircle(actor, other);
             break;
         }
-        if (uwamonoHitCheckRecord((UwamonoHitQuery *)record) == -1) {
+        if (HitCheckMapUnit(actor) == -1) {
             return 1;
         }
-        record->position = savedPosition.vector;
-        record->rotation = savedAnchor.vector;
+        actor->position = savedPosition.vector;
+        actor->velocity = savedAnchor.vector;
     }
-    record->position.x -= record->rotation.x;
-    record->position.z -= record->rotation.z;
-    record->rotation.x = 0.0f;
-    record->rotation.z = 0.0f;
+    actor->position.x -= actor->velocity.x;
+    actor->position.z -= actor->velocity.z;
+    actor->velocity.x = 0.0f;
+    actor->velocity.z = 0.0f;
     return 0;
 }
 
@@ -308,25 +235,12 @@ int HitCheckMapUnitPos(const Vector4 *position) {
     return HitCheckMapUnitPosSize(position, 0.0f);
 }
 
-void xglMatrixStackUnit(void);
-void xglMatrixStackRotY(float angle);
-void xglMatrixStackMulVector(Vector4 *destination, const Vector4 *source);
-float xglSin(float angle);
-float xglCos(float angle);
 float atan2f(float y, float x);
 
-struct UwamonoHitQuery {
-    unsigned char unmodeled_00[0x10];
-    Vector4 position;                   /* +0x10 */
-    unsigned char unmodeled_20[0x90];
-    float radius;                       /* +0xb0 */
-    float positionYBias;                /* +0xb4: added to position.y by uwamonoHitCheckRecordAt */
-    unsigned char unmodeled_b8[0x7f0 - 0xb8];
-};
 
 int HitCheckMapUnitPosSize(const Vector4 *position, float radius)
 {
-    UwamonoHitQuery query;
+    struct XenoActor query;
     int index;
 
     query.position = *position;
@@ -334,31 +248,30 @@ int HitCheckMapUnitPosSize(const Vector4 *position, float radius)
     for (index = 0; index < UWAMONO_RECORD_COUNT; index++) {
         UwamonoRecord *record = &uwamonoRecords[index];
 
-        if (record->kind < 2 || record->kind == 7 || (record->flags & 0x2000000) || record->mode == 0) {
+        if (record->kind < 2 || record->kind == 7 || (record->flags & 0x2000000) || record->searchMode == 0) {
             continue;
         }
-        if (HitCheckMapUnitPosAt((UwamonoRecord *)&query, record)) {
+        if (HitCheckMapUnitPosAt(&query, record)) {
             return index;
         }
     }
     return -1;
 }
 
-float Get_Distance(const Vector4 *from, const Vector4 *to);
-int uwamonoHitCheckBox(UwamonoRecord *query, UwamonoRecord *record);
-extern const float D_0069B064;
+int HitCheckBox(struct XenoActor *query, UwamonoRecord *record);
+extern const float uwamonoMapUnitTopScale;
 
-int uwamonoHitCheckRecordAt(UwamonoHitQuery *query, UwamonoRecord *record)
+int HitCheckMapUnitAt(struct XenoActor *query, UwamonoRecord *record)
 {
-    if (record->position.y + record->extent.y * D_0069B064 < query->position.y) {
+    if (record->position.y + record->extent.y * uwamonoMapUnitTopScale < query->position.y) {
         return 0;
     }
-    if (query->position.y + query->positionYBias < record->position.y) {
+    if (query->position.y + query->height < record->position.y) {
         return 0;
     }
-    switch (record->mode) {
+    switch (record->searchMode) {
     case UWAMONO_MODE_BOX:
-        return uwamonoHitCheckBox((UwamonoRecord *)query, record);
+        return HitCheckBox(query, record);
     case 2:
         return Get_Distance(&query->position, &record->position) < query->radius + record->extent.x;
     default:
@@ -366,7 +279,7 @@ int uwamonoHitCheckRecordAt(UwamonoHitQuery *query, UwamonoRecord *record)
     }
 }
 
-unsigned int HitCheckMapUnitPosAt(UwamonoRecord *query, UwamonoRecord *record)
+unsigned int HitCheckMapUnitPosAt(struct XenoActor *query, UwamonoRecord *record)
 {
     if (record->position.y + record->extent.y * 0.9f < query->position.y) {
         return 0;
@@ -374,8 +287,8 @@ unsigned int HitCheckMapUnitPosAt(UwamonoRecord *query, UwamonoRecord *record)
     if (query->position.y < record->position.y - 1.8f) {
         return 0;
     }
-    if (record->mode != UWAMONO_MODE_BOX) {
-        if (record->mode == UWAMONO_MODE_CIRCLE) {
+    if (record->searchMode != UWAMONO_MODE_BOX) {
+        if (record->searchMode == UWAMONO_MODE_CIRCLE) {
             if (!(CheckDist2D(&query->position, &record->position) < query->radius + record->extent.x)) {
                 return 0;
             }
@@ -408,10 +321,10 @@ int uwamonoPointInBox(const Vector4 *from, const Vector4 *position, const Vector
     }
 }
 
-int uwamonoHitCheckBox(UwamonoRecord *query, UwamonoRecord *record)
+int HitCheckBox(struct XenoActor *query, UwamonoRecord *record)
 {
     DoublewordAlignedVector4 extent;
-    UwamonoCrossBasis *basis = &record->matrix;
+    float (*basis)[4] = record->matrix;
     Vector4 anchor;
     float deltaX;
     float deltaZ;
@@ -425,14 +338,14 @@ int uwamonoHitCheckBox(UwamonoRecord *query, UwamonoRecord *record)
     float scaled;
 
     extent = record->extent;
-    axisZ = basis->xAxisZ;
-    axisX = basis->xAxisX;
-    deltaX = query->position.x - basis->anchor[0];
-    deltaZ = query->position.z - basis->anchor[2];
+    axisZ = basis[0][2];
+    axisX = basis[0][0];
+    deltaX = query->position.x - basis[3][0];
+    deltaZ = query->position.z - basis[3][2];
     value = deltaX * axisX + deltaZ * axisZ;
-    anchor.x = basis->anchor[0];
-    anchor.y = basis->anchor[1];
-    anchor.z = basis->anchor[2];
+    anchor.x = basis[3][0];
+    anchor.y = basis[3][1];
+    anchor.z = basis[3][2];
     anchor.w = 1.0f;
     if (extent.x + query->radius < __builtin_fabsf(value)) {
         return 0;
@@ -445,7 +358,7 @@ int uwamonoHitCheckBox(UwamonoRecord *query, UwamonoRecord *record)
     if (!(value < limit)) {
         return 0;
     }
-    value = __builtin_sqrtf(query->rotation.x * query->rotation.x + query->rotation.z * query->rotation.z)
+    value = __builtin_sqrtf(query->velocity.x * query->velocity.x + query->velocity.z * query->velocity.z)
             * __builtin_sqrtf(deltaX * deltaX + deltaZ * deltaZ);
     major = extent.x;
     minor = extent.z;
@@ -456,7 +369,7 @@ int uwamonoHitCheckBox(UwamonoRecord *query, UwamonoRecord *record)
     scaled = (minor / major) * 0.3f;
     limit = 1.0f - scaled;
     if (value > 1e-5f) {
-        value = (query->rotation.x * deltaX + query->rotation.z * deltaZ) / value;
+        value = (query->velocity.x * deltaX + query->velocity.z * deltaZ) / value;
     }
     if (!(limit < value)) {
         return 1;
@@ -465,7 +378,7 @@ int uwamonoHitCheckBox(UwamonoRecord *query, UwamonoRecord *record)
 }
 
 /* Box corner test of an actor against a unit: the box test decides, and a 2 result also needs the corner test. */
-int HitCheckBoxCorner(UwamonoRecord *actor, UwamonoRecord *unit)
+int HitCheckBoxCorner(struct XenoActor *actor, UwamonoRecord *unit)
 {
     int hit = uwamonoPointInBox(&actor->position, &unit->position, &unit->extent, actor->radius, unit->rotation.y);
 
@@ -480,14 +393,14 @@ int HitCheckBoxCorner(UwamonoRecord *actor, UwamonoRecord *unit)
 
 float sqrtf(float x);
 
-int HitCheckCorner(UwamonoRecord *query, UwamonoRecord *record)
+int HitCheckCorner(struct XenoActor *query, UwamonoRecord *record)
 {
     Vector4 corner[4];
     DoublewordAlignedVector4 position;
     DoublewordAlignedVector4 extent;
     float (*transform)[4];
 
-    transform = (*(UwamonoTransform **) &record->transform)->matrix;
+    transform = (*(UwamonoPose **) &record->transform)->matrix;
     position = record->position;
     extent = record->extent;
 
@@ -518,40 +431,38 @@ int HitCheckCorner(UwamonoRecord *query, UwamonoRecord *record)
     return 0;
 }
 
-extern const float D_0069B068;
-extern const float D_0069B06C;
-int uwamonoNyuruCircle(UwamonoRecord *record, UwamonoRecord *other);
+int NyuruCircle(struct XenoActor *record, UwamonoRecord *other);
 
-int uwamonoHitCheckNyuru(UwamonoRecord *record, UwamonoRecord *other)
+int HitCheckNyuru(struct XenoActor *actor, UwamonoRecord *other)
 {
     DoublewordAlignedVector4 savedPosition;
     DoublewordAlignedVector4 savedAnchor;
     int hit;
 
-    savedPosition = record->position;
-    savedAnchor = record->rotation;
+    savedPosition = actor->position;
+    savedAnchor = actor->velocity;
     hit = -1;
-    switch (other->mode) {
+    switch (other->searchMode) {
     case UWAMONO_MODE_CIRCLE:
-        if (uwamonoNyuruCircle(record, other) == 0) {
+        if (NyuruCircle(actor, other) == 0) {
             return 0;
         }
-        hit = uwamonoHitCheckRecord((UwamonoHitQuery *)record);
+        hit = HitCheckMapUnit(actor);
         break;
     case UWAMONO_MODE_BOX:
-        if (uwamonoNyuruMatrix(record, other, 0) == 0) {
+        if (NyuruMatrix(actor, other, 0) == 0) {
             return 0;
         }
-        hit = uwamonoHitCheckRecord((UwamonoHitQuery *)record);
+        hit = HitCheckMapUnit(actor);
         break;
     }
     if (hit != -1) {
-    record->position = savedPosition;
-    record->rotation = savedAnchor;
-    record->position.x = record->position.x - record->rotation.x;
-    record->rotation.x = 0.0f;
-    record->position.z = record->position.z - record->rotation.z;
-    record->rotation.z = 0.0f;
+    actor->position = savedPosition;
+    actor->velocity = savedAnchor;
+    actor->position.x = actor->position.x - actor->velocity.x;
+    actor->velocity.x = 0.0f;
+    actor->position.z = actor->position.z - actor->velocity.z;
+    actor->velocity.z = 0.0f;
         return 0;
     }
     return 1;
@@ -587,33 +498,32 @@ int uwamonoPushOutOfCircle(Vector4 *from, Vector4 *to, const Vector4 *other, flo
     return 0;
 }
 
-float mapMoveProbe(const Vector4 *from, const Vector4 *to, void *result);
 
 /*
  * Circle-shaped record against another record: returns 1 when the other record's
  * circle does not block it; otherwise it lands the record on the ground height
- * mapMoveProbe reports and returns 1, or 0 when there is no ground.
+ * UnduCheck reports and returns 1, or 0 when there is no ground.
  */
-int uwamonoNyuruCircle(UwamonoRecord *record, UwamonoRecord *other) {
+int NyuruCircle(struct XenoActor *actor, UwamonoRecord *other) {
     float height;
 
-    if (uwamonoPushOutOfCircle(&record->position, &record->rotation, &other->position,
-                      record->radius + other->extent.x) != 0) {
+    if (uwamonoPushOutOfCircle(&actor->position, &actor->velocity, &other->position,
+                      actor->radius + other->extent.x) != 0) {
         return 1;
     }
-    record->hitFlags |= 0x1000;
-    height = mapMoveProbe(&record->position, &record->rotation, record->hitBuffer);
+    actor->collision.flags |= 0x1000;
+    height = UnduCheck(&actor->position, &actor->velocity, &actor->collision);
     if (height == -1000.0f) {
         return 0;
     }
-    record->position.y = height;
+    actor->position.y = height;
     return 1;
 }
 
-extern const float D_0069B07C;
-extern const float D_0069B080;
+extern const float nyuruSnapEpsilonX;
+extern const float nyuruSnapEpsilonZ;
 
-int uwamonoNyuruMatrix(UwamonoRecord *record, UwamonoRecord *other, int skipSnap)
+int NyuruMatrix(struct XenoActor *actor, UwamonoRecord *other, int skipSnap)
 {
     DoublewordVector4 extent;
     Vector4 dir;
@@ -627,71 +537,69 @@ int uwamonoNyuruMatrix(UwamonoRecord *record, UwamonoRecord *other, int skipSnap
     float height;
 
     transform = other->transform->matrix;
-    matrixCopy = *other->transform;
+    matrixCopy = other->transform->copy;
     extent.words[0] = ((u64 *)&other->extent)[0];
     extent.words[1] = ((u64 *)&other->extent)[1];
-    record->position.x -= record->rotation.x;
-    record->position.z -= record->rotation.z;
-    dx = record->position.x - other->position.x;
-    dz = record->position.z - other->position.z;
+    actor->position.x -= actor->velocity.x;
+    actor->position.z -= actor->velocity.z;
+    dx = actor->position.x - other->position.x;
+    dz = actor->position.z - other->position.z;
     dot = dx * transform[0][0] + dz * transform[0][2];
-    length = __builtin_sqrtf(record->rotation.x * record->rotation.x + record->rotation.z * record->rotation.z);
+    length = __builtin_sqrtf(actor->velocity.x * actor->velocity.x + actor->velocity.z * actor->velocity.z);
     if (length == 0.0f) {
         return 0;
     }
-    dir.x = record->rotation.x / length;
+    dir.x = actor->velocity.x / length;
     dir.y = 0.0f;
-    dir.z = record->rotation.z / length;
-    if (__builtin_fabsf(dot) < extent.vector.x + record->radius) {
+    dir.z = actor->velocity.z / length;
+    if (__builtin_fabsf(dot) < extent.vector.x + actor->radius) {
         projection = dir.x * transform[0][0] + dir.z * transform[0][2];
-        record->rotation.x = projection * transform[0][0] * length;
-        record->rotation.z = projection * transform[0][2] * length;
-        if (__builtin_fabsf(record->rotation.x) < D_0069B07C) {
-            if (__builtin_fabsf(record->rotation.z) < D_0069B07C && !skipSnap) {
+        actor->velocity.x = projection * transform[0][0] * length;
+        actor->velocity.z = projection * transform[0][2] * length;
+        if (__builtin_fabsf(actor->velocity.x) < nyuruSnapEpsilonX) {
+            if (__builtin_fabsf(actor->velocity.z) < nyuruSnapEpsilonX && !skipSnap) {
                 if (extent.vector.x < dot) {
-                    record->rotation.x = transform[0][0] * length * 0.5f;
-                    record->rotation.z = transform[0][2] * length * 0.5f;
+                    actor->velocity.x = transform[0][0] * length * 0.5f;
+                    actor->velocity.z = transform[0][2] * length * 0.5f;
                 } else if (dot < -extent.vector.x) {
-                    record->rotation.x = -transform[0][0] * length * 0.5f;
-                    record->rotation.z = -transform[0][2] * length * 0.5f;
+                    actor->velocity.x = -transform[0][0] * length * 0.5f;
+                    actor->velocity.z = -transform[0][2] * length * 0.5f;
                 }
             }
         }
     } else {
         projection = dir.x * transform[2][0] + dir.z * transform[2][2];
-        record->rotation.x = projection * transform[2][0] * length;
-        record->rotation.z = projection * transform[2][2] * length;
-        if (__builtin_fabsf(record->rotation.x) < D_0069B080) {
-            if (__builtin_fabsf(record->rotation.z) < D_0069B080 && !skipSnap) {
+        actor->velocity.x = projection * transform[2][0] * length;
+        actor->velocity.z = projection * transform[2][2] * length;
+        if (__builtin_fabsf(actor->velocity.x) < nyuruSnapEpsilonZ) {
+            if (__builtin_fabsf(actor->velocity.z) < nyuruSnapEpsilonZ && !skipSnap) {
                 dot = dx * transform[2][0] + dz * transform[2][2];
                 if (extent.vector.z < dot) {
-                    record->rotation.x = transform[2][0] * length * 0.5f;
-                    record->rotation.z = transform[2][2] * length * 0.5f;
+                    actor->velocity.x = transform[2][0] * length * 0.5f;
+                    actor->velocity.z = transform[2][2] * length * 0.5f;
                 } else if (dot < -extent.vector.z) {
-                    record->rotation.x = -transform[2][0] * length * 0.5f;
-                    record->rotation.z = -transform[2][2] * length * 0.5f;
+                    actor->velocity.x = -transform[2][0] * length * 0.5f;
+                    actor->velocity.z = -transform[2][2] * length * 0.5f;
                 }
             }
         }
     }
-    record->hitFlags |= 0x1000;
-    height = mapMoveProbe(&record->position, &record->rotation, record->hitBuffer);
+    actor->collision.flags |= 0x1000;
+    height = UnduCheck(&actor->position, &actor->velocity, &actor->collision);
     if (height == -1000.0f) {
-        record->position.x -= record->rotation.x;
-        record->position.z -= record->rotation.z;
+        actor->position.x -= actor->velocity.x;
+        actor->position.z -= actor->velocity.z;
         return 0;
     } else {
-        record->position.y = height;
+        actor->position.y = height;
         return 1;
     }
 }
 
-int uwamonoAreaCheck(const Vector4 *from, UwamonoRecord *record, float radius);
-int uwamonoCrossPointAt(const Vector4 *first, const Vector4 *second, UwamonoRecord *record, AlignedVector4 *third);
-int CheckPointLine(const Vector4 *from, const Vector4 *to, const Vector4 *point);
-void xglVectorNormal_001A9200(Vector4 *destination, const Vector4 *vector);
+int UwamonoAreaCheck(const Vector4 *from, UwamonoRecord *record, float radius);
+int CrossPointUwamonoAt(const Vector4 *first, const Vector4 *second, UwamonoRecord *record, AlignedVector4 *third);
 
-int uwamonoCrossPoint(const Vector4 *origin, const Vector4 *target, AlignedVector4 *out, float radius)
+int CrossPointUwamono(const Vector4 *origin, const Vector4 *target, float radius, AlignedVector4 *out)
 {
     int hitIndex[256];
     AlignedVector4 startLeft;
@@ -733,7 +641,7 @@ int uwamonoCrossPoint(const Vector4 *origin, const Vector4 *target, AlignedVecto
         if (__builtin_fabsf(origin->y - record->position.y) > 0.3f) {
             continue;
         }
-        if (record->mode != 0 && uwamonoAreaCheck(origin, record, limit)) {
+        if (record->searchMode != 0 && UwamonoAreaCheck(origin, record, limit)) {
             hitIndex[count++] = i;
         }
     }
@@ -746,7 +654,7 @@ int uwamonoCrossPoint(const Vector4 *origin, const Vector4 *target, AlignedVecto
         return 0;
     }
 
-    xglVectorNormal_001A9200(&dir, &dir);
+    xglVectorNormal(&dir, &dir);
 
     startLeft = *origin;
     endLeft = *target;
@@ -774,11 +682,11 @@ int uwamonoCrossPoint(const Vector4 *origin, const Vector4 *target, AlignedVecto
             break;
         }
         hitRecord = &uwamonoRecords[hitIndex[i]];
-        uwamonoCrossPointAt(&startLeft, &endLeft, hitRecord, &crossPoint);
+        CrossPointUwamonoAt(&startLeft, &endLeft, hitRecord, &crossPoint);
         if (crossPoint.y != -1000.0f) {
             CheckNearPoint(origin, &crossPoint, out, out);
         }
-        uwamonoCrossPointAt(&startRight, &endRight, hitRecord, &crossPoint);
+        CrossPointUwamonoAt(&startRight, &endRight, hitRecord, &crossPoint);
         if (crossPoint.y != -1000.0f) {
             CheckNearPoint(origin, &crossPoint, out, out);
         }
@@ -788,7 +696,7 @@ int uwamonoCrossPoint(const Vector4 *origin, const Vector4 *target, AlignedVecto
             leftSide = CheckPointLine(&startLeft, &endLeft, &hitRecord->position);
             rightSide = CheckPointLine(&startRight, &endRight, &hitRecord->position);
             if (leftSide != rightSide) {
-                uwamonoCrossPointAt(origin, &hitRecord->position, hitRecord, &crossPoint);
+                CrossPointUwamonoAt(origin, &hitRecord->position, hitRecord, &crossPoint);
                 CheckNearPoint(origin, &crossPoint, out, out);
             }
         }
@@ -814,23 +722,23 @@ int uwamonoCrossPoint(const Vector4 *origin, const Vector4 *target, AlignedVecto
     return 1;
 }
 
-int uwamonoCalcNearCrossPointCircle(const Vector4 *origin, const Vector4 *target, UwamonoRecord *record, AlignedVector4 *out);
-int uwamonoCalcNearCrossPointBox(const Vector4 *origin, const Vector4 *target, UwamonoRecord *record, AlignedVector4 *out);
+int CalcNearCrossPointCircle(const Vector4 *origin, const Vector4 *target, UwamonoRecord *record, AlignedVector4 *out);
+int CalcNearCrossPointBox(const Vector4 *origin, const Vector4 *target, UwamonoRecord *record, AlignedVector4 *out);
 
 /* Near-crossing calculation for one record, chosen by its mode: 1 = box, 2 = circle; any other mode returns 2. */
-int uwamonoCrossPointAt(const Vector4 *first, const Vector4 *second, UwamonoRecord *record, AlignedVector4 *third) {
-    if (record->mode != UWAMONO_MODE_BOX) {
-        if (record->mode == UWAMONO_MODE_CIRCLE) {
-            return uwamonoCalcNearCrossPointCircle(first, second, record, third);
+int CrossPointUwamonoAt(const Vector4 *first, const Vector4 *second, UwamonoRecord *record, AlignedVector4 *third) {
+    if (record->searchMode != UWAMONO_MODE_BOX) {
+        if (record->searchMode == UWAMONO_MODE_CIRCLE) {
+            return CalcNearCrossPointCircle(first, second, record, third);
         }
         return 2;
     }
-    return uwamonoCalcNearCrossPointBox(first, second, record, third);
+    return CalcNearCrossPointBox(first, second, record, third);
 }
 
-/* Declared without a prototype: uwamonoCrossCheckRecordAt passes three arguments (a tail jump), the definition takes four. */
+/* Declared without a prototype: CrossCheckMapUnitAt passes three arguments (a tail jump), the definition takes four. */
 
-int uwamonoCalcNearCrossPointCircle(const Vector4 *origin, const Vector4 *target, UwamonoRecord *record, AlignedVector4 *out)
+int CalcNearCrossPointCircle(const Vector4 *origin, const Vector4 *target, UwamonoRecord *record, AlignedVector4 *out)
 {
     AlignedVector4 dir;
     AlignedVector4 normal;
@@ -841,7 +749,7 @@ int uwamonoCalcNearCrossPointCircle(const Vector4 *origin, const Vector4 *target
         dir.y = record->position.y;
         Vu0SubVectorXYZ(&dir, &record->position, origin);
         xglVectorLength(&length, &dir);
-        xglVectorNormal_001A9200(&normal, &dir);
+        xglVectorNormal(&normal, &dir);
         length = length - record->extent.x;
         if (length < 0.0f) {
             *out = *origin;
@@ -855,10 +763,8 @@ int uwamonoCalcNearCrossPointCircle(const Vector4 *origin, const Vector4 *target
     }
 }
 
-int CheckCrossLine(const Vector4 *origin, const Vector4 *target, const Vector4 *from, const Vector4 *to);
-void CalcCrossPoint(const Vector4 *origin, const Vector4 *target, const Vector4 *from, const Vector4 *to, AlignedVector4 *hit);
 
-int uwamonoCalcNearCrossPointBox(const Vector4 *origin, const Vector4 *target, UwamonoRecord *record, AlignedVector4 *out)
+int CalcNearCrossPointBox(const Vector4 *origin, const Vector4 *target, UwamonoRecord *record, AlignedVector4 *out)
 {
     Vector4 corner[4];
     AlignedVector4 position;
@@ -937,27 +843,27 @@ void CheckNearPoint(const Vector4 *origin, const Vector4 *candA, const Vector4 *
         *out = *candB;
 }
 
-int uwamonoAreaCheckBox(const Vector4 *from, UwamonoRecord *record, float radius);
+int AreaCheckBox(const Vector4 *from, UwamonoRecord *record, float radius);
 /* Area test of a record against a point: the height band of the record, then its box or circle. */
-extern float D_0069B08C;
-extern float D_0069B090;
+extern float uwamonoAreaTopScale;
+extern float uwamonoAreaBottomMargin;
 
-int uwamonoAreaCheck(const Vector4 *from, UwamonoRecord *record, float radius)
+int UwamonoAreaCheck(const Vector4 *from, UwamonoRecord *record, float radius)
 {
-    if (record->position.y + record->extent.y * D_0069B08C < from->y) {
+    if (record->position.y + record->extent.y * uwamonoAreaTopScale < from->y) {
         return 0;
     }
-    if (from->y < record->position.y - D_0069B090) {
+    if (from->y < record->position.y - uwamonoAreaBottomMargin) {
         return 0;
     }
-    if (record->mode != UWAMONO_MODE_BOX) {
-        if (record->mode == UWAMONO_MODE_CIRCLE) {
+    if (record->searchMode != UWAMONO_MODE_BOX) {
+        if (record->searchMode == UWAMONO_MODE_CIRCLE) {
             if (CheckDist2D(from, &record->position) < radius + record->extent.x) {
                 return 1;
             }
         }
     } else {
-        if (uwamonoAreaCheckBox(from, record, radius)) {
+        if (AreaCheckBox(from, record, radius)) {
             return 1;
         }
     }
@@ -965,21 +871,21 @@ int uwamonoAreaCheck(const Vector4 *from, UwamonoRecord *record, float radius)
 }
 
 /* Box area test of a record (the record's extent and anchor height) against a point with a radius. */
-int uwamonoAreaCheckBox(const Vector4 *from, UwamonoRecord *record, float radius) {
+int AreaCheckBox(const Vector4 *from, UwamonoRecord *record, float radius) {
     return uwamonoPointInBox(from, &record->position, &record->extent, radius, record->rotation.y) != 0;
 }
 
-/* Tests one record against the check point: far in y is a miss; mode 1 is a box, 2 a circle, other modes never hit. */ int uwamonoCrossCheckRecordAt(const AlignedVector4 *checkPosition, const AlignedVector4 *exclude, UwamonoRecord *record);
+/* Tests one record against the check point: far in y is a miss; mode 1 is a box, 2 a circle, other modes never hit. */ int CrossCheckMapUnitAt(const AlignedVector4 *checkPosition, const AlignedVector4 *exclude, UwamonoRecord *record);
 
-int uwamonoCrossCheck(const AlignedVector4 *checkPosition, UwamonoRecord *exclude)
+int CrossCheckMapUnitAim(const AlignedVector4 *checkPosition, UwamonoRecord *exclude)
 {
     UwamonoRecord *record;
     int index;
 
     record = uwamonoRecords;
     for (index = 0; index < UWAMONO_RECORD_COUNT; index++) {
-        if (record->kind == 2 && !(record->flags & 0x02000000) && record != exclude && record->mode != 0
-            && uwamonoCrossCheckRecordAt(checkPosition, &exclude->position, record) != 0) {
+        if (record->kind == 2 && !(record->flags & 0x02000000) && record != exclude && record->searchMode != 0
+            && CrossCheckMapUnitAt(checkPosition, &exclude->position, record) != 0) {
             return index;
         }
         record++;
@@ -990,15 +896,15 @@ int uwamonoCrossCheck(const AlignedVector4 *checkPosition, UwamonoRecord *exclud
 int CrossCheckMapUnitBox(const Vector4 *origin, const Vector4 *target, UwamonoRecord *record);
 
 /* Tests one record against the check point: far in y is a miss; mode 1 is a box, 2 a circle, other modes never hit. */
-int uwamonoCrossCheckRecordAt(const AlignedVector4 *checkPosition, const AlignedVector4 *exclude, UwamonoRecord *record)
+int CrossCheckMapUnitAt(const AlignedVector4 *checkPosition, const AlignedVector4 *exclude, UwamonoRecord *record)
 {
     float dy = checkPosition->y - record->position.y;
 
     if (__builtin_fabsf(dy) > 0.6f) {
         return 0;
     }
-    if (record->mode != 1) {
-        if (record->mode != 2) {
+    if (record->searchMode != 1) {
+        if (record->searchMode != 2) {
             return 0;
         }
         return CrossCheckMapUnitCircle(checkPosition, exclude, record);
@@ -1028,7 +934,7 @@ int CrossCheckMapUnitCircle(const Vector4 *origin, const Vector4 *target, Uwamon
     dz = normal.z;
     radius = record->extent.x;
     halfLength = __builtin_sqrtf(dx * dx + dz * dz) * 0.5f;
-    xglVectorNormal_001A9200(&normal, &normal);
+    xglVectorNormal(&normal, &normal);
     ox = origin->x;
     oz = origin->z;
     mid.x = ox + (target->x - ox) * 0.5f;
@@ -1050,7 +956,7 @@ int CrossCheckMapUnitCircle(const Vector4 *origin, const Vector4 *target, Uwamon
     return 0;
 }
 
-extern float D_0069B098;
+extern float crossCheckBoxMargin;
 
 int CrossCheckMapUnitBox(const Vector4 *origin, const Vector4 *target, UwamonoRecord *record)
 {
@@ -1061,8 +967,8 @@ int CrossCheckMapUnitBox(const Vector4 *origin, const Vector4 *target, UwamonoRe
 
     extent.words[1] = ((const u64 *)&record->extent)[1];
     extent.words[0] = ((const u64 *)&record->extent)[0];
-    extent.vector.z = extent.vector.z + D_0069B098;
-    extent.vector.x = extent.vector.x + D_0069B098;
+    extent.vector.z = extent.vector.z + crossCheckBoxMargin;
+    extent.vector.x = extent.vector.x + crossCheckBoxMargin;
     position = record->position;
     matrix = record->transform->matrix;
 
@@ -1096,16 +1002,14 @@ int CrossCheckMapUnitBox(const Vector4 *origin, const Vector4 *target, UwamonoRe
     return CheckCrossLine(origin, target, &corner[3], &corner[0]) != 0;
 }
 
-/* One slot of uwamonoSlotTable: the record of the object it tracks. */
-typedef struct UwamonoSlot {
-    UwamonoRecord *object;              /* +0x00 */
-    unsigned char unmodeled_04[0x86c];
-} UwamonoSlot;
-
 /*
- * The probe block of mapMoveProbe (uwamonoCheckHeight and uwamonoCanSeeRecord pass one):
+ * The probe block of UnduCheck (CheckUwamonoHeight and AimMapUnitLookCheck pass one):
  * two cleared words, the attribute mask, a flag byte, the range, the ground height and
- * work words. The +0x28 word is set as a float by uwamonoCanSeeRecord (zeroed28 is its int view).
+ * work words. The +0x28 word is set as a float by AimMapUnitLookCheck (zeroed28 is its int view).
+ * Same 0x40 bytes as MapCollisionObject (undulate.h), which it views for AimMapUnitLookCheck only: the unions here are
+ * scheduling levers (the stores of the mask and of the +0x28 word get alias set 0; with plain MapCollisionObject fields the
+ * mask store is scheduled right after its computation and the template copy changes registers), so UnduCheck gets the
+ * request through a cast to the type it views.
  */
 typedef struct UwamonoProbeRequest {
     int clearedA;                       /* +0x00 */
@@ -1122,19 +1026,17 @@ typedef struct UwamonoProbeRequest {
     unsigned char unmodeled_2C[0x14];
 } UwamonoProbeRequest;
 
-extern int uwamonoCurrentIndex;
-extern UwamonoSlot uwamonoSlotTable[];
-extern UwamonoProbeRequest uwamonoProbeTemplate;
+extern UwamonoProbeRequest uwamonoProbeTemplate; /* game_camera.c defines it as a MapCollisionObject */
 
-int uwamonoCanSeeRecord(UwamonoRecord *record)
+int AimMapUnitLookCheck(UwamonoRecord *record)
 {
-    UwamonoRecord *object;
+    struct XenoActor *object;
     UwamonoProbeRequest request;
     DoublewordAlignedVector4 position;
     Vector4 delta;
 
-    object = uwamonoSlotTable[uwamonoCurrentIndex].object;
-    if (uwamonoCrossCheck(&object->position, record) != -1) {
+    object = uwamonoRecords[uwamonoCurrentIndex].body.actor;
+    if (CrossCheckMapUnitAim(&object->position, record) != -1) {
         return 0;
     }
     request = uwamonoProbeTemplate;
@@ -1146,8 +1048,8 @@ int uwamonoCanSeeRecord(UwamonoRecord *record)
     request.mask = (request.mask & 0xFFF8) | 0x803;
     request.flag = 0;
     request.word = 0.0f;
-    mapMoveProbe(&position, 0, &request);
-    if (mapMoveProbe(&position, &delta, &request) == -1000.0f) {
+    UnduCheck(&position, 0, (MapCollisionObject *) &request);
+    if (UnduCheck(&position, &delta, (MapCollisionObject *) &request) == -1000.0f) {
         return 0;
     }
     if (__builtin_fabsf(position.x - record->position.x) < 0.01f
@@ -1157,18 +1059,18 @@ int uwamonoCanSeeRecord(UwamonoRecord *record)
     return 0;
 }
 
-void uwamonoCheckHeight(UwamonoRecord *record);
+void CheckUwamonoHeight(UwamonoRecord *record);
 
 /* Copies the record position into its transform translation when the record is visible and the global gate is clear. */
 void uwamonoUpdateTransform(UwamonoRecord *record)
 {
     int flags;
-    UwamonoTransform *transform;
+    UwamonoPose *transform;
 
     flags = record->flags;
     if ((flags & 2) && !(gameWork.control & 1)) {
-        if ((flags & 8) && record->target == -1) {
-            uwamonoCheckHeight(record);
+        if ((flags & 8) && record->parent == -1) {
+            CheckUwamonoHeight(record);
         }
         transform = record->transform;
         transform->matrix[3][0] = record->position.x;
@@ -1177,75 +1079,73 @@ void uwamonoUpdateTransform(UwamonoRecord *record)
     }
 }
 
-void mapProbeInit(UwamonoProbeRequest *probe);
-int mapFindBlockEntry(int key, int index);
-int uwamonoHitCheckOther(UwamonoRecord *record);
+int HitCheckUwamono(UwamonoRecord *record);
 
 /* Falls a unit under gravity until it lands on the map or on another unit. */
-void uwamonoCheckHeight(UwamonoRecord *record)
+void CheckUwamonoHeight(UwamonoRecord *record)
 {
-    UwamonoProbeRequest probe;
+    MapCollisionObject probe;
     float velocity;
     float groundY;
     float newY;
     int hitIndex;
 
-    mapProbeInit(&probe);
-    probe.ground = mapFindBlockEntry(256, -1);
-    probe.mask = 0;
-    groundY = mapMoveProbe(&record->position, 0, &probe);
+    UnduParamInit(&probe);
+    probe.block = UnduDataGetHeader(256, -1);
+    probe.flags = 0;
+    groundY = UnduCheck(&record->position, 0, &probe);
     if (groundY == -1000.0f) {
         return;
     }
     if (!(record->flags & 8)) {
         return;
     }
-    velocity = record->fallSpeed;
+    velocity = record->velocity.y;
     for (;;) {
         if (velocity > -0.6f) {
-            velocity = record->fallSpeed = velocity - gameWork.gravity;
+            velocity = record->velocity.y = velocity - gameWork.gravity;
         }
         newY = record->position.y + velocity;
         record->position.y = newY;
         if (newY < groundY) {
             record->position.y = groundY + 0.001f;
             if ((*(unsigned long long *)&record->flags & 0x10000010ULL) == 0) {
-                record->fallSpeed = -velocity / gameWork.bounceDivisor;
+                record->velocity.y = -velocity / gameWork.bounceDivisor;
             } else {
-                record->fallSpeed = 0.0f;
+                record->velocity.y = 0.0f;
             }
-            if (record->fallSpeed < 0.05f) {
+            if (record->velocity.y < 0.05f) {
                 record->landedFlags |= MAP_UNIT_LANDED;
-                record->fallSpeed = 0.0f;
+                record->velocity.y = 0.0f;
             }
         } else {
-            hitIndex = uwamonoHitCheckOther(record);
+            hitIndex = HitCheckUwamono(record);
             if (hitIndex != -1) {
                 record->position.y = uwamonoRecords[hitIndex].position.y
                     + uwamonoRecords[hitIndex].extent.y + 0.001f;
                 if ((*(unsigned long long *)&record->flags & 0x10000010ULL) == 0) {
-                    record->fallSpeed = -record->fallSpeed / gameWork.bounceDivisor;
+                    record->velocity.y = -record->velocity.y / gameWork.bounceDivisor;
                 } else {
-                    record->fallSpeed = 0.0f;
+                    record->velocity.y = 0.0f;
                 }
-                if (record->fallSpeed < 0.1f) {
-                    record->fallSpeed = 0.0f;
+                if (record->velocity.y < 0.1f) {
+                    record->velocity.y = 0.0f;
                 }
             }
         }
         if (!(record->flags & 0x10)) {
             return;
         }
-        if (record->fallSpeed == 0.0f) {
+        if (record->velocity.y == 0.0f) {
             break;
         }
-        velocity = record->fallSpeed;
+        velocity = record->velocity.y;
     }
 }
 
-int uwamonoHitCheckOtherAt(UwamonoRecord *record, UwamonoRecord *candidate);
+int HitCheckUwamonoAt(UwamonoRecord *record, UwamonoRecord *candidate);
 
-int uwamonoHitCheckOther(UwamonoRecord *record)
+int HitCheckUwamono(UwamonoRecord *record)
 {
     int index;
 
@@ -1253,18 +1153,18 @@ int uwamonoHitCheckOther(UwamonoRecord *record)
         UwamonoRecord *candidate = &uwamonoRecords[index];
 
         if (candidate->kind == 2 && candidate->key != record->key
-            && (candidate->flags & 2) && candidate->mode != 0
-            && uwamonoHitCheckOtherAt(record, candidate) != 0) {
+            && (candidate->flags & 2) && candidate->searchMode != 0
+            && HitCheckUwamonoAt(record, candidate) != 0) {
             return index;
         }
     }
     return -1;
 }
 
-extern float D_0069B0B0;
-int uwamonoHitCheckOtherBox(UwamonoRecord *record, UwamonoRecord *other);
+extern float hitCheckCircleMargin;
+int HitCheckBoxUwamono(UwamonoRecord *record, UwamonoRecord *other);
 
-int uwamonoHitCheckOtherAt(UwamonoRecord *record, UwamonoRecord *candidate)
+int HitCheckUwamonoAt(UwamonoRecord *record, UwamonoRecord *candidate)
 {
     if (record->position.y < candidate->position.y) {
         return 0;
@@ -1272,448 +1172,30 @@ int uwamonoHitCheckOtherAt(UwamonoRecord *record, UwamonoRecord *candidate)
     if (candidate->position.y + candidate->extent.y < record->position.y) {
         return 0;
     }
-    switch (candidate->mode) {
+    switch (candidate->searchMode) {
     case UWAMONO_MODE_CIRCLE:
-        if (CheckDist2D(&record->position, &candidate->position) < candidate->extent.x + D_0069B0B0) {
+        if (CheckDist2D(&record->position, &candidate->position) < candidate->extent.x + hitCheckCircleMargin) {
             return 1;
         }
         return 0;
     case UWAMONO_MODE_BOX:
-        return uwamonoHitCheckOtherBox(record, candidate);
+        return HitCheckBoxUwamono(record, candidate);
     default:
         return 0;
     }
 }
 
-extern float D_0069B0B4;
+extern float hitCheckBoxPointRadius;
 
-int uwamonoHitCheckOtherBox(UwamonoRecord *record, UwamonoRecord *other) {
-    return uwamonoPointInBox(&record->position, &other->position, &other->extent, D_0069B0B4, other->rotation.y) != 0;
+int HitCheckBoxUwamono(UwamonoRecord *record, UwamonoRecord *other) {
+    return uwamonoPointInBox(&record->position, &other->position, &other->extent, hitCheckBoxPointRadius, other->rotation.y) != 0;
 }
 
-extern float D_0069B0B8;
-extern signed char uwamonoDrawDisabled;
-void DispPillar(Vector4 *source, float radius, float lift, int color);
-
-/*
- * Builds the debug outline of every active record and draws nothing: a box record (mode 1) gets the four bottom
- * corners of its footprint and their copies raised by the extent height, a circle record (mode 2) goes to
- * DispPillar. The Xenosaga II form of Xenosaga I's DispCollUwamono. Does nothing while uwamonoDrawDisabled is set.
- */
-void DispCollUwamono(void)
-{
-    DoublewordVector4 bottom[4];
-    DoublewordVector4 top[4];
-    AlignedVector4 position;
-    DoublewordAlignedVector4 size;
-    int colors[8];
-    float cornerW;
-    int i;
-
-    if (uwamonoDrawDisabled == 0) {
-        colors[0] = colors[1] = 0;
-        colors[2] = 255;
-        colors[3] = 128;
-        colors[4] = 255;
-        colors[5] = colors[6] = 0;
-        colors[7] = 128;
-        cornerW = D_0069B0B8;
-        for (i = 0; i < UWAMONO_RECORD_COUNT; i++) {
-            UwamonoRecord *record = &uwamonoRecords[i];
-            UwamonoRecord *unit;
-            float (*rotation)[4];
-
-            if (record->kind < 2 || record->kind == 4 || record->kind == 5 || record->kind == 6
-                || record->kind == 3 || record->kind == 7) {
-                continue;
-            }
-            if (record->extent.x == 0.0f || record->extent.y == 0.0f || record->extent.z == 0.0f) {
-                continue;
-            }
-            if (record->mode == 0) {
-                continue;
-            }
-            unit = &uwamonoRecords[i];
-            rotation = unit->matrix.rows;
-            position.x = rotation[3][0];
-            position.y = rotation[3][1];
-            position.z = rotation[3][2];
-            position.w = 1.0f;
-            size = unit->extent;
-            switch (record->mode) {
-            case UWAMONO_MODE_BOX:
-                bottom[0].vector.x = position.x + (size.x * rotation[0][0] + size.z * rotation[2][0]);
-                bottom[0].vector.y = position.y;
-                bottom[0].vector.z = position.z + (size.x * rotation[0][2] + size.z * rotation[2][2]);
-                bottom[1].vector.x = position.x - (size.z * rotation[0][2] + size.x * rotation[2][2]);
-                bottom[1].vector.y = position.y;
-                bottom[1].vector.z = position.z + (size.z * rotation[0][0] + size.x * rotation[2][0]);
-                bottom[2].vector.x = position.x - (size.x * rotation[0][0] + size.z * rotation[2][0]);
-                bottom[2].vector.y = position.y;
-                bottom[2].vector.z = position.z - (size.x * rotation[0][2] + size.z * rotation[2][2]);
-                bottom[3].vector.x = position.x + (size.z * rotation[0][2] + size.x * rotation[2][2]);
-                bottom[3].vector.y = position.y;
-                bottom[3].vector.z = position.z - (size.z * rotation[0][0] + size.x * rotation[2][0]);
-                bottom[0].vector.w = cornerW;
-                bottom[1].vector.w = cornerW;
-                bottom[2].vector.w = cornerW;
-                bottom[3].vector.w = cornerW;
-                top[0] = bottom[0];
-                top[1] = bottom[1];
-                top[2] = bottom[2];
-                top[3] = bottom[3];
-                top[0].vector.y += size.y;
-                top[1].vector.y += size.y;
-                top[2].vector.y += size.y;
-                top[3].vector.y += size.y;
-                break;
-            case UWAMONO_MODE_CIRCLE:
-                DispPillar(&record->position, record->extent.x, record->extent.y, 4);
-                break;
-            }
-            /*
-             * The unit pointer is set again with no use left, as Xenosaga I's DispCollUwamono sets it once per
-             * branch. A pointer set more than once has no known base while the corners are stored, so the
-             * rotation rows are loaded again after each corner store.
-             */
-            unit = &uwamonoRecords[i];
-        }
-    }
-}
-
-/* The state block of one uwamonoStateSlots entry: the pending points and the link table. */
-struct UwamonoState {
-    unsigned char unmodeled_0000[0x10a0];
-    Vector4 points[512];                /* +0x10A0 */
-    unsigned char unmodeled_30a0[6];
-    short count;                        /* +0x30A6: points in use */
-    unsigned char unmodeled_30a8[8];
-    Vector4 vectors[0x40];              /* +0x30B0: copied one vector at a time */
-    short linkTargets[0x40][4];         /* +0x34B0: vectors[linkTargets[i][j]] is linked to vectors[i] */
-    short linkCounts[0x80];             /* +0x36B0: number of links of vectors[i] */
-    short pointCount;                   /* +0x37B0 */
-};
-
-/*
- * Each 0x870-byte entry of uwamonoStateSlots starts with a pointer to its state block; the
- * rest of the entry is unmodeled here.
- */
-typedef struct UwamonoStateSlot {
-    struct UwamonoState *state;         /* +0x00 */
-    unsigned char unmodeled_04[0x870 - 0x04];
-} UwamonoStateSlot;
-
-extern UwamonoStateSlot uwamonoStateSlots[];
-extern float D_0069B0BC;
-
-void uwamonoDrawPointPath(int slotIndex) {
-    struct UwamonoState *state;
-    int colour[4];
-    DoublewordVector4 segment[2];
-    int i;
-
-    state = uwamonoStateSlots[slotIndex].state;
-    if (uwamonoDrawDisabled == 0) {
-        colour[0] = 255;
-        colour[1] = 0;
-        colour[2] = 0;
-        colour[3] = 128;
-        i = 0;
-        if (state->count - 1 > 0) {
-            do {
-                segment[0].vector = state->points[i];
-                segment[1].vector = state->points[i + 1];
-                segment[0].vector.y += D_0069B0BC;
-                segment[1].vector.y += D_0069B0BC;
-                i++;
-            } while (i < state->count - 1);
-        }
-    }
-}
-
-extern float D_0069B0C0;
-
-/*
- * For each vector pair of the state's link table, copies both vectors into locals and
- * adds the gain to the y of each copy. Does nothing while uwamonoDrawDisabled is set.
- */
-void uwamonoDrawStateLinks(int slotIndex)
-{
-    struct UwamonoState *state;
-    int color[4];
-    int i;
-    int j;
-    int target;
-
-    state = uwamonoStateSlots[slotIndex].state;
-    if (uwamonoDrawDisabled == 0) {
-        color[0] = 255;
-        color[1] = 0;
-        color[2] = 255;
-        color[3] = 128;
-        for (i = 0; i < state->pointCount - 1; i++) {
-            j = 0;
-            if (state->linkCounts[i] > 0) {
-                do {
-                    DoublewordVector4 current;
-                    DoublewordVector4 linked;
-                    target = state->linkTargets[i][j];
-                    current.vector = state->vectors[i];
-                    linked.vector = state->vectors[target];
-                    current.vector.y += D_0069B0C0;
-                    linked.vector.y += D_0069B0C0;
-                } while (++j < state->linkCounts[i]);
-            }
-        }
-    }
-}
-
-/* One 208-byte record of the ladder table ladderSlots (tu075 and tu076 name it LadderSlot). */
-typedef struct UwamonoLadderRecord {
-    short id;                               /* +0x00: -1 when the slot is unused */
-    unsigned char unmodeled_02[0x0E];
-    DoublewordAlignedVector4 origin;        /* +0x10: x, y (the baseY of the foot), z, w */
-    float angle;                            /* +0x20: facing angle of the ladder */
-    float height;                           /* +0x24 */
-    float rungs[32];                        /* +0x28: height of each rung above the foot */
-    unsigned char rungExits[32];            /* +0xA8: 1 the rung can be left to the left, 2 to the right */
-    short rungCount;                        /* +0xC8 */
-    unsigned char unmodeled_ca[0x06];
-} UwamonoLadderRecord;
-
-extern UwamonoLadderRecord ladderSlots[];
-extern float D_0069B0C4;
-extern float D_0069B0C8;
-extern float sinf(float angle);
-extern float cosf(float angle);
-
-void uwamonoDrawLadder(int slotIndex)
-{
-    UwamonoLadderRecord *slot;
-    int color[4];
-    DoublewordAlignedVector4 rung;
-    DoublewordAlignedVector4 point;
-    float phase;
-    float radius;
-    int i;
-
-    slot = &ladderSlots[slotIndex];
-    if (uwamonoDrawDisabled == 0 && slot->id != -1) {
-        color[0] = 255;
-        color[1] = 255;
-        color[2] = 0;
-        color[3] = 128;
-        point = slot->origin;
-        i = 0;
-        point.y = point.y + slot->height;
-        point = slot->origin;
-        point.x = point.x + sinf(slot->angle);
-        point.z = point.z + cosf(slot->angle);
-        if (slot->rungCount > 0) {
-            phase = D_0069B0C4;
-            radius = D_0069B0C8;
-            do {
-                rung = slot->origin;
-                rung.y = rung.y + slot->rungs[i];
-                if (slot->rungExits[i] & 1) {
-                    point.x = rung.x + sinf(slot->angle + phase) * radius;
-                    point.y = rung.y;
-                    point.z = rung.z + cosf(slot->angle + phase) * radius;
-                }
-                if (slot->rungExits[i] & 2) {
-                    point.x = rung.x + sinf(slot->angle - phase) * radius;
-                    point.y = rung.y;
-                    point.z = rung.z + cosf(slot->angle - phase) * radius;
-                }
-            } while (++i < slot->rungCount);
-        }
-    }
-}
-
-void func_00202C78(void)
-{
-    int table[4];
-    int n;
-
-    if (uwamonoDrawDisabled != 0) {
-        return;
-    }
-    table[0] = 255;
-    table[1] = 255;
-    table[2] = 0;
-    table[3] = 128;
-    n = 123;
-    do {
-        n -= 4;
-    } while (n > -1);
-}
-
-/* A circle is walked in 16 steps of an eighth of pi (22.5 degrees). */
-#define CIRCLE_STEP 0.39269909f
-
-/*
- * Walks a ring of the given radius around source in the XZ plane, one segment per step: each step builds the segment's
- * two end points; when lift is positive the end points are copied with y raised by lift. Does nothing while
- * uwamonoDrawDisabled is set. color is not read: the callers pass a small id there (1, 2, 4 or 7), where Xenosaga I's
- * DispPillar took its unused colors argument.
- */
-void DispPillar(Vector4 *source, float radius, float lift, int color)
-{
-    DoublewordAlignedVector4 first;
-    DoublewordAlignedVector4 second;
-    DoublewordAlignedVector4 firstLifted;
-    DoublewordAlignedVector4 secondLifted;
-    float angle;
-    int i;
-
-    if (uwamonoDrawDisabled == 0) {
-        for (i = 0; i < 17; i++) {
-            angle = CIRCLE_STEP;
-            angle = i * angle;
-            first = *source;
-            second = *source;
-            first.x = first.x + xglSin(angle) * radius;
-            first.z = first.z + xglCos(angle) * radius;
-            angle = CIRCLE_STEP;
-            angle = (i + 1) * angle;
-            second.x = second.x + xglSin(angle) * radius;
-            second.z = second.z + xglCos(angle) * radius;
-            if (lift > 0.0f) {
-                firstLifted = first;
-                secondLifted = second;
-                firstLifted.y = firstLifted.y + lift;
-                secondLifted.y = secondLifted.y + lift;
-            }
-        }
-    }
-}
-
-/* Empty stub: six callers, nothing to name from the body. */
-void func_00202E60(void) {
-
-}
-
-void uwamonoDrawFanEdge(const Vector4 *from, float angle, float radius)
-{
-    Vector4 point;
-
-    if (uwamonoDrawDisabled == 0) {
-        point = *from;
-        point.x += sinf(angle) * radius;
-        point.z += cosf(angle) * radius;
-    }
-}
-
-/* Stores a value in the record's pendingValue, but only while the global gate uwamonoDrawDisabled is clear. */
-void uwamonoSetPendingValue(UwamonoRecord *record, float pendingValue) {
-    if (uwamonoDrawDisabled == 0) {
-        record->pendingValue = pendingValue;
-    }
-}
-
-void uwamonoDrawSegmentBox(const Vector4 *from, const Vector4 *to)
-{
-    Vector4 outline[8];
-    int i;
-
-    if (uwamonoDrawDisabled != 0) {
-        return;
-    }
-    for (i = 0; i < 4; i++) {
-        outline[i] = *from;
-        outline[i + 4] = *to;
-    }
-    outline[1].x = to->x;
-    outline[2].x = to->x;
-    outline[2].z = to->z;
-    outline[3].z = to->z;
-    outline[5].x = from->x;
-    outline[6].x = from->x;
-    outline[6].z = from->z;
-    outline[7].z = from->z;
-}
-
-/*
- * Builds three copies of *position, each nudged by 0.5 on one axis (x, y, z),
- * and three RGBA colour rows (red, green, blue); no value leaves the function.
- */
-void uwamonoDrawPointAxes(const Vector4 *position) {
-    if (uwamonoDrawDisabled == 0) {
-        Vector4 pointX = *position;
-        Vector4 pointY = *position;
-        Vector4 pointZ = *position;
-        int colorRed[4];
-        int colorGreen[4];
-        int colorBlue[4];
-
-        colorRed[0] = 255;
-        colorRed[1] = 0;
-        colorRed[2] = 0;
-        colorRed[3] = 63;
-        colorGreen[0] = 0;
-        colorGreen[1] = 255;
-        colorGreen[2] = 0;
-        colorGreen[3] = 63;
-        colorBlue[0] = 0;
-        colorBlue[1] = 0;
-        colorBlue[2] = 255;
-        colorBlue[3] = 63;
-
-        pointX.x += 0.5f;
-        pointY.y += 0.5f;
-        pointZ.z += 0.5f;
-    }
-}
-
-/* Two screen coordinates, scaled by 16 before uwamonoProjectToScreen halves them. */
-typedef struct UwamonoScreenPos {
-    int x;
-    int y;
-} UwamonoScreenPos;
-
-/* The part of the active camera that uwamonoProjectToScreen hands to the vector helpers. */
-typedef struct UwamonoActiveCamera {
-    unsigned char unmodeled_00[0x70];
-    Vector4 secondVector;               /* +0x70: second operand of _CurSetViewScaleTrans */
-    Vector4 firstVector;                /* +0x80: first operand of _CurSetViewScaleTrans */
-    unsigned char unmodeled_90[0x3e0];
-    Vector4 thirdVector;                /* +0x470: operand of _CurMatrixSet */
-} UwamonoActiveCamera;
-
-void _CurMatrixSet(Vector4 *vector);
-void _CurSetViewScaleTrans(Vector4 *first, Vector4 *second);
-int _CurRotTransPersClipScreen(UwamonoScreenPos *position, int query);
-UwamonoActiveCamera *xglStudioSelectGetActiveCamera(int);
-
-/*
- * Sets up the active camera's vectors, then rescales the two screen coordinates in
- * position (x16) to centred values; _CurRotTransPersClipScreen can replace both with 0x1000.
- */
-void uwamonoProjectToScreen(int query, UwamonoScreenPos *position) {
-    UwamonoActiveCamera *camera;
-
-    camera = xglStudioSelectGetActiveCamera(0);
-    _CurMatrixSet(&camera->thirdVector);
-    _CurSetViewScaleTrans(&camera->firstVector, &camera->secondVector);
-    if (_CurRotTransPersClipScreen(position, query) != 0) {
-        position->x = 0x1000;
-        position->y = 0x1000;
-        return;
-    }
-    position->x = ((position->x >> 4) - 0x700) >> 1;
-    position->y = ((position->y >> 4) - 0x720) >> 1;
-}
-
-const float D_0069B064 = 0.89999997615814209f;
-const float D_0069B07C = 0.0010000000474974513f;
-const float D_0069B080 = 0.0010000000474974513f;
-float D_0069B08C = 0.89999997615814209f;
-float D_0069B090 = 1.7999999523162842f;
-float D_0069B098 = 0.10000000149011612f;
-float D_0069B0B0 = 0.10000000149011612f;
-float D_0069B0B4 = 0.15000000596046448f;
-float D_0069B0B8 = 0.10000000149011612f;
-float D_0069B0BC = 0.20000000298023224f;
-float D_0069B0C0 = 0.20000000298023224f;
-float D_0069B0C4 = 2.1816616058349609f;
-float D_0069B0C8 = 0.87000000476837158f;
+const float uwamonoMapUnitTopScale = 0.89999997615814209f;
+const float nyuruSnapEpsilonX = 0.0010000000474974513f;
+const float nyuruSnapEpsilonZ = 0.0010000000474974513f;
+float uwamonoAreaTopScale = 0.89999997615814209f;
+float uwamonoAreaBottomMargin = 1.7999999523162842f;
+float crossCheckBoxMargin = 0.10000000149011612f;
+float hitCheckCircleMargin = 0.10000000149011612f;
+float hitCheckBoxPointRadius = 0.15000000596046448f;

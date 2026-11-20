@@ -2,6 +2,7 @@
 #define INCLUDE_MAIN_TIXACANIMCURVE_H
 
 #include "shared.h"
+#include "main/TiMRPackage.h"
 
 /* Curve keys, transform headers and the functions of src/main/TiXacAnimCurve.c that other files call. */
 
@@ -32,29 +33,26 @@ typedef struct XacCurveKeyTable {
     f32 keys[1];
 } XacCurveKeyTable;
 
-typedef struct XacTransDynamics {
-    unsigned char unmodeled_00[0x28];
-    int flags;
-    f32 weight;
-    f32 translation[3];
-    unsigned char unmodeled_3C[0x14];
-    f32 rotation[3];
-    unsigned char unmodeled_5C[0x4];
-    f32 scale[3];
-} XacTransDynamics;
 
-void xacBuildCubicSegment(f32 *coeffs, const f32 *times, const f32 *values);
+extern const char xacAssertFile[];
+
 f32 xacGetKeyValue(TiXacKey *pKeyHeader);
-void xacGetKeyPair(TiXacKey *keyHeader, f32 *first, f32 *second);
-void xacGetKeyPairB(TiXacKey *keyHeader, f32 *first, f32 *second);
-f32 xacGetKeyPayloadA(TiXacKey *key);
-f32 xacGetKeyPayloadB(TiXacKey *key);
+void xacGetStartKeyValueAngle(TiXacKey *keyHeader, f32 *first, f32 *second);
+void xacGetEndKeyValueAngle(TiXacKey *keyHeader, f32 *first, f32 *second);
+f32 xacGetKeyOutTangentAngle(TiXacKey *key);
+f32 xacGetKeyInTangentAngle(TiXacKey *key);
 f32 xacEvalCurve(f32 curveParam, u8 **keyCursor);
+void xacEvalTransform(f32 *values, u8 **keyCursor, f32 curveParam);
 u8 *xacEvalJointPose(f32 *values, u8 **ppJointHeader, f32 curveParam);
-u8 *xacEvalJointValue(f32 *values, u8 **ppJointHeader, f32 curveParam);
+u8 *xacEvalJointValue(f32 curveParam, f32 *values, u8 **ppJointHeader);
 u8 *xacReadJointCurves9(f32 *values, u8 **ppJointHeader, f32 curveParam);
-void xacEvalTransDynamicsNoWeight(f32 *values, XacTransDynamics *pTransDynamics, u8 **ppCursor, f32 curveParam);
-f32 *xacFindCurveKey(int *pFlag, XacCurveKeyTable *pTable, f32 curveParam);
+void xacEvalTransJoint(f32 *values, TiHrcJoint *pTransJoint, u8 **keyCursor, f32 frame);
+void xacEvalTransLocator(f32 *values, TiHrcLocator *pTransLocator, u8 **keyCursor, f32 frame);
+void xacEvalTransFace(f32 *values, TiHrcSkip *pTransFace, u8 **keyCursor, f32 frame);
+void xacEvalTransDynamics(f32 *values, TiHrcDynamics *pTransDynamics, u8 **ppCursor, f32 curveParam);
+void xacEvalJointCurves9(f32 *values, u8 *pJointHeader, f32 curveParam);
+void xacEvalTransDynamicsNoWeight(f32 *values, TiHrcDynamics *pTransDynamics, u8 **ppCursor, f32 curveParam);
+f32 *xacFindVisibilityKey(int *pFlag, XacCurveKeyTable *pTable, f32 curveParam);
 void xacReadWindDirCurves(f32 *values, u8 **ppJointHeader, f32 curveParam);
 void xacReadWindPointCurves(f32 *values, u8 **ppJointHeader, f32 curveParam);
 void xacReadJointCurves12Padded(f32 *values, u8 **ppJointHeader, f32 curveParam);

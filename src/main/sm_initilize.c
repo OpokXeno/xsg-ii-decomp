@@ -54,10 +54,12 @@ void smInitMemInfo(SmPool *pool, SmCell *first_cell, u32 unit_count)
   pool->largest_free_block = bytes;
 }
 
-void smInitilize(SmCell *cell, u32 size)
+void smInitilize(void *memory, u32 size)
 {
+  SmCell *cell;
   u32 unit_count;
 
+  cell = memory;
   unit_count = size >> 6;
   cell->tag = 0x1234;
   cell->unit_count = (int)(unit_count - 1);
@@ -66,10 +68,12 @@ void smInitilize(SmCell *cell, u32 size)
   smInitMemInfo(&smPool, cell, unit_count);
 }
 
-void smInitilizeSmall(SmCell *cell, u32 size)
+void smInitilizeSmall(void *memory, u32 size)
 {
+  SmCell *cell;
   u32 unit_count;
 
+  cell = memory;
   unit_count = size >> 6;
   cell->tag = 0x1234;
   cell->unit_count = (int)(unit_count - 1);
@@ -141,9 +145,9 @@ void *smAlloc(int size)
   return smAllocFromPool((size + 0x7FF) & ~0x7FF, smPool.first_cell, smPool.total_units, 0);
 }
 
-void smFindFree(int size)
+void *smFindFree(int size)
 {
-  smAllocFromPool((size + 0x7FF) & ~0x7FF, smPool.first_cell, smPool.total_units, 1);
+  return smAllocFromPool((size + 0x7FF) & ~0x7FF, smPool.first_cell, smPool.total_units, 1);
 }
 
 void *smAllocSmall(int size)
@@ -241,4 +245,4 @@ const Matrix4 MMathUnitMatrix = {
 const char MSeObjInitAllocMessage[40] = "MSeObjInit: Could not allocate memory";
 
 /* Message of MSeObjProc for an invalid object type. */
-const char D_0068C6D8[32] = "MSeObjProc: Invalid type [%d]";
+const char MSeObjProcInvalidTypeFormat[32] = "MSeObjProc: Invalid type [%d]";

@@ -23,6 +23,25 @@ typedef struct Vector4 {
 /* Quadword-aligned like sceVu0FVECTOR: whole-vector copies compile to ld/sd. */
 typedef Vector4 AlignedVector4 __attribute__((aligned(16)));
 
+/* A vector viewed as a Vector4 or as its four floats by index. The original reaches such vectors through a union: the
+ * stores have alias set 0, so every store reloads the pointers (the levers named where it is used). */
+typedef union Vector4Elements {
+    Vector4 vector;
+    float component[4];
+} Vector4Elements;
+
+/* The same view of a quadword-aligned vector. */
+typedef union AlignedVector4Elements {
+    AlignedVector4 vector;
+    float component[4];
+} AlignedVector4Elements;
+
+/* Four floats the original indexes one by one and copies by value as two doublewords (ld/sd). */
+typedef union Vector4Doublewords {
+    float component[4];
+    u64 words[2];
+} Vector4Doublewords;
+
 /* A vector the original keeps only 8-aligned but copies with ld/sd. */
 typedef Vector4 DoublewordAlignedVector4 __attribute__((aligned(8)));
 

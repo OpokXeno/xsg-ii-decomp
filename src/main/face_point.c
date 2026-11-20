@@ -1,12 +1,10 @@
 #include "common.h"
-#include "main/sdv_033.h"
+#include "main/xgl_camera.h"
 #include "shared.h"
 #include "main/face_point.h"
+#include "main/xgl_2.h"
 
 extern int strcmp(const char *left, const char *right);
-void xglVectorOuter(Vector4 *destination, const Vector4 *left,
-                    const Vector4 *right);
-void xglVectorNormal_001A9200(Vector4 *destination, const Vector4 *source);
 
 typedef int s32;
 
@@ -52,7 +50,7 @@ static int s_nIgnoreCulling = 0;
 extern const CullingMapEntry s_aCullingMap[14];
 
 /* _ApplyMatrix33: _ApplyMatrix33, verbatim X1 twin (high). */
-void _ApplyMatrix33(register Vector4 *destination, register const Matrix4 *matrix, register const Vector4 *vector)
+void _ApplyMatrix33(register Vector4 *destination, register Matrix4 *matrix, register const Vector4 *vector)
 {
     __asm__ __volatile__(
         "lqc2 $vf31,0(%2)\n\t"
@@ -68,7 +66,7 @@ void _ApplyMatrix33(register Vector4 *destination, register const Matrix4 *matri
 }
 
 /* _ApplyMatrix: _ApplyMatrix, verbatim X1 twin (high). */
-void _ApplyMatrix(register Vector4 *destination, register const Matrix4 *matrix, register const Vector4 *vector)
+void _ApplyMatrix(register Vector4 *destination, register Matrix4 *matrix, register const Vector4 *vector)
 {
     __asm__ __volatile__(
         "lqc2 $vf31,0(%2)\n\t"
@@ -85,7 +83,7 @@ void _ApplyMatrix(register Vector4 *destination, register const Matrix4 *matrix,
 }
 
 /* _ApplyMatrix2Mat: _ApplyMatrix2Mat, verbatim X1 twin (high). */
-void _ApplyMatrix2Mat(register Vector4 *destination, register const Matrix4 *matrix1, register const Matrix4 *matrix2, register const Vector4 *vector)
+void _ApplyMatrix2Mat(register Vector4 *destination, register Matrix4 *matrix1, register Matrix4 *matrix2, register const Vector4 *vector)
 {
     __asm__ __volatile__(
         "lqc2 $vf31,0(%3)\n\t"
@@ -109,16 +107,6 @@ void _ApplyMatrix2Mat(register Vector4 *destination, register const Matrix4 *mat
         : : "r"(destination), "r"(matrix1), "r"(matrix2), "r"(vector) : "memory");
 }
 
-void xglMatrixStackUnit(void);
-void xglMatrixStackTrans(CullingVolume *volume);
-void xglMatrixStackScale(Vector4 *destination);
-void xglMatrixStackRotX(float angle);
-void xglMatrixStackRotY(float angle);
-void xglMatrixStackRotZ(float angle);
-void xglMatrixStackSave(Matrix4 *matrix);
-void xglMatrixStackInverse(void);
-/* _ApplyMatrix33: _ApplyMatrix33, verbatim X1 twin (high). */ void _ApplyMatrix33(register Vector4 *destination, register const Matrix4 *matrix, register const Vector4 *vector);
-/* _ApplyMatrix: _ApplyMatrix, verbatim X1 twin (high). */ void _ApplyMatrix(register Vector4 *destination, register const Matrix4 *matrix, register const Vector4 *vector);
 extern const AlignedVector4 cullingForwardAxisVector;
 extern const AlignedVector4 cullingCornerLowerLeftVector;
 extern const AlignedVector4 cullingCornerLowerRightVector;
@@ -135,17 +123,17 @@ void culling_matrix(CullingVolume *volume)
     AlignedVector4 upperLeft;
 
     xglMatrixStackUnit();
-    xglMatrixStackTrans(volume);
+    xglMatrixStackTrans(&volume->position);
     xglMatrixStackRotY(volume->rotation.y);
     xglMatrixStackRotX(volume->rotation.x);
     xglMatrixStackRotZ(volume->rotation.z);
     xglMatrixStackScale(&volume->scale);
-    xglMatrixStackSave(&volume->transform);
+    xglMatrixStackSave(volume->transform);
     xglMatrixStackInverse();
-    xglMatrixStackSave(&volume->inverseTransform);
+    xglMatrixStackSave(volume->inverseTransform);
     forwardAxis = cullingForwardAxisVector;
     _ApplyMatrix33(&volume->normalizedDirection, &volume->transform, &forwardAxis);
-    xglVectorNormal_001A9200(&volume->normalizedDirection, &volume->normalizedDirection);
+    xglVectorNormal(&volume->normalizedDirection, &volume->normalizedDirection);
     lowerLeft = cullingCornerLowerLeftVector;
     lowerRight = cullingCornerLowerRightVector;
     upperRight = cullingCornerUpperRightVector;
@@ -195,7 +183,6 @@ void _FacePoint(Vector4 *destination, const Vector4 *lineStart, const Vector4 *l
         : : "r"(destination), "r"(lineStart), "r"(lineEnd), "r"(normal), "r"(planePoint) : "memory");
 }
 
-void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source, float scale);
 void xglVectorSubXYZ_001B7468(Vector4 *destination, const Vector4 *left, const Vector4 *right);
 void xglVectorAddXYZ_001B7430(Vector4 *destination, const Vector4 *left, const Vector4 *right);
 
@@ -238,7 +225,7 @@ void plane_from_points(const Vector4 *point0, const Vector4 *point1,
     edge1.y = point2->y - point0->y;
     edge1.z = point2->z - point0->z;
     xglVectorOuter(&normal, &edge0, &edge1);
-    xglVectorNormal_001A9200(&normal, &normal);
+    xglVectorNormal(&normal, &normal);
     plane->x = normal.x;
     plane->y = normal.y;
     plane->z = normal.z;
@@ -409,16 +396,11 @@ s32 check_culling_map(const char *name) {
     return result;
 }
 
-typedef struct CullingMapNameSource {
-    u8 unmodeled_000[0x10];
-    char name_with_prefix[32];
-} CullingMapNameSource;
-
-extern const CullingMapNameSource *D_00967AF8;
+extern const PxyHeader *cullingMapSetSource;
 unsigned int strlen(const char *string);
 char *strcpy(char *destination, const char *source);
 
-void xglCullingMapSet(const CullingMapNameSource *source)
+void xglCullingMapSet(const PxyHeader *source)
 {
     s32 boxIndex = 0;
     s32 index;
@@ -427,15 +409,15 @@ void xglCullingMapSet(const CullingMapNameSource *source)
 
     cullingExistFlag[0] = 0;
     cullingMapSource = 0;
-    if (strlen(source->name_with_prefix) < 32) {
-        strcpy((char *)&cullingMapName, source->name_with_prefix);
+    if (strlen(source->name) < 32) {
+        strcpy((char *)&cullingMapName, source->name);
     }
     index = check_culling_map((const char *)&cullingMapName);
     if (index < 0) {
         return;
     }
     cullingMapSource = s_aCullingMap[index].source;
-    D_00967AF8 = source;
+    cullingMapSetSource = source;
     if (s_aCullingMap[index].entryCount == 0) {
         return;
     }
@@ -527,7 +509,7 @@ void xglCullingMapDebug(void)
 
 s32 xglCullingCheck(XglCamera *camera, const Vector4 *point);
 
-int nmlModelCalcClipCulling(int camera, int point)
+int nmlModelCalcClipCulling(XglCamera *camera, const Vector4 *point)
 {
     int result;
 
@@ -553,52 +535,50 @@ void xglVectorSubXYZ_001B7468(register Vector4 *destination, register const Vect
     Vu0SubVectorXYZ(destination, minuend, subtrahend);
 }
 
-/* main/tu036 .rodata 0x0068EDD0..0x0068F000: culling map table (14 rows, the last
+/* main/face_point.c .rodata 0x0068EDD0..0x0068F000: culling map table (14 rows, the last
  * one is the terminator), its name strings, the base record and the corner vectors. */
-extern const unsigned char D_0068E7A0[];
-extern int D_0069E0A8;
-extern const char D_0068EF70[16];
-extern const char D_0068EF60[16];
-extern const char D_0068EF50[16];
-extern const char D_0068EF40[16];
-extern const char D_0068EF30[16];
-extern const char D_0068EF20[16];
-extern const char D_0068EF10[16];
-extern const char D_0068EF00[16];
-extern const char D_0068EEF0[16];
-extern const char D_0068EEE0[16];
-extern const char D_0068EED0[16];
-extern const char D_0068EEC0[16];
-extern const char D_0068EEB0[16];
+extern const char cullingMapNameE2Mil06[16];
+extern const char cullingMapNameE2Kuk06[16];
+extern const char cullingMapNameE2Dyu01[16];
+extern const char cullingMapNameE2Umn01[16];
+extern const char cullingMapNameE2Vec02[16];
+extern const char cullingMapNameE2Mil02[16];
+extern const char cullingMapNameE2Mid02[16];
+extern const char cullingMapNameE2Rav03[16];
+extern const char cullingMapNameE2Exb02[16];
+extern const char cullingMapNameE2Exb05[16];
+extern const char cullingMapNameE2Exb06[16];
+extern const char cullingMapNameE2Sui02[16];
+extern const char cullingMapNameE2Els04[16];
 const CullingMapEntry s_aCullingMap[14] = {
-    { D_0068EF70, (const float *)D_0068E7A0, (const s32 *)((const char *)D_0068E7A0 + 0x600) },
-    { D_0068EF60, (const float *)((const char *)D_0068E7A0 + 0x70), 0 },
-    { D_0068EF50, (const float *)((const char *)D_0068E7A0 + 0xB8), 0 },
-    { D_0068EF40, (const float *)((const char *)D_0068E7A0 + 0x100), 0 },
-    { D_0068EF30, (const float *)((const char *)D_0068E7A0 + 0x190), 0 },
-    { D_0068EF20, (const float *)((const char *)D_0068E7A0 + 0x1D8), 0 },
-    { D_0068EF10, (const float *)((const char *)D_0068E7A0 + 0x220), 0 },
-    { D_0068EF00, (const float *)((const char *)D_0068E7A0 + 0x268), 0 },
-    { D_0068EEF0, (const float *)((const char *)D_0068E7A0 + 0x320), 0 },
-    { D_0068EEE0, (const float *)((const char *)D_0068E7A0 + 0x3D8), 0 },
-    { D_0068EED0, (const float *)((const char *)D_0068E7A0 + 0x4D8), 0 },
-    { D_0068EEC0, (const float *)((const char *)D_0068E7A0 + 0x548), 0 },
-    { D_0068EEB0, (const float *)((const char *)D_0068E7A0 + 0x5B8), 0 },
-    { (const char *)&D_0069E0A8, 0, 0 },
+    { cullingMapNameE2Mil06, (const float *)cullingMapDataTable, (const s32 *)((const char *)cullingMapDataTable + 0x600) },
+    { cullingMapNameE2Kuk06, (const float *)((const char *)cullingMapDataTable + 0x70), 0 },
+    { cullingMapNameE2Dyu01, (const float *)((const char *)cullingMapDataTable + 0xB8), 0 },
+    { cullingMapNameE2Umn01, (const float *)((const char *)cullingMapDataTable + 0x100), 0 },
+    { cullingMapNameE2Vec02, (const float *)((const char *)cullingMapDataTable + 0x190), 0 },
+    { cullingMapNameE2Mil02, (const float *)((const char *)cullingMapDataTable + 0x1D8), 0 },
+    { cullingMapNameE2Mid02, (const float *)((const char *)cullingMapDataTable + 0x220), 0 },
+    { cullingMapNameE2Rav03, (const float *)((const char *)cullingMapDataTable + 0x268), 0 },
+    { cullingMapNameE2Exb02, (const float *)((const char *)cullingMapDataTable + 0x320), 0 },
+    { cullingMapNameE2Exb05, (const float *)((const char *)cullingMapDataTable + 0x3D8), 0 },
+    { cullingMapNameE2Exb06, (const float *)((const char *)cullingMapDataTable + 0x4D8), 0 },
+    { cullingMapNameE2Sui02, (const float *)((const char *)cullingMapDataTable + 0x548), 0 },
+    { cullingMapNameE2Els04, (const float *)((const char *)cullingMapDataTable + 0x5B8), 0 },
+    { (const char *)&xglCullingMapEmptyName, 0, 0 },
 };
-const char D_0068EEB0[16] = "E2_ELS04";
-const char D_0068EEC0[16] = "E2_SUI02";
-const char D_0068EED0[16] = "E2_EXB06";
-const char D_0068EEE0[16] = "E2_EXB05";
-const char D_0068EEF0[16] = "E2_EXB02";
-const char D_0068EF00[16] = "E2_RAV03";
-const char D_0068EF10[16] = "E2_MID02";
-const char D_0068EF20[16] = "E2_MIL02";
-const char D_0068EF30[16] = "E2_VEC02";
-const char D_0068EF40[16] = "E2_UMN01";
-const char D_0068EF50[16] = "E2_DYU01";
-const char D_0068EF60[16] = "E2_KUK06";
-const char D_0068EF70[16] = "E2_MIL06";
+const char cullingMapNameE2Els04[16] = "E2_ELS04";
+const char cullingMapNameE2Sui02[16] = "E2_SUI02";
+const char cullingMapNameE2Exb06[16] = "E2_EXB06";
+const char cullingMapNameE2Exb05[16] = "E2_EXB05";
+const char cullingMapNameE2Exb02[16] = "E2_EXB02";
+const char cullingMapNameE2Rav03[16] = "E2_RAV03";
+const char cullingMapNameE2Mid02[16] = "E2_MID02";
+const char cullingMapNameE2Mil02[16] = "E2_MIL02";
+const char cullingMapNameE2Vec02[16] = "E2_VEC02";
+const char cullingMapNameE2Umn01[16] = "E2_UMN01";
+const char cullingMapNameE2Dyu01[16] = "E2_DYU01";
+const char cullingMapNameE2Kuk06[16] = "E2_KUK06";
+const char cullingMapNameE2Mil06[16] = "E2_MIL06";
 const float s_aCullingBase[12] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f };
 const AlignedVector4 cullingForwardAxisVector = { 0.0f, 0.0f, 1.0f, 1.0f };
 const AlignedVector4 cullingCornerLowerLeftVector = { -1.0f, -1.0f, 0.0f, 1.0f };

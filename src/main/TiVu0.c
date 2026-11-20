@@ -1,32 +1,31 @@
 #include "common.h"
-#include "main/tu026.h"
+#include "main/assert_fail.h"
 
-extern const char D_0068F5F0[];
+extern const char tiVu0UnreachableAssertText[];
 extern const char tiVu0AssertFile[];
 
 /* Unconditional assert(0) at TiVu0.euc.c line 739: a fail-only path with no role shown. */
-void func_002933D0(void)
+void tiVu0AssertUnreachable739(void)
 {
-    assertFailed(D_0068F5F0, tiVu0AssertFile, 739);
+    assertFailed(tiVu0UnreachableAssertText, tiVu0AssertFile, 739);
 }
 
 /* Unconditional assert(0) at TiVu0.euc.c line 758: a fail-only path with no role shown. */
-void func_002933F8(void)
+void tiVu0AssertUnreachable758(void)
 {
-    assertFailed(D_0068F5F0, tiVu0AssertFile, 758);
+    assertFailed(tiVu0UnreachableAssertText, tiVu0AssertFile, 758);
 }
 
 #include "shared.h"
 #include "main/TiXacAnimCurve.h"
 
-extern const char D_0068F610[];
-extern char xacAssertFile[];
+extern const char xacUnreachableAssertText[];
 
 extern f32 xacKeyU16ScaleA;
 
 /* Reads one curve key's value by key type: 0 gives 0.0, 2 a float at +4, 3 a u16 at +6 times 1e-4, 5 a float at +8; other types assert.
  * The assert file names TiXacAnimCurve.euc.c, so this reader belongs to that family. */
-f32 xacGetKeyPayloadA(TiXacKey *key) {
+f32 xacGetKeyOutTangentAngle(TiXacKey *key) {
     int keyType;
 
     keyType = key->typeFlags & XAC_KEY_TYPE_MASK;
@@ -40,15 +39,15 @@ f32 xacGetKeyPayloadA(TiXacKey *key) {
     case 2:
         return key->payload.value[0];
     default:
-        assertFailed(D_0068F610, xacAssertFile, 32);
+        assertFailed(xacUnreachableAssertText, xacAssertFile, 32);
         return 0.0f;
     }
 }
 
 extern f32 xacKeyU16ScaleB;
 
-/* Same type switch as xacGetKeyPayloadA with another key layout: 3 reads a u16 at +4 times 1e-4, 2 and 5 read a float at +4. */
-f32 xacGetKeyPayloadB(TiXacKey *key) {
+/* Same type switch as xacGetKeyOutTangentAngle with another key layout: 3 reads a u16 at +4 times 1e-4, 2 and 5 read a float at +4. */
+f32 xacGetKeyInTangentAngle(TiXacKey *key) {
     int keyType;
 
     keyType = key->typeFlags & XAC_KEY_TYPE_MASK;
@@ -62,14 +61,14 @@ f32 xacGetKeyPayloadB(TiXacKey *key) {
     case 2:
         return key->payload.value[0];
     default:
-        assertFailed(D_0068F610, xacAssertFile, 67);
+        assertFailed(xacUnreachableAssertText, xacAssertFile, 67);
         return 0.0f;
     }
 }
 
-const char D_0068F5F0[8] = "0";
+const char tiVu0UnreachableAssertText[8] = "0";
 const char tiVu0AssertFile[24] = "../TiVu0.euc.c";
-const char D_0068F610[8] = "0";
+const char xacUnreachableAssertText[8] = "0";
 
 f32 xacKeyU16ScaleA = 0.0001f;
 f32 xacKeyU16ScaleB = 0.0001f;

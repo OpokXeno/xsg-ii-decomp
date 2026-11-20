@@ -8,37 +8,25 @@
 #include "common.h"
 #include "shared.h"
 #include "main/TiWatSim.h"
+#include "main/pad.h"
 #include "main/xgl_2.h"
 
-/* One normal vector. The original stores the normals through a union member, so its stores carry alias set 0. */
-typedef union TiWatSimNormal {
-    Vector4 vector;
-} TiWatSimNormal;
-
-/* Port-1 pad record: the held buttons are read at +0x28 and the pressed buttons at +0x2A. */
-typedef struct TiWatSimPad {
-    u8 unmodeled_00[0x28];
-    u16 held_buttons;
-    u16 pressed_buttons;
-} TiWatSimPad;
-
-extern TiWatSimPad PadData;
 /* Cell under the pad cursor: row and column in the item grid. */
 static u32 tiWatSimCursorRow;
 static u32 tiWatSimCursorCol;
 
 /* Steers the cursor cell with the pad, then lowers its height in buffer A by drop_amount.
  * Pad bits (include/main/pad.h): held PAD_SELECT (0x100) enables the cursor, a fresh press of
- * PAD_SELECT (pressed_buttons) jumps to a random interior cell, and PAD_RIGHT / PAD_LEFT / PAD_DOWN /
+ * PAD_SELECT (PadData[0].pressed) jumps to a random interior cell, and PAD_RIGHT / PAD_LEFT / PAD_DOWN /
  * PAD_UP (0x2000 / 0x8000 / 0x4000 / 0x1000) move the column and row by one inside the border. */
 void tiWatSimPadDrop(TiWatSimItem *item)
 {
     u32 cell_index;
 
-    if (!(PadData.held_buttons & 0x100)) {
+    if (!(PadData[0].held & 0x100)) {
         return;
     }
-    if (PadData.pressed_buttons & 0x100) {
+    if (PadData[0].pressed & 0x100) {
         do {
             tiWatSimCursorRow = xglSRand() % (item->rows - 1);
         } while (tiWatSimCursorRow == 0);
@@ -46,28 +34,28 @@ void tiWatSimPadDrop(TiWatSimItem *item)
             tiWatSimCursorCol = xglSRand() % (item->cols - 1);
         } while (tiWatSimCursorCol == 0);
     } else {
-        if (PadData.held_buttons & 0x2000) {
+        if (PadData[0].held & 0x2000) {
             u32 *cursor_col = &tiWatSimCursorCol;
 
             if (*cursor_col < item->cols - 2) {
                 (*cursor_col)++;
             }
         }
-        if (PadData.held_buttons & 0x8000) {
+        if (PadData[0].held & 0x8000) {
             u32 *cursor_col = &tiWatSimCursorCol;
 
             if (*cursor_col >= 2) {
                 (*cursor_col)--;
             }
         }
-        if (PadData.held_buttons & 0x4000) {
+        if (PadData[0].held & 0x4000) {
             u32 *cursor_row = &tiWatSimCursorRow;
 
             if (*cursor_row < item->rows - 2) {
                 (*cursor_row)++;
             }
         }
-        if (PadData.held_buttons & 0x1000) {
+        if (PadData[0].held & 0x1000) {
             u32 *cursor_row = &tiWatSimCursorRow;
 
             if (*cursor_row >= 2) {
@@ -82,7 +70,7 @@ void tiWatSimPadDrop(TiWatSimItem *item)
 /* Normal of each interior cell from the height differences of buffer B, scaled by the cell spacing. */
 void tiWatSimComputeNormals(TiWatSimItem *item)
 {
-    TiWatSimNormal *normals;
+    DoublewordVector4 *normals; /* stores through the union carry alias set 0, like the original */
     u32 x;
     u32 y;
     u32 index;
@@ -93,7 +81,7 @@ void tiWatSimComputeNormals(TiWatSimItem *item)
     float length_squared;
     float inverse;
 
-    normals = (TiWatSimNormal *) (item->block + item->normals_offset);
+    normals = (DoublewordVector4 *) (item->block + item->normals_offset);
     for (y = 1; y < item->rows - 1; y++) {
         row = y * item->cols;
         for (x = 1; x < item->cols - 1; x++) {
@@ -138,12 +126,12 @@ void tiWatSimStepRain(TiWatSimItem *item)
     tiWatSimRainCountdown--;
 }
 
-#include "main/tu026.h"
+#include "main/assert_fail.h"
 #define NULL ((void *) 0)
 
-extern const char D_0068D118[];
-extern const char D_0068D138[];
-extern const char D_0068D120[];
+extern const char tiWatSimWaterAssertText[];
+extern const char tiWatSimPosAssertText[];
+extern const char tiWatSimSourceFile[];
 
 /* Pushes the height buffer down at the grid cell under pPos: the cell loses drop_amount, its four neighbours half of it. */
 void tiWatSimDisturbAt(TiWatSimItem *item, Vector4 *pPos)
@@ -158,12 +146,12 @@ void tiWatSimDisturbAt(TiWatSimItem *item, Vector4 *pPos)
     half = item->drop_amount * 0.5f;
     mask = (float *) (item->block + item->mask_offset);
     if (item == NULL) {
-        assertFailed(D_0068D118, D_0068D120, 218);
+        assertFailed(tiWatSimWaterAssertText, tiWatSimSourceFile, 218);
     }
     if (pPos == NULL) {
-        assertFailed(D_0068D138, D_0068D120, 219);
+        assertFailed(tiWatSimPosAssertText, tiWatSimSourceFile, 219);
     }
-    xglVectorMulMat(&pos, item->matrix, pPos);
+    xglVectorMulMat(&pos, item->matrix.rows, pPos);
     pos.x = pos.x - item->grid_origin_x;
     pos.z = pos.z - item->grid_origin_z;
     col = (int) (pos.x / item->cell_spacing);
@@ -236,11 +224,11 @@ void tiWatSimStoreSourcePos(const Vector4 *position)
     QuadwordCopy(&tiWatSimSourcePos, position);
 }
 
-extern Vector4 D_00631870;
+extern Vector4 tiWatSimSecondSourcePos;
 
-void tiWatSimStoreSourcePos2(const Vector4 *position)
+void tiWatSimStoreSecondSourcePos(const Vector4 *position)
 {
-    QuadwordCopy(&D_00631870, position);
+    QuadwordCopy(&tiWatSimSecondSourcePos, position);
 }
 
 /* Bump allocator: returns the cursor and advances it by size, rounded up to 16 bytes. */
@@ -263,19 +251,19 @@ u32 tiWatSimAlloc(u32 *cursor, u32 size)
     return old;
 }
 
-const char D_0068D118[8] = "pWater";
+const char tiWatSimWaterAssertText[8] = "pWater";
 
-const char D_0068D120[24] = "../TiWatSim.euc.c";
+const char tiWatSimSourceFile[24] = "../TiWatSim.euc.c";
 
-const char D_0068D138[8] = "pPos";
+const char tiWatSimPosAssertText[8] = "pPos";
 
 Vector4 tiWatSimSourcePos = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 1.0f };
 
-Vector4 D_00631860 = { .x = 5.0f, .y = 0.0f, .z = 5.0f, .w = 1.0f };
+Vector4 tiWatSimSourcePosTransformed = { .x = 5.0f, .y = 0.0f, .z = 5.0f, .w = 1.0f };
 
-Vector4 D_00631870 = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f };
+Vector4 tiWatSimSecondSourcePos = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f };
 
 int tiWatSimRainCountdown = 0;
-int D_00631884 = 0;
-int D_00631888 = 0;
-int D_0063188C = 0;
+int tiWatSimUnusedWordA = 0;
+int tiWatSimUnusedWordB = 0;
+int tiWatSimUnusedWordC = 0;

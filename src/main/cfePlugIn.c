@@ -2,34 +2,44 @@
 #include "shared.h"
 #include "quadword.h"
 #include "main/cfePlugIn.h"
-#include "main/control_entry.h"
-#include "main/tu017.h"
-#include "main/tu022.h"
-#include "main/tu026.h"
-#include "main/tu051.h"
-#include "main/tu101.h"
-#include "main/tu214.h"
-#include "main/tu234.h"
-#include "main/tu138.h"
+#include "ov01/sb_vm.h"
+#include "ov01/sb_natives.h"
+#include "main/xgl_thread.h"
+#include "main/movie_player.h"
+#include "main/sound_driver.h"
+#include "main/assert_fail.h"
+#include "main/game_camera.h"
+#include "main/xgl_mc_request.h"
+#include "main/menu_draw.h"
+#include "main/effect_request.h"
+#include "main/debt_box.h"
+#include "main/cfe_entry.h"
 #include "main/sef.h"
-#include "main/tu144.h"
-#include "main/tu145.h"
-#include "main/tu146.h"
-#include "main/sdv_033.h"
+#include "main/cfe_list.h"
+#include "main/cfe_track.h"
+#include "main/cfe_node_pool.h"
+#include "main/xgl_camera.h"
 #include "main/xenoActor.h"
+#include "main/xeno_actor_set.h"
 #include "main/xgl_2.h"
 #include "main/xgl_cd.h"
 #include "main/xgl_studio.h"
 #include "main/cfeEvaluate.h"
-#include "main/tu148.h"
+#include "main/face_point.h"
+#include "main/cfe_init.h"
+#include "main/msg_state.h"
 #include "main/TiGlobalColl.h"
+#include "main/TiWindBase.h"
 #include "main/nml_model_set.h"
 #include "main/pad.h"
 #include "main/res_get_path.h"
-#include "main/tu021.h"
+#include "main/se_bank_load.h"
 #include "main/xgl_font.h"
 #include "main/xgl_render.h"
-#include "main/tu048.h"
+#include "main/game_data.h"
+#include "main/fade_ctrl.h"
+#include "main/game_pause_disp.h"
+#include "main/xgl_cd_arena.h"
 
 
 /* The modes of cfeListSetKeyMode / cfeListSetAngleKeyMode: set the key plain or linear (CFE_TRACK_LINEAR), or
@@ -130,13 +140,10 @@ void cfeListSetAngleKeyMode(CfeTrackNode **list, int mode, int key, float value)
     }
 }
 
-void xglMatrixStackRotX(float angle);
-void xglMatrixStackRotY(float angle);
-void xglMatrixStackSave(Matrix4 matrix);
 const AlignedVector4 cfeForwardVector = { 0.0f, 0.0f, 1.0f, 1.0f };
 
 /* The vector cfeForwardVector rotated by angles[0] about X and angles[1] about Y. */
-void cfeRotateVectorXY(float *result, const float *angles)
+void cfeDirectionFromAngles(float *result, const float *angles)
 {
     Matrix4 matrix;
     AlignedVector4 vector = cfeForwardVector;
@@ -250,9 +257,6 @@ void cfeMesUnescape(char *destination, const char *source)
     *destination = 0;
 }
 
-typedef struct XenoActor XenoActor;
-void xglCullingMapSet(int map);
-
 /* The resource block the cfe object loaders read. */
 typedef struct CfeResourceBlock {
     int pack;
@@ -262,16 +266,6 @@ typedef struct CfeResourceBlock {
     int slotTable;
 } CfeResourceBlock;
 
-int GameResLoadID(int id, void **buffer, unsigned int *size,
-                  void (*callback)(int index, void *buffer, unsigned int size, int value));
-
-/* XenoActor.kind (+0x798) as cfeLoadResourceObject writes it: a pointer-typed store through a view
- * that only has this member, so the pack load after it may move above it as in the original. Through
- * actor->kind (0.91) or an int view field (gate fails) it cannot. */
-typedef struct CfeActorKindView {
-    unsigned char unmodeled_000[0x798];
-    void *kind;
-} CfeActorKindView;
 
 /* Loads resource `id` (waiting for the CD first), creates an actor for it with the block's pack and
  * effect and sets the pack as the culling map. */
@@ -289,11 +283,11 @@ XenoActor *cfeLoadResourceObject(int id)
     }
     resource = data;
     actor = XenoActorAlloc();
-    ((CfeActorKindView *) actor)->kind = (void *) id;
+    ((XenoActorKindView *) actor)->kind = (void *) id;
     actor->rsrc[XAct_Rsrc_MDL] = resource->pack;
     actor->rsrc[XAct_Rsrc_TEX] = resource->effect;
     if (resource->pack != 0) {
-        xglCullingMapSet(resource->pack);
+        xglCullingMapSet((const PxyHeader *)resource->pack);
     }
     return actor;
 }
@@ -348,11 +342,6 @@ void cfeMapInitRecords(CfeMap *group)
     }
 }
 
-int VM_PLUGIN_CNT_GET(int handle);
-int vmArgGet(int, int);
-char *vmKeyedEntryGet(int, int);
-
-void XenoActorAllocMatrices(XenoActor *actor);
 
 /* The head of an actor's hierarchy as cfeLoadActorObject reads it. */
 typedef struct CfeHierarchyHeader {
@@ -390,12 +379,12 @@ XenoActor *cfeLoadActorObject(int id)
     actor->rsrc[XAct_Rsrc_TEX] = resource->effect;
     actor->rsrc[XAct_Rsrc_XHR] = resource->hierarchy;
     actor->rsrc[XAct_Rsrc_XAP] = resource->slotTable;
-    actor->lookLink = resource->lookLink;
+    actor->rsrc[XAct_Rsrc_EntryTableC] = resource->lookLink;
     if (actor->rsrc[XAct_Rsrc_XHR] != 0 && ((CfeHierarchyHeader *) actor->rsrc[XAct_Rsrc_XHR])->needsShared != 0) {
         do {
         } while (xglCdServiceIfPending() != 0);
         GameResLoadID(CFE_SHARED_RESOURCE_ID, &data, 0, 0);
-        actor->sharedResource = data;
+        actor->rsrc[XAct_Rsrc_SlotTableB] = data;
         XenoActorSetChannelValueB(actor, 0.0f);
         XenoActorSetSelector(actor, 0);
     }
@@ -410,7 +399,7 @@ XenoActor *cfeLoadActorObject(int id)
 /* Script command `cfe.ldAt` (1 argument): loads actor argument 1 into the next entry of cfeEntries, copies the play
  * range of its first motion state, sets draw mode 6 and allocates a cleared record block of two words per
  * pack geometry. */
-int cfe_0024BA70(int handle)
+int cfeCmdLoadActor(SbThread *handle)
 {
     XenoActor *actor;
     CfePackHeader *pack;
@@ -440,10 +429,8 @@ int cfe_0024BA70(int handle)
     return 1;
 }
 
-int GameResLoadName(char *name, void **data, unsigned int *size,
-                    void (*callback)(int index, void *buffer, unsigned int size, int value));
 
-int cfe_0024BC10(int handle)
+int cfeCmdLoadMotion(SbThread *handle)
 {
     char buffer[0x80];
     void *data;
@@ -484,7 +471,7 @@ const AlignedVector4 cfeUnitScale = { 1.0f, 1.0f, 1.0f, 1.0f };
 /* Script command `cfe.ldEf` (2 or 3 arguments): starts the effect of the next command of cfeCommands (page index
  * and offset; the 3-argument form also gives the bank flag) and sets the command's position and
  * rotation to the origin and its scale to cfeUnitScale. */
-int cfe_0024BD28(int handle)
+int cfeCmdLoadEffect(SbThread *handle)
 {
     AlignedVector4 position;
     AlignedVector4 rotation;
@@ -523,7 +510,7 @@ int cfe_0024BD28(int handle)
 
 /* Script command `cfe.ldMp` (1 argument): loads resource argument 1 as the object of the next group; when its
  * pack has a part pack, the group gets it, its matrices and one cleared record per geometry. */
-int cfe_0024BEF0(int handle)
+int cfeCmdLoadMap(SbThread *handle)
 {
     CfeMap *group;
     XenoActor *object;
@@ -561,9 +548,9 @@ int cfe_0024BEF0(int handle)
     return 1;
 }
 
-void sprintf(char *, unsigned char *, char *);
+int sprintf(char *buffer, const char *format, ...);
 
-int cfe_0024C030(int handle)
+int cfeCmdLoadMapCollision(SbThread *handle)
 {
     char buffer[0x40];
     void *data;
@@ -586,7 +573,7 @@ const char cfeMovieOpenFailedText[24] = "failed movie open\n";
 /* Script command `cfe.ldMnt` (1 argument): opens the movie named by argument 1 in the next entry of
  * cfeEvalEntries: reads the file into a new block (walking the block table when the allocation
  * fails), opens it and allocates its two frame buffers. */
-int cfe_0024C0D8(int handle)
+int cfeCmdLoadMonitor(SbThread *handle)
 {
     CfeEvalEntry *entry = &cfeEvalEntries[cfeEvalEntryCount];
     unsigned int slot;
@@ -604,7 +591,7 @@ int cfe_0024C0D8(int handle)
     }
     do {
     } while (xglCdServiceIfPending() != 0);
-    xglCdReadFile(entry->name, entry->movie.source, 0, 1);
+    xglCdReadFile(entry->name, entry->movie.source, 0, CD_NOTIFY_DUMMY);
     entry->movie.loop = 1;
     /* assert(!"failed movie open
 ") inside `if (xglMovieOpen(...) != 0)`: the string is the assert's own
@@ -618,14 +605,12 @@ int cfe_0024C0D8(int handle)
     return 1;
 }
 
-int ldDev(void)
+int cfeCmdLoadDev(void)
 {
     return 1;
 }
 
-void seBgmNameSet(void *);
-
-int cfe_0024C278(int handle)
+int cfeCmdLoadSound(SbThread *handle)
 {
     int count;
     CfeSndRecord *record;
@@ -637,18 +622,10 @@ int cfe_0024C278(int handle)
     record = &cfeSndRecords[count];
     count = count + 1;
     cfeSndRecordCount = count;
-    seBgmNameSet(record);
+    seBgmNameSet(record->name);
     return 1;
 }
 
-void xglFontLoad(int first, int second);
-void resUpdatePathSlot(int slot);
-void cfeInit(void);
-void tiGlobalCollClearHandle(void);
-void func_001B2724(void);
-void fadeClear(void);
-XglCamera *xglStudioGetCamera2(int index);
-extern signed char pxyTickScaleDouble;
 extern int cfePaused;
 extern int cfeStartDelay;
 
@@ -656,7 +633,7 @@ extern int cfeStartDelay;
 const AlignedVector4 cfeParkedPosition = { 99999.0f, 99999.0f, 99999.0f, 1.0f };
 
 /* The uwamonoRecords entries and the two flags this command sets on every used record. */
-#define CFE_RECORD_COUNT 256
+#define CFE_RECORD_COUNT MAP_RECORD_COUNT
 #define CFE_RECORD_FLAG_400000 0x400000
 #define CFE_RECORD_FLAG_800000 0x800000
 
@@ -664,7 +641,7 @@ const AlignedVector4 cfeParkedPosition = { 99999.0f, 99999.0f, 99999.0f, 1.0f };
  * font, the path slot and the sound levels, restarts the cut-scene state, releases the actors of the
  * player and part records (moved to cfeParkedPosition first) and marks every used record, then frees all
  * actors and resets the camera and the fade. */
-int cfe_0024C308(int handle)
+int cfeCmdInit(SbThread *handle)
 {
     AlignedVector4 parked;
     int i;
@@ -672,18 +649,18 @@ int cfe_0024C308(int handle)
     do {
     } while (xglCdServiceIfPending() != 0);
     msgResetAll();
-    xglFontLoad(0, 0);
-    resUpdatePathSlot(-3);
+    xglFontLoad(0, CD_NOTIFY_CURRENT);
+    resPlayerSlotUpdate(-3);
     xglMovieInit();
     cfePaused = 0;
     cfeStartDelay = 0;
-    soundSlotSetLevel(0, 0);
-    soundSlotSetLevel(1, 0);
+    soundSlotSetPause(0, 0);
+    soundSlotSetPause(1, 0);
     cfeInit();
     cfeEntryCount = 0;
     tiGlobalCollClearHandle();
     pxyTickScaleDouble = 0;
-    func_001B2724();
+    studioSceneFlagSet();
     gameWork.control |= CONTROL_CFE_NO_FADE | CONTROL_CFE_SCENE;
     for (i = 0; i < CFE_RECORD_COUNT; i++) {
         switch (uwamonoRecords[i].kind) {
@@ -692,12 +669,12 @@ int cfe_0024C308(int handle)
         case 4:
         case 5:
             parked = cfeParkedPosition;
-            QuadwordCopy(&uwamonoRecords[i].actor->position, &parked);
+            QuadwordCopy(&uwamonoRecords[i].body.actor->position, &parked);
             QuadwordCopy(&uwamonoRecords[i].position, &parked);
             QuadwordCopy(&uwamonoRecords[i].moveFrom, &parked);
             QuadwordCopy(&uwamonoRecords[i].moveTo, &parked);
-            XenoActorRelease(uwamonoRecords[i].actor);
-            uwamonoRecords[i].actor = 0;
+            XenoActorRelease(uwamonoRecords[i].body.actor);
+            uwamonoRecords[i].body.actor = 0;
             /* fall through */
         case 1:
         case 2:
@@ -719,7 +696,7 @@ int cfe_0024C308(int handle)
 /* Script command `cfe.stKyAt` (5 arguments): sets key `key` of track `sub` (CFE_ACTOR_TRACK_*) of actor `index` to
  * the 8.8 value. Lists 3 to 5 hold angles (cfeListSetAngleLinear / cfeListSetAngle), the others plain values
  * (cfeListSetValueLinear / cfeListSetValue); the linear forms are used when `linear` is set. */
-int cfe_0024C500(int handle)
+int cfeCmdSetActorKey(SbThread *handle)
 {
     int index;
     int sub;
@@ -754,7 +731,7 @@ int cfe_0024C500(int handle)
 /* Script command `cfe.stKyAtHd` (5 arguments): sets key `key` of head track `sub` of actor `index`
  * (CFE_ACTOR_HEAD_*) to the 8.8 value, with flag
  * linear (cfeListSetValueLinear) when `linear` is set. */
-int cfe_0024C7B8(int handle)
+int cfeCmdSetActorHeadKey(SbThread *handle)
 {
     int index;
     int sub;
@@ -782,7 +759,7 @@ int cfe_0024C7B8(int handle)
 /* Script command `cfe.stKyAtPrts` (6 arguments): sets key `key` of track `column` of flag record `row` of entry `entry`
  * to the 8.8 value (linear through cfeListSetValueLinear when `linear` is set), then walks that track to its
  * end. */
-int cfe_0024C940(int handle)
+int cfeCmdSetActorPartKey(SbThread *handle)
 {
     int entry;
     int row;
@@ -815,7 +792,7 @@ int cfe_0024C940(int handle)
 /* Script command `cfe.stKyCm` (4 arguments): fetches the studio camera and sets key `key` of camera track `index`
  * (CFE_CAMERA_TRACK_*) to the 8.8 value in `mode`; lists 3 to 5 go through cfeListSetAngleKeyMode, the others
  * through cfeListSetKeyMode. */
-int cfe_0024CB80(int handle)
+int cfeCmdSetCameraKey(SbThread *handle)
 {
     int index;
     int mode;
@@ -841,7 +818,7 @@ int cfe_0024CB80(int handle)
 /* Script command `cfe.stKyEf` (5 arguments): sets key `key` of track `sub` (CFE_COMMAND_TRACK_*) of command `index`
  * to the 8.8 value. Lists 3 to 5 hold angles (cfeListSetAngleLinear / cfeListSetAngle), the others plain values
  * (cfeListSetValueLinear / cfeListSetValue); the linear forms are used when `linear` is set. */
-int cfe_0024CCF8(int handle)
+int cfeCmdSetEffectKey(SbThread *handle)
 {
     int index;
     int sub;
@@ -876,7 +853,7 @@ int cfe_0024CCF8(int handle)
 /* Script command `cfe.stKyLgt` (5 arguments): sets key `key` of track `sub` (CFE_LIGHT_TRACK_*) of light `index` to
  * the 8.8 value. Lists 3 to 5 hold angles (cfeListSetAngleLinear / cfeListSetAngle), the others plain values
  * (cfeListSetValueLinear / cfeListSetValue); the linear forms are used when `linear` is set. */
-int cfe_0024CF70(int handle)
+int cfeCmdSetLightKey(SbThread *handle)
 {
     int index;
     int sub;
@@ -911,7 +888,7 @@ int cfe_0024CF70(int handle)
 /* Script command `cfe.stKyMp` (6 or 5 arguments): sets key `key` of a list of group `group` to the 8.8 value. With
  * 6 arguments the list is source `sub` of the record of part `part` (sources 3 to 5 hold angles),
  * with 5 the group's own list `sub`; the linear forms are used when `linear` is set. */
-int cfe_0024D1E8(int handle)
+int cfeCmdSetMapKey(SbThread *handle)
 {
     int group;
     int part;
@@ -957,7 +934,7 @@ int cfe_0024D1E8(int handle)
 
 /* Script command `cfe.stKyFog` (4 arguments): sets key `key` of fog track `index` (cfeEvalGlobal.source) to the 8.8
  * value, linear (cfeListSetValueLinear) when `linear` is set. */
-int cfe_0024D5E0(int handle)
+int cfeCmdSetFogKey(SbThread *handle)
 {
     int index;
     int key;
@@ -982,7 +959,7 @@ int cfe_0024D5E0(int handle)
 /* Script command `cfe.stKyMnt` (5 arguments): sets key `key` of track `sub` of monitor `index` (cfeEvalEntries)
  * (140 per row) to the 8.8 value, linear (cfeListSetValueLinear) when
  * `linear` is set. */
-int cfe_0024D738(int handle)
+int cfeCmdSetMonitorKey(SbThread *handle)
 {
     int index;
     int sub;
@@ -1008,7 +985,7 @@ int cfe_0024D738(int handle)
 
 /* Script command `cfe.stKyScrEff` (5 arguments): sets key `key` of track `sub` (CFE_SLOT_SOURCE_*) of screen effect
  * `index` (6 per row) to the 8.8 value, linear (cfeListSetValueLinear) when `linear` is set. */
-int cfe_0024D8C0(int handle)
+int cfeCmdSetScreenEffectKey(SbThread *handle)
 {
     int index;
     int sub;
@@ -1035,7 +1012,7 @@ int cfe_0024D8C0(int handle)
 /* Script command `cfe.stKySnd` (5 arguments): sets key `key` of track `sub` (CFE_SND_TRACK_*) of sound `index`
  * (20 per row) to the 8.8 value, linear (cfeListSetValueLinear) when
  * `linear` is set. */
-int cfe_0024DA40(int handle)
+int cfeCmdSetSoundKey(SbThread *handle)
 {
     int index;
     int sub;
@@ -1059,7 +1036,7 @@ int cfe_0024DA40(int handle)
     return 1;
 }
 
-/* One 0x44C-byte message record of cfeMessages (cfe_0024DBC0 allocates them). */
+/* One 0x44C-byte message record of cfeMessages (cfeCmdAllocMessages allocates them). */
 typedef struct CfeMessageRecord {
     int firstFrame;             /* +0x000: script argument 2, the first frame the text is shown */
     int endFrame;               /* +0x004: script argument 3, the frame it is gone again */
@@ -1071,7 +1048,7 @@ typedef struct CfeMessageRecord {
 extern CfeMessageRecord *cfeMessages;
 
 /* Script command `cfe.allocMes` (1 argument): allocates and clears argument 1 message records for cfeMessages. */
-int cfe_0024DBC0(int handle)
+int cfeCmdAllocMessages(SbThread *handle)
 {
     int count;
     int size;
@@ -1098,7 +1075,7 @@ extern const char cfeEmptyName[];
 /* Script command `cfe.setMes` (3 or 5 arguments): fills the next message record with the unescaped, laid-out text
  * of argument 1 and arguments 2 and 3; the 5-argument form also sets the name (argument 4) and the
  * sound slot (argument 5). */
-int cfe_0024DC78(int handle)
+int cfeCmdSetMessage(SbThread *handle)
 {
     CfeMessageRecord *record = &cfeMessages[cfePlugInRecordCount];
 
@@ -1125,13 +1102,13 @@ int cfe_0024DC78(int handle)
     return 1;
 }
 
-int setMesScr(void)
+int cfeCmdSetMessageScr(void)
 {
     return 1;
 }
 
 
-int cfe_0024DE20(int handle)
+int cfeCmdSetStartFrame(SbThread *handle)
 {
     int value;
     if (VM_PLUGIN_CNT_GET(handle) != 1) {
@@ -1143,7 +1120,7 @@ int cfe_0024DE20(int handle)
 }
 
 
-int cfe_0024DE80(int handle)
+int cfeCmdSetEndFrame(SbThread *handle)
 {
     int value;
     if (VM_PLUGIN_CNT_GET(handle) != 1) {
@@ -1154,12 +1131,10 @@ int cfe_0024DE80(int handle)
     return 1;
 }
 
-void adxSetSlotFile(int slot, const char *file);
-int soundSlotStatus(int);
 
-void cfeRunAndWait(const char *file, int id)
+void cfeSoundSlotStartWait(const char *file, int id)
 {
-    soundSlotSetLevel(id, 1);
+    soundSlotSetPause(id, 1);
     soundSlotSetVolume(id, -1, 0);
     adxSetSlotFile(id, file);
     while (soundSlotStatus(id) != 3) {
@@ -1167,21 +1142,9 @@ void cfeRunAndWait(const char *file, int id)
     }
 }
 
-void XenoActorSetFocusTarget(struct XenoActor *actor, Vector4 *target);
-void cfeDampDirOffset(struct XenoActor *actor, int offset);
-void xglClockSampleDayTime(void);
-void xglClockAccumulate(void);
-void pauseDrawScreen(void);
-void sefExecEffect(void);
-void effectRequestToCommand(int slot, int kind, unsigned int value, int count);
-void fadeReset(void);
-void fadeStartIn(int frames);
-void xglFontPrintDirect(const char *text);
 /* The running fade (nonzero while a fade is under way). */
 extern int fadeUpdateHook;
-extern PadRecord PadData[];
 
-extern ConfigSaveSettings SaveData;
 extern const char cfeMesFontSettings[];
 int strcmp(const char *first, const char *second);
 
@@ -1203,7 +1166,7 @@ int strcmp(const char *first, const char *second);
  * resumes (triangle while paused skips 30000 frames ahead), the cut scene is evaluated (camera, directions, nodes,
  * groups, commands, entries, slots, sound) and drawn with its subtitles, and the time to continue with is returned:
  * one frame later unless paused. */
-int cfe_0024DF60(int handle)
+int cfeCmdStepFrame(SbThread *handle)
 {
     CfeActor *entry;
     int time;
@@ -1230,25 +1193,25 @@ int cfe_0024DF60(int handle)
         }
     }
     if (cfePlugInRecordCount > 0 && time == cfeRangeGetMin() && strcmp(cfeMessages->name, cfeEmptyName) != 0) {
-        cfeRunAndWait(cfeMessages->name, cfeMessages->soundSlot);
+        cfeSoundSlotStartWait(cfeMessages->name, cfeMessages->soundSlot);
     }
     if (cfePaused == 0) {
         cfeCameraEvaluate(time, 0);
     }
-    cfeEvaluateDirections(time);
+    cfeLightTableEvaluate(time);
     cfeGlobalEvaluate(time);
-    cfeEvaluateNodes(time);
+    cfeActorTableEvaluate(time);
     cfeGroupTableEvaluate(time);
     cfeCommandTableEvaluate(time);
     cfeGlobalEvaluate(time);
     cfeEntryTableEvaluate(time);
     cfeSlotTableEvaluate(time);
-    cfeSndSetTarget(time);
+    cfeSndTableEvaluate(time);
     pxySetDefaultLight(&cfeLightSet);
     if (cfeEvalGlobal.fogEnabled != 0) {
-        pxySetGlobalFogDist(cfeEvalGlobal.evaluated[1].x, cfeEvalGlobal.evaluated[1].y, cfeEvalGlobal.evaluated[1].z,
+        nmlModelSetGlobalFogDist(cfeEvalGlobal.evaluated[1].x, cfeEvalGlobal.evaluated[1].y, cfeEvalGlobal.evaluated[1].z,
                             cfeEvalGlobal.evaluated[1].w);
-        pxySetGlobalFogColor(&cfeEvalGlobal.evaluated[0]);
+        nmlModelSetGlobalFogCol(&cfeEvalGlobal.evaluated[0]);
     }
     for (i = 0; i < cfeEntryCount; i++) {
         entry = &cfeEntries[i];
@@ -1264,7 +1227,7 @@ int cfe_0024DF60(int handle)
     for (i = 0; i < cfePlugInRecordCount; i++) {
         if (cfeMessages[i].firstFrame <= time && time < cfeMessages[i].endFrame && cfeMessages[i].firstFrame == time
             && strcmp(cfeMessages[i].name, cfeEmptyName) != 0 && cfePaused == 0) {
-            soundSlotSetLevel(cfeMessages[i].soundSlot, 0);
+            soundSlotSetPause(cfeMessages[i].soundSlot, 0);
         }
     }
     for (i = 0; i < cfePlugInRecordCount; i++) {
@@ -1280,10 +1243,10 @@ int cfe_0024DF60(int handle)
     }
     if (cfePaused != 0) {
         xglClockAccumulate();
-        func_0027C7D0();
+        recordUpdatesHold();
         XenoActorSetHoldFlag();
-        soundSlotSetLevel(0, 1);
-        soundSlotSetLevel(1, 1);
+        soundSlotSetPause(0, 1);
+        soundSlotSetPause(1, 1);
         seSetMuted(1, 1);
         pauseDrawScreen();
         if ((PadData[0].pressed & PAD_TRIANGLE) && cfeStartDelay == 0) {
@@ -1291,18 +1254,18 @@ int cfe_0024DF60(int handle)
             time += CFE_SKIP_FRAMES;
             soundSlotStop(0);
             soundSlotStop(1);
-            soundSlotSetLevel(0, 0);
-            soundSlotSetLevel(1, 0);
+            soundSlotSetPause(0, 0);
+            soundSlotSetPause(1, 0);
             seSetMuted(1, 0);
             seVolumeSet(0, 0);
             seVoiceStartDefault(CFE_PAUSE_SOUND);
-            sefReleaseOwnedRecords(-1);
+            sefKillEffect(-1);
             return time;
         }
     } else {
         if (PadData[0].pressed & PAD_START) {
-            soundSlotSetLevel(0, 0);
-            soundSlotSetLevel(1, 0);
+            soundSlotSetPause(0, 0);
+            soundSlotSetPause(1, 0);
             seSetMuted(1, 0);
             XenoActorClearHoldFlag();
         }
@@ -1328,7 +1291,7 @@ int cfe_0024DF60(int handle)
                           cfeEvalSlots[i].sample_int);
         }
     }
-    cfeUpdateEntries(cfePaused);
+    cfeEntryTableUpdate(cfePaused);
     XenoActorDoit();
     XenoActorDisp();
     if (cfePaused == 0) {
@@ -1338,18 +1301,17 @@ int cfe_0024DF60(int handle)
 }
 
 
-int cfe_0024E688(int handle)
+int cfeCmdFadeIn(SbThread *handle)
 {
     if (VM_PLUGIN_CNT_GET(handle) != 1) {
         assertFailed("VM_PLUGIN_CNT_GET() == 1", "../cfePlugIn.euc.c", 1456);
     }
-    sefReleaseOwnedRecords(-1);
+    sefKillEffect(-1);
     return 1;
 }
 
-void fadeStartOut(int);
 
-int cfe_0024E6D8(int handle)
+int cfeCmdFadeOut(SbThread *handle)
 {
     int value;
     if (VM_PLUGIN_CNT_GET(handle) != 1) {
@@ -1361,15 +1323,6 @@ int cfe_0024E6D8(int handle)
 }
 
 int sceGsSyncPath(int mode, int timeout);
-void xglRenderCopyDisp2Draw(void);
-int GameResBlockFreeByBuffer(void *buffer);
-int GameResBlockFreeByOwner(int owner);
-void tiWindDisableAll(void);
-void resResetSlotTable(void);
-void resResetPathSlots(void);
-void func_001BA320(void);
-extern int uwamonoCurrentIndex;
-extern UwamonoObject uwamonoRecords[];
 
 /* The record flag the cut-scene end clears on the current record. */
 #define CFE_RECORD_FLAG_2 0x2
@@ -1378,14 +1331,14 @@ extern UwamonoObject uwamonoRecords[];
  * frame to the drawn one, clears the scene control bits and the current record's flag 0x2, frees the
  * message records, the group and entry buffers, the collision, wind, actors and resource slots, and
  * gives the player and part records new actors. */
-int cfe_0024E738(int handle)
+int cfeCmdDestroy(SbThread *handle)
 {
     int i;
     int current;
 
     soundSlotStop(0);
     soundSlotStop(1);
-    sefReleaseOwnedRecords(-1);
+    sefKillEffect(-1);
     xglRenderClearDepth();
     sceGsSyncPath(0, 0);
     xglRenderCopyDisp2Draw();
@@ -1422,58 +1375,51 @@ int cfe_0024E738(int handle)
     tiGlobalCollClearHandle();
     tiWindDisableAll();
     XenoActorReleaseAll();
-    resResetSlotTable();
-    resResetPathSlots();
+    GameResourceReset();
+    resPlayerSlotsReset();
     for (i = 0; i < CFE_RECORD_COUNT; i++) {
         switch (uwamonoRecords[i].kind) {
         case 4:
         case 5:
-            uwamonoRecords[i].actor = XenoActorAlloc();
+            uwamonoRecords[i].body.actor = XenoActorAlloc();
             break;
         }
     }
-    xglFontLoad(1, 0);
-    func_001BA320();
+    xglFontLoad(1, CD_NOTIFY_CURRENT);
+    pxyResetLightToDefault();
     return 1;
 }
 
-void sbNativeOwnerAdd(void *, void *);
+const char cfeNativeNameDestroy[8] = "destroy";
+const char cfeNativeNameStEndFrm[16] = "stEndFrm";
+const char cfeNativeNameStStrtFrm[16] = "stStrtFrm";
+const char cfeNativeNameSetMesScr[16] = "setMesScr";
+const char cfeNativeNameSetMes[8] = "setMes";
+const char cfeNativeNameAllocMes[16] = "allocMes";
+const char cfeNativeNameStKySnd[8] = "stKySnd";
+const char cfeNativeNameStKyScrEff[16] = "stKyScrEff";
+const char cfeNativeNameStKyMnt[8] = "stKyMnt";
+const char cfeNativeNameStKyFog[8] = "stKyFog";
+const char cfeNativeNameStKyMp[8] = "stKyMp";
+const char cfeNativeNameStKyLgt[8] = "stKyLgt";
+const char cfeNativeNameStKyEf[8] = "stKyEf";
+const char cfeNativeNameStKyCm[8] = "stKyCm";
+const char cfeNativeNameStKyAtPrts[16] = "stKyAtPrts";
+const char cfeNativeNameStKyAtHd[16] = "stKyAtHd";
+const char cfeNativeNameStKyAt[8] = "stKyAt";
+const char cfeNativeNameStFrm[8] = "stFrm";
+const char cfeNativeNameStFdOut[8] = "stFdOut";
+const char cfeNativeNameStFdIn[8] = "stFdIn";
+const char cfeNativeNameLdSnd[8] = "ldSnd";
+const char cfeNativeNameLdDev[8] = "ldDev";
+const char cfeNativeNameLdMnt[8] = "ldMnt";
+const char cfeNativeNameLdMpDev[8] = "ldMpDev";
+const char cfeNativeNameLdMp[8] = "ldMp";
+const char cfeNativeNameLdEf[8] = "ldEf";
+const char cfeNativeNameLdMt[8] = "ldMt";
+const char cfeNativeNameLdAt[8] = "ldAt";
+const char cfeNativeNameInit[8] = "init";
 
-const char D_0068CF40[8] = "destroy";
-const char D_0068CF48[16] = "stEndFrm";
-const char D_0068CF58[16] = "stStrtFrm";
-const char D_0068CF68[16] = "setMesScr";
-const char D_0068CF78[8] = "setMes";
-const char D_0068CF80[16] = "allocMes";
-const char D_0068CF90[8] = "stKySnd";
-const char D_0068CF98[16] = "stKyScrEff";
-const char D_0068CFA8[8] = "stKyMnt";
-const char D_0068CFB0[8] = "stKyFog";
-const char D_0068CFB8[8] = "stKyMp";
-const char D_0068CFC0[8] = "stKyLgt";
-const char D_0068CFC8[8] = "stKyEf";
-const char D_0068CFD0[8] = "stKyCm";
-const char D_0068CFD8[16] = "stKyAtPrts";
-const char D_0068CFE8[16] = "stKyAtHd";
-const char D_0068CFF8[8] = "stKyAt";
-const char D_0068D000[8] = "stFrm";
-const char D_0068D008[8] = "stFdOut";
-const char D_0068D010[8] = "stFdIn";
-const char D_0068D018[8] = "ldSnd";
-const char D_0068D020[8] = "ldDev";
-const char D_0068D028[8] = "ldMnt";
-const char D_0068D030[8] = "ldMpDev";
-const char D_0068D038[8] = "ldMp";
-const char D_0068D040[8] = "ldEf";
-const char D_0068D048[8] = "ldMt";
-const char D_0068D050[8] = "ldAt";
-const char D_0068D058[8] = "init";
-
-/* One native of the plug-in: the script name and its command function. */
-typedef struct CfePlugInEntry {
-    const char *name;
-    void *function;
-} CfePlugInEntry;
 
 int cfePaused = 0;
 int cfeStartDelay = 0;
@@ -1481,36 +1427,36 @@ int cfePlugInRecordCount = 0;
 CfeMessageRecord *cfeMessages = 0;
 const char cfePlugInName[16] = "cfe";
 
-CfePlugInEntry cfePlugInTable[30] = {
-    { D_0068D058, cfe_0024C308 },
-    { D_0068D050, cfe_0024BA70 },
-    { D_0068D048, cfe_0024BC10 },
-    { D_0068D040, cfe_0024BD28 },
-    { D_0068D038, cfe_0024BEF0 },
-    { D_0068D030, cfe_0024C030 },
-    { D_0068D028, cfe_0024C0D8 },
-    { D_0068D020, ldDev },
-    { D_0068D018, cfe_0024C278 },
-    { D_0068D010, cfe_0024E688 },
-    { D_0068D008, cfe_0024E6D8 },
-    { D_0068D000, cfe_0024DF60 },
-    { D_0068CFF8, cfe_0024C500 },
-    { D_0068CFE8, cfe_0024C7B8 },
-    { D_0068CFD8, cfe_0024C940 },
-    { D_0068CFD0, cfe_0024CB80 },
-    { D_0068CFC8, cfe_0024CCF8 },
-    { D_0068CFC0, cfe_0024CF70 },
-    { D_0068CFB8, cfe_0024D1E8 },
-    { D_0068CFB0, cfe_0024D5E0 },
-    { D_0068CFA8, cfe_0024D738 },
-    { D_0068CF98, cfe_0024D8C0 },
-    { D_0068CF90, cfe_0024DA40 },
-    { D_0068CF80, cfe_0024DBC0 },
-    { D_0068CF78, cfe_0024DC78 },
-    { D_0068CF68, setMesScr },
-    { D_0068CF58, cfe_0024DE20 },
-    { D_0068CF48, cfe_0024DE80 },
-    { D_0068CF40, cfe_0024E738 },
+SbNativeMethod cfePlugInTable[30] = {
+    { cfeNativeNameInit, cfeCmdInit },
+    { cfeNativeNameLdAt, cfeCmdLoadActor },
+    { cfeNativeNameLdMt, cfeCmdLoadMotion },
+    { cfeNativeNameLdEf, cfeCmdLoadEffect },
+    { cfeNativeNameLdMp, cfeCmdLoadMap },
+    { cfeNativeNameLdMpDev, cfeCmdLoadMapCollision },
+    { cfeNativeNameLdMnt, cfeCmdLoadMonitor },
+    { cfeNativeNameLdDev, cfeCmdLoadDev },
+    { cfeNativeNameLdSnd, cfeCmdLoadSound },
+    { cfeNativeNameStFdIn, cfeCmdFadeIn },
+    { cfeNativeNameStFdOut, cfeCmdFadeOut },
+    { cfeNativeNameStFrm, cfeCmdStepFrame },
+    { cfeNativeNameStKyAt, cfeCmdSetActorKey },
+    { cfeNativeNameStKyAtHd, cfeCmdSetActorHeadKey },
+    { cfeNativeNameStKyAtPrts, cfeCmdSetActorPartKey },
+    { cfeNativeNameStKyCm, cfeCmdSetCameraKey },
+    { cfeNativeNameStKyEf, cfeCmdSetEffectKey },
+    { cfeNativeNameStKyLgt, cfeCmdSetLightKey },
+    { cfeNativeNameStKyMp, cfeCmdSetMapKey },
+    { cfeNativeNameStKyFog, cfeCmdSetFogKey },
+    { cfeNativeNameStKyMnt, cfeCmdSetMonitorKey },
+    { cfeNativeNameStKyScrEff, cfeCmdSetScreenEffectKey },
+    { cfeNativeNameStKySnd, cfeCmdSetSoundKey },
+    { cfeNativeNameAllocMes, cfeCmdAllocMessages },
+    { cfeNativeNameSetMes, cfeCmdSetMessage },
+    { cfeNativeNameSetMesScr, cfeCmdSetMessageScr },
+    { cfeNativeNameStStrtFrm, cfeCmdSetStartFrame },
+    { cfeNativeNameStEndFrm, cfeCmdSetEndFrame },
+    { cfeNativeNameDestroy, cfeCmdDestroy },
     { 0, 0 },
 };
 

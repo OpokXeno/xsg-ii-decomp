@@ -1,15 +1,23 @@
 {
  "provenance": "estimated",
  "text": {
-  "ov02/tu000": [
+  "ov02/logo": [
    "0x00a80000",
+   "0x00a80790"
+  ],
+  "ov02/boot_display": [
+   "0x00a80790",
    "0x00a80798"
   ],
-  "ov02/tu001": [
+  "ov02/title": [
    "0x00a80798",
+   "0x00a81c38"
+  ],
+  "ov02/title_game_init": [
+   "0x00a81c38",
    "0x00a81c78"
   ],
-  "ov02/tu002": [
+  "ov02/title_hdd_install": [
    "0x00a81c78",
    "0x00a82848"
   ]
@@ -17,46 +25,46 @@
  "families": {
   ".data": [
    [
-    "ov02/tu000",
+    "ov02/logo",
     "0x00a82848",
     "0x00a829a8"
    ],
    [
-    "ov02/tu001",
+    "ov02/title",
     "0x00a829a8",
     "0x00a830a0"
    ],
    [
-    "ov02/tu002",
+    "ov02/title_hdd_install",
     "0x00a830a0",
     "0x00a83178"
    ]
   ],
   ".rodata": [
    [
-    "ov02/tu000",
+    "ov02/logo",
     "0x00a83178",
     "0x00a83450"
    ],
    [
-    "ov02/tu001",
+    "ov02/title",
     "0x00a83450",
     "0x00a83530"
    ],
    [
-    "ov02/tu002",
+    "ov02/title_hdd_install",
     "0x00a83530",
     "0x00a83c48"
    ]
   ],
   ".bss": [
    [
-    "ov02/tu001",
+    "ov02/title",
     "0x00a83c48",
     "0x00a83e20"
    ],
    [
-    "ov02/tu002",
+    "ov02/title_hdd_install",
     "0x00a83e20",
     "0x00a83e28"
    ]

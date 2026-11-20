@@ -56,187 +56,166 @@ segments:
     align: 4
     subalign: null
     subsegments:
-      - [0x1000, c, ov01/tu000]
-      - [0x11E0, c, ov01/tu001]
-      - [0x1368, c, ov01/tu002]
-      - [0x14D8, c, ov01/tu003]
-      - [0x1660, c, ov01/tu004]
-      - [0x17E8, c, ov01/tu005]
-      - [0x1E40, c, ov01/tu006]
-      - [0x24A8, c, ov01/tu007]
-      - [0x28E8, c, ov01/tu008]
-      - [0x4D28, c, ov01/tu009]
-      - [0x50F0, c, ov01/tu010]
-      - [0x5430, c, ov01/tu011]
-      - [0x5830, c, ov01/tu012]
-      - [0x6A80, c, ov01/tu013]
-      - [0x72D8, c, ov01/tu014]
-      - [0x75D8, c, ov01/tu015]
-      - [0x7CB0, c, ov01/tu016]
-      - [0x8E38, c, ov01/tu017]
-      - [0x9348, c, ov01/tu018]
-      - [0x9A50, c, ov01/tu019]
-      - [0x9C60, c, ov01/tu020]
-      - [0x9CB0, c, ov01/tu021]
-      - [0x9E70, c, ov01/tu022]
-      - [0xB8B8, c, ov01/tu023]
-      - [0x13150, c, ov01/tu033]
-      - [0x18110, c, ov01/tu034]
-      - [0x18180, c, ov01/tu035]
-      - [0x18D68, c, ov01/tu036]
-      - [0x1AEC0, c, ov01/tu037]
-      - [0x1B4B0, c, ov01/tu038]
-      - [0x1BF68, c, ov01/tu039]
-      - [0x1C0F8, c, ov01/tu040]
-      - [0x1C120, c, ov01/tu041]
-      - [0x1C280, c, ov01/tu042]
-      - [0x1CC08, c, ov01/tu091]
-      - [0x1D610, c, ov01/tu043]
-      - [0x1D928, c, ov01/tu044]
-      - [0x1FE28, c, ov01/tu045]
-      - [0x200A8, c, ov01/tu046]
-      - [0x20F80, c, ov01/tu047]
-      - [0x22BE0, c, ov01/tu048]
-      - [0x23CE0, c, ov01/tu049]
-      - [0x24928, c, ov01/tu050]
-      - [0x24E28, c, ov01/tu051]
-      - [0x25280, c, ov01/tu052]
-      - [0x25670, c, ov01/tu053]
-      - [0x25BD8, c, ov01/tu054]
-      - [0x26248, c, ov01/tu055]
-      - [0x26390, c, ov01/tu056]
-      - [0x27148, c, ov01/tu058]
-      - [0x27390, c, ov01/tu059]
-      - [0x274A8, c, ov01/tu060]
-      - [0x27BF8, c, ov01/tu061]
-      - [0x280E8, c, ov01/tu062]
-      - [0x29200, c, ov01/tu063]
-      - [0x29590, c, ov01/tu064]
-      - [0x29930, c, ov01/tu066]
-      - [0x29B70, c, ov01/tu067]
-      - [0x29C10, c, ov01/tu068]
-      - [0x29EA0, c, ov01/tu069]
-      - [0x2A058, c, ov01/tu070]
-      - [0x2A0C8, c, ov01/tu071]
-      - [0x2A340, c, ov01/tu072]
-      - [0x2BA50, c, ov01/tu073]
-      - [0x2BB80, c, ov01/tu074]
-      - [0x2BD58, c, ov01/tu075]
-      - [0x2C010, c, ov01/tu076]
-      - [0x2C888, c, ov01/tu077]
-      - [0x2EBE0, c, ov01/tu078]
-      - [0x2F748, c, ov01/tu079]
-      - [0x2FEE8, c, ov01/tu080]
-      - [0x30718, c, ov01/tu081]
-      - [0x31088, c, ov01/tu082]
-      - [0x31A38, c, ov01/tu083]
-      - [0x324E0, c, ov01/tu084]
-      - [0x32CE0, c, ov01/tu085]
-      - [0x33750, c, ov01/tu086]
-      - [0x34210, c, ov01/tu088]
-      - [0x34CC8, c, ov01/tu089]
-      - [0x354FC, data, ov01/tu008]
-      - [0x36548, data, ov01/tu012]
-      - [0x365E8, data, ov01/tu020]
-      - [0x365F0, data, ov01/tu022]
-      - [0x36978, data, ov01/tu023]
-      - [0x36A40, data, ov01/tu033]
-      - [0x36B80, data, ov01/tu035]
-      - [0x36BD0, data, ov01/tu036]
-      - [0x36CD0, data, ov01/tu038]
-      - [0x36CF0, data, ov01/tu041]
-      - [0x36F28, data, ov01/tu042]
-      - [0x36F90, data, ov01/tu044]
-      - [0x37078, data, ov01/tu047]
-      - [0x372A0, data, ov01/tu048]
-      - [0x372B0, data, ov01/tu050]
-      - [0x372D8, data, ov01/tu051]
-      - [0x374C0, data, ov01/tu052]
-      - [0x37500, data, ov01/tu054]
-      - [0x37548, data, ov01/tu055]
-      - [0x37588, data, ov01/tu056]
-      - [0x37600, data, ov01/tu060]
-      - [0x37608, data, ov01/tu061]
-      - [0x37658, data, ov01/tu062]
-      - [0x378B8, data, ov01/tu063]
-      - [0x37AB8, data, ov01/tu071]
-      - [0x37AD0, data, ov01/tu072]
-      - [0x37BC4, data, ov01/tu075]
-      - [0x37C40, data, ov01/tu077]
-      - [0x39C40, data, ov01/tu078]
-      - [0x39C48, data, ov01/tu079]
-      - [0x39C50, data, ov01/tu081]
-      - [0x39C78, data, ov01/tu082]
-      - [0x39CA0, rodata, ov01/tu008]
-      - [0x3B260, rodata, ov01/tu013]
-      - [0x3B280, rodata, ov01/tu014]
-      - [0x3B2A0, rodata, ov01/tu016]
-      - [0x3B340, rodata, ov01/tu022]
-      - [0x3B370, rodata, ov01/tu023]
-      - [0x3B440, rodata, ov01/tu033]
-      - [0x3B590, rodata, ov01/tu035]
-      - [0x3B5B0, rodata, ov01/tu036]
-      - [0x3B6A0, rodata, ov01/tu091]
-      - [0x3B880, rodata, ov01/tu044]
-      - [0x3B8D0, rodata, ov01/tu047]
-      - [0x3BCA8, rodata, ov01/tu048]
-      - [0x3BCC8, rodata, ov01/tu051]
-      - [0x3BCD0, rodata, ov01/tu056]
-      - [0x3BD60, rodata, ov01/tu072]
-      - [0x3C010, rodata, ov01/tu075]
-      - [0x3C0A0, rodata, ov01/tu076]
-      - [0x3C108, rodata, ov01/tu077]
-      - [0x3C450, rodata, ov01/tu078]
-      - [0x3C4B0, rodata, ov01/tu079]
-      - [0x3C510, rodata, ov01/tu080]
-      - [0x3C530, rodata, ov01/tu081]
-      - [0x3C570, rodata, ov01/tu082]
-      - [0x3C5A0, rodata, ov01/tu083]
-      - [0x3C690, rodata, ov01/tu084]
-      - [0x3C6A0, rodata, ov01/tu085]
-      - [0x3C770, rodata, ov01/tu086]
-      - [0x3C7D0, rodata, ov01/tu088]
-      - [0x3C850, rodata, ov01/tu089]
+      - [0x1000, c, ov01/ov01_slot]
+      - [0x11E0, c, ov01/ov01_task]
+      - [0x1368, c, ov01/mons_slot_run]
+      - [0x14D8, c, ov01/unit_side_table]
+      - [0x1660, c, ov01/data_obj_table]
+      - [0x17E8, c, ov01/obj_slot]
+      - [0x1E40, c, ov01/gr_matrix]
+      - [0x21F8, c, ov01/obj]
+      - [0x28E8, c, ov01/data_file_load]
+      - [0x4D28, c, ov01/data_unit_org_get]
+      - [0x50F0, c, ov01/unit_cmd]
+      - [0x8E38, c, ov01/unit_tbl]
+      - [0x9348, c, ov01/unit_fade]
+      - [0x9A50, c, ov01/mons_slot]
+      - [0x9C60, c, ov01/mons_slot_show]
+      - [0x9CB0, c, ov01/mons_slot_fade]
+      - [0x9E70, c, ov01/battle_init]
+      - [0xB8B8, c, ov01/calc]
+      - [0x13150, c, ov01/cmd_exec]
+      - [0x18110, c, ov01/event_stock]
+      - [0x18180, c, ov01/tgt_select]
+      - [0x18D68, c, ov01/choice_menu]
+      - [0x1AEC0, c, ov01/scene]
+      - [0x1B4B0, c, ov01/scene_load]
+      - [0x1BF68, c, ov01/scene_finish]
+      - [0x1C0F8, c, ov01/scene_script]
+      - [0x1C120, c, ov01/effect_pos]
+      - [0x1C280, c, ov01/data_record_get]
+      - [0x1CC08, c, ov01/think_dispatch]
+      - [0x1D610, c, ov01/data_box]
+      - [0x1D928, c, ov01/sb_vm]
+      - [0x1FE28, c, ov01/sb_push_const]
+      - [0x200A8, c, ov01/sb_natives]
+      - [0x20F80, c, ov01/sb_natives_unit]
+      - [0x22BE0, c, ov01/gr_gp_init]
+      - [0x23D18, c, ov01/menu]
+      - [0x26248, c, ov01/act_step_icon]
+      - [0x26390, c, ov01/menu_wep_sp_panel]
+      - [0x27148, c, ov01/menu_unit_panel]
+      - [0x27390, c, ov01/menu_unit_panel_open]
+      - [0x274A8, c, ov01/menu_icon_list]
+      - [0x27BF8, c, ov01/menu_combo_panel]
+      - [0x280E8, c, ov01/menu_panel]
+      - [0x29200, c, ov01/menu_tex_state]
+      - [0x29590, c, ov01/entry_first_init]
+      - [0x29930, c, ov01/deco_flags]
+      - [0x29B70, c, ov01/screen_flash]
+      - [0x29C10, c, ov01/screen_fill]
+      - [0x29EA0, c, ov01/handle_table]
+      - [0x2A058, c, ov01/handle_state]
+      - [0x2A0C8, c, ov01/snd_play]
+      - [0x2A340, c, ov01/debug_entry]
+      - [0x2BB80, c, ov01/yamamoto_test]
+      - [0x2BD58, c, ov01/m_gs]
+      - [0x2C010, c, ov01/m_ef_path_debug]
+      - [0x2C888, c, ov01/m_ef]
+      - [0x2EBE0, c, ov01/m_ef_sway]
+      - [0x2F748, c, ov01/m_ef_missile_trail]
+      - [0x2FEE8, c, ov01/m_ef_spiral]
+      - [0x30718, c, ov01/m_ef_thunder25]
+      - [0x31088, c, ov01/m_ef_thunder31]
+      - [0x31A38, c, ov01/m_ef_create_smp_01]
+      - [0x324E0, c, ov01/m_ef_flag_window]
+      - [0x32CE0, c, ov01/m_ef_wave]
+      - [0x33750, c, ov01/m_ef_spray]
+      - [0x34210, c, ov01/m_ef_actor_path]
+      - [0x34CC8, c, ov01/m_ef_actor_history]
+      - [0x354FC, data, ov01/data_file_load]
+      - [0x36548, data, ov01/unit_cmd]
+      - [0x365E8, data, ov01/mons_slot_show]
+      - [0x365F0, data, ov01/battle_init]
+      - [0x36978, data, ov01/calc]
+      - [0x36A40, data, ov01/cmd_exec]
+      - [0x36B80, data, ov01/tgt_select]
+      - [0x36BD0, data, ov01/choice_menu]
+      - [0x36CD0, data, ov01/scene_load]
+      - [0x36CF0, data, ov01/effect_pos]
+      - [0x36F28, data, ov01/data_record_get]
+      - [0x36F90, data, ov01/sb_vm]
+      - [0x37078, data, ov01/sb_natives_unit]
+      - [0x372A0, data, ov01/gr_gp_init]
+      - [0x372B0, data, ov01/menu]
+      - [0x37548, data, ov01/act_step_icon]
+      - [0x37588, data, ov01/menu_wep_sp_panel]
+      - [0x37600, data, ov01/menu_icon_list]
+      - [0x37608, data, ov01/menu_combo_panel]
+      - [0x37658, data, ov01/menu_panel]
+      - [0x378B8, data, ov01/menu_tex_state]
+      - [0x37AB8, data, ov01/snd_play]
+      - [0x37AD0, data, ov01/debug_entry]
+      - [0x37BC4, data, ov01/m_gs]
+      - [0x37C40, data, ov01/m_ef]
+      - [0x39C40, data, ov01/m_ef_sway]
+      - [0x39C48, data, ov01/m_ef_missile_trail]
+      - [0x39C50, data, ov01/m_ef_thunder25]
+      - [0x39C78, data, ov01/m_ef_thunder31]
+      - [0x39CA0, rodata, ov01/data_file_load]
+      - [0x3B260, rodata, ov01/unit_cmd]
+      - [0x3B340, rodata, ov01/battle_init]
+      - [0x3B370, rodata, ov01/calc]
+      - [0x3B440, rodata, ov01/cmd_exec]
+      - [0x3B590, rodata, ov01/tgt_select]
+      - [0x3B5B0, rodata, ov01/choice_menu]
+      - [0x3B6A0, rodata, ov01/think_dispatch]
+      - [0x3B880, rodata, ov01/sb_vm]
+      - [0x3B8D0, rodata, ov01/sb_natives_unit]
+      - [0x3BCA8, rodata, ov01/gr_gp_init]
+      - [0x3BCC8, rodata, ov01/menu]
+      - [0x3BCD0, rodata, ov01/menu_wep_sp_panel]
+      - [0x3BD60, rodata, ov01/debug_entry]
+      - [0x3C010, rodata, ov01/m_gs]
+      - [0x3C0A0, rodata, ov01/m_ef_path_debug]
+      - [0x3C108, rodata, ov01/m_ef]
+      - [0x3C450, rodata, ov01/m_ef_sway]
+      - [0x3C4B0, rodata, ov01/m_ef_missile_trail]
+      - [0x3C510, rodata, ov01/m_ef_spiral]
+      - [0x3C530, rodata, ov01/m_ef_thunder25]
+      - [0x3C570, rodata, ov01/m_ef_thunder31]
+      - [0x3C5A0, rodata, ov01/m_ef_create_smp_01]
+      - [0x3C690, rodata, ov01/m_ef_flag_window]
+      - [0x3C6A0, rodata, ov01/m_ef_wave]
+      - [0x3C770, rodata, ov01/m_ef_spray]
+      - [0x3C7D0, rodata, ov01/m_ef_actor_path]
+      - [0x3C850, rodata, ov01/m_ef_actor_history]
       - [0x3C870]
-      - { type: bss, vram: 0x00ABB870, name: ov01/tu000 }
-      - { type: bss, vram: 0x00ABB930, name: ov01/tu001 }
-      - { type: bss, vram: 0x00ABBCB0, name: ov01/tu002 }
-      - { type: bss, vram: 0x00ABBDF0, name: ov01/tu003 }
-      - { type: bss, vram: 0x00ABCF60, name: ov01/tu004 }
-      - { type: bss, vram: 0x00ABD320, name: ov01/tu005 }
-      - { type: bss, vram: 0x00ABFF28, name: ov01/tu008 }
-      - { type: bss, vram: 0x00AC1038, name: ov01/tu009 }
-      - { type: bss, vram: 0x00AC1040, name: ov01/tu010 }
-      - { type: bss, vram: 0x00AC1068, name: ov01/tu019 }
-      - { type: bss, vram: 0x00AC1078, name: ov01/tu022 }
-      - { type: bss, vram: 0x00AC10B0, name: ov01/tu023 }
-      - { type: bss, vram: 0x00AC2AD0, name: ov01/tu033 }
-      - { type: bss, vram: 0x00AC3B98, name: ov01/tu035 }
-      - { type: bss, vram: 0x00AC3BFC, name: ov01/tu036 }
-      - { type: bss, vram: 0x00AC4190, name: ov01/tu037 }
-      - { type: bss, vram: 0x00AC41A0, name: ov01/tu038 }
-      - { type: bss, vram: 0x00AC51A8, name: ov01/tu041 }
-      - { type: bss, vram: 0x00AC51B0, name: ov01/tu091 }
-      - { type: bss, vram: 0x00AC51C0, name: ov01/tu044 }
-      - { type: bss, vram: 0x00AE0C20, name: ov01/tu046 }
-      - { type: bss, vram: 0x00AE0C2C, name: ov01/tu047 }
-      - { type: bss, vram: 0x00AE0DE0, name: ov01/tu048 }
-      - { type: bss, vram: 0x00AE0E88, name: ov01/tu049 }
-      - { type: bss, vram: 0x00AE0EA0, name: ov01/tu050 }
-      - { type: bss, vram: 0x00AE0EB4, name: ov01/tu051 }
-      - { type: bss, vram: 0x00AE0EB8, name: ov01/tu052 }
-      - { type: bss, vram: 0x00AE0EBC, name: ov01/tu053 }
-      - { type: bss, vram: 0x00AE0EC0, name: ov01/tu055 }
-      - { type: bss, vram: 0x00AE0EC4, name: ov01/tu056 }
-      - { type: bss, vram: 0x00AE0ED0, name: ov01/tu058 }
-      - { type: bss, vram: 0x00AE0ED4, name: ov01/tu060 }
-      - { type: bss, vram: 0x00AE0ED8, name: ov01/tu061 }
-      - { type: bss, vram: 0x00AE0EDC, name: ov01/tu062 }
-      - { type: bss, vram: 0x00AE0EE4, name: ov01/tu064 }
-      - { type: bss, vram: 0x00AE0EE8, name: ov01/tu068 }
-      - { type: bss, vram: 0x00AE0F18, name: ov01/tu069 }
-      - { type: bss, vram: 0x00AE0F68, name: ov01/tu072 }
-      - { type: bss, vram: 0x00AED080, name: ov01/tu075 }
+      - { type: bss, vram: 0x00ABB870, name: ov01/ov01_slot }
+      - { type: bss, vram: 0x00ABB930, name: ov01/ov01_task }
+      - { type: bss, vram: 0x00ABBCB0, name: ov01/mons_slot_run }
+      - { type: bss, vram: 0x00ABBDF0, name: ov01/unit_side_table }
+      - { type: bss, vram: 0x00ABCF60, name: ov01/data_obj_table }
+      - { type: bss, vram: 0x00ABD320, name: ov01/obj_slot }
+      - { type: bss, vram: 0x00ABFF28, name: ov01/data_file_load }
+      - { type: bss, vram: 0x00AC1038, name: ov01/data_unit_org_get }
+      - { type: bss, vram: 0x00AC1040, name: ov01/unit_cmd }
+      - { type: bss, vram: 0x00AC1068, name: ov01/mons_slot }
+      - { type: bss, vram: 0x00AC1078, name: ov01/battle_init }
+      - { type: bss, vram: 0x00AC10B0, name: ov01/calc }
+      - { type: bss, vram: 0x00AC2AD0, name: ov01/cmd_exec }
+      - { type: bss, vram: 0x00AC3B98, name: ov01/tgt_select }
+      - { type: bss, vram: 0x00AC3BFC, name: ov01/choice_menu }
+      - { type: bss, vram: 0x00AC4190, name: ov01/scene }
+      - { type: bss, vram: 0x00AC41A0, name: ov01/scene_load }
+      - { type: bss, vram: 0x00AC51A8, name: ov01/effect_pos }
+      - { type: bss, vram: 0x00AC51B0, name: ov01/think_dispatch }
+      - { type: bss, vram: 0x00AC51C0, name: ov01/sb_vm }
+      - { type: bss, vram: 0x00AE0C20, name: ov01/sb_natives }
+      - { type: bss, vram: 0x00AE0C2C, name: ov01/sb_natives_unit }
+      - { type: bss, vram: 0x00AE0DE0, name: ov01/gr_gp_init }
+      - { type: bss, vram: 0x00AE0E88, name: ov01/menu }
+      - { type: bss, vram: 0x00AE0EC0, name: ov01/act_step_icon }
+      - { type: bss, vram: 0x00AE0EC4, name: ov01/menu_wep_sp_panel }
+      - { type: bss, vram: 0x00AE0ED0, name: ov01/menu_unit_panel }
+      - { type: bss, vram: 0x00AE0ED4, name: ov01/menu_icon_list }
+      - { type: bss, vram: 0x00AE0ED8, name: ov01/menu_combo_panel }
+      - { type: bss, vram: 0x00AE0EDC, name: ov01/menu_panel }
+      - { type: bss, vram: 0x00AE0EE4, name: ov01/entry_first_init }
+      - { type: bss, vram: 0x00AE0EE8, name: ov01/screen_fill }
+      - { type: bss, vram: 0x00AE0F18, name: ov01/handle_table }
+      - { type: bss, vram: 0x00AE0F68, name: ov01/debug_entry }
+      - { type: bss, vram: 0x00AED080, name: ov01/m_gs }
   - [0x3C870, pad, ov01_bss_file_image]
   - [0x6E088, bin, elf_shstrtab]
   - [0x6E0A8, bin, elf_section_headers]

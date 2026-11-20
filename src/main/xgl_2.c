@@ -1,13 +1,15 @@
 #include "common.h"
 #include "main/nml_model_set.h"
-#include "main/sdv_033.h"
+#include "main/xgl_camera.h"
 #include "shared.h"
 #include "main/xgl_2.h"
 
-/* This unit's .sdata (0x69E070-0x69E078) and .sbss (0x69E398), defined before
- * their first use so that every access is $gp-relative. */
-int xglLightSetDefaultReady = 0;
-int xglMotionCacheValid = 0;
+#include "quadword.h"
+
+#include "vu0_macro.h"
+#include "main/xgl_dma.h"
+#include "main/xgl_studio.h"
+
 static unsigned long long iRandSeed;
 
 unsigned short xglSRand(void)
@@ -32,7 +34,7 @@ float xglFRand(void)
     __asm__ __volatile__("vrnext.x vf1x, R\n\tqmfc2 $2, vf1\n\tmtc1 $2, $f0" : : : "$2", "$f0", "memory");
 }
 
-void xglFRandSeed(register float seed)
+void xglFSrand(register float seed)
 {
     __asm__ __volatile__(
         "mfc1 $2, %0\n"
@@ -62,11 +64,6 @@ f32 I2F(register int value)
     return (f32)value;
 }
 
-void xglMatrixStackUnit(void);
-void xglMatrixStackRotX(float angle);
-void xglMatrixStackRotY(float angle);
-void xglMatrixStackRotZ(float angle);
-void xglMatrixStackSave(Matrix4 matrix);
 float asinf(float value);
 float atan2f(float y, float x);
 
@@ -169,8 +166,6 @@ float xglAtan2(float y, float x)
     return r;
 }
 
-#include "quadword.h"
-
 void xglMemCopy64(void *destination, const void *source, int count)
 {
     register void *dst = destination;
@@ -180,7 +175,7 @@ void xglMemCopy64(void *destination, const void *source, int count)
     QuadwordCopyMatrixArray(dst, src, remaining);
 }
 
-void xglMemCopy64Backward(void *destination, const void *source, int count)
+void xglMemCopy64b(void *destination, const void *source, int count)
 {
     register void *dst = destination;
     register const void *src = source;
@@ -214,39 +209,9 @@ void xglMemCopy16(void *destination, const void *source, int count)
     QuadwordCopyArray(dst, src, remaining);
 }
 
-extern void xglVectorLength(float *destination, const Vector4 *vector);
-extern void xglMatrixStackSave(float matrix[4][4]);
-void xglVectorScale(Vector4 *destination, const Vector4 *source, float scale);
 
 typedef unsigned int XglQuadword __attribute__((mode(TI)));
 
-void xglVectorMulMat(Vector4 *destination, Matrix4 matrix,
-                     const Vector4 *vector);
-void xglVectorScaleXYZ(Vector4 *destination, const Vector4 *source, float scale);
-void xglVectorNormal_001A9200(Vector4 *destination, const Vector4 *source);
-void xglMatrixStackLoad(float matrix[4][4]);
-void xglVectorMulAdd(Vector4 *destination, const Vector4 *left,
-                     const Vector4 *right, const Vector4 *addend);
-void xglRandSeedInit(void);
-void xglVectorDiv(Vector4 *destination, const Vector4 *numerator,
-                  const Vector4 *divisor);
-void xglVectorDivXYZ(Vector4 *destination, const Vector4 *numerator,
-                     const Vector4 *divisor);
-void xglVectorMulAddXYZ(Vector4 *destination, const Vector4 *left,
-                        const Vector4 *right, const Vector4 *addend);
-void xglVectorMulSub(Vector4 *destination, const Vector4 *left,
-                     const Vector4 *right, const Vector4 *subtrahend);
-void xglVectorMulSubXYZ(Vector4 *destination, const Vector4 *left,
-                        const Vector4 *right, const Vector4 *subtrahend);
-void xglVectorDivAdd(Vector4 *destination, const Vector4 *numerator,
-                     const Vector4 *divisor, const Vector4 *addend);
-void xglVectorDivAddXYZ(Vector4 *destination, const Vector4 *numerator,
-                        const Vector4 *divisor, const Vector4 *addend);
-void xglVectorDivSub(Vector4 *destination, const Vector4 *numerator,
-                     const Vector4 *divisor, const Vector4 *subtrahend);
-void xglVectorDivSubXYZ(Vector4 *destination, const Vector4 *numerator,
-                        const Vector4 *divisor, const Vector4 *subtrahend);
-extern void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right);
 
 void xglMemCopy16b(u8 *destination, const u8 *source, int count)
 {
@@ -683,7 +648,7 @@ float xglPointLengthXZ(Vector4 *from, Vector4 *to)
         : "+r"(f) : "r"(to) : "$2", "$f0", "memory");
 }
 
-void xglVectorNormal_001A9200(Vector4 *destination, const Vector4 *source)
+void xglVectorNormal(Vector4 *destination, const Vector4 *source)
 {
     __asm__ __volatile__(
         "lqc2 vf2, 0(%1)\n\t"
@@ -727,9 +692,6 @@ void xglVectorClampXYZ(Vector4 *destination, const Vector4 *source,
     destination->w = source->w;
 }
 
-void xglVectorSubXYZ(Vector4 *destination, const Vector4 *left,
-                     const Vector4 *right);
-void xglVectorOuter(Vector4 *destination, const Vector4 *first, const Vector4 *second);
 
 void xglPlaneParameter(Vector4 *plane, const Vector4 *a, const Vector4 *b,
                        const Vector4 *c)
@@ -740,7 +702,7 @@ void xglPlaneParameter(Vector4 *plane, const Vector4 *a, const Vector4 *b,
     xglVectorSubXYZ(&edge1, b, a);
     xglVectorSubXYZ(&edge2, c, b);
     xglVectorOuter(plane, &edge1, &edge2);
-    xglVectorNormal_001A9200(plane, plane);
+    xglVectorNormal(plane, plane);
     xglVectorInner(&plane->w, plane, a);
     plane->w = -plane->w;
 }
@@ -765,30 +727,25 @@ void xglVectorMulMat(Vector4 *destination, Matrix4 matrix,
     );
 }
 
-void xglMatrixStackPush(void);
-u8 *xglStudioGetCamera2(void *studio);
-void xglMatrixStackMul(Matrix4 matrix);
-void xglMatrixStackPop(u32 value);
-void xglMatrixStackRTPS(Vector4 *destination, Vector4 *point, Vector4 *screenScale, Vector4 *screenOffset);
 
-float xglRotTransPers(Vector4 *destination, float matrix[4][4], Vector4 *point, void *cameraId)
+float xglRotTransPers(ScreenVector4 *destination, float matrix[4][4], Vector4 *point, int cameraId)
 {
-    u8 *camera;
+    XglCamera *camera;
 
     xglMatrixStackPush();
     camera = xglStudioGetCamera2(cameraId);
-    xglMatrixStackLoad((float (*)[4])(camera + 1136));
+    xglMatrixStackLoad(camera->volume[0].viewMatrix);
     if (matrix != 0) {
         xglMatrixStackMul(matrix);
     }
-    xglMatrixStackRTPS(destination, point, (Vector4 *)(camera + 128), (Vector4 *)(camera + 112));
+    xglMatrixStackRTPS(destination, point, &camera->screen.screenScale, &camera->screen.screenOffset);
     xglMatrixStackPop(1);
     return *(&destination->w);
 }
 
 /* The studio camera fields this function reads: the screen offset and scale and the view matrix. */
 
-void xglRotTransPersN(Vector4 *destination, Matrix4 matrix, const Vector4 *source,
+void xglRotTransPersN(ScreenVector4 *destination, Matrix4 matrix, const Vector4 *source,
                    int count, int cameraId)
 {
     XglCamera *camera;
@@ -812,9 +769,6 @@ void xglRotTransPersN(Vector4 *destination, Matrix4 matrix, const Vector4 *sourc
 }
 
 void xglMatrixCopy();
-void xglLightSetDefault(XglLightSet *lightSet);
-extern Matrix4 xglIdentityMatrix;
-extern Matrix4 D_00645330;
 
 void xglMatrixUnit(Matrix4 destination)
 {
@@ -823,10 +777,10 @@ void xglMatrixUnit(Matrix4 destination)
 
 void xglMatrixUnit4s(Matrix4 destination)
 {
-    xglMatrixCopy(destination, D_00645330);
+    xglMatrixCopy(destination, xglUnit4sMatrix);
 }
 
-void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right)
+void xglMatrixMul(Matrix4 destination, Matrix4 left, Matrix4 right)
 {
     __asm__ __volatile__(
         "lqc2 vf2, 0(%2)\n\t"
@@ -878,8 +832,6 @@ void xglMatrixReverse(Matrix4 destination, const Matrix *source)
     xglMatrixCopy(destination, work);
 }
 
-float xglSin(float angle);
-float xglCos(float angle);
 
 void xglMatrixInverse(Matrix *destination, Matrix *source)
 {
@@ -930,31 +882,27 @@ void xglMatrixInverse(Matrix *destination, Matrix *source)
     destination->elements[15] = 1.0f;
 }
 
-typedef struct Matrix4Block {
-    Matrix4 m;
-} Matrix4Block;
-
-void xglMatrixScale(Matrix4Block *destination, const Matrix4Block *source, const Vector4 *scale)
+void xglMatrixScale(Matrix *destination, Matrix *source, const Vector4 *scale)
 {
     int column;
 
     for (column = 0; column < 4; column++) {
-        destination->m[0][column] = source->m[0][column] * scale->x;
-        destination->m[1][column] = source->m[1][column] * scale->y;
-        destination->m[2][column] = source->m[2][column] * scale->z;
-        destination->m[3][column] = source->m[3][column] * scale->w;
+        destination->rows[0][column] = source->rows[0][column] * scale->x;
+        destination->rows[1][column] = source->rows[1][column] * scale->y;
+        destination->rows[2][column] = source->rows[2][column] * scale->z;
+        destination->rows[3][column] = source->rows[3][column] * scale->w;
     }
 }
 
-void xglMatrixTrans(Matrix4Block *destination, const Matrix4Block *source, const Vector4 *translation)
+void xglMatrixTrans(Matrix *destination, Matrix *source, const Vector4 *translation)
 {
     int column;
 
     for (column = 0; column < 4; column++) {
-        destination->m[0][column] = source->m[0][column];
-        destination->m[1][column] = source->m[1][column];
-        destination->m[2][column] = source->m[2][column];
-        destination->m[3][column] = source->m[0][column] * translation->x + source->m[1][column] * translation->y + source->m[2][column] * translation->z + source->m[3][column] * translation->w;
+        destination->rows[0][column] = source->rows[0][column];
+        destination->rows[1][column] = source->rows[1][column];
+        destination->rows[2][column] = source->rows[2][column];
+        destination->rows[3][column] = source->rows[0][column] * translation->x + source->rows[1][column] * translation->y + source->rows[2][column] * translation->z + source->rows[3][column] * translation->w;
     }
 }
 
@@ -986,7 +934,7 @@ void xglMatrixRotV(Matrix *destination, Matrix *source, Vector4 *axis,
     rotation.elements[14] = 0.0f;
     rotation.elements[15] = 1.0f;
 
-    xglMatrixMul(destination, source, &rotation);
+    xglMatrixMul(destination->rows, source->rows, rotation.rows);
 }
 
 void xglMatrixRotX(Matrix4 destination, Matrix4 source, float angle)
@@ -1092,10 +1040,8 @@ void xglMatrixFrustum(Matrix *destination, Matrix *source,
     projection.elements[13] = 0.0f;
     projection.elements[14] = -(2.0f * farPlane * nearPlane) / (farPlane - nearPlane);
     projection.elements[15] = 0.0f;
-    xglMatrixMul(destination, source, &projection);
+    xglMatrixMul(destination->rows, source->rows, projection.rows);
 }
-
-#include "vu0_macro.h"
 
 extern char D_108[];
 
@@ -1300,7 +1246,7 @@ void xglMatrixStackMulVector(Vector4 *destination, const Vector4 *source)
 
 extern char D_648[];
 
-void xglMatrixStackRTPS(Vector4 *destination, Vector4 *point, Vector4 *screenScale, Vector4 *screenOffset)
+void xglMatrixStackRTPS(ScreenVector4 *destination, const Vector4 *point, Vector4 *screenScale, Vector4 *screenOffset)
 {
     __asm__ __volatile__(
         "ctc2.i %0, $vi27\n"
@@ -1317,7 +1263,7 @@ void xglMatrixStackRTPS(Vector4 *destination, Vector4 *point, Vector4 *screenSca
 
 float sqrtf(float x);
 
-void xglMatrix2Quaternion_001AAD20(Matrix *quaternion, Matrix *source)
+void xglMatrix2Quaternion(Matrix *quaternion, Matrix *source)
 {
     float trace;
 
@@ -1456,15 +1402,13 @@ void xglRandSeedInit(void)
     iRandSeed = 0x12345678ULL;
 }
 
-void xglFRandSeed(register float seed);
-extern void xglDmaDirectSrcChain(u32 channel, u32 address);
-extern char D_00672A30[];
+extern char xglGeometryInitDmaChain[];
 
 void xglGeometryInit(void)
 {
-    xglFRandSeed(0.1f);
+    xglFSrand(0.1f);
     iRandSeed = 0x12345678ULL;
-    xglDmaDirectSrcChain(0, (u32)&D_00672A30);
+    xglDmaDirectSrcChain(0, (u32)&xglGeometryInitDmaChain);
 }
 
 void xglMatrixCopy()
@@ -1490,1269 +1434,6 @@ void xglVectorSubXYZ(register Vector4 *destination, register const Vector4 *left
     Vu0SubVectorXYZ(destination, left, right);
 }
 
-void xglStudioLightReset(void *light)
-{
-    xglLightSetDefault(light);
-}
-
-void *memcpy(void *destination, const void *source, unsigned int size);
-void xglZeroQuadwords18(AlignedVector4 *dst);
-
-/* A loaded light pack file: it starts with the "lxy" tag and is registered in xglLightPackTable. */
-typedef struct XglLightPack {
-    char tag[4];            /* 0x00: "lxy" */
-    u8 unk04[0xC];
-    char name[0x20];        /* 0x10 */
-    int entryCount;         /* 0x30 */
-    u8 unk34[8];
-    int keyOffset;          /* 0x3C */
-    u8 unk40[0xB0];
-    int entryOffsets[1];    /* 0xF0 */
-} XglLightPack;
-
-/* One slot of the 16-entry light pack table at 0x0095A410 in this TU's .bss (no symbol). */
-typedef struct XglLightPackSlot {
-    XglLightPack *pack;      /* 0x00 */
-    int refs;               /* 0x04 */
-    u32 unk08;
-    u32 unk0C;
-} XglLightPackSlot;
-
-static XglLightPackSlot xglLightPackTable[16];
-
-static XglLightSet xglLightSetDefaultCache;
-
-void xglLightSetDefault(XglLightSet *lightSet)
-{
-    int i;
-
-    if (xglLightSetDefaultReady == 0) {
-        xglZeroQuadwords18(lightSet);
-        lightSet->colors[0][0] = lightSet->colors[0][1] = lightSet->colors[0][2] = 0.8f;
-        lightSet->colors[1][0] = lightSet->colors[1][1] = lightSet->colors[1][2] = 0.5f;
-        lightSet->colors[2][0] = lightSet->colors[2][1] = lightSet->colors[2][2] = 0.5f;
-        lightSet->ambientColor.x = lightSet->ambientColor.y = lightSet->ambientColor.z = 0.25f;
-        lightSet->ambientColorLower.x = lightSet->ambientColorLower.y = lightSet->ambientColorLower.z = 0.25f;
-        lightSet->directions[3][0] = lightSet->directions[4][0] = lightSet->directions[5][0] = 1.5707964f;
-        lightSet->viewDirection.x = 1.5707964f;
-        lightSet->directions[0][0] = -0.26195645f;
-        lightSet->directions[0][1] = 0.53120846f;
-        lightSet->directions[0][3] = 1.0f;
-        lightSet->directions[1][0] = 2.3561945f;
-        lightSet->directions[1][1] = 1.2733574f;
-        lightSet->directions[1][3] = 1.0f;
-        lightSet->directions[2][0] = 0.34906587f;
-        lightSet->directions[2][1] = 3.7866313f;
-        lightSet->directions[2][3] = 1.0f;
-        for (i = 0; i < 7; i++) {
-            xglDirectionFromAngles((Vector4 *)lightSet + i, (Vector4 *)lightSet + i);
-        }
-        lightSet->pointPositions[0][0] = lightSet->pointPositions[0][1] = lightSet->pointPositions[0][2]
-            = lightSet->pointPositions[0][3] = 0.0f;
-        lightSet->pointPositions[1][0] = lightSet->pointPositions[1][1] = lightSet->pointPositions[1][2]
-            = lightSet->pointPositions[1][3] = 0.0f;
-        lightSet->pointPositions[2][0] = lightSet->pointPositions[2][1] = lightSet->pointPositions[2][2]
-            = lightSet->pointPositions[2][3] = 0.0f;
-        lightSet->pointColors[0][0] = lightSet->pointColors[0][1] = lightSet->pointColors[0][2]
-            = lightSet->pointColors[0][3] = 0.0f;
-        lightSet->pointColors[1][0] = lightSet->pointColors[1][1] = lightSet->pointColors[1][2]
-            = lightSet->pointColors[1][3] = 0.0f;
-        lightSet->pointColors[2][0] = lightSet->pointColors[2][1] = lightSet->pointColors[2][2]
-            = lightSet->pointColors[2][3] = 0.0f;
-        {
-            register Vector4 *src = (Vector4 *)lightSet;
-            register void *saved = &xglLightSetDefaultCache;
-            register Vector4 *copy = src;
-            memcpy(saved, copy, sizeof(XglLightSet));
-        }
-        xglLightSetDefaultReady = 1;
-    } else {
-        {
-            register XglLightSet *dst = lightSet;
-            register XglLightSet *cache = &xglLightSetDefaultCache;
-            memcpy(dst, cache, sizeof(XglLightSet));
-        }
-    }
-    xglMotionCacheValid = 0;
-}
-
-void xglLightPackTableInit(void)
-{
-    int i;
-
-    for (i = 0; i < 16; i++) {
-        xglLightPackTable[i].pack = 0;
-        xglLightPackTable[i].refs = 0;
-    }
-}
-
-int xglLightPackRegister(XglLightPack *pack)
-{
-    int i;
-    Vector4 unused;   /* frame-sizing local, playbook frame */
-
-    if (pack != 0 && pack->tag[0] == 'l' && pack->tag[1] == 'x' && pack->tag[2] == 'y') {
-        for (i = 0; i < 16; i++) {
-            if (xglLightPackTable[i].pack == pack) {
-                xglLightPackTable[i].refs = xglLightPackTable[i].refs + 1;
-                return 2;
-            }
-        }
-        {
-            for (i = 0; i < 16; i++) {
-                if (xglLightPackTable[i].pack == 0) {
-                    xglLightPackTable[i].pack = pack;
-                    xglLightPackTable[i].refs = 1;
-                    return 1;
-                }
-            }
-        }
-    }
-    return 0;
-}
-
-int xglLightPackRelease(XglLightPack *pack)
-{
-    int i;
-    Vector4 unused;
-
-    if (pack != 0 && pack->tag[0] == 'l' && pack->tag[1] == 'x' && pack->tag[2] == 'y') {
-        for (i = 0; i < 16; i++) {
-            if (xglLightPackTable[i].pack == pack) {
-                xglLightPackTable[i].refs = xglLightPackTable[i].refs - 1;
-                if (xglLightPackTable[i].refs <= 0) {
-                    xglLightPackTable[i].pack = 0;
-                    xglLightPackTable[i].refs = 0;
-                    return 1;
-                }
-                return 0;
-            }
-        }
-    }
-    return 0;
-}
-
-typedef struct XglLightCurve {
-    int count;
-    int minimum;
-    int maximum;
-    int unknown12;
-    int fixed;
-} XglLightCurve;
-
-float pxyInterpolateKeys(int, int *, float, float);
-
-float xglLightPackSampleCurve(int **cursor, float time)
-{
-    float result = 0.0f;
-    XglLightCurve *record;
-
-    record = (XglLightCurve *)*cursor;
-    record->fixed = ((int)time << 8) + (int)((time - (float)(int)time) * 256.0f);
-    if (record->fixed > (record->maximum << 8)) {
-        record->fixed = record->maximum << 8;
-    }
-    if (record->fixed < (record->minimum << 8)) {
-        record->fixed = record->minimum << 8;
-    }
-    result = pxyInterpolateKeys(record->count, (int *)record + 8,
-                           (float)(record->fixed / 256) +
-                               (float)(record->fixed % 256) / 256.0f,
-                           0.2f);
-    *cursor = (int *)record + record->count * 4 + 8;
-    return result;
-}
-
-void xglVectorZero(Vector4 *destination);
-void xglVectorCopy(AlignedVector4 *dst, AlignedVector4 *src);
-void xglVectorSubXYZ_001AF3F0(AlignedVector4 *dst, AlignedVector4 *minuend, AlignedVector4 *subtrahend);
-void xglVectorSub(AlignedVector4 *dst, AlignedVector4 *minuend, AlignedVector4 *subtrahend);
-void xglVectorInner(float *destination, const Vector4 *left, const Vector4 *right);
-void xglMatrixStackMulVector(Vector4 *destination, const Vector4 *source);
-float acosf(float);
-
-/* One light of a light pack (0x50 bytes per element). */
-typedef struct XglLightKey {
-    Vector4 position;       /* 0x00 */
-    Vector4 rotation;       /* 0x10: x, y, z angles */
-    Vector4 extent;         /* 0x20: radii / slopes / box half sizes by type */
-    Vector4 color;          /* 0x30 */
-    float coneAngle;        /* 0x40 */
-    float penumbra;         /* 0x44 */
-    float intensity;        /* 0x48 */
-    float reserved4C;
-} XglLightKey;
-
-typedef struct XglLightEntry {
-    int unk00;
-    int type;               /* 0x04 */
-    u8 unk08[8];
-    u8 channelTypes[20];    /* 0x10 */
-    u8 unk24[12];
-    int stream[1];          /* 0x30 */
-} XglLightEntry;
-
-void xglLightPackEvaluate(XglLightPack *pack, float time)
-{
-    int i;
-    int *entryOffsets;
-    XglLightKey *keys;
-    XglLightEntry *entry;
-    int *cursor;
-    float *values;
-    int channel;
-    int valueIndex;
-
-    entryOffsets = pack->entryOffsets;
-    keys = (XglLightKey *)((u8 *)pack + pack->keyOffset);
-    for (i = 0; i < pack->entryCount; i++) {
-        entry = (XglLightEntry *)((u8 *)pack + entryOffsets[i]);
-        cursor = entry->stream;
-        values = (float *)&keys[i];
-        valueIndex = 0;
-        for (channel = 0; channel < 20; channel++) {
-            switch (entry->channelTypes[channel]) {
-            case 2:
-                values[valueIndex] = *(float *)cursor++;
-                break;
-            case 3:
-                values[valueIndex] = 0.0f;
-                break;
-            case 4:
-                values[valueIndex] = 1.0f;
-                break;
-            case 1:
-                {
-                    while (((int)cursor & 0xf) != 0) {
-                        cursor++;
-                    }
-                }
-                values[valueIndex] = xglLightPackSampleCurve(&cursor, time);
-                break;
-            }
-            valueIndex++;
-        }
-    }
-}
-
-typedef struct XglLightSlotDir {
-    float x;
-    float y;
-    float z;
-    int weakest;
-} XglLightSlotDir;
-
-typedef struct XglLightSlots {
-    Vector4 colors[6];
-    XglLightSlotDir directions[6];
-} XglLightSlots;
-
-void xglLightSlotsInsert(XglLightSlots *lightSlots, Vector4 *color, Vector4 *lightDir)
-{
-    float strength;
-    int i;
-    float weakestStrength;
-    Vector4 *slot;
-
-    strength = color->x;
-    if (strength < color->y) {
-        strength = color->y;
-    }
-    if (strength < color->z) {
-        strength = color->z;
-    }
-    if ((&lightSlots->colors[0])[(&lightSlots->directions[0])->weakest].w < strength) {
-        weakestStrength = 0;
-        slot = &(&lightSlots->colors[0])[(&lightSlots->directions[0])->weakest];
-        xglVectorCopy(slot, color);
-        slot->w = strength;
-        slot[6].x = lightDir->x;
-        slot[6].y = lightDir->y;
-        slot[6].z = lightDir->z;
-        if (slot[6].x == 0.0f && slot[6].y == 0.0f && slot[6].z == 0.0f) {
-            slot[6].z = 1.0f;
-        }
-        xglVectorNormal_001A9200(&slot[6], &slot[6]);
-        weakestStrength = (&lightSlots->colors[0])[0].w;
-        (&lightSlots->directions[0])->weakest = 0;
-        for (i = 1; i < 6; i++) {
-            if ((&lightSlots->colors[0])[i].w < weakestStrength) {
-                weakestStrength = (&lightSlots->colors[0])[i].w;
-                (&lightSlots->directions[0])->weakest = i;
-            }
-        }
-    }
-}
-
-int xglLightPointColor(Vector4 *color, XglLightKey *key, Vector4 *receiver)
-{
-    Vector4 toLight;
-    float distance;
-
-    xglVectorZero(color);
-    xglVectorSubXYZ_001AF3F0(&toLight, &key->position, receiver);
-    distance = toLight.x * toLight.x + toLight.y * toLight.y + toLight.z * toLight.z;
-    if (key->extent.y * key->extent.y <= distance) {
-        return 0;
-    }
-    distance = sqrtf(distance);
-    xglVectorCopy(color, &key->color);
-    if (distance > key->extent.x) {
-        distance = (key->extent.y - distance) / (key->extent.y - key->extent.x);
-        xglVectorScale(color, color, distance);
-    }
-    return 1;
-}
-
-int xglLightSpotColor(Vector4 *color, Vector4 *lightDirection, XglLightKey *key, Vector4 *receiver)
-{
-    DoublewordVector4 coneAxis = { { 0.0f, 0.0f, -1.0f, 1.0f } };
-    float angle;
-    float halfCone;
-
-    halfCone = key->coneAngle * 0.5f;
-    xglVectorSub(lightDirection, receiver, &key->position);
-    xglVectorNormal_001A9200(lightDirection, lightDirection);
-    xglMatrixStackUnit();
-    xglMatrixStackRotZ(key->rotation.z);
-    xglMatrixStackRotY(key->rotation.y);
-    xglMatrixStackRotX(key->rotation.x);
-    xglMatrixStackMulVector(&coneAxis.vector, &coneAxis.vector);
-    xglVectorInner(&angle, &coneAxis.vector, lightDirection);
-    angle = acosf(angle);
-    if (angle > halfCone) {
-        return 0;
-    }
-    xglVectorCopy(color, &key->color);
-    if (halfCone - __builtin_fabsf(key->penumbra) < angle) {
-        halfCone = (halfCone - angle) / __builtin_fabsf(key->penumbra);
-        xglVectorScale(color, color, halfCone);
-    }
-    xglVectorScale(lightDirection, lightDirection, -1.0f);
-    return 1;
-}
-
-int xglLightBoxColor(Vector4 *color, Vector4 *lightDirection, XglLightKey *key, Vector4 *receiver)
-{
-    DoublewordAlignedVector4 boxAxis = {0};
-    float edgeDistance;
-
-    boxAxis.z = 1.0f;
-    edgeDistance = 1000000.0f;
-    *lightDirection = *receiver;
-    xglMatrixStackUnit();
-    xglMatrixStackTrans(key);
-    if (key->rotation.z != 0.0f) {
-        xglMatrixStackRotZ(key->rotation.z);
-    }
-    if (key->rotation.y != 0.0f) {
-        xglMatrixStackRotY(key->rotation.y);
-    }
-    if (key->rotation.x != 0.0f) {
-        xglMatrixStackRotX(key->rotation.x);
-    }
-    xglMatrixStackMulVector(&boxAxis, &boxAxis);
-    xglMatrixStackScale(&key->extent);
-    xglMatrixStackInverse();
-    lightDirection->w = 1.0f;
-    xglMatrixStackMulVector(lightDirection, lightDirection);
-    if (lightDirection->x < -1.0f || lightDirection->x > 1.0f || lightDirection->y < -1.0f || lightDirection->y > 1.0f || lightDirection->z > 0.0f) {
-        return 0;
-    }
-    xglVectorCopy(color, &key->color);
-    if (__builtin_fabsf((-1.0f - lightDirection->x) * key->extent.x) < edgeDistance) {
-        edgeDistance = __builtin_fabsf((-1.0f - lightDirection->x) * key->extent.x);
-    }
-    if (__builtin_fabsf((1.0f - lightDirection->x) * key->extent.x) < edgeDistance) {
-        edgeDistance = __builtin_fabsf((1.0f - lightDirection->x) * key->extent.x);
-    }
-    if (__builtin_fabsf((-1.0f - lightDirection->y) * key->extent.y) < edgeDistance) {
-        edgeDistance = __builtin_fabsf((-1.0f - lightDirection->y) * key->extent.y);
-    }
-    if (__builtin_fabsf((1.0f - lightDirection->y) * key->extent.y) < edgeDistance) {
-        edgeDistance = __builtin_fabsf((1.0f - lightDirection->y) * key->extent.y);
-    }
-    if (edgeDistance < 1.0f) {
-        xglVectorScale(color, color, edgeDistance);
-    }
-    *lightDirection = boxAxis;
-    return 1;
-}
-
-void xglVectorAddXYZ(AlignedVector4 *dst, AlignedVector4 *first, AlignedVector4 *second);
-void func_001BB3FC(void *cache);
-void xglLightSlotsInsert(XglLightSlots *work, Vector4 *vector, Vector4 *direction);
-int xglLightPointColor(Vector4 *result, XglLightKey *key, Vector4 *origin);
-int xglLightSpotColor(Vector4 *result, Vector4 *direction, XglLightKey *key, Vector4 *origin);
-int xglLightBoxColor(Vector4 *result, Vector4 *direction, XglLightKey *key, Vector4 *origin);
-int xglLightConeColor(Vector4 *result, Vector4 *direction, XglLightKey *key, Vector4 *origin);
-
-/* Loads the key's Z, Y, X rotation into the matrix stack (identity first, zero angles skipped).
- * A plain block, not do/while (0): the loop's labels would renumber the output. */
-#define LOAD_KEY_ROTATION(key) \
-    { \
-        xglMatrixStackUnit(); \
-        if ((key)->rotation.z != 0.0f) { \
-            xglMatrixStackRotZ((key)->rotation.z); \
-        } \
-        if ((key)->rotation.y != 0.0f) { \
-            xglMatrixStackRotY((key)->rotation.y); \
-        } \
-        if ((key)->rotation.x != 0.0f) { \
-            xglMatrixStackRotX((key)->rotation.x); \
-        } \
-    }
-#define XGL_MOTION_TYPE_COUNT 19
-
-extern const u64 D_0068E570[2];
-extern u64 D_0068E578;
-float xglPointLength(Vector4 *from, Vector4 *to);
-
-int xglLightConeColor(Vector4 *color, Vector4 *lightDirection, XglLightKey *key, Vector4 *receiver)
-{
-    float keyMatrix[4][4];
-    Vector4 coneScale;
-    float innerSlope;
-    float outerSlope;
-    float fade;
-    float coneRatio;
-    DoublewordVector4 edgePoint;
-    DoublewordVector4 spareVector0;
-
-    innerSlope = key->extent.x / key->extent.z;
-    outerSlope = key->extent.y / key->extent.z;
-    fade = 1.0f;
-    coneRatio = 1.0f;
-    coneScale.x = key->extent.y;
-    coneScale.y = key->extent.z;
-    coneScale.z = key->extent.y;
-    coneScale.w = 1.0f;
-
-    *lightDirection = *receiver;
-    xglMatrixStackUnit();
-    xglMatrixStackTrans(key);
-    if (key->rotation.z != 0.0f) {
-        xglMatrixStackRotZ(key->rotation.z);
-    }
-    if (key->rotation.y != 0.0f) {
-        xglMatrixStackRotY(key->rotation.y);
-    }
-    if (key->rotation.x != 0.0f) {
-        xglMatrixStackRotX(key->rotation.x);
-    }
-    xglMatrixStackSave(keyMatrix);
-    xglMatrixStackScale(&coneScale);
-    xglMatrixStackInverse();
-    lightDirection->w = 1.0f;
-    xglMatrixStackMulVector(lightDirection, lightDirection);
-
-    if (lightDirection->y > 1.0f || lightDirection->y < -1.0f) {
-        edgePoint.words[0] = D_0068E570[0];
-        edgePoint.words[1] = D_0068E578;
-        if (lightDirection->y < -1.0f) {
-            edgePoint.vector.y = -1.0f;
-        }
-        coneRatio = xglPointLength(lightDirection, &edgePoint.vector) * outerSlope;
-        if (coneRatio >= outerSlope) {
-            return 0;
-        }
-        if (coneRatio > innerSlope) {
-            fade = 1.0f - (coneRatio - innerSlope) / (outerSlope - innerSlope);
-        }
-        xglVectorSubXYZ_001AF3F0(lightDirection, lightDirection, &edgePoint.vector);
-        xglMatrixStackLoad(keyMatrix);
-        lightDirection->w = 0.0f;
-        xglMatrixStackMulVector(lightDirection, lightDirection);
-        xglVectorNormal_001A9200(lightDirection, lightDirection);
-        xglVectorScale(lightDirection, lightDirection, -1.0f);
-        xglVectorCopy(color, &key->color);
-        xglVectorScale(color, color, fade);
-        return 1;
-    } else {
-        if (lightDirection->x > -1.0f && lightDirection->x < 1.0f && lightDirection->z > -1.0f && lightDirection->z < 1.0f) {
-            coneRatio = sqrtf(lightDirection->x * lightDirection->x + lightDirection->z * lightDirection->z) * outerSlope;
-            if (coneRatio >= outerSlope) {
-                return 0;
-            }
-            if (coneRatio > innerSlope) {
-                fade = 1.0f - (coneRatio - innerSlope) / (outerSlope - innerSlope);
-            }
-            lightDirection->y = 0.0f;
-            xglMatrixStackLoad(keyMatrix);
-            lightDirection->w = 0.0f;
-            xglMatrixStackMulVector(lightDirection, lightDirection);
-            xglVectorNormal_001A9200(lightDirection, lightDirection);
-            xglVectorScale(lightDirection, lightDirection, -1.0f);
-            xglVectorCopy(color, &key->color);
-            xglVectorScale(color, color, fade);
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static Vector4 xglMotionCache[1];
-
-void *xglLightPackCacheGet(void)
-{
-    if (xglMotionCacheValid != 0) {
-        return xglMotionCache;
-    }
-    return 0;
-}
-
-void xglLightPackCacheInvalidate(void)
-{
-    xglMotionCacheValid = 0;
-}
-
-void xglLightPackBuildLightSet(XglLightPack *pack, XglLightSet *lightSet, Vector4 *receiver)
-{
-    int i;
-    int *entryOffsets;
-    Vector4 lightSlots[12];
-
-    entryOffsets = pack->entryOffsets;
-    memset(lightSlots, 0, sizeof(lightSlots));
-    xglZeroQuadwords18(lightSet);
-    for (i = 0; i < pack->entryCount; i++) {
-        XglLightEntry *entry = (XglLightEntry *)((u8 *)pack + entryOffsets[i]);
-
-        if (entry->type < XGL_MOTION_TYPE_COUNT) {
-            XglLightKey *key = &((XglLightKey *)((u8 *)pack + pack->keyOffset))[i];
-            DoublewordAlignedVector4 axisDir = { 0.0f, 0.0f, -1.0f, 1.0f };
-            Vector4 pointColor;
-            Vector4 coneColor;
-            Vector4 coneDirection;
-            Vector4 spotColor;
-            Vector4 spotDirection;
-            Vector4 boxColor;
-            Vector4 boxDirection;
-            Vector4 scaledColor;
-
-            switch (entry->type) {
-            case 9:
-                xglVectorScale(xglMotionCache, &key->color, key->intensity);
-                func_001BB3FC(xglMotionCache);
-                xglMotionCacheValid = 1;
-                break;
-            case 1:
-                xglVectorScale(&lightSet->ambientColor, &key->color, key->intensity);
-                xglVectorScale(&lightSet->ambientColorLower, &key->color, key->intensity);
-                break;
-            case 2:
-                xglVectorScale(&lightSet->ambientColor, &key->color, key->intensity);
-                xglVectorScale(&lightSet->ambientColorLower, &key->extent, key->intensity);
-                LOAD_KEY_ROTATION(key)
-                                xglMatrixStackMulVector(&axisDir, &axisDir);
-                xglVectorCopy(&lightSet->viewDirection, &axisDir);
-                break;
-            case 3:
-                if (!xglLightPointColor(&pointColor, key, receiver)) {
-                    break;
-                }
-                xglVectorScale(&pointColor, &pointColor, key->intensity);
-                xglVectorAddXYZ(&lightSet->ambientColor, &lightSet->ambientColor, &pointColor);
-                xglVectorAddXYZ(&lightSet->ambientColorLower, &lightSet->ambientColorLower, &pointColor);
-                break;
-            case 7:
-                if (!xglLightConeColor(&coneColor, &coneDirection, key, receiver)) {
-                    break;
-                }
-                xglVectorScale(&coneColor, &coneColor, key->intensity);
-                xglVectorAddXYZ(&lightSet->ambientColor, &lightSet->ambientColor, &coneColor);
-                xglVectorAddXYZ(&lightSet->ambientColorLower, &lightSet->ambientColorLower, &coneColor);
-                break;
-            case 6:
-                if (!xglLightSpotColor(&spotColor, &spotDirection, key, receiver)) {
-                    break;
-                }
-                xglVectorScale(&spotColor, &spotColor, key->intensity);
-                xglVectorAddXYZ(&lightSet->ambientColor, &lightSet->ambientColor, &spotColor);
-                xglVectorAddXYZ(&lightSet->ambientColorLower, &lightSet->ambientColorLower, &spotColor);
-                break;
-            case 4:
-                if (!xglLightBoxColor(&boxColor, &boxDirection, key, receiver)) {
-                    break;
-                }
-                xglVectorScale(&boxColor, &boxColor, key->intensity);
-                xglVectorAddXYZ(&lightSet->ambientColor, &lightSet->ambientColor, &boxColor);
-                xglVectorAddXYZ(&lightSet->ambientColorLower, &lightSet->ambientColorLower, &boxColor);
-                break;
-            case 8:
-                axisDir.z = 1.0f;
-                LOAD_KEY_ROTATION(key)
-                                xglMatrixStackMulVector(&axisDir, &axisDir);
-                xglVectorScale(&scaledColor, &key->color, key->intensity);
-                xglLightSlotsInsert(lightSlots, &scaledColor, &axisDir);
-                break;
-            case 10:
-                axisDir.z = 1.0f;
-                LOAD_KEY_ROTATION(key)
-                                xglMatrixStackMulVector(&lightSet->shadows[0], &axisDir);
-                lightSet->shadows[0].w = 1.0f;
-                break;
-            case 11:
-                xglVectorSubXYZ_001AF3F0(&lightSet->shadows[0], &key->position, receiver);
-                xglVectorNormal_001A9200(&lightSet->shadows[0], &lightSet->shadows[0]);
-                lightSet->shadows[0].w = 1.0f;
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-    {
-        int pointCount;
-
-        pointCount = 0;
-        for (i = 0; i < pack->entryCount; i++) {
-            XglLightEntry *entry = (XglLightEntry *)((u8 *)pack + entryOffsets[i]);
-
-            if (entry->type >= XGL_MOTION_TYPE_COUNT) {
-                XglLightKey *key = &((XglLightKey *)((u8 *)pack + pack->keyOffset))[i];
-                Vector4 pointColor;
-                Vector4 pointDirection;
-                Vector4 coneColor;
-                Vector4 coneDirection;
-                Vector4 boxColor;
-                Vector4 boxDirection;
-                Vector4 spotColor;
-                Vector4 spotDirection;
-
-                switch (entry->type) {
-                case 19:
-                    if (pointCount < 3) {
-                        xglVectorCopy((Vector4 *)lightSet->pointPositions[pointCount], &key->position);
-                        xglVectorScale((Vector4 *)lightSet->pointColors[pointCount], &key->color,
-                            key->intensity * 128.0f);
-                        lightSet->pointPositions[pointCount][3] = 1.0f;
-                        pointCount++;
-                    }
-                    break;
-                case 20:
-                case 35:
-                    if (!xglLightPointColor(&pointColor, key, receiver)) {
-                        break;
-                    }
-                    xglVectorSubXYZ_001AF3F0(&pointDirection, &key->position, receiver);
-                    xglVectorScale(&pointColor, &pointColor, key->intensity);
-                    xglLightSlotsInsert(lightSlots, &pointColor, &pointDirection);
-                    break;
-                case 24:
-                    if (!xglLightConeColor(&coneColor, &coneDirection, key, receiver)) {
-                        break;
-                    }
-                    xglVectorScale(&coneColor, &coneColor, key->intensity);
-                    xglLightSlotsInsert(lightSlots, &coneColor, &coneDirection);
-                    break;
-                case 21:
-                    if (!xglLightBoxColor(&boxColor, &boxDirection, key, receiver)) {
-                        break;
-                    }
-                    xglVectorScale(&boxColor, &boxColor, key->intensity);
-                    xglLightSlotsInsert(lightSlots, &boxColor, &boxDirection);
-                    break;
-                case 23:
-                    if (!xglLightSpotColor(&spotColor, &spotDirection, key, receiver)) {
-                        break;
-                    }
-                    xglVectorScale(&spotColor, &spotColor, key->intensity);
-                    xglLightSlotsInsert(lightSlots, &spotColor, &spotDirection);
-                    break;
-                }
-            }
-        }
-    }
-    {
-        int slot;
-
-        for (slot = 0; slot < 6; slot++) {
-            xglVectorCopy((Vector4 *)lightSet->colors[slot], &lightSlots[slot]);
-            xglVectorCopy((Vector4 *)lightSet->directions[slot], &lightSlots[slot + 6]);
-            lightSet->colors[slot][3] = 0;
-        }
-    }
-}
-
-int strcmp(const char *s1, const char *s2);
-
-void xglLightPackBuildByName(XglLightSet *light, const char *packName, Vector4 *receiver)
-{
-    int i;
-
-    xglMotionCacheValid = 0;
-    for (i = 0; i < 16; i++) {
-        if (xglLightPackTable[i].pack != 0) {
-            if (strcmp(xglLightPackTable[i].pack->name, packName) == 0) {
-                xglLightPackBuildLightSet(xglLightPackTable[i].pack, light, receiver);
-                return;
-            }
-        }
-    }
-}
-
-void xglLightPackTableClear(void)
-{
-    int i;
-
-    for (i = 0; i < 16; i++) {
-        xglLightPackTable[i].pack = 0;
-        xglLightPackTable[i].refs = 0;
-    }
-}
-
-void xglLightPackEvaluate(XglLightPack *pack, float time);
-
-void xglLightPackEvaluateAll(float time)
-{
-    int i;
-
-    for (i = 0; i < 16; i++) {
-        if (xglLightPackTable[i].pack != 0) {
-            xglLightPackEvaluate(xglLightPackTable[i].pack, time);
-        }
-    }
-}
-
-extern const u64 D_0068E610[10];
-void xglMatrixStackScale(const Vector4 *vector);
-void xglMatrixStackTrans(const Vector4 *vector);
-
-void xglLightPackDebugBox(XglLightKey *key)
-{
-    int scaled[3];
-    DoublewordVector4 point0;
-    DoublewordVector4 point1;
-    DoublewordVector4 point2;
-    DoublewordVector4 point3;
-    DoublewordVector4 point4;
-    DoublewordVector4 spareVector0;
-    DoublewordVector4 spareVector1;
-    DoublewordVector4 spareVector2;
-
-    point0.words[0] = D_0068E610[0];
-    point0.words[1] = D_0068E610[1];
-    point1.words[0] = D_0068E610[2];
-    point1.words[1] = D_0068E610[3];
-    point2.words[0] = D_0068E610[4];
-    point2.words[1] = D_0068E610[5];
-    point3.words[0] = D_0068E610[6];
-    point3.words[1] = D_0068E610[7];
-    point4.words[0] = D_0068E610[8];
-    point4.words[1] = D_0068E610[9];
-    xglMatrixStackUnit();
-    xglMatrixStackTrans(key);
-    xglMatrixStackRotZ(key->rotation.z);
-    xglMatrixStackRotY(key->rotation.y);
-    xglMatrixStackRotX(key->rotation.x);
-    xglMatrixStackScale(&key->extent);
-    xglMatrixStackMulVector(&point0.vector, &point0.vector);
-    xglMatrixStackMulVector(&point1.vector, &point1.vector);
-    xglMatrixStackMulVector(&point2.vector, &point2.vector);
-    xglMatrixStackMulVector(&point3.vector, &point3.vector);
-    xglMatrixStackMulVector(&point4.vector, &point4.vector);
-    /* scaled[] is stored and never read in the original. */
-    scaled[0] = key->color.x * 128.0f * key->intensity;
-    scaled[1] = key->color.y * 128.0f * key->intensity;
-    scaled[2] = key->color.z * 128.0f * key->intensity;
-}
-
-void xglLightPackDebugAmbient(void *state)
-{
-}
-
-void *memset(void *destination, int value, unsigned int count);
-float sinf(float angle);
-float cosf(float angle);
-float func_002A1D08(float value);
-/* gp-relative float constants of this TU (.sdata). */
-
-void xglLightPackDebugSpot(XglLightKey *key)
-{
-    int scaled[3];
-    Vector4 baseRing[8];
-    Vector4 apex;
-    float height;
-    int i;
-    float radius;
-    register unsigned int size;
-    register Vector4 *entry;
-    register Vector4 *entry2;
-    register int offset;
-    register int zoff8;
-    register int zoff12;
-    register unsigned int tb;
-    register int index;
-    register unsigned int tby;
-
-    memset(&apex, 0, (size = 16, size));
-    apex.w = 1.0f;
-    height = key->extent.z * 0.44f + 0.867f;
-    radius = func_002A1D08(key->coneAngle * 0.5f) * height;
-    apex.z = -height * 1.2f;
-    scaled[0] = key->color.x * 128.0f * key->intensity;
-    scaled[1] = key->color.y * 128.0f * key->intensity;
-    scaled[2] = key->color.z * 128.0f * key->intensity;
-    for (i = 0; i < 8; i++) {
-        index = i << 4;
-        tb = (unsigned int)baseRing;
-        entry = (Vector4 *)(tb + index);
-        entry->x = radius * cosf(2.0f * ((float)i / 8.0f * 3.141592f));
-        offset = i * 16 + 4;
-        tby = (unsigned int)baseRing;
-        entry2 = (Vector4 *)(tby + offset);
-        entry2->x = radius * sinf(2.0f * ((float)i / 8.0f * 3.141592f));
-        zoff8 = i * 16 + 8;
-        *(float *)(zoff8 + (unsigned int)baseRing) = -height;
-        zoff12 = i * 16 + 12;
-        *(float *)(zoff12 + (unsigned int)baseRing) = 1.0f;
-    }
-    xglMatrixStackUnit();
-    xglMatrixStackTrans(key);
-    xglMatrixStackRotZ(key->rotation.z);
-    xglMatrixStackRotY(key->rotation.y);
-    xglMatrixStackRotX(key->rotation.x);
-    xglMatrixStackMulVector(&apex, &apex);
-    for (i = 0; i < 8; i++) {
-        xglMatrixStackMulVector(&baseRing[i], &baseRing[i]);
-    }
-    {
-        for (i = 0; i < 8; i++) {
-        }
-    }
-    {
-        for (i = 0; i < 8; i++) {
-        }
-    }
-}
-
-struct XglLightKeyView {
-    DoublewordAlignedVector4 position;
-    u32 unmodeled_10[4];
-    float extentX;
-    float extentY;
-    u32 unmodeled_28[2];
-    float colorX;
-    float colorY;
-    float colorZ;
-    u32 unmodeled_3C[3];
-    float intensity;
-};
-
-void xglLightPackDebugMarker(struct XglLightKeyView *key)
-{
-    int spare0;
-    int spare1;
-    int spare2;
-    int x;
-    int y;
-    int z;
-    DoublewordAlignedVector4 copy;
-
-    copy = key->position;
-    copy.w = 0.5f;
-    x = key->colorX * 128.0f * key->intensity;
-    y = key->colorY * 128.0f * key->intensity;
-    z = key->colorZ * 128.0f * key->intensity;
-}
-
-/* The 0x0068E660 table: four Vector4 (x, y, z, w) copied as eight doublewords. Each word keeps its own
- * scaffold label, so the copies reference the same symbols as the original. */
-extern const u64 D_0068E660[8];
-
-void xglLightPackDebugDirectional(XglLightKey *key)
-{
-    int scaled[3];
-    DoublewordVector4 point0;
-    DoublewordVector4 point1;
-    DoublewordVector4 point2;
-    DoublewordVector4 point3;
-    DoublewordVector4 spareVector0;
-    DoublewordVector4 spareVector1;
-
-    point0.words[0] = D_0068E660[0];
-    point0.words[1] = D_0068E660[1];
-    point1.words[0] = D_0068E660[2];
-    point1.words[1] = D_0068E660[3];
-    point2.words[0] = D_0068E660[4];
-    point2.words[1] = D_0068E660[5];
-    point3.words[0] = D_0068E660[6];
-    point3.words[1] = D_0068E660[7];
-    /* scaled[] is stored and never read in the original. */
-    scaled[0] = key->color.x * 128.0f * key->intensity;
-    scaled[1] = key->color.y * 128.0f * key->intensity;
-    scaled[2] = key->color.z * 128.0f * key->intensity;
-    xglMatrixStackUnit();
-    xglMatrixStackRotZ(key->rotation.z);
-    xglMatrixStackRotY(key->rotation.y);
-    xglMatrixStackRotX(key->rotation.x);
-    xglMatrixStackMulVector(&point0.vector, &point0.vector);
-    xglMatrixStackMulVector(&point1.vector, &point1.vector);
-    xglMatrixStackMulVector(&point2.vector, &point2.vector);
-    xglMatrixStackMulVector(&point3.vector, &point3.vector);
-}
-
-void xglLightPackDebugPoint(struct XglLightKeyView *key)
-{
-    int spare0;
-    int spare1;
-    int spare2;
-    int x;
-    int y;
-    int z;
-    DoublewordAlignedVector4 copy;
-
-    copy = key->position;
-    copy.w = key->extentX;
-    x = key->colorX * 128.0f * key->intensity;
-    y = key->colorY * 128.0f * key->intensity;
-    z = key->colorZ * 128.0f * key->intensity;
-    copy.w = key->extentY;
-}
-
-extern const u64 D_0068E6A0[4];
-
-void xglLightPackDebugCone(XglLightKey *key)
-{
-    int scaled[3];
-    Vector4 baseRing[8];
-    Vector4 ringA[8];
-    Vector4 ringB[8];
-    Vector4 ringC[8];
-    Vector4 ringD[8];
-    Vector4 coneScale;
-    DoublewordVector4 point0;
-    DoublewordVector4 point1;
-    int i;
-    float radius;
-    Vector4 spareVector0;
-    register Vector4 *entry;
-    register Vector4 *entry2;
-    register Vector4 *entry3;
-    register Vector4 *entry4;
-    register float *zptr;
-    register float *zptr2;
-    register int index;
-    register int index2;
-    register unsigned int tb;
-    register unsigned int tb2;
-    register int zoff8;
-    register int zoff82;
-    register int off;
-    register int off2;
-    register int off3;
-    register int off4;
-    register int off5;
-    register int off6;
-    register float *zD;
-    register float *zC;
-    register float *zD2;
-    register float *zC2;
-    register int off11;
-    register int off12;
-    register int index3;
-    register int index4;
-    register int off7;
-    register int off8;
-    register int off9;
-    register int off10;
-    register unsigned int tbd;
-    register unsigned int tbc;
-    register unsigned int tbc2;
-    register unsigned int tbd2;
-    register unsigned int tbd3;
-    register unsigned int tbc3;
-    register unsigned int tbd4;
-    register unsigned int tbc4;
-    register unsigned int tby;
-    register unsigned int tby2;
-    register unsigned int tby3;
-    register unsigned int tby4;
-    register unsigned int tby5;
-    register unsigned int tby6;
-    register unsigned int tby7;
-    register unsigned int tby8;
-
-    point0.words[0] = D_0068E6A0[0];
-    point0.words[1] = D_0068E6A0[1];
-    point1.words[0] = D_0068E6A0[2];
-    point1.words[1] = D_0068E6A0[3];
-    radius = 1.0f;
-    point0.vector.y = (1.0f / key->extent.z) * key->extent.y + 1.0f;
-    point1.vector.y = -1.0f - (1.0f / key->extent.z) * key->extent.y;
-    scaled[0] = key->color.x * 128.0f * key->intensity;
-    scaled[1] = key->color.y * 128.0f * key->intensity;
-    scaled[2] = key->color.z * 128.0f * key->intensity;
-    coneScale.x = key->extent.x;
-    coneScale.y = key->extent.z;
-    coneScale.z = key->extent.x;
-    coneScale.w = 1.0f;
-    xglMatrixStackUnit();
-    xglMatrixStackTrans(key);
-    xglMatrixStackRotZ(key->rotation.z);
-    xglMatrixStackRotY(key->rotation.y);
-    xglMatrixStackRotX(key->rotation.x);
-    xglMatrixStackScale(&coneScale);
-    xglMatrixStackMulVector(&point0.vector, &point0.vector);
-    xglMatrixStackMulVector(&point1.vector, &point1.vector);
-    for (i = 0; i < 8; i++) {
-        index = i << 4;
-        tb = (unsigned int)baseRing;
-        entry = (Vector4 *)(tb + index);
-        entry->x = cosf(2.0f * ((float)i / 8.0f * 3.141592f));
-        off = i * 16 + 4;
-        tby = (unsigned int)baseRing;
-        *(float *)(tby + off) = 1.0f;
-        zoff8 = i * 16 + 8;
-        tby2 = (unsigned int)baseRing;
-        zptr = (float *)(tby2 + zoff8);
-        *zptr = sinf(2.0f * ((float)i / 8.0f * 3.141592f));
-        off2 = i * 16 + 12;
-        tby3 = (unsigned int)baseRing;
-        *(float *)(tby3 + off2) = 1.0f;
-        xglMatrixStackMulVector(&ringA[i], &baseRing[i]);
-        off3 = i * 16 + 4;
-        tby4 = (unsigned int)baseRing;
-        *(float *)(tby4 + off3) = -1.0f;
-        xglMatrixStackMulVector(&ringB[i], &baseRing[i]);
-    }
-    {
-        for (i = 0; i < 8; i++) {
-        }
-    }
-    coneScale.x = key->extent.y;
-    coneScale.z = key->extent.y;
-    xglMatrixStackUnit();
-    xglMatrixStackTrans(key);
-    xglMatrixStackRotZ(key->rotation.z);
-    xglMatrixStackRotY(key->rotation.y);
-    xglMatrixStackRotX(key->rotation.x);
-    xglMatrixStackScale(&coneScale);
-    {
-        for (i = 0; i < 8; i++) {
-        index2 = i << 4;
-        tb2 = (unsigned int)baseRing;
-        entry3 = (Vector4 *)(tb2 + index2);
-        entry3->x = radius * cosf(2.0f * ((float)i / 8.0f * 3.141592f));
-        off4 = i * 16 + 4;
-        tby5 = (unsigned int)baseRing;
-        *(float *)(tby5 + off4) = 1.0f;
-        zoff82 = i * 16 + 8;
-        tby6 = (unsigned int)baseRing;
-        zptr2 = (float *)(tby6 + zoff82);
-        *zptr2 = radius * sinf(2.0f * ((float)i / 8.0f * 3.141592f));
-        off5 = i * 16 + 12;
-        tby7 = (unsigned int)baseRing;
-        *(float *)(tby7 + off5) = 1.0f;
-        xglMatrixStackMulVector(&ringA[i], &baseRing[i]);
-        off6 = i * 16 + 4;
-        tby8 = (unsigned int)baseRing;
-        *(float *)(tby8 + off6) = -1.0f;
-        xglMatrixStackMulVector(&ringB[i], &baseRing[i]);
-        index3 = i << 4;
-        tbd = (unsigned int)ringD;
-        entry2 = (Vector4 *)(tbd + index3);
-        index4 = i << 4;
-        tbc = (unsigned int)ringC;
-        entry4 = (Vector4 *)(tbc + index4);
-        entry2->x = entry4->x = cosf(2.0f * ((float)i / 8.0f * 3.141592f)) * 0.707f;
-        off7 = i * 16 + 4;
-        tbc2 = (unsigned int)ringC;
-        *(float *)(tbc2 + off7) = (0.707f / key->extent.z) * key->extent.y + 1.0f;
-        off8 = i * 16 + 4;
-        tbd2 = (unsigned int)ringD;
-        *(float *)(tbd2 + off8) = -1.0f - (0.707f / key->extent.z) * key->extent.y;
-        off9 = i * 16 + 8;
-        tbd3 = (unsigned int)ringD;
-        zD = (float *)(tbd3 + off9);
-        off11 = i * 16 + 8;
-        tbc3 = (unsigned int)ringC;
-        zC = (float *)(tbc3 + off11);
-        *zD = *zC = sinf(2.0f * ((float)i / 8.0f * 3.141592f)) * 0.707f;
-        off10 = i * 16 + 12;
-        tbd4 = (unsigned int)ringD;
-        zD2 = (float *)(tbd4 + off10);
-        off12 = i * 16 + 12;
-        tbc4 = (unsigned int)ringC;
-        zC2 = (float *)(tbc4 + off12);
-        *zD2 = *zC2 = 1.0f;
-        xglMatrixStackMulVector(&ringC[i], &ringC[i]);
-        xglMatrixStackMulVector(&ringD[i], &ringD[i]);
-        }
-    }
-    {
-        for (i = 0; i < 8; i++) {
-        }
-    }
-}
-
-/* The 0x0068E6C0 table: three Vector4 copied as six doublewords, one scaffold label per word. */
-extern const u64 D_0068E6C0[6];
-
-void xglLightPackDebugAxis(XglLightKey *key)
-{
-    int scaled[3];
-    Vector4 zero;
-    DoublewordVector4 point0;
-    DoublewordVector4 point1;
-    DoublewordVector4 point2;
-    DoublewordVector4 spareVector0;
-    DoublewordVector4 spareVector1;
-    register unsigned int size;
-
-    /* The count is stored inside the call: the original loads it after the buffer address. */
-    memset(&zero, 0, (size = 16, size));
-    point0.words[0] = D_0068E6C0[0];
-    point0.words[1] = D_0068E6C0[1];
-    point1.words[0] = D_0068E6C0[2];
-    point1.words[1] = D_0068E6C0[3];
-    point2.words[0] = D_0068E6C0[4];
-    point2.words[1] = D_0068E6C0[5];
-    scaled[0] = key->color.x * 128.0f * key->intensity;
-    scaled[1] = key->color.y * 128.0f * key->intensity;
-    scaled[2] = key->color.z * 128.0f * key->intensity;
-    xglMatrixStackUnit();
-    xglMatrixStackRotZ(key->rotation.z);
-    xglMatrixStackRotY(key->rotation.y);
-    xglMatrixStackRotX(key->rotation.x);
-    xglMatrixStackMulVector(&point0.vector, &point0.vector);
-    xglMatrixStackMulVector(&point1.vector, &point1.vector);
-    xglMatrixStackMulVector(&point2.vector, &point2.vector);
-    scaled[0] = key->extent.x * 128.0f;
-    scaled[1] = key->extent.y * 128.0f;
-    scaled[2] = key->extent.z * 128.0f;
-    xglVectorSubXYZ_001AF3F0(&point0.vector, &zero, &point0.vector);
-}
-
-void xglLightPackDebugAmbient(void *state);
-void xglLightPackDebugMarker(struct XglLightKeyView *key);
-void xglLightPackDebugPoint(struct XglLightKeyView *key);
-
-void xglLightPackDebugDrawAll(void)
-{
-    int i;
-    XglLightKey *key;
-    int *entryOffsets;
-    int j;
-    XglLightEntry *entry;
-
-    for (i = 0; i < 16; i++) {
-        if (xglLightPackTable[i].pack != 0) {
-            key = (XglLightKey *)((u8 *)xglLightPackTable[i].pack + xglLightPackTable[i].pack->keyOffset);
-            entryOffsets = xglLightPackTable[i].pack->entryOffsets;
-            for (j = 0; j < xglLightPackTable[i].pack->entryCount; j++) {
-                entry = (XglLightEntry *)((u8 *)xglLightPackTable[i].pack + entryOffsets[j]);
-                switch (entry->type - 1) {
-                case 0:
-                    xglLightPackDebugAmbient(key);
-                    break;
-                case 1:
-                    xglLightPackDebugAxis(key);
-                    break;
-                case 7:
-                case 9:
-                    xglLightPackDebugDirectional(key);
-                    break;
-                case 3:
-                case 4:
-                case 20:
-                case 21:
-                    xglLightPackDebugBox(key);
-                    break;
-                case 5:
-                case 22:
-                    xglLightPackDebugSpot(key);
-                    break;
-                case 23:
-                    xglLightPackDebugCone(key);
-                    break;
-                case 10:
-                case 18:
-                    xglLightPackDebugMarker(key);
-                    break;
-                case 2:
-                case 19:
-                case 34:
-                    xglLightPackDebugPoint(key);
-                    break;
-                }
-                key++;
-            }
-        }
-    }
-}
-
-void xglVectorCopy(register AlignedVector4 *dst, register AlignedVector4 *src)
-{
-    QuadwordCopy(dst, src);
-}
-
-void xglVectorZero(register AlignedVector4 *v)
-{
-    QuadwordZero(v);
-}
-
-void xglVectorSub(register AlignedVector4 *dst, register AlignedVector4 *minuend, register AlignedVector4 *subtrahend)
-{
-    Vu0SubVector(dst, minuend, subtrahend);
-}
-
-void xglVectorAddXYZ(register AlignedVector4 *dst, register AlignedVector4 *first, register AlignedVector4 *second)
-{
-    Vu0AddVectorXYZ(dst, first, second);
-}
-
-void xglVectorSubXYZ_001AF3F0(register AlignedVector4 *dst, register AlignedVector4 *minuend, register AlignedVector4 *subtrahend)
-{
-    Vu0SubVectorXYZ(dst, minuend, subtrahend);
-}
-
-void xglZeroQuadwords18(register AlignedVector4 *dst)
-{
-    __asm__ __volatile__(
-        "sq $0, 0(%0)\n"
-        "sq $0, 16(%0)\n"
-        "sq $0, 32(%0)\n"
-        "sq $0, 48(%0)\n"
-        "sq $0, 64(%0)\n"
-        "sq $0, 80(%0)\n"
-        "sq $0, 96(%0)\n"
-        "sq $0, 112(%0)\n"
-        "sq $0, 128(%0)\n"
-        "sq $0, 144(%0)\n"
-        "sq $0, 160(%0)\n"
-        "sq $0, 176(%0)\n"
-        "sq $0, 192(%0)\n"
-        "sq $0, 208(%0)\n"
-        "sq $0, 224(%0)\n"
-        "sq $0, 240(%0)\n"
-        "sq $0, 256(%0)\n"
-        "sq $0, 272(%0)\n"
-        :
-        : "r" (dst)
-        : "memory");
-}
-
 Matrix4 xglIdentityMatrix = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f, 1.0f } };
 
-Matrix4 D_00645330 = { { 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f } };
-
-const u64 D_0068E570[2] = { 0x3F80000000000000ULL, 0x3F80000000000000ULL };
-
-const u64 D_0068E610[10] = {
-    0x3F8000003F800000ULL, 0x3F80000000000000ULL, 0xBF8000003F800000ULL, 0x3F80000000000000ULL, 0xBF800000BF800000ULL, 0x3F80000000000000ULL, 0x3F800000BF800000ULL, 0x3F80000000000000ULL,
-    0, 0x3F800000BF800000ULL
-};
-
-const u64 D_0068E660[8] = {
-    0, 0x3F8000003F800000ULL, 0, 0x3F800000BF800000ULL, 0x3DCCCCCDULL, 0x3F800000BE99999AULL, 0xBDCCCCCDULL, 0x3F800000BE99999AULL
-};
-
-const u64 D_0068E6A0[4] = {
-    0x3F80000000000000ULL, 0x3F80000000000000ULL, 0xBF80000000000000ULL, 0x3F80000000000000ULL
-};
-
-const u64 D_0068E6C0[6] = {
-    0, 0x3F800000BF800000ULL, 0x3E99999AULL, 0x3F80000000000000ULL, 0xBE99999AULL, 0x3F80000000000000ULL
-};
+Matrix4 xglUnit4sMatrix = { { 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f } };

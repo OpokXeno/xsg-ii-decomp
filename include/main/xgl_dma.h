@@ -1,6 +1,8 @@
 #ifndef INCLUDE_MAIN_XGL_DMA_H
 #define INCLUDE_MAIN_XGL_DMA_H
 
+/* Functions of src/main/xgl_dma.c that other files call. */
+
 /* DMA tag ID (bits 28..30 of the first tag word). */
 #define DMA_TAG_ID_CNT 0x10000000U
 #define DMA_TAG_ID_REF 0x30000000U
@@ -17,9 +19,10 @@ typedef struct XglDmaRefTag {
     u64 upperQword;
 } XglDmaRefTag;
 
-/* Functions of src/main/xgl_dma.c that other files call. */
-
+/* The address is a DMA address, not always a pointer: an SPR address (0x7000xxxx) is rewritten to its
+ * scratchpad offset, so callers pass (u32) of the packet. */
 void xglDmaDirectNormal(unsigned int channel, unsigned int address, unsigned int count);
 void xglDmaDirectSrcChain(unsigned int channel, unsigned int address);
+void xglDmaInitial(void);
 
 #endif /* INCLUDE_MAIN_XGL_DMA_H */
